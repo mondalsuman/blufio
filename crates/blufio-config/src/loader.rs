@@ -80,17 +80,20 @@ pub fn build_figment() -> Figment {
 /// underscore-containing key names. For example, `BLUFIO_TELEGRAM_BOT_TOKEN` must
 /// map to `telegram.bot_token`, not `telegram.bot.token`.
 fn env_provider() -> Env {
-    Env::prefixed("BLUFIO_").map(|key| {
-        // `key` is the lowercased env var name with prefix stripped.
-        // Example: BLUFIO_TELEGRAM_BOT_TOKEN -> "telegram_bot_token"
-        let key_str = key.as_str();
-        let mapped = key_str
-            .replacen("agent_", "agent.", 1)
-            .replacen("telegram_", "telegram.", 1)
-            .replacen("anthropic_", "anthropic.", 1)
-            .replacen("storage_", "storage.", 1)
-            .replacen("security_", "security.", 1)
-            .replacen("cost_", "cost.", 1);
-        mapped.into()
-    })
+    Env::prefixed("BLUFIO_")
+        // Ignore env vars that are not config keys (e.g., BLUFIO_VAULT_KEY is a runtime passphrase).
+        .ignore(&["vault_key"])
+        .map(|key| {
+            // `key` is the lowercased env var name with prefix stripped.
+            // Example: BLUFIO_TELEGRAM_BOT_TOKEN -> "telegram_bot_token"
+            let key_str = key.as_str();
+            let mapped = key_str
+                .replacen("agent_", "agent.", 1)
+                .replacen("telegram_", "telegram.", 1)
+                .replacen("anthropic_", "anthropic.", 1)
+                .replacen("storage_", "storage.", 1)
+                .replacen("security_", "security.", 1)
+                .replacen("cost_", "cost.", 1);
+            mapped.into()
+        })
 }

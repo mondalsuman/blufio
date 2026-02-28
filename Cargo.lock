@@ -186,8 +186,13 @@ version = "0.1.0"
 dependencies = [
  "blufio-config",
  "blufio-core",
+ "blufio-storage",
+ "blufio-vault",
  "clap",
+ "rpassword",
+ "secrecy",
  "serde_json",
+ "tempfile",
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
