@@ -13,6 +13,5 @@ pub mod models;
 pub mod queries;
 pub mod writer;
 
-// Database re-export enabled after Task 2 implementation.
-// pub use database::Database;
+pub use database::Database;
 pub use models::*;
