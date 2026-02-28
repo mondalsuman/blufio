@@ -10,7 +10,7 @@ Phase 1 establishes the entire build/test/quality infrastructure for Blufio from
 
 The biggest pitfall is the `#[serde(deny_unknown_fields)]` + `#[serde(flatten)]` incompatibility in serde. Since the config system needs `deny_unknown_fields` (requirement CLI-06) and may eventually need flattened structs, config structs must be designed flat from the start -- no `#[serde(flatten)]` anywhere. Figment handles the TOML + env var merging layer, serde handles the validation layer, and miette provides Elm-style diagnostic rendering for config errors.
 
-**Primary recommendation:** Use figment 0.10 for config merging (TOML + env + defaults), serde with `deny_unknown_fields` on all config structs (no flatten), miette for Elm-style error display, `#[async_trait]` for all adapter trait definitions, and virtual Cargo workspace manifest with `workspace.dependencies` inheritance.
+**Primary recommendation:** Use figment 0.10 with `Env::map()` (NOT `split("_")`) for config merging (TOML + env + defaults), serde with `deny_unknown_fields` on all config structs (no flatten), a custom Figment-to-miette bridge for Elm-style error display leveraging `Kind::UnknownField`'s built-in valid field list, `#[async_trait]` for all adapter trait definitions with concrete `BlufioError` return types, and virtual Cargo workspace manifest with `workspace.dependencies` inheritance. blufio-core should have zero tokio dependency -- `async_trait` only needs std types.
 
 <user_constraints>
 ## User Constraints (from CONTEXT.md)
@@ -110,7 +110,7 @@ dirs = "6"
 strsim = "0.11"
 semver = "1"
 tracing = "0.1"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1" }               # NO features at workspace level (see Deep Dive: Tokio)
 tikv-jemallocator = "0.6"
 tikv-jemalloc-ctl = "0.6"
 ```
@@ -291,7 +291,9 @@ pub fn load_config() -> Result<BlufioConfig, figment::Error> {
         // Layer 4: Local config (current directory)
         .merge(Toml::file("blufio.toml"))
         // Layer 5: Environment variable overrides
-        .merge(Env::prefixed("BLUFIO_").split("_"))
+        // NOTE: Do NOT use .split("_") -- see Deep Dive: Figment Env Mapping
+        // Use explicit .map() to avoid underscore ambiguity in key names
+        .merge(env_provider())
         .extract()
 }
 ```
@@ -388,13 +390,19 @@ pub trait ChannelAdapter: PluginAdapter {
 **How to avoid:** Use separate cache keys for build and clippy jobs, or run clippy first (it includes build), or use `Swatinem/rust-cache@v2` with separate `shared-key` values per job.
 **Warning signs:** CI builds are slower than expected, cache size grows unbounded, "recompiling" messages in CI logs for dependencies that should be cached.
 
-### Pitfall 5: Figment Env Split Depth
-**What goes wrong:** `Env::prefixed("BLUFIO_").split("_")` with deeply nested config keys causes incorrect key mapping. `BLUFIO_AGENT_MAX_SESSIONS` maps to `agent.max.sessions` instead of `agent.max_sessions`.
-**Why it happens:** The split delimiter `_` is ambiguous when config keys themselves contain underscores. Figment splits on every occurrence.
-**How to avoid:** Use double underscore `__` as the split delimiter: `Env::prefixed("BLUFIO_").split("__")`. This means env vars use `BLUFIO_AGENT__MAX_SESSIONS` for `agent.max_sessions`. Alternatively, keep config flat (one level of nesting only, as decided) and map env vars explicitly.
-**Warning signs:** Config values appearing under wrong keys when set via environment variables.
+### Pitfall 5: Figment Env Split Ambiguity (CRITICAL -- updated by deep dive)
+**What goes wrong:** `Env::prefixed("BLUFIO_").split("_")` is fundamentally broken for config keys containing underscores. `BLUFIO_TELEGRAM_BOT_TOKEN` maps to `telegram.bot.token` instead of `telegram.bot_token`. The Figment maintainer confirms: "there does not exist an unambiguous way to split an environment variable name into nestings."
+**Why it happens:** `A_B_C` could mean `A[B][C]`, `A_B[C]`, or `A[B_C]` -- 2^n possible interpretations for n underscores.
+**How to avoid:** Use `Env::map()` with explicit section-to-dot mapping instead of `split()`. See Deep Dive: Figment Environment Variable Mapping for the complete pattern.
+**Warning signs:** Config values appearing under wrong keys when set via environment variables. Bot tokens splitting into nested dictionaries.
 
-### Pitfall 6: Missing `resolver = "2"` in Workspace
+### Pitfall 6: musl Default Allocator 9x Slowdown (added by deep dive)
+**What goes wrong:** musl builds without jemalloc are ~9x slower than glibc builds under multi-threaded workloads (513ms vs 56ms in benchmarks).
+**Why it happens:** musl's default allocator uses a single global lock for all allocations, causing extreme lock contention under concurrent allocation patterns.
+**How to avoid:** ALWAYS use tikv-jemallocator as `#[global_allocator]` in the binary crate. This is not optional for musl targets. Use `#[cfg(not(target_env = "msvc"))]` conditional compilation.
+**Warning signs:** Inexplicable performance regression when switching from `linux-gnu` to `linux-musl` target. All benchmarks suddenly 5-10x slower.
+
+### Pitfall 7: Missing `resolver = "2"` in Workspace
 **What goes wrong:** Without `resolver = "2"`, Cargo uses the v1 feature resolver which unifies features across all workspace members, including dev-dependencies and build-dependencies.
 **Why it happens:** The v1 resolver was the default before Rust 2021 edition. Virtual manifests don't have an edition field, so the resolver must be explicitly set.
 **How to avoid:** Always include `resolver = "2"` in the workspace `[workspace]` section. The 2024 edition (used with `edition = "2024"`) implies resolver v2 for packages but NOT for virtual manifests.
@@ -669,20 +677,780 @@ components = ["rustfmt", "clippy"]
 
 ## Open Questions
 
-1. **Figment + deny_unknown_fields interaction specifics**
-   - What we know: Figment uses serde for extraction, and `deny_unknown_fields` works on the serde layer. Figment's own error reporting adds provenance on top.
-   - What's unclear: Whether Figment's error type preserves enough information (source spans, line numbers) for miette to render with TOML source context. May need a custom bridge between Figment errors and miette diagnostics.
-   - Recommendation: Implement a `FigmentToMiette` error conversion in blufio-config that reads the TOML source file and maps Figment's key paths to byte offsets for miette SourceSpan. Test this early in Phase 1.
+All three original open questions have been resolved by the deep dive research below. See the "Deep Dive" section for full details. Summary of resolutions:
 
-2. **Edition 2024 compatibility with workspace tooling**
-   - What we know: Rust 2024 edition is stable since Rust 1.85 (Feb 2025). Cargo-deny, clippy, and other tools should support it.
-   - What's unclear: Whether all dependencies compile cleanly under edition 2024, and whether any CI actions have issues.
-   - Recommendation: Start with `edition = "2024"` in workspace. If any issues emerge, fall back to `edition = "2021"`. The edition is per-crate so it can be changed easily.
+1. **Figment-to-miette error bridge** -- RESOLVED: Figment errors do NOT contain line numbers or byte offsets. The `figment::Error` struct provides key paths (e.g., `agent.name`) and `Kind::UnknownField(field_name, &[expected_fields])` which gives us the unknown field and valid field list directly. To render TOML source context in miette, we must implement a custom bridge that: (a) reads the TOML source file, (b) searches for the key path to find byte offsets, (c) constructs miette `SourceSpan` from those offsets. This is a custom ~100-line module, not a library solution.
 
-3. **Tokio feature minimization for library crates**
-   - What we know: blufio-core defines async traits that depend on tokio types (e.g., `tokio::sync::mpsc`). But not all traits need all tokio features.
-   - What's unclear: The minimal tokio feature set needed for trait signatures in blufio-core vs the full set needed in the binary crate.
-   - Recommendation: Start with `tokio = { version = "1" }` (no features) in workspace.dependencies. Add features per-crate as needed. The binary crate adds `features = ["full"]`.
+2. **Edition 2024 compatibility** -- RESOLVED: Safe to use `edition = "2024"`. The edition is a per-crate setting that only affects language syntax within that crate, not dependencies. Dependencies compiled with edition 2021 work fine in a 2024-edition workspace. All recommended crates (figment, tikv-jemallocator, miette, serde, etc.) are compatible because edition is not a transitive property.
+
+3. **Tokio feature minimization** -- RESOLVED: blufio-core should NOT depend on tokio at all for Phase 1 stub traits. The `#[async_trait]` macro only needs `std::future::Future` and `std::pin::Pin`, not tokio. Tokio types (channels, I/O) belong in concrete implementations, not trait signatures. Use standard library types in trait signatures; add tokio dependency only when concrete implementations need it in later phases.
+
+## Deep Dive: Figment Error Internals and Config Error UX
+
+### Figment Error Type Anatomy (HIGH confidence -- docs.rs verified)
+
+The `figment::Error` struct has four public fields:
+
+```rust
+pub struct Error {
+    pub profile: Option<Profile>,     // Which config profile was active
+    pub metadata: Option<Metadata>,   // Source provider metadata
+    pub path: Vec<String>,            // Key path, e.g. ["agent", "name"]
+    pub kind: Kind,                   // Error classification enum
+}
+```
+
+The `Metadata` struct:
+```rust
+pub struct Metadata {
+    pub name: Cow<'static, str>,                    // e.g., "TOML file"
+    pub source: Option<Source>,                      // File path or custom source
+    pub provide_location: Option<&'static Location<'static>>,  // Rust code location where provider was added
+    // Private: interpolater function for path display
+}
+```
+
+The critical `Kind` enum (for config error UX):
+```rust
+pub enum Kind {
+    Message(String),
+    InvalidType(Actual, String),           // Wrong type: "found string, expected u16"
+    InvalidValue(Actual, String),          // Wrong value
+    InvalidLength(usize, String),
+    UnknownVariant(String, &'static [&'static str]),  // Unknown enum variant + valid variants
+    UnknownField(String, &'static [&'static str]),    // CRITICAL: unknown field name + valid field names
+    MissingField(Cow<'static, str>),
+    DuplicateField(&'static str),
+    ISizeOutOfRange(isize),
+    USizeOutOfRange(usize),
+    Unsupported(Actual),
+    UnsupportedKey(Actual, Cow<'static, str>),
+}
+```
+
+**Critical finding: `Kind::UnknownField` carries BOTH the unknown field name AND the list of valid field names.** This is the exact data needed for fuzzy matching typo suggestions -- we do NOT need to manually enumerate valid fields. When `deny_unknown_fields` triggers during deserialization, Figment captures the serde error and wraps it in `Kind::UnknownField(bad_key, &["valid_key_1", "valid_key_2", ...])`.
+
+**What Figment does NOT provide:**
+- Line numbers in the TOML source file
+- Byte offsets / character positions
+- Source file content (only file path via `Metadata::source`)
+
+### The Figment-to-Miette Bridge Architecture (HIGH confidence)
+
+Since Figment provides key paths but NOT source positions, we need a custom bridge module. The architecture:
+
+```
+Figment::extract() fails
+    |
+    v
+figment::Error { path: ["agent", "naem"], kind: UnknownField("naem", &["name", "max_sessions"]) }
+    |
+    v
+bridge module reads TOML source file from Metadata::source
+    |
+    v
+bridge searches TOML text for key "naem" to find byte offset
+    |
+    v
+bridge constructs miette::SourceSpan from byte offset
+    |
+    v
+bridge runs strsim::jaro_winkler("naem", valid_fields) to find best suggestion
+    |
+    v
+ConfigError::UnknownKey { key, suggestion, span, src } emitted as miette Diagnostic
+```
+
+**Implementation pattern:**
+```rust
+// Source: Custom pattern derived from figment::Error docs + miette docs
+use figment::error::{Kind, Error as FigmentError};
+use miette::{Diagnostic, SourceSpan, NamedSource, Report};
+use thiserror::Error;
+
+#[derive(Error, Debug, Diagnostic)]
+pub enum ConfigError {
+    #[error("unknown configuration key `{key}`")]
+    #[diagnostic(
+        code(blufio::config::unknown_key),
+        help("did you mean `{suggestion}`? Valid keys: {valid_keys}")
+    )]
+    UnknownKey {
+        key: String,
+        suggestion: String,
+        valid_keys: String,
+        #[label("this key is not recognized")]
+        span: SourceSpan,
+        #[source_code]
+        src: NamedSource<String>,
+    },
+
+    #[error("invalid type for `{key}`: {detail}")]
+    #[diagnostic(code(blufio::config::invalid_type))]
+    InvalidType {
+        key: String,
+        detail: String,
+        #[label("expected {expected}")]
+        span: SourceSpan,
+        #[source_code]
+        src: NamedSource<String>,
+    },
+
+    #[error("missing required key `{key}`")]
+    #[diagnostic(
+        code(blufio::config::missing_key),
+        help("add `{key} = <value>` to your blufio.toml")
+    )]
+    MissingKey {
+        key: String,
+    },
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
+}
+
+/// Convert figment errors to miette-rendered config errors
+pub fn figment_to_config_errors(
+    err: FigmentError,
+    toml_sources: &[(String, String)],  // Vec of (file_path, file_content)
+) -> Vec<ConfigError> {
+    err.into_iter().map(|e| {
+        let key_path = e.path.join(".");
+
+        match e.kind {
+            Kind::UnknownField(ref field, expected) => {
+                // Fuzzy match for suggestion
+                let suggestion = suggest_key(field, expected)
+                    .unwrap_or_else(|| "(none)".into());
+                let valid_keys = expected.join(", ");
+
+                // Find byte offset in TOML source
+                if let Some((path, content)) = find_source(&e, toml_sources) {
+                    if let Some(offset) = find_key_offset(content, &e.path, field) {
+                        return ConfigError::UnknownKey {
+                            key: field.clone(),
+                            suggestion,
+                            valid_keys,
+                            span: SourceSpan::from(offset..offset + field.len()),
+                            src: NamedSource::new(path, content.clone()),
+                        };
+                    }
+                }
+
+                // Fallback: no source location available
+                ConfigError::UnknownKey {
+                    key: field.clone(),
+                    suggestion,
+                    valid_keys,
+                    span: SourceSpan::from(0..0),
+                    src: NamedSource::new("(unknown)", String::new()),
+                }
+            },
+            Kind::MissingField(ref field) => {
+                ConfigError::MissingKey { key: field.to_string() }
+            },
+            _ => {
+                ConfigError::Other(Box::new(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                ))
+            }
+        }
+    }).collect()
+}
+
+/// Find the TOML source file that the error metadata points to
+fn find_source<'a>(
+    err: &figment::Error,
+    sources: &'a [(String, String)],
+) -> Option<(&'a str, &'a String)> {
+    let meta = err.metadata.as_ref()?;
+    let source = meta.source.as_ref()?;
+    let path = source.custom()?;
+    sources.iter()
+        .find(|(p, _)| p.contains(path))
+        .map(|(p, c)| (p.as_str(), c))
+}
+
+/// Find byte offset of a key in TOML content by key path
+fn find_key_offset(content: &str, path: &[String], field: &str) -> Option<usize> {
+    // For top-level keys in a section like [agent], search for the field name
+    // after the section header
+    let search_key = if path.len() > 1 {
+        // Under a section: look for "[section]\n...key = "
+        let section = &path[..path.len()-1].join(".");
+        let section_header = format!("[{}]", section);
+        let section_start = content.find(&section_header)?;
+        let after_section = &content[section_start..];
+        let key_in_section = after_section.find(field)?;
+        section_start + key_in_section
+    } else {
+        // Top-level key
+        content.find(field)?
+    };
+    Some(search_key)
+}
+
+/// Fuzzy match using Jaro-Winkler (best for short config key names)
+pub fn suggest_key(unknown: &str, valid_keys: &[&str]) -> Option<String> {
+    valid_keys
+        .iter()
+        .filter_map(|k| {
+            let score = strsim::jaro_winkler(unknown, k);
+            if score > 0.75 { Some((*k, score)) } else { None }
+        })
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+        .map(|(k, _)| k.to_string())
+}
+```
+
+**Effort estimate:** ~150 lines of production code for the bridge module. This is the hardest UX piece in Phase 1 but the data is all available -- no missing information.
+
+### Fuzzy Matching Algorithm Selection (HIGH confidence)
+
+Use **Jaro-Winkler** (from `strsim` 0.11.x), not Levenshtein, for config key suggestions. Rationale:
+
+| Algorithm | Best For | Score Range | Config Key Performance |
+|-----------|----------|-------------|----------------------|
+| Levenshtein | Fixed-cost edit distance | 0..inf (lower = better) | Poor for short strings with prefix matches |
+| Jaro | Character transposition detection | 0.0..1.0 | Good but misses prefix weight |
+| **Jaro-Winkler** | **Short strings with common prefixes** | **0.0..1.0** | **Best for config keys** (e.g., "naem" -> "name", "bot_tken" -> "bot_token") |
+| Damerau-Levenshtein | Transpositions + insertions | 0..inf | Comparable to Jaro-Winkler but needs normalization |
+
+Jaro-Winkler gives higher scores to strings that match from the beginning, which is exactly the typo pattern in config keys (users get the prefix right, mess up the suffix). Use a threshold of 0.75 (not 0.8 as in initial research) to catch more typos like `max_sesions` -> `max_sessions`.
+
+### Figment Environment Variable Mapping -- The Split Ambiguity Problem (HIGH confidence)
+
+**The problem is worse than initially documented.** The Figment maintainer (SergioBenitez) explicitly states in GitHub issue #12:
+
+> "There does not exist an unambiguous way to split an environment variable name into nestings. For example, the name `A_B_C` could be `A[B][C]` or `A_B[C]` or `A[B_C]`."
+
+This means `Env::prefixed("BLUFIO_").split("_")` is fundamentally broken for our config structure because keys like `bot_token` contain underscores.
+
+**Solution: Use `Env::map()` with explicit key mapping instead of `split()`.**
+
+```rust
+// Source: figment docs + GitHub issue #12 discussion
+use figment::providers::Env;
+
+// WRONG: ambiguous split
+// Env::prefixed("BLUFIO_").split("_")
+// BLUFIO_TELEGRAM_BOT_TOKEN -> telegram.bot.token (WRONG!)
+
+// RIGHT: explicit key mapping
+fn env_provider() -> Env {
+    Env::prefixed("BLUFIO_").map(|key| {
+        // key is already lowercased and prefix-stripped by Env::prefixed
+        // e.g., "telegram_bot_token" (from BLUFIO_TELEGRAM_BOT_TOKEN)
+        key.as_str()
+            .replacen("telegram_", "telegram.", 1)
+            .replacen("anthropic_", "anthropic.", 1)
+            .replacen("storage_", "storage.", 1)
+            .replacen("security_", "security.", 1)
+            .replacen("agent_", "agent.", 1)
+            .replacen("cost_", "cost.", 1)
+            .into()
+    })
+}
+```
+
+**Alternative: double-underscore convention.** Use `__` as the nesting separator:
+```rust
+// BLUFIO_TELEGRAM__BOT_TOKEN -> telegram.bot_token
+Env::prefixed("BLUFIO_").split("__")
+```
+
+**Recommendation:** Use the explicit `map()` approach. It is unambiguous, self-documenting, and does not impose an ugly `__` convention on users. The `map()` approach knows exactly which config sections exist because they are defined in the code. The cost is maintaining the map function when sections change, but config sections change rarely.
+
+**Updated workspace dependency note:** Remove the `split("_")` pattern from all code examples. Replace with `map()`.
+
+### XDG Path Lookup Implementation (HIGH confidence)
+
+The `dirs` crate (v6.x) is the correct choice. It provides `dirs::config_dir()` which returns:
+- Linux: `$XDG_CONFIG_HOME` or `$HOME/.config`
+- macOS: `$HOME/Library/Application Support`
+- Windows: `{FOLDERID_RoamingAppData}` (not relevant, but handled)
+
+For Blufio's XDG hierarchy, the Figment provider chain handles precedence natively:
+```rust
+use dirs;
+use figment::providers::{Format, Toml};
+
+// Layer 1: System config (lowest priority)
+.merge(Toml::file("/etc/blufio/blufio.toml"))
+// Layer 2: User config (XDG)
+.merge(Toml::file(
+    dirs::config_dir()
+        .map(|d| d.join("blufio/blufio.toml"))
+        .unwrap_or_default()
+))
+// Layer 3: Local config (highest file priority)
+.merge(Toml::file("blufio.toml"))
+// Layer 4: Env vars (highest overall priority)
+.merge(env_provider())
+```
+
+Figment's `Toml::file()` silently skips missing files -- no error if `/etc/blufio/blufio.toml` does not exist. This is the correct behavior for optional config files.
+
+## Deep Dive: musl + jemalloc Builds
+
+### Cross-Compilation Strategy Decision (HIGH confidence)
+
+**Use `cross-rs/cross` for CI musl builds. Use native compilation only for local development on Linux.**
+
+| Approach | Pros | Cons | Best For |
+|----------|------|------|----------|
+| `cross-rs/cross` v0.2.5 | Docker-based, works on any host, handles all musl toolchain setup, pre-built images for x86_64/aarch64-musl | Requires Docker, ~2min overhead per build, some ARM runner issues | **CI release builds (recommended)** |
+| Native `rustup target add x86_64-unknown-linux-musl` | No Docker needed, faster, simpler | Requires musl-tools installed, only works on Linux host, manual OpenSSL/ring setup | Local Linux development |
+| `houseabsolute/actions-rust-cross` | GitHub Action wrapping cross | Less tested than direct cross usage | Alternative if cross CLI fails |
+| `taiki-e/setup-cross-toolchain-action` | Newer, addresses cross pain points | Less community adoption | Watch list |
+
+**macOS cannot natively compile musl targets.** `cargo build --target x86_64-unknown-linux-musl` on macOS requires Docker (via cross) or a Linux VM. This is expected and correct -- musl builds are CI-only (release tags), and CI runs on `ubuntu-latest`.
+
+**Known cross-rs issues (2025):**
+- ARM binary releases not published -- must install from git: `cargo install cross --git https://github.com/cross-rs/cross`
+- Custom Docker images needed when cross-compiling FROM Linux ARM runners (not relevant for standard x86_64 CI)
+- Docker-in-Docker can be problematic; GitHub-hosted runners handle this fine
+
+### Jemalloc + musl Performance (HIGH confidence -- benchmarked)
+
+From [raniz.blog 2025-02-06](https://raniz.blog/2025-02-06_rust-musl-malloc/):
+
+| Allocator | Target | Multi-threaded Perf | vs glibc |
+|-----------|--------|---------------------|----------|
+| glibc default | linux-gnu | 56 ms (baseline) | 1.0x |
+| musl default | linux-musl | 513 ms | **9.2x slower** |
+| **jemalloc** | **linux-musl** | **67 ms** | **1.2x** |
+| mimalloc | linux-musl | 57 ms | 1.02x |
+
+**musl's default allocator is catastrophically slow under multi-threaded workloads** due to lock contention. Using jemalloc with musl is not optional -- it is required for acceptable performance. The CORE-06 requirement (jemalloc allocator) is even more critical than the PRD suggests.
+
+**Configuration for conditional compilation:**
+```toml
+# In crates/blufio/Cargo.toml (binary crate only)
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { workspace = true }
+tikv-jemalloc-ctl = { workspace = true }
+```
+
+```rust
+// In crates/blufio/src/main.rs
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+```
+
+### Binary Size Optimization (HIGH confidence)
+
+Recommended release profile for the binary crate:
+
+```toml
+# In root Cargo.toml
+
+# Standard release: optimized for speed + reasonable size
+[profile.release]
+opt-level = 3          # Maximum speed optimization
+lto = "thin"           # Good LTO without extreme compile times
+codegen-units = 1      # Better optimization, single codegen unit
+strip = "debuginfo"    # Remove debug info, keep symbols for crash reports
+
+# musl release: optimized for minimal binary size (CI release tags)
+[profile.release-musl]
+inherits = "release"
+opt-level = "s"        # Optimize for size (often smaller than "z" in practice)
+lto = true             # Fat LTO for maximum size reduction
+panic = "abort"        # No unwinding tables, saves ~100-200KB
+strip = "symbols"      # Remove all symbols for smallest binary
+```
+
+**Size impact breakdown (approximate, from multiple sources):**
+
+| Setting | Impact |
+|---------|--------|
+| `opt-level = "s"` vs `3` | -15 to -25% binary size |
+| `lto = true` (fat) vs `false` | -10 to -20% binary size |
+| `codegen-units = 1` vs default | -5 to -10% binary size |
+| `strip = "symbols"` | -20 to -40% binary size |
+| `panic = "abort"` | -2 to -5% binary size |
+| **Combined** | **-40 to -55% total** |
+
+**Why `opt-level = "s"` instead of `"z"`:** The Rust internals discussion and real-world measurements show that `"s"` frequently produces smaller binaries than `"z"` because `"z"` disables vectorization and some inlining that can actually increase code size through less efficient code patterns. Always benchmark both, but default to `"s"`.
+
+**Projected binary size:** PRD estimates 40-50MB for the full application with all features. Phase 1 skeleton (workspace + config + clap + jemalloc, no business logic) should be ~5-8MB with musl, or ~2-4MB with musl + all optimizations.
+
+### TLS Strategy for musl Builds (HIGH confidence)
+
+**Use rustls (not openssl) for all TLS needs.** This is a forward-looking decision for SEC-10 (TLS required for all remote connections) that must be locked in Phase 1 via cargo-deny.
+
+| TLS Library | musl Compatibility | Binary Impact | Maintenance |
+|-------------|-------------------|---------------|-------------|
+| **rustls** | **Perfect -- pure Rust, no C deps** | **~1-2MB** | **Active, memory-safe** |
+| openssl-sys | Broken -- requires libssl.so or vendored build, musl linking hell | ~3-5MB | C dependency, version conflicts |
+| native-tls | Platform-dependent, not portable | Varies | Different behavior per platform |
+
+**rustls uses `ring` for cryptography.** ring supports x86_64-unknown-linux-musl and aarch64-unknown-linux-musl, tested in their CI on every commit. As alternative, `aws-lc-rs` is a drop-in replacement for ring with FIPS support and pre-generated musl bindings.
+
+**Phase 1 action:** The `cargo-deny.toml` already bans `openssl` and `openssl-sys`. This ensures no dependency pulls in OpenSSL accidentally. When reqwest/hyper/axum are added in later phases, always use the `rustls-tls` feature flag.
+
+### musl 1.2.5 Update (MEDIUM confidence)
+
+Starting with Rust 1.93 (stable 2026-01-22), all `*-linux-musl` targets ship with musl 1.2.5. Key improvements:
+- Major DNS resolver improvements (critical for network-heavy agents)
+- Better `time64` support on 32-bit platforms
+- Improved threading performance (though still much slower than jemalloc)
+
+Since we target latest stable Rust, we will get musl 1.2.5 automatically. No action needed.
+
+## Deep Dive: Trait Architecture for Plugin System
+
+### Trait Object vs Generics vs Associated Types (HIGH confidence)
+
+**Decision: Use trait objects (`Box<dyn Trait>`) for all 7 adapter traits.** This is the only viable approach for a runtime plugin system.
+
+| Pattern | Compile-time Known? | Runtime Swap? | Binary Bloat | Best For |
+|---------|---------------------|---------------|--------------|----------|
+| Generics (`T: Trait`) | Yes | No (monomorphized) | High (N copies) | Library APIs, zero-cost abstraction |
+| Associated Types | Yes | No | Medium | Type-level configuration |
+| **Trait Objects (`Box<dyn Trait>`)** | **No** | **Yes** | **Low (vtable)** | **Plugin systems, runtime configuration** |
+| Enum Dispatch | Partially | If variants known | Low | Fixed set of implementations |
+
+The plugin host needs to load adapter implementations at runtime based on configuration. `Box<dyn ChannelAdapter>` is the only pattern that allows "user configures `channel = "telegram"` in TOML, system loads Telegram adapter at runtime."
+
+### Trait Hierarchy Design (HIGH confidence -- modeled after Tower/Axum)
+
+**Study of real-world Rust trait hierarchies:**
+
+**Tower's `Service` trait:**
+```rust
+pub trait Service<Request> {
+    type Response;
+    type Error;
+    type Future: Future<Output = Result<Self::Response, Self::Error>>;
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+    fn call(&mut self, req: Request) -> Self::Future;
+}
+```
+Tower uses associated types for Response/Error/Future. This works because Tower services are typically monomorphized at compile time. **This pattern does NOT work for our plugin system** because associated types make traits non-dyn-compatible when the types differ between implementations.
+
+**Axum's `FromRequest` trait:**
+```rust
+pub trait FromRequest<S, M = ViaRequest>: Sized {
+    type Rejection: IntoResponse;
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection>;
+}
+```
+Axum uses `async fn` in traits (Rust 1.75+) because extractors are monomorphized per handler at compile time, not dispatched dynamically.
+
+**The Blufio pattern must differ from both:**
+- Unlike Tower: Cannot use associated error types (each adapter would have a different Error type, breaking dyn dispatch)
+- Unlike Axum: Cannot use native async fn (must support dyn dispatch via trait objects)
+- Like both: Use `Send + Sync + 'static` bounds
+
+### Error Handling at Trait Boundaries (HIGH confidence)
+
+**Use a concrete `BlufioError` enum (thiserror) as the error type for all adapter traits. Do NOT use `Box<dyn Error>` or `anyhow::Error`.**
+
+Rationale:
+- `Box<dyn Error + Send + Sync>` forces callers to downcast, losing all type information
+- `anyhow::Error` couples all consumers to the anyhow crate, prevents major version upgrades
+- A concrete enum lets match-based error handling, structured logging, and error categorization
+
+```rust
+// Source: Derived from thiserror docs + Rust error handling best practices (lpalmieri.com)
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum BlufioError {
+    // Infrastructure errors
+    #[error("configuration error: {0}")]
+    Config(String),
+
+    #[error("storage error: {source}")]
+    Storage {
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[error("channel error: {message}")]
+    Channel {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+
+    #[error("provider error: {message}")]
+    Provider {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+
+    #[error("adapter not found: {adapter_type} adapter `{name}` is not registered")]
+    AdapterNotFound {
+        adapter_type: String,
+        name: String,
+    },
+
+    #[error("adapter health check failed: {name}")]
+    HealthCheckFailed {
+        name: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[error("operation timed out after {duration:?}")]
+    Timeout {
+        duration: std::time::Duration,
+    },
+
+    #[error("internal error: {0}")]
+    Internal(String),
+}
+```
+
+**Why `Box<dyn Error + Send + Sync>` inside enum variants but not as the trait return type:** Individual adapters may have implementation-specific errors (reqwest::Error, rusqlite::Error, etc.). Wrapping these in `Box<dyn Error>` inside a categorized enum variant preserves both the category (Storage, Channel, Provider) and the original error chain. The caller matches on the variant for routing/logging, and the `.source()` chain provides full detail.
+
+### Send + Sync + 'static Bounds (HIGH confidence)
+
+All adapter traits MUST have `Send + Sync + 'static` supertraits:
+
+```rust
+#[async_trait]
+pub trait PluginAdapter: Send + Sync + 'static { ... }
+```
+
+**Why each bound is required:**
+- `Send`: Adapter objects will be moved between tokio tasks (e.g., health check task, message processing task)
+- `Sync`: Multiple tasks may hold `&dyn PluginAdapter` references simultaneously (e.g., reading config, sending messages)
+- `'static`: Adapter objects are stored in `Arc<dyn Trait>` in the plugin registry, which requires `'static`
+
+**`#[async_trait]` default behavior:** The `#[async_trait]` macro adds `+ Send` to the returned future by default. Use `#[async_trait(?Send)]` only for single-threaded contexts, which Blufio does not use.
+
+### Complete Trait Signature Pattern (HIGH confidence)
+
+```rust
+// Source: PRD Section 2.2 + async_trait docs + Tower/Axum patterns
+use async_trait::async_trait;
+use crate::error::BlufioError;
+
+/// Adapter lifecycle states
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HealthStatus {
+    Healthy,
+    Degraded(String),
+    Unhealthy(String),
+}
+
+/// Adapter type classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
+pub enum AdapterType {
+    Channel,
+    Provider,
+    Storage,
+    Embedding,
+    Observability,
+    Auth,
+    SkillRuntime,
+}
+
+/// Base trait for ALL adapter plugins
+#[async_trait]
+pub trait PluginAdapter: Send + Sync + 'static {
+    /// Human-readable adapter name (e.g., "telegram", "anthropic")
+    fn name(&self) -> &str;
+
+    /// Semantic version of this adapter
+    fn version(&self) -> semver::Version;
+
+    /// Which adapter slot this fills
+    fn adapter_type(&self) -> AdapterType;
+
+    /// Check adapter health (connectivity, resource availability)
+    async fn health_check(&self) -> Result<HealthStatus, BlufioError>;
+
+    /// Graceful shutdown -- release resources, close connections
+    async fn shutdown(&self) -> Result<(), BlufioError>;
+}
+
+/// Example: Channel adapter trait (Phase 1 defines stubs only)
+#[async_trait]
+pub trait ChannelAdapter: PluginAdapter {
+    /// Channel capabilities (text, images, voice, reactions, etc.)
+    fn capabilities(&self) -> ChannelCapabilities;
+
+    /// Connect to the messaging platform
+    async fn connect(&mut self) -> Result<(), BlufioError>;
+
+    /// Send a message to a conversation
+    async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError>;
+
+    /// Receive the next inbound message (long-poll or push)
+    async fn receive(&self) -> Result<InboundMessage, BlufioError>;
+}
+```
+
+**Note on `&mut self` vs `&self`:** `connect()` takes `&mut self` because it mutates internal state (establishing connection). All other methods take `&self` because the adapter is shared via `Arc<dyn ChannelAdapter>` after connection. This matches the Tower pattern where `poll_ready` takes `&mut self` but `call` logically borrows.
+
+**Phase 1 stub implementations:** All 7 trait files are created with full signatures but `todo!()` method bodies. No concrete implementations until later phases.
+
+### Avoiding Over-Abstraction: The "7 Traits, Not 70" Rule
+
+From STATE.md: "Research recommends building Anthropic client directly in Phase 3, extracting provider trait -- not over-abstracting early."
+
+Phase 1 trait stubs should be:
+1. **Minimal method count** -- only methods that are clearly needed across all implementations of that type
+2. **No generics on the traits** -- concrete types only (BlufioError, MessageId, etc.)
+3. **No associated types** -- they break dyn compatibility
+4. **Return types are concrete** -- `Result<MessageId, BlufioError>`, not `Result<Self::MessageId, Self::Error>`
+
+## Deep Dive: Edition 2024 Compatibility
+
+### How Rust Editions Work (HIGH confidence)
+
+Rust editions are a **per-crate** setting, not a global workspace setting. Key facts:
+- `edition = "2024"` in `workspace.package` applies to YOUR crates only
+- Dependencies on crates.io are compiled with THEIR declared edition (typically 2021)
+- **Editions are NOT transitive** -- a 2024-edition crate can depend on a 2015-edition crate with zero issues
+- The Rust compiler supports ALL editions simultaneously in a single compilation
+
+### Specific Crate Compatibility
+
+| Crate | Compatible with Edition 2024? | Notes |
+|-------|------------------------------|-------|
+| figment 0.10.x | Yes | Edition only affects YOUR code syntax, not dependency compilation |
+| serde 1.x | Yes | Same reason -- serde compiles with its own declared edition |
+| tikv-jemallocator 0.6.x | Yes | Proc macros and C FFI unaffected by consumer edition |
+| miette 7.x | Yes | Derive macros generate edition-appropriate code |
+| thiserror 2.x | Yes | Same as above |
+| async-trait 0.1.x | Yes | Proc macro generates code compatible with consumer edition |
+| clap 4.x | Yes | No edition-specific syntax issues |
+
+**Bottom line: Use `edition = "2024"` without hesitation.** The only risk is if your own code uses patterns that changed between 2021 and 2024 (e.g., `gen` is now a reserved keyword, `unsafe extern` blocks, changes to `!` never type). These are unlikely to cause issues in a new project.
+
+### Edition 2024 Benefits for Blufio
+
+- `unsafe_op_in_unsafe_fn` lint is deny-by-default (better safety for FFI with jemalloc)
+- `gen` keyword reserved (future generators, not relevant now)
+- Lifetime capture rules changes in `impl Trait` (clearer semantics)
+- `tail_expr_drop_order` changes (more intuitive temporary drop behavior)
+
+## Deep Dive: Tokio Feature Minimization
+
+### Can blufio-core Avoid Tokio Entirely? (HIGH confidence)
+
+**Yes -- and it SHOULD for Phase 1.** The `#[async_trait]` macro expands to:
+
+```rust
+// What you write:
+#[async_trait]
+pub trait PluginAdapter: Send + Sync + 'static {
+    async fn health_check(&self) -> Result<HealthStatus, BlufioError>;
+}
+
+// What async_trait generates:
+pub trait PluginAdapter: Send + Sync + 'static {
+    fn health_check<'life0, 'async_trait>(
+        &'life0 self,
+    ) -> Pin<Box<dyn Future<Output = Result<HealthStatus, BlufioError>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait;
+}
+```
+
+The generated code only needs `std::pin::Pin`, `std::future::Future`, and `std::marker::Send` -- all from the standard library. **No tokio types appear in the expansion.**
+
+Tokio types (`tokio::sync::mpsc`, `tokio::io::AsyncRead`) belong in:
+- **Concrete struct fields** (the Telegram adapter's internal channel)
+- **Implementation blocks** (the SQLite storage adapter's connection pool)
+- **The binary crate's runtime** (`#[tokio::main]`)
+
+They do NOT belong in trait signatures.
+
+### Recommended Tokio Feature Configuration
+
+```toml
+# In root Cargo.toml [workspace.dependencies]
+# Minimal: no features at workspace level
+tokio = { version = "1" }
+
+# In crates/blufio-core/Cargo.toml
+# NO tokio dependency at all for Phase 1 stubs
+[dependencies]
+async-trait.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+semver.workspace = true
+strum.workspace = true
+
+# In crates/blufio-config/Cargo.toml
+# NO tokio dependency needed
+[dependencies]
+figment.workspace = true
+serde.workspace = true
+miette.workspace = true
+dirs.workspace = true
+strsim.workspace = true
+
+# In crates/blufio/Cargo.toml (binary crate)
+# Full tokio for the runtime
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+clap.workspace = true
+tracing.workspace = true
+```
+
+**When tokio enters the picture (later phases):**
+- Phase 2 (Persistence): `tokio = { workspace = true, features = ["sync"] }` in blufio-storage for `Mutex`, `RwLock`
+- Phase 3 (Agent Loop): `tokio = { workspace = true, features = ["net", "io-util", "time"] }` in blufio-channel for async I/O
+- Binary crate always: `features = ["full"]`
+
+### Updated Workspace Dependencies
+
+Based on all deep dive findings, the corrected workspace dependencies:
+
+```toml
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+
+# Config
+toml = "0.8"
+figment = { version = "0.10", features = ["toml", "env"] }
+dirs = "6"
+strsim = "0.11"
+
+# Error handling & diagnostics
+thiserror = "2"
+miette = { version = "7", features = ["fancy"] }
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Async traits (for plugin adapter dyn dispatch)
+async-trait = "0.1"
+
+# Type utilities
+strum = { version = "0.26", features = ["derive"] }
+semver = "1"
+
+# Logging
+tracing = "0.1"
+
+# Runtime (NO features at workspace level -- each crate adds what it needs)
+tokio = { version = "1" }
+
+# Allocator (binary crate only, via target-specific deps)
+tikv-jemallocator = "0.6"
+tikv-jemalloc-ctl = "0.6"
+```
+
+**Key change from initial research:** `tokio` no longer has `features = ["full"]` at the workspace level. This prevents feature additivity bloat in library crates.
 
 ## Validation Architecture
 
@@ -721,9 +1489,16 @@ components = ["rustfmt", "clippy"]
 ## Sources
 
 ### Primary (HIGH confidence)
-- Context7: `/sergiobenitez/figment` -- config merging, Env::prefixed, Env::split, Provider trait
+- Context7: `/sergiobenitez/figment` -- config merging, Env::prefixed, Env::split, Env::map, Provider trait, Tagged value provenance, Error struct
 - Context7: `/websites/serde_rs` -- deny_unknown_fields behavior, flatten incompatibility, field attributes
 - Context7: `/websites/embarkstudios_github_io_cargo-deny` -- deny.toml configuration, license allow-list, clarify sections
+- Context7: `/tower-rs/tower` -- Service trait pattern, Layer middleware, BoxService for dyn dispatch
+- Context7: `/tokio-rs/axum` -- FromRequest trait design, Handler pattern, state management
+- [figment::Error docs.rs](https://docs.rs/figment/latest/figment/struct.Error.html) -- Error struct fields: profile, metadata, path, kind
+- [figment::error::Kind docs.rs](https://docs.rs/figment/latest/figment/error/enum.Kind.html) -- UnknownField variant with expected field names list
+- [figment::Metadata docs.rs](https://docs.rs/figment/latest/figment/struct.Metadata.html) -- Source enum, name field, provide_location
+- [figment::providers::Env docs.rs](https://docs.rs/figment/latest/figment/providers/struct.Env.html) -- prefixed, split, map, filter_map, only methods
+- [Figment GitHub issue #12](https://github.com/SergioBenitez/Figment/issues/12) -- Split ambiguity with underscore-containing keys (maintainer response)
 - [Cargo Workspaces - The Cargo Book](https://doc.rust-lang.org/cargo/reference/workspaces.html) -- workspace.dependencies, workspace.package inheritance, virtual manifest
 - [tikv-jemallocator GitHub](https://github.com/tikv/jemallocator) -- v0.6.1, platform support, feature flags
 - [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain) -- GitHub Action for Rust toolchain
@@ -731,27 +1506,39 @@ components = ["rustfmt", "clippy"]
 - [actions-rust-lang/audit](https://github.com/actions-rust-lang/audit) -- v1.2.7 audit action with issue creation
 - [EmbarkStudios/cargo-deny-action](https://github.com/EmbarkStudios/cargo-deny-action) -- v2 deny action
 - [Announcing async fn in traits](https://blog.rust-lang.org/2023/12/21/async-fn-rpit-in-traits.html) -- dyn incompatibility of native async fn in trait
+- [tokio::sync docs.rs](https://docs.rs/tokio/latest/tokio/sync/index.html) -- sync primitives are runtime-agnostic, feature flags independent
+- [Rust musl 1.2.5 update blog](https://blog.rust-lang.org/2025/12/05/Updating-musl-1.2.5/) -- DNS resolver improvements, Rust 1.93+
 
 ### Secondary (MEDIUM confidence)
-- [Large Rust Workspaces (matklad)](https://matklad.github.io/2021/08/22/large-rust-workspaces.html) -- virtual manifest recommendation, crates/ directory pattern, version = "0.0.0"
+- [Large Rust Workspaces (matklad)](https://matklad.github.io/2021/08/22/large-rust-workspaces.html) -- virtual manifest recommendation, crates/ directory pattern
 - [Figment vs config-rs comparison](https://github.com/mehcode/config-rs/issues/371) -- provenance tracking advantage
 - [Async trait dyn dispatch discussion](https://smallcultfollowing.com/babysteps/blog/2025/03/24/box-box-box/) -- current state of dyn async traits
 - [REUSE tutorial](https://reuse.software/tutorial/) -- SPDX header format and reuse-tool usage
 - [min-sized-rust](https://github.com/johnthagen/min-sized-rust) -- Release profile optimization settings
 - [cross-rs/cross](https://github.com/cross-rs/cross) -- v0.2.5, Docker-based musl cross-compilation
+- [raniz.blog: Performance of static Rust with MUSL](https://raniz.blog/2025-02-06_rust-musl-malloc/) -- jemalloc/mimalloc/musl allocator benchmarks
+- [ring GitHub issue #713](https://github.com/briansmith/ring/issues/713) -- musl static linking support status
+- [Definitive guide to Rust error handling](https://www.howtocodeit.com/articles/the-definitive-guide-to-rust-error-handling) -- thiserror vs anyhow at crate boundaries
+- [Luca Palmieri: Error handling in Rust](https://lpalmieri.com/posts/error-handling-rust/) -- error type design for libraries
+- [Cross compiling Rust in GitHub Actions](https://blog.urth.org/2023/03/05/cross-compiling-rust-projects-in-github-actions/) -- cross-rs practical CI patterns
+- [Binary size optimization (Markaicode 2025)](https://markaicode.com/binary-size-optimization-techniques/) -- 43% reduction with combined optimizations
 
 ### Tertiary (LOW confidence)
-- [houseabsolute/actions-rust-cross](https://github.com/houseabsolute/actions-rust-cross) -- GitHub Action wrapping cross-rs, fewer direct verifications
-- Rust 2024 edition compatibility with all workspace tooling -- not extensively tested in production reports yet
+- [houseabsolute/actions-rust-cross](https://github.com/houseabsolute/actions-rust-cross) -- GitHub Action wrapping cross-rs
+- [taiki-e/setup-cross-toolchain-action](https://github.com/taiki-e/setup-cross-toolchain-action) -- newer alternative to cross, less community adoption
+- [aws-lc-rs](https://github.com/aws/aws-lc-rs) -- ring alternative with FIPS support and musl pre-generated bindings
 
 ## Metadata
 
 **Confidence breakdown:**
 - Standard stack: HIGH -- All libraries verified via Context7, crates.io, and official documentation. Versions confirmed current.
-- Architecture: HIGH -- Workspace patterns from Cargo Book (official docs). Trait pattern from PRD + Rust reference on async trait limitations.
-- Pitfalls: HIGH -- deny_unknown_fields+flatten confirmed via serde issue #1600 and official docs. Jemalloc musl segfault confirmed via tikv/jemallocator#146. Feature additivity from Cargo Book.
+- Architecture: HIGH -- Trait pattern validated against Tower/Axum real-world patterns via Context7. dyn dispatch requirement confirmed. Error type design follows established Rust library conventions.
+- Pitfalls: HIGH -- deny_unknown_fields+flatten confirmed via serde issue #1600. Jemalloc musl segfault confirmed via tikv/jemallocator#146. Env split ambiguity confirmed via Figment maintainer response in issue #12. Musl allocator performance confirmed via 2025 benchmarks.
 - CI/CD: HIGH -- All GitHub Actions verified on their respective repositories with current version numbers.
-- Config merging: MEDIUM -- Figment-to-miette bridge for TOML source spans is theoretically sound but not verified with a working example. Flagged in Open Questions.
+- Config UX: HIGH (upgraded from MEDIUM) -- Figment Error internals fully documented from docs.rs. Kind::UnknownField confirmed to carry valid field names. Bridge architecture designed with concrete code example. No remaining unknowns.
+- musl + jemalloc: HIGH -- Performance benchmarks from 2025 confirm jemalloc eliminates 9x musl slowdown. ring musl compatibility confirmed. rustls is pure Rust with no musl issues.
+- Trait architecture: HIGH -- Validated against Tower Service trait and Axum FromRequest/Handler patterns. Error handling at trait boundaries follows established Rust library conventions.
+- Tokio minimization: HIGH -- async_trait expansion confirmed to use only std types. blufio-core can be tokio-free.
 
-**Research date:** 2026-02-28
+**Research date:** 2026-02-28 (initial), 2026-02-28 (deep dive)
 **Valid until:** 2026-03-28 (stable ecosystem, 30-day validity)
