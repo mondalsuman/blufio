@@ -35,6 +35,10 @@ pub struct BlufioConfig {
     #[serde(default)]
     pub security: SecurityConfig,
 
+    /// Credential vault settings.
+    #[serde(default)]
+    pub vault: VaultConfig,
+
     /// Cost tracking and budget settings.
     #[serde(default)]
     pub cost: CostConfig,
@@ -143,7 +147,11 @@ impl Default for StorageConfig {
 }
 
 fn default_database_path() -> String {
-    "blufio.db".to_string()
+    dirs::data_dir()
+        .map(|p| p.join("blufio").join("blufio.db"))
+        .unwrap_or_else(|| std::path::PathBuf::from("blufio.db"))
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn default_wal_mode() -> bool {
@@ -161,6 +169,10 @@ pub struct SecurityConfig {
     /// Require TLS for all connections.
     #[serde(default = "default_require_tls")]
     pub require_tls: bool,
+
+    /// Private IP addresses allowed for SSRF exemption (e.g., local services).
+    #[serde(default)]
+    pub allowed_private_ips: Vec<String>,
 }
 
 impl Default for SecurityConfig {
@@ -168,6 +180,7 @@ impl Default for SecurityConfig {
         Self {
             bind_address: default_bind_address(),
             require_tls: default_require_tls(),
+            allowed_private_ips: Vec::new(),
         }
     }
 }
@@ -209,4 +222,46 @@ impl Default for CostConfig {
 
 fn default_track_tokens() -> bool {
     true
+}
+
+/// Credential vault configuration.
+///
+/// Controls Argon2id key derivation parameters used to protect the vault
+/// master key. Defaults follow OWASP recommendations.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct VaultConfig {
+    /// Argon2id memory cost in KiB (default: 65536 = 64 MiB).
+    #[serde(default = "default_kdf_memory_cost")]
+    pub kdf_memory_cost: u32,
+
+    /// Argon2id iteration count (default: 3).
+    #[serde(default = "default_kdf_iterations")]
+    pub kdf_iterations: u32,
+
+    /// Argon2id parallelism lanes (default: 4).
+    #[serde(default = "default_kdf_parallelism")]
+    pub kdf_parallelism: u32,
+}
+
+impl Default for VaultConfig {
+    fn default() -> Self {
+        Self {
+            kdf_memory_cost: default_kdf_memory_cost(),
+            kdf_iterations: default_kdf_iterations(),
+            kdf_parallelism: default_kdf_parallelism(),
+        }
+    }
+}
+
+fn default_kdf_memory_cost() -> u32 {
+    65536 // 64 MiB per OWASP recommendation
+}
+
+fn default_kdf_iterations() -> u32 {
+    3
+}
+
+fn default_kdf_parallelism() -> u32 {
+    4
 }

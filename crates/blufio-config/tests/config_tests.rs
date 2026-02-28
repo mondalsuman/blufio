@@ -100,13 +100,24 @@ fn missing_optional_sections_use_defaults() {
     assert!(config.telegram.allowed_users.is_empty());
     assert!(config.anthropic.api_key.is_none());
     assert_eq!(config.anthropic.default_model, "claude-sonnet-4-20250514");
-    assert_eq!(config.storage.database_path, "blufio.db");
+    // database_path defaults to XDG data directory path (not bare "blufio.db")
+    let expected_db_path = dirs::data_dir()
+        .map(|p| p.join("blufio").join("blufio.db"))
+        .unwrap_or_else(|| std::path::PathBuf::from("blufio.db"))
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(config.storage.database_path, expected_db_path);
     assert!(config.storage.wal_mode);
     assert_eq!(config.security.bind_address, "127.0.0.1");
     assert!(config.security.require_tls);
+    assert!(config.security.allowed_private_ips.is_empty());
     assert!(config.cost.daily_budget_usd.is_none());
     assert!(config.cost.monthly_budget_usd.is_none());
     assert!(config.cost.track_tokens);
+    // Vault config defaults
+    assert_eq!(config.vault.kdf_memory_cost, 65536);
+    assert_eq!(config.vault.kdf_iterations, 3);
+    assert_eq!(config.vault.kdf_parallelism, 4);
 }
 
 /// Environment variable BLUFIO_AGENT_NAME overrides agent.name in TOML.
@@ -159,7 +170,13 @@ fn serialized_defaults_are_sensible() {
     assert_eq!(config.agent.log_level, "info");
     assert!(config.telegram.bot_token.is_none());
     assert_eq!(config.anthropic.default_model, "claude-sonnet-4-20250514");
-    assert_eq!(config.storage.database_path, "blufio.db");
+    // database_path defaults to XDG data directory path (not bare "blufio.db")
+    let expected_db_path = dirs::data_dir()
+        .map(|p| p.join("blufio").join("blufio.db"))
+        .unwrap_or_else(|| std::path::PathBuf::from("blufio.db"))
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(config.storage.database_path, expected_db_path);
     assert!(config.storage.wal_mode);
     assert_eq!(config.security.bind_address, "127.0.0.1");
     assert!(config.security.require_tls);
