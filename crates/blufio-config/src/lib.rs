@@ -3,7 +3,12 @@
 
 //! Configuration system for the Blufio agent framework.
 //!
-//! Config system implemented in Plan 01-02.
+//! Provides TOML configuration parsing with strict validation (`deny_unknown_fields`),
+//! XDG file hierarchy lookup, environment variable overrides, and Elm-style diagnostic
+//! error rendering with typo suggestions.
 
-/// Placeholder module for the configuration system.
-pub mod config {}
+pub mod loader;
+pub mod model;
+
+pub use loader::{load_config, load_config_from_path, load_config_from_str};
+pub use model::BlufioConfig;
