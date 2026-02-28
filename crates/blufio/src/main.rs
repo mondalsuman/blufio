@@ -19,7 +19,7 @@ use clap::{Parser, Subcommand};
 #[command(name = "blufio", version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 /// Available subcommands.
@@ -37,15 +37,33 @@ enum Commands {
 async fn main() {
     let cli = Cli::parse();
 
+    // Load and validate configuration at startup
+    let _config = match blufio_config::load_and_validate() {
+        Ok(config) => {
+            eprintln!(
+                "blufio: config loaded (agent.name={})",
+                config.agent.name
+            );
+            config
+        }
+        Err(errors) => {
+            blufio_config::render_errors(&errors);
+            std::process::exit(1);
+        }
+    };
+
     match cli.command {
-        Commands::Serve => {
+        Some(Commands::Serve) => {
             println!("blufio serve: not yet implemented");
         }
-        Commands::Shell => {
+        Some(Commands::Shell) => {
             println!("blufio shell: not yet implemented");
         }
-        Commands::Config => {
+        Some(Commands::Config) => {
             println!("blufio config: not yet implemented");
+        }
+        None => {
+            println!("blufio: use --help for available commands");
         }
     }
 }
@@ -61,5 +79,13 @@ mod tests {
         epoch::advance().unwrap();
         let allocated = stats::allocated::read().unwrap();
         assert!(allocated > 0, "jemalloc should report non-zero allocation");
+    }
+
+    #[test]
+    fn binary_loads_config_defaults() {
+        // Verify config loads with defaults (no config file needed)
+        let config = blufio_config::load_and_validate()
+            .expect("default config should be valid");
+        assert_eq!(config.agent.name, "blufio");
     }
 }

@@ -3,8 +3,9 @@
 
 //! Integration tests for the Blufio configuration system.
 
+use blufio_config::diagnostic::{suggest_key, ConfigError};
 use blufio_config::model::BlufioConfig;
-use blufio_config::{load_config_from_str};
+use blufio_config::{load_and_validate_str, load_config_from_str};
 
 /// Valid TOML with all known fields deserializes successfully.
 #[test]
@@ -229,4 +230,182 @@ level = "debug"
         err_str.contains("unknown field") || err_str.contains("logging"),
         "error should mention unknown field, got: {err_str}"
     );
+}
+
+// ============================================================================
+// Diagnostic tests (Task 2)
+// ============================================================================
+
+/// Unknown key "naem" in [agent] produces suggestion "did you mean `name`?"
+#[test]
+fn diagnostic_naem_suggests_name() {
+    let valid_keys = &["name", "max_sessions", "log_level"];
+    let suggestion = suggest_key("naem", valid_keys);
+    assert_eq!(suggestion, Some("name".to_string()));
+}
+
+/// Unknown key "bot_tken" in [telegram] produces suggestion "did you mean `bot_token`?"
+#[test]
+fn diagnostic_bot_tken_suggests_bot_token() {
+    let valid_keys = &["bot_token", "allowed_users"];
+    let suggestion = suggest_key("bot_tken", valid_keys);
+    assert_eq!(suggestion, Some("bot_token".to_string()));
+}
+
+/// Unknown key "zzzzzz" with no close match does NOT produce a suggestion.
+#[test]
+fn diagnostic_no_suggestion_for_distant_typo() {
+    let valid_keys = &["name", "max_sessions", "log_level"];
+    let suggestion = suggest_key("zzzzzz", valid_keys);
+    assert!(suggestion.is_none(), "should not suggest for distant typo");
+}
+
+/// Error output from load_and_validate_str includes the unknown key name.
+#[test]
+fn diagnostic_error_includes_unknown_key() {
+    let toml = r#"
+[agent]
+naem = "test"
+"#;
+
+    let errors = load_and_validate_str(toml).expect_err("should produce errors");
+    assert!(!errors.is_empty(), "should have at least one error");
+
+    let has_unknown_key = errors.iter().any(|e| {
+        matches!(e, ConfigError::UnknownKey { key, suggestion, valid_keys, .. } if {
+            key == "naem"
+                && suggestion.as_deref() == Some("name")
+                && valid_keys.contains("name")
+        })
+    });
+    assert!(
+        has_unknown_key,
+        "should have UnknownKey error for 'naem' with suggestion 'name', got: {errors:?}"
+    );
+}
+
+/// Error output includes the list of valid keys for the section.
+#[test]
+fn diagnostic_error_includes_valid_keys() {
+    let toml = r#"
+[agent]
+naem = "test"
+"#;
+
+    let errors = load_and_validate_str(toml).expect_err("should produce errors");
+    let has_valid_keys = errors.iter().any(|e| {
+        matches!(e, ConfigError::UnknownKey { valid_keys, .. } if {
+            valid_keys.contains("name")
+                && valid_keys.contains("max_sessions")
+                && valid_keys.contains("log_level")
+        })
+    });
+    assert!(
+        has_valid_keys,
+        "error should list valid keys for [agent] section"
+    );
+}
+
+/// Invalid type (string where number expected) produces clear message.
+#[test]
+fn diagnostic_invalid_type_message() {
+    let toml = r#"
+[agent]
+max_sessions = "not_a_number"
+"#;
+
+    let err = load_config_from_str(toml).expect_err("should reject invalid type");
+    let err_str = format!("{err}");
+    assert!(
+        err_str.contains("invalid type") || err_str.contains("max_sessions"),
+        "error should mention type mismatch, got: {err_str}"
+    );
+}
+
+/// ConfigError implements miette::Diagnostic (can be rendered).
+#[test]
+fn config_error_implements_diagnostic() {
+    use miette::Diagnostic;
+
+    let error = ConfigError::UnknownKey {
+        key: "naem".to_string(),
+        suggestion: Some("name".to_string()),
+        valid_keys: "name, max_sessions, log_level".to_string(),
+        span: None,
+        src: None,
+    };
+
+    // Verify it implements Diagnostic
+    let code = error.code();
+    assert!(code.is_some(), "should have diagnostic code");
+
+    let help = error.help();
+    assert!(help.is_some(), "should have help text");
+    let help_str = help.unwrap().to_string();
+    assert!(
+        help_str.contains("did you mean `name`"),
+        "help should contain suggestion, got: {help_str}"
+    );
+}
+
+/// ConfigError can be rendered using miette's graphical handler.
+#[test]
+fn config_error_renders_with_miette() {
+    use miette::GraphicalReportHandler;
+
+    let error = ConfigError::UnknownKey {
+        key: "naem".to_string(),
+        suggestion: Some("name".to_string()),
+        valid_keys: "name, max_sessions, log_level".to_string(),
+        span: None,
+        src: None,
+    };
+
+    let handler = GraphicalReportHandler::new();
+    let mut buf = String::new();
+    handler
+        .render_report(&mut buf, &error)
+        .expect("should render without error");
+    assert!(
+        !buf.is_empty(),
+        "rendered report should not be empty"
+    );
+    assert!(
+        buf.contains("naem"),
+        "rendered report should mention the key"
+    );
+}
+
+/// load_and_validate_str with valid TOML returns Ok config.
+#[test]
+fn load_and_validate_valid_toml() {
+    let toml = r#"
+[agent]
+name = "test"
+"#;
+
+    let config = load_and_validate_str(toml).expect("valid TOML should validate");
+    assert_eq!(config.agent.name, "test");
+}
+
+/// load_and_validate with defaults works (no config file needed).
+#[test]
+fn load_and_validate_defaults() {
+    let config = blufio_config::load_and_validate().expect("defaults should validate");
+    assert_eq!(config.agent.name, "blufio");
+}
+
+/// Validation catches negative budget.
+#[test]
+fn validation_catches_negative_budget() {
+    let toml = r#"
+[cost]
+daily_budget_usd = -5.0
+"#;
+
+    let errors = load_and_validate_str(toml).expect_err("negative budget should fail");
+    let has_validation_error = errors.iter().any(|e| {
+        matches!(e, ConfigError::Validation { message } if message.contains("daily_budget_usd"))
+    });
+    assert!(has_validation_error, "should have validation error for negative budget");
 }
