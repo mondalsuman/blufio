@@ -98,7 +98,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **CLI-03**: `blufio config` manages TOML configuration with `get/set/set-secret/validate` subcommands
 - [ ] **CLI-04**: `blufio doctor` runs diagnostics: LLM connectivity, DB integrity, channel status, memory usage
 - [ ] **CLI-05**: `blufio shell` provides interactive REPL for testing agent responses
-- [ ] **CLI-06**: TOML config with deny_unknown_fields catches typos at startup
+- [x] **CLI-06**: TOML config with deny_unknown_fields catches typos at startup
 - [ ] **CLI-07**: systemd unit file with health checks and auto-restart
 - [ ] **CLI-08**: Shell automation scripts for backup, log rotation, and lifecycle hooks
 
@@ -221,7 +221,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-03 | Phase 9: Production Hardening | Pending |
 | CLI-04 | Phase 9: Production Hardening | Pending |
 | CLI-05 | Phase 3: Agent Loop & Telegram | Pending |
-| CLI-06 | Phase 1: Project Foundation & Workspace | Pending |
+| CLI-06 | Phase 1: Project Foundation & Workspace | Complete |
 | CLI-07 | Phase 9: Production Hardening | Pending |
 | CLI-08 | Phase 9: Production Hardening | Pending |
 | INFRA-01 | Phase 1: Project Foundation & Workspace | Pending |

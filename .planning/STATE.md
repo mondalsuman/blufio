@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 1 of 10 (Project Foundation & Workspace)
-Plan: 1 of 2 in current phase
-Status: Executing phase 1
-Last activity: 2026-02-28 -- Plan 01-01 complete (workspace, traits, CI)
+Plan: 2 of 2 in current phase (COMPLETE)
+Status: Phase 1 complete
+Last activity: 2026-02-28 -- Plan 01-02 complete (TOML config system)
 
-Progress: [█.........] 5%
+Progress: [█.........] 10%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: ~15min
-- Total execution time: 0.25 hours
+- Total plans completed: 2
+- Average duration: ~12min
+- Total execution time: 0.38 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 1/2 | 15min | 15min |
+| 1 | 2/2 | 23min | 12min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (15min)
-- Trend: starting
+- Last 5 plans: 01-01 (15min), 01-02 (8min)
+- Trend: accelerating
 
 *Updated after each plan completion*
 
@@ -46,6 +46,9 @@ Recent decisions affecting current work:
 - [01-01]: Concrete BlufioError return type on all traits instead of associated error types
 - [01-01]: No tokio dependency in blufio-core — async-trait only needs std types
 - [01-01]: Ignored RUSTSEC-2024-0436 (paste) — transitive via tikv-jemalloc-ctl, no alternative
+- [01-02]: Used Env::map() NOT Env::split() for env var mapping to avoid underscore ambiguity
+- [01-02]: Jaro-Winkler threshold 0.75 for fuzzy matching (catches more typos than 0.8)
+- [01-02]: Made CLI command optional for cleaner startup config-only validation
 - [Roadmap]: 10 phases derived from 70 requirements following PRD dependency order
 - [Roadmap]: Research recommends building Anthropic client directly in Phase 3, extracting provider trait
 
@@ -62,5 +65,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Plan 01-01 complete, executing plan 01-02 next
+Stopped at: Phase 1 complete (01-01 workspace + 01-02 config). Ready for Phase 2.
 Resume file: None

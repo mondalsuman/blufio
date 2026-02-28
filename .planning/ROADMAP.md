@@ -12,7 +12,7 @@ Blufio ships in 10 phases that follow the natural dependency graph: workspace an
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Project Foundation & Workspace** - Cargo workspace, core traits, config system, build pipeline, licensing
+- [x] **Phase 1: Project Foundation & Workspace** - Cargo workspace, core traits, config system, build pipeline, licensing
 - [ ] **Phase 2: Persistence & Security Vault** - SQLite WAL persistence, credential vault, security defaults
 - [ ] **Phase 3: Agent Loop & Telegram** - FSM agent loop, Anthropic provider, Telegram adapter, basic CLI
 - [ ] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps
@@ -38,8 +38,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Cargo workspace, core crate with 7 adapter trait stubs, binary crate with jemalloc, licensing, community docs, cargo-deny, CI pipelines
-- [ ] 01-02-PLAN.md -- TOML config system with deny_unknown_fields, figment-to-miette error bridge, fuzzy match typo suggestions, XDG lookup, env var overrides
+- [x] 01-01-PLAN.md -- Cargo workspace, core crate with 7 adapter trait stubs, binary crate with jemalloc, licensing, community docs, cargo-deny, CI pipelines
+- [x] 01-02-PLAN.md -- TOML config system with deny_unknown_fields, figment-to-miette error bridge, fuzzy match typo suggestions, XDG lookup, env var overrides
 
 ### Phase 2: Persistence & Security Vault
 **Goal**: All application state persists in a single SQLite database with WAL mode and ACID guarantees, credentials are encrypted at rest with AES-256-GCM, and security defaults (localhost binding, TLS, secret redaction, SSRF prevention) are enforced from this point forward
