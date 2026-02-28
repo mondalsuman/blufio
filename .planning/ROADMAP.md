@@ -13,7 +13,7 @@ Blufio ships in 10 phases that follow the natural dependency graph: workspace an
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Project Foundation & Workspace** - Cargo workspace, core traits, config system, build pipeline, licensing
-- [ ] **Phase 2: Persistence & Security Vault** - SQLite WAL persistence, credential vault, security defaults
+- [x] **Phase 2: Persistence & Security Vault** - SQLite WAL persistence, credential vault, security defaults
 - [ ] **Phase 3: Agent Loop & Telegram** - FSM agent loop, Anthropic provider, Telegram adapter, basic CLI
 - [ ] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps
 - [ ] **Phase 5: Memory & Embeddings** - ONNX embedding model, semantic memory, hybrid search
@@ -54,8 +54,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- SQLite persistence layer (blufio-storage crate): WAL mode, embedded migrations, single-writer via tokio-rusqlite, session/message/queue CRUD, StorageAdapter implementation, config/error extensions
-- [ ] 02-02-PLAN.md -- Credential vault + network security (blufio-vault, blufio-security crates): AES-256-GCM encryption, Argon2id KDF, key wrapping, TLS enforcement, SSRF prevention, secret redaction, plaintext config migration
+- [x] 02-01-PLAN.md -- SQLite persistence layer (blufio-storage crate): WAL mode, embedded migrations, single-writer via tokio-rusqlite, session/message/queue CRUD, StorageAdapter implementation, config/error extensions
+- [x] 02-02-PLAN.md -- Credential vault + network security (blufio-vault, blufio-security crates): AES-256-GCM encryption, Argon2id KDF, key wrapping, TLS enforcement, SSRF prevention, secret redaction, plaintext config migration
 
 ### Phase 3: Agent Loop & Telegram
 **Goal**: A working always-on Telegram bot backed by Claude -- the minimum viable agent that receives messages, assembles basic context, calls Anthropic, and responds, with persistent conversations and graceful shutdown
@@ -185,8 +185,8 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Project Foundation & Workspace | 0/2 | Planned | - |
-| 2. Persistence & Security Vault | 0/2 | Not started | - |
+| 1. Project Foundation & Workspace | 2/2 | Complete | 2026-02-28 |
+| 2. Persistence & Security Vault | 2/2 | Complete | 2026-02-28 |
 | 3. Agent Loop & Telegram | 0/3 | Not started | - |
 | 4. Context Engine & Cost Tracking | 0/2 | Not started | - |
 | 5. Memory & Embeddings | 0/2 | Not started | - |
