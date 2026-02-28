@@ -35,12 +35,12 @@ impl Database {
     /// 4. Runs embedded migrations.
     pub async fn open(path: &str) -> Result<Self, BlufioError> {
         // Create parent directories if needed.
-        if let Some(parent) = std::path::Path::new(path).parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent).map_err(|e| BlufioError::Storage {
-                    source: Box::new(e),
-                })?;
-            }
+        if let Some(parent) = std::path::Path::new(path).parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| BlufioError::Storage {
+                source: Box::new(e),
+            })?;
         }
 
         info!(path = %path, "opening database");
