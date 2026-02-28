@@ -1,0 +1,19 @@
+[package]
+name = "blufio-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Configuration system for the Blufio agent framework"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+figment.workspace = true
+serde.workspace = true
+toml.workspace = true
+miette.workspace = true
+thiserror.workspace = true
+dirs.workspace = true
+strsim.workspace = true

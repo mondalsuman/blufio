@@ -1,0 +1,40 @@
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/blufio/blufio"
+authors = ["Blufio Contributors"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+figment = { version = "0.10", features = ["toml", "env"] }
+thiserror = "2"
+miette = { version = "7", features = ["fancy"] }
+clap = { version = "4.5", features = ["derive"] }
+async-trait = "0.1"
+strum = { version = "0.26", features = ["derive"] }
+dirs = "6"
+strsim = "0.11"
+semver = "1"
+tracing = "0.1"
+tokio = { version = "1" }
+tikv-jemallocator = "0.6"
+tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[profile.release-musl]
+inherits = "release"
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = "symbols"

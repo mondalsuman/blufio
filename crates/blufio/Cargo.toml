@@ -1,0 +1,27 @@
+[package]
+name = "blufio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "An always-on personal AI agent"
+
+[[bin]]
+name = "blufio"
+path = "src/main.rs"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+clap.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { workspace = true }
+tikv-jemalloc-ctl = { workspace = true }
+
+[dev-dependencies]
+serde_json = "1"

@@ -1,0 +1,19 @@
+[package]
+name = "blufio-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Core trait definitions, error types, and common types for the Blufio agent framework"
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+semver.workspace = true
+strum.workspace = true
+
+[dev-dependencies]
+serde_json = "1"
