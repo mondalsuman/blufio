@@ -9,7 +9,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Core Agent
 
-- [ ] **CORE-01**: Agent executes FSM-per-session loop: receive → assemble context → call LLM → execute tools → respond
+- [ ] **CORE-01**: Agent executes FSM-per-session loop: receive -> assemble context -> call LLM -> execute tools -> respond
 - [ ] **CORE-02**: Agent handles streaming responses from LLM providers with partial output delivery
 - [ ] **CORE-03**: Agent gracefully shuts down on SIGTERM, draining active sessions before exit
 - [ ] **CORE-04**: Agent runs as background daemon, auto-restarts on crash via systemd
@@ -25,8 +25,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **LLM-03**: Three-zone context engine assembles prompts from static (system prompt, cached), conditional (skills/memory per-relevance), and dynamic (current turn) zones
 - [ ] **LLM-04**: Context engine aligns prompt structure to exploit Anthropic prompt caching (target 50-65% cache hit rate)
 - [ ] **LLM-05**: Model router classifies query complexity and routes to Haiku (simple), Sonnet (standard), or Opus (complex)
-- [ ] **LLM-06**: Smart heartbeats run on Haiku with skip-when-unchanged logic, costing ≤$10/month
-- [ ] **LLM-07**: Token overhead per turn stays ≤3,000 for simple queries and ≤5,000 weighted average
+- [ ] **LLM-06**: Smart heartbeats run on Haiku with skip-when-unchanged logic, costing <=/$10/month
+- [ ] **LLM-07**: Token overhead per turn stays <=3,000 for simple queries and <=5,000 weighted average
 - [ ] **LLM-08**: System prompt and agent personality are configurable via TOML + optional markdown files
 
 ### Channel
@@ -39,9 +39,9 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Persistence
 
 - [ ] **PERS-01**: All state stored in single SQLite database with WAL mode and ACID transactions
-- [ ] **PERS-02**: Sessions persist across restarts — user can resume conversation after reboot
-- [ ] **PERS-03**: Message queue is SQLite-backed and crash-safe — zero message loss on crash
-- [ ] **PERS-04**: Backup is `cp blufio.db blufio.db.bak` — single file, no coordination needed
+- [ ] **PERS-02**: Sessions persist across restarts -- user can resume conversation after reboot
+- [ ] **PERS-03**: Message queue is SQLite-backed and crash-safe -- zero message loss on crash
+- [ ] **PERS-04**: Backup is `cp blufio.db blufio.db.bak` -- single file, no coordination needed
 - [ ] **PERS-05**: Single-writer-thread pattern prevents SQLITE_BUSY under concurrent sessions
 
 ### Memory
@@ -50,17 +50,18 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **MEM-02**: Local ONNX embedding model runs inference without external API calls
 - [ ] **MEM-03**: Context engine loads only relevant memories per-turn based on semantic similarity
 - [ ] **MEM-04**: Conversation history compacts automatically when approaching context window limits
+
 - [ ] **MEM-05**: Memory embeddings stored in SQLite with efficient cosine similarity search
 
 ### Security
 
-- [ ] **SEC-01**: Binary binds to 127.0.0.1 by default — no open ports to the internet
-- [ ] **SEC-02**: Device keypair authentication required — no optional auth mode
+- [ ] **SEC-01**: Binary binds to 127.0.0.1 by default -- no open ports to the internet
+- [ ] **SEC-02**: Device keypair authentication required -- no optional auth mode
 - [ ] **SEC-03**: AES-256-GCM encrypted credential vault stores all API keys and bot tokens
-- [ ] **SEC-04**: Vault key derived from passphrase via Argon2id — never stored on disk
-- [ ] **SEC-05**: WASM skill sandbox (wasmtime) with capability manifests — skills cannot escape sandbox
+- [ ] **SEC-04**: Vault key derived from passphrase via Argon2id -- never stored on disk
+- [ ] **SEC-05**: WASM skill sandbox (wasmtime) with capability manifests -- skills cannot escape sandbox
 - [ ] **SEC-06**: WASM sandbox enforces fuel limits (CPU), memory limits, and epoch interruption
-- [ ] **SEC-07**: Ed25519 signed inter-agent messages — prevents impersonation in multi-agent setups
+- [ ] **SEC-07**: Ed25519 signed inter-agent messages -- prevents impersonation in multi-agent setups
 - [ ] **SEC-08**: Secrets redacted from all logs and persisted data before storage
 - [ ] **SEC-09**: SSRF prevention (private IP blocking) enabled by default
 - [ ] **SEC-10**: TLS required for all remote connections
@@ -71,8 +72,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **COST-02**: Per-session and per-model cost attribution in real-time
 - [ ] **COST-03**: Configurable daily and monthly budget caps with hard kill switch when exhausted
 - [ ] **COST-04**: Prometheus metrics endpoint exports token usage, latency percentiles, error rates, memory usage
-- [ ] **COST-05**: Structured error handling with Result<T,E> everywhere — zero empty catch blocks
-- [ ] **COST-06**: All errors logged with context using tracing crate — structured, filterable
+- [ ] **COST-05**: Structured error handling with Result<T,E> everywhere -- zero empty catch blocks
+- [ ] **COST-06**: All errors logged with context using tracing crate -- structured, filterable
 
 ### Skills & Tools
 
@@ -159,13 +160,82 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| CORE-01 | Phase 3: Agent Loop & Telegram | Pending |
+| CORE-02 | Phase 3: Agent Loop & Telegram | Pending |
+| CORE-03 | Phase 3: Agent Loop & Telegram | Pending |
+| CORE-04 | Phase 9: Production Hardening | Pending |
+| CORE-05 | Phase 1: Project Foundation & Workspace | Pending |
+| CORE-06 | Phase 1: Project Foundation & Workspace | Pending |
+| CORE-07 | Phase 9: Production Hardening | Pending |
+| CORE-08 | Phase 9: Production Hardening | Pending |
+| LLM-01 | Phase 3: Agent Loop & Telegram | Pending |
+| LLM-02 | Phase 3: Agent Loop & Telegram | Pending |
+| LLM-03 | Phase 4: Context Engine & Cost Tracking | Pending |
+| LLM-04 | Phase 4: Context Engine & Cost Tracking | Pending |
+| LLM-05 | Phase 6: Model Routing & Smart Heartbeats | Pending |
+| LLM-06 | Phase 6: Model Routing & Smart Heartbeats | Pending |
+| LLM-07 | Phase 4: Context Engine & Cost Tracking | Pending |
+| LLM-08 | Phase 3: Agent Loop & Telegram | Pending |
+| CHAN-01 | Phase 3: Agent Loop & Telegram | Pending |
+| CHAN-02 | Phase 3: Agent Loop & Telegram | Pending |
+| CHAN-03 | Phase 3: Agent Loop & Telegram | Pending |
+| CHAN-04 | Phase 3: Agent Loop & Telegram | Pending |
+| PERS-01 | Phase 2: Persistence & Security Vault | Pending |
+| PERS-02 | Phase 2: Persistence & Security Vault | Pending |
+| PERS-03 | Phase 2: Persistence & Security Vault | Pending |
+| PERS-04 | Phase 2: Persistence & Security Vault | Pending |
+| PERS-05 | Phase 2: Persistence & Security Vault | Pending |
+| MEM-01 | Phase 5: Memory & Embeddings | Pending |
+| MEM-02 | Phase 5: Memory & Embeddings | Pending |
+| MEM-03 | Phase 5: Memory & Embeddings | Pending |
+| MEM-04 | Phase 4: Context Engine & Cost Tracking | Pending |
+| MEM-05 | Phase 5: Memory & Embeddings | Pending |
+| SEC-01 | Phase 2: Persistence & Security Vault | Pending |
+| SEC-02 | Phase 9: Production Hardening | Pending |
+| SEC-03 | Phase 2: Persistence & Security Vault | Pending |
+| SEC-04 | Phase 2: Persistence & Security Vault | Pending |
+| SEC-05 | Phase 7: WASM Skill Sandbox | Pending |
+| SEC-06 | Phase 7: WASM Skill Sandbox | Pending |
+| SEC-07 | Phase 10: Multi-Agent & Final Integration | Pending |
+| SEC-08 | Phase 2: Persistence & Security Vault | Pending |
+| SEC-09 | Phase 2: Persistence & Security Vault | Pending |
+| SEC-10 | Phase 2: Persistence & Security Vault | Pending |
+| COST-01 | Phase 4: Context Engine & Cost Tracking | Pending |
+| COST-02 | Phase 4: Context Engine & Cost Tracking | Pending |
+| COST-03 | Phase 4: Context Engine & Cost Tracking | Pending |
+| COST-04 | Phase 9: Production Hardening | Pending |
+| COST-05 | Phase 4: Context Engine & Cost Tracking | Pending |
+| COST-06 | Phase 4: Context Engine & Cost Tracking | Pending |
+| SKILL-01 | Phase 7: WASM Skill Sandbox | Pending |
+| SKILL-02 | Phase 7: WASM Skill Sandbox | Pending |
+| SKILL-03 | Phase 7: WASM Skill Sandbox | Pending |
+| SKILL-04 | Phase 7: WASM Skill Sandbox | Pending |
+| SKILL-05 | Phase 7: WASM Skill Sandbox | Pending |
+| SKILL-06 | Phase 7: WASM Skill Sandbox | Pending |
+| PLUG-01 | Phase 8: Plugin System & Gateway | Pending |
+| PLUG-02 | Phase 8: Plugin System & Gateway | Pending |
+| PLUG-03 | Phase 8: Plugin System & Gateway | Pending |
+| PLUG-04 | Phase 8: Plugin System & Gateway | Pending |
+| CLI-01 | Phase 3: Agent Loop & Telegram | Pending |
+| CLI-02 | Phase 9: Production Hardening | Pending |
+| CLI-03 | Phase 9: Production Hardening | Pending |
+| CLI-04 | Phase 9: Production Hardening | Pending |
+| CLI-05 | Phase 3: Agent Loop & Telegram | Pending |
+| CLI-06 | Phase 1: Project Foundation & Workspace | Pending |
+| CLI-07 | Phase 9: Production Hardening | Pending |
+| CLI-08 | Phase 9: Production Hardening | Pending |
+| INFRA-01 | Phase 1: Project Foundation & Workspace | Pending |
+| INFRA-02 | Phase 1: Project Foundation & Workspace | Pending |
+| INFRA-03 | Phase 1: Project Foundation & Workspace | Pending |
+| INFRA-04 | Phase 1: Project Foundation & Workspace | Pending |
+| INFRA-05 | Phase 8: Plugin System & Gateway | Pending |
+| INFRA-06 | Phase 10: Multi-Agent & Final Integration | Pending |
 
 **Coverage:**
-- v1 requirements: 52 total
-- Mapped to phases: 0
-- Unmapped: 52 (pending roadmap)
+- v1 requirements: 70 total
+- Mapped to phases: 70
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 after initial definition*
+*Last updated: 2026-02-28 after roadmap creation*
