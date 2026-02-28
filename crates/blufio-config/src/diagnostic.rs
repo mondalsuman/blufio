@@ -7,6 +7,8 @@
 //! with source spans, valid key listings, and "did you mean?" suggestions
 //! using Jaro-Winkler string similarity.
 
+#![allow(unused_assignments)] // miette's Diagnostic derive generates code triggering this lint
+
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
@@ -184,7 +186,7 @@ fn find_source_span(
         let section: Vec<String> = error.path.iter().map(|s| s.to_string()).collect();
 
         if let Some(offset) = find_key_offset(content, &section, field) {
-            let span = SourceSpan::new(offset.into(), field.len().into());
+            let span = SourceSpan::new(offset.into(), field.len());
             let named = NamedSource::new(path, content.to_string());
             return (Some(span), Some(named));
         }
@@ -214,9 +216,8 @@ pub fn find_key_offset(content: &str, path: &[String], field: &str) -> Option<us
     let mut byte_offset = 0;
     for line in remaining.lines() {
         let trimmed = line.trim_start();
-        if trimmed.starts_with(field) {
+        if let Some(after) = trimmed.strip_prefix(field) {
             // Check that the character after the field name is whitespace or '='
-            let after = &trimmed[field.len()..];
             if after.starts_with(' ') || after.starts_with('=') || after.starts_with('\t') {
                 // Find the exact position of the field name in the original content
                 let field_start_in_line = line.len() - trimmed.len();

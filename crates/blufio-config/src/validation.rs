@@ -48,24 +48,20 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
     }
 
     // Validate budget values are non-negative if set
-    if let Some(daily) = config.cost.daily_budget_usd {
-        if daily < 0.0 {
-            errors.push(ConfigError::Validation {
-                message: format!(
-                    "cost.daily_budget_usd must be non-negative, got {daily}"
-                ),
-            });
-        }
+    if let Some(daily) = config.cost.daily_budget_usd
+        && daily < 0.0
+    {
+        errors.push(ConfigError::Validation {
+            message: format!("cost.daily_budget_usd must be non-negative, got {daily}"),
+        });
     }
 
-    if let Some(monthly) = config.cost.monthly_budget_usd {
-        if monthly < 0.0 {
-            errors.push(ConfigError::Validation {
-                message: format!(
-                    "cost.monthly_budget_usd must be non-negative, got {monthly}"
-                ),
-            });
-        }
+    if let Some(monthly) = config.cost.monthly_budget_usd
+        && monthly < 0.0
+    {
+        errors.push(ConfigError::Validation {
+            message: format!("cost.monthly_budget_usd must be non-negative, got {monthly}"),
+        });
     }
 
     if errors.is_empty() {

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Loaded from TOML files following XDG hierarchy, with environment variable overrides.
 /// All sections are optional and default to sensible values.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BlufioConfig {
     /// Agent identity and behavior settings.
@@ -40,18 +40,6 @@ pub struct BlufioConfig {
     pub cost: CostConfig,
 }
 
-impl Default for BlufioConfig {
-    fn default() -> Self {
-        Self {
-            agent: AgentConfig::default(),
-            telegram: TelegramConfig::default(),
-            anthropic: AnthropicConfig::default(),
-            storage: StorageConfig::default(),
-            security: SecurityConfig::default(),
-            cost: CostConfig::default(),
-        }
-    }
-}
 
 /// Agent identity and behavior configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -93,7 +81,7 @@ fn default_log_level() -> String {
 }
 
 /// Telegram bot integration configuration.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TelegramConfig {
     /// Telegram Bot API token. `None` disables Telegram integration.
@@ -105,14 +93,6 @@ pub struct TelegramConfig {
     pub allowed_users: Vec<String>,
 }
 
-impl Default for TelegramConfig {
-    fn default() -> Self {
-        Self {
-            bot_token: None,
-            allowed_users: Vec::new(),
-        }
-    }
-}
 
 /// Anthropic API configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]

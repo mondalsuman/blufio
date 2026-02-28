@@ -6,6 +6,8 @@
 //! Supports XDG hierarchy: `./blufio.toml` > `~/.config/blufio/blufio.toml` > `/etc/blufio/blufio.toml`
 //! with environment variable overrides via `BLUFIO_` prefix.
 
+#![allow(clippy::result_large_err)] // figment::Error is external and cannot be boxed without wrapper
+
 use std::path::Path;
 
 use figment::{
