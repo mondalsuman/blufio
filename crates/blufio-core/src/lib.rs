@@ -13,7 +13,12 @@ pub mod types;
 
 // Re-export key items at crate root for ergonomic imports.
 pub use error::BlufioError;
-pub use types::{AdapterType, HealthStatus, Message, MessageId, QueueEntry, Session, SessionId};
+pub use types::{
+    AdapterType, ChannelCapabilities, ContentBlock, HealthStatus, InboundMessage, Message,
+    MessageContent, MessageId, OutboundMessage, ProviderMessage, ProviderRequest,
+    ProviderResponse, ProviderStreamChunk, QueueEntry, Session, SessionId, StreamEventType,
+    TokenUsage,
+};
 
 // Re-export all adapter traits at crate root.
 pub use traits::{

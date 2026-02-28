@@ -26,4 +26,24 @@ pub trait ChannelAdapter: PluginAdapter {
 
     /// Receives the next inbound message from the channel.
     async fn receive(&self) -> Result<InboundMessage, BlufioError>;
+
+    /// Edits an existing message in the channel.
+    ///
+    /// Default implementation is a no-op for channels that don't support editing.
+    async fn edit_message(
+        &self,
+        _chat_id: &str,
+        _message_id: &str,
+        _text: &str,
+        _parse_mode: Option<&str>,
+    ) -> Result<(), BlufioError> {
+        Ok(())
+    }
+
+    /// Sends a typing indicator to the channel.
+    ///
+    /// Default implementation is a no-op for channels that don't support typing indicators.
+    async fn send_typing(&self, _chat_id: &str) -> Result<(), BlufioError> {
+        Ok(())
+    }
 }

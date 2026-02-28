@@ -39,44 +39,175 @@ pub enum AdapterType {
     SkillRuntime,
 }
 
-// --- Channel placeholder types ---
+// --- Channel types ---
+
+/// Content types that can be received from a channel.
+#[derive(Debug, Clone)]
+pub enum MessageContent {
+    /// Plain text message.
+    Text(String),
+    /// Image with raw bytes and metadata.
+    Image {
+        data: Vec<u8>,
+        mime_type: String,
+        caption: Option<String>,
+    },
+    /// Document/file with raw bytes and metadata.
+    Document {
+        data: Vec<u8>,
+        filename: String,
+        mime_type: String,
+    },
+    /// Voice message with raw audio bytes.
+    Voice {
+        data: Vec<u8>,
+        duration_secs: Option<f32>,
+    },
+}
 
 /// An inbound message received from a channel adapter.
 #[derive(Debug, Clone)]
 pub struct InboundMessage {
-    pub _placeholder: (),
+    /// Message ID from the channel.
+    pub id: String,
+    /// Session this message belongs to (resolved by agent loop).
+    pub session_id: Option<String>,
+    /// Channel identifier (e.g., "telegram", "cli").
+    pub channel: String,
+    /// Sender identifier from the channel.
+    pub sender_id: String,
+    /// Message content.
+    pub content: MessageContent,
+    /// ISO 8601 timestamp.
+    pub timestamp: String,
+    /// Optional JSON metadata blob.
+    pub metadata: Option<String>,
 }
 
 /// An outbound message to be sent via a channel adapter.
 #[derive(Debug, Clone)]
 pub struct OutboundMessage {
-    pub _placeholder: (),
+    /// Session this message belongs to.
+    pub session_id: Option<String>,
+    /// Channel identifier.
+    pub channel: String,
+    /// Text content to send.
+    pub content: String,
+    /// Message ID to reply to (channel-specific).
+    pub reply_to: Option<String>,
+    /// Parse mode for formatting (e.g., "MarkdownV2").
+    pub parse_mode: Option<String>,
+    /// Optional JSON metadata blob.
+    pub metadata: Option<String>,
 }
 
 /// Capabilities reported by a channel adapter.
 #[derive(Debug, Clone)]
 pub struct ChannelCapabilities {
-    pub _placeholder: (),
+    /// Whether the channel supports editing sent messages.
+    pub supports_edit: bool,
+    /// Whether the channel supports typing indicators.
+    pub supports_typing: bool,
+    /// Whether the channel supports image messages.
+    pub supports_images: bool,
+    /// Whether the channel supports document messages.
+    pub supports_documents: bool,
+    /// Whether the channel supports voice messages.
+    pub supports_voice: bool,
+    /// Maximum message length in characters (None = unlimited).
+    pub max_message_length: Option<usize>,
 }
 
-// --- Provider placeholder types ---
+// --- Provider types ---
+
+/// A content block within a provider message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ContentBlock {
+    /// Text content block.
+    #[serde(rename = "text")]
+    Text { text: String },
+    /// Image content block (base64 encoded).
+    #[serde(rename = "image")]
+    Image {
+        source_type: String,
+        media_type: String,
+        data: String,
+    },
+}
+
+/// A single message in a provider conversation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderMessage {
+    /// Role: "user", "assistant", or "system".
+    pub role: String,
+    /// Content blocks for this message.
+    pub content: Vec<ContentBlock>,
+}
 
 /// A request to an LLM provider.
 #[derive(Debug, Clone)]
 pub struct ProviderRequest {
-    pub _placeholder: (),
+    /// Model identifier (e.g., "claude-sonnet-4-20250514").
+    pub model: String,
+    /// System prompt (injected as system parameter, not a message).
+    pub system_prompt: Option<String>,
+    /// Conversation messages.
+    pub messages: Vec<ProviderMessage>,
+    /// Maximum tokens to generate.
+    pub max_tokens: u32,
+    /// Whether to stream the response.
+    pub stream: bool,
+}
+
+/// Token usage statistics from a provider response.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TokenUsage {
+    /// Number of input tokens consumed.
+    pub input_tokens: u32,
+    /// Number of output tokens generated.
+    pub output_tokens: u32,
 }
 
 /// A response from an LLM provider.
 #[derive(Debug, Clone)]
 pub struct ProviderResponse {
-    pub _placeholder: (),
+    /// Response ID from the provider.
+    pub id: String,
+    /// Generated text content.
+    pub content: String,
+    /// Model that generated the response.
+    pub model: String,
+    /// Reason the generation stopped (e.g., "end_turn", "max_tokens").
+    pub stop_reason: Option<String>,
+    /// Token usage statistics.
+    pub usage: TokenUsage,
+}
+
+/// Event types in a streaming provider response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StreamEventType {
+    MessageStart,
+    ContentBlockStart,
+    ContentBlockDelta,
+    ContentBlockStop,
+    MessageDelta,
+    MessageStop,
+    Ping,
+    Error,
 }
 
 /// A single chunk from a streaming LLM provider response.
 #[derive(Debug, Clone)]
 pub struct ProviderStreamChunk {
-    pub _placeholder: (),
+    /// Type of streaming event.
+    pub event_type: StreamEventType,
+    /// Text content (for ContentBlockDelta with text_delta).
+    pub text: Option<String>,
+    /// Token usage (for MessageDelta).
+    pub usage: Option<TokenUsage>,
+    /// Error message (for Error events).
+    pub error: Option<String>,
 }
 
 // --- Embedding placeholder types ---

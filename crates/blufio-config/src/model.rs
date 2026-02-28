@@ -60,6 +60,15 @@ pub struct AgentConfig {
     /// Logging level (trace, debug, info, warn, error).
     #[serde(default = "default_log_level")]
     pub log_level: String,
+
+    /// Inline system prompt string. Overridden by `system_prompt_file` if both set.
+    #[serde(default)]
+    pub system_prompt: Option<String>,
+
+    /// Path to a markdown file containing the system prompt.
+    /// Takes precedence over `system_prompt` if both are set.
+    #[serde(default)]
+    pub system_prompt_file: Option<String>,
 }
 
 impl Default for AgentConfig {
@@ -68,6 +77,8 @@ impl Default for AgentConfig {
             name: default_agent_name(),
             max_sessions: default_max_sessions(),
             log_level: default_log_level(),
+            system_prompt: None,
+            system_prompt_file: None,
         }
     }
 }
@@ -109,6 +120,14 @@ pub struct AnthropicConfig {
     /// Default model to use for LLM requests.
     #[serde(default = "default_model")]
     pub default_model: String,
+
+    /// Maximum tokens to generate per response.
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+
+    /// Anthropic API version string.
+    #[serde(default = "default_api_version")]
+    pub api_version: String,
 }
 
 impl Default for AnthropicConfig {
@@ -116,12 +135,22 @@ impl Default for AnthropicConfig {
         Self {
             api_key: None,
             default_model: default_model(),
+            max_tokens: default_max_tokens(),
+            api_version: default_api_version(),
         }
     }
 }
 
 fn default_model() -> String {
     "claude-sonnet-4-20250514".to_string()
+}
+
+fn default_max_tokens() -> u32 {
+    4096
+}
+
+fn default_api_version() -> String {
+    "2023-06-01".to_string()
 }
 
 /// Storage backend configuration.
