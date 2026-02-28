@@ -51,11 +51,11 @@ Plans:
   3. API keys and bot tokens stored in the credential vault are encrypted with AES-256-GCM and the vault key (derived via Argon2id) is never written to disk
   4. The binary binds to 127.0.0.1 by default, all outbound connections require TLS, and secrets are redacted from all log output
   5. Concurrent write operations from multiple sessions never produce SQLITE_BUSY errors (single-writer pattern enforced)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- SQLite persistence layer (blufio-storage crate): WAL mode, embedded migrations, single-writer via tokio-rusqlite, session/message/queue CRUD, StorageAdapter implementation, config/error extensions
+- [ ] 02-02-PLAN.md -- Credential vault + network security (blufio-vault, blufio-security crates): AES-256-GCM encryption, Argon2id KDF, key wrapping, TLS enforcement, SSRF prevention, secret redaction, plaintext config migration
 
 ### Phase 3: Agent Loop & Telegram
 **Goal**: A working always-on Telegram bot backed by Claude -- the minimum viable agent that receives messages, assembles basic context, calls Anthropic, and responds, with persistent conversations and graceful shutdown
