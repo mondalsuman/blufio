@@ -35,11 +35,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. TOML configuration with `deny_unknown_fields` rejects invalid config keys at startup with clear error messages
   4. `cargo deny check` passes for license compatibility and `cargo audit` finds no known vulnerabilities
   5. Every source file contains SPDX dual-license header (MIT + Apache-2.0) and LICENSE files exist at repo root
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Cargo workspace, core crate with 7 adapter trait stubs, binary crate with jemalloc, licensing, community docs, cargo-deny, CI pipelines
+- [ ] 01-02-PLAN.md -- TOML config system with deny_unknown_fields, figment-to-miette error bridge, fuzzy match typo suggestions, XDG lookup, env var overrides
 
 ### Phase 2: Persistence & Security Vault
 **Goal**: All application state persists in a single SQLite database with WAL mode and ACID guarantees, credentials are encrypted at rest with AES-256-GCM, and security defaults (localhost binding, TLS, secret redaction, SSRF prevention) are enforced from this point forward
@@ -185,7 +185,7 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Project Foundation & Workspace | 0/2 | Not started | - |
+| 1. Project Foundation & Workspace | 0/2 | Planned | - |
 | 2. Persistence & Security Vault | 0/2 | Not started | - |
 | 3. Agent Loop & Telegram | 0/3 | Not started | - |
 | 4. Context Engine & Cost Tracking | 0/2 | Not started | - |
