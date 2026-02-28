@@ -47,6 +47,14 @@ pub enum BlufioError {
     #[error("operation timed out after {duration:?}")]
     Timeout { duration: std::time::Duration },
 
+    /// Credential vault errors (decryption failure, vault locked, key derivation).
+    #[error("vault error: {0}")]
+    Vault(String),
+
+    /// Security policy violations (TLS required, SSRF blocked, invalid credential).
+    #[error("security violation: {0}")]
+    Security(String),
+
     /// Internal or unexpected errors.
     #[error("internal error: {0}")]
     Internal(String),

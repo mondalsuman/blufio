@@ -26,6 +26,17 @@ tracing = "0.1"
 tokio = { version = "1" }
 tikv-jemallocator = "0.6"
 tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+tokio-rusqlite = "0.7"
+refinery = { version = "0.9", features = ["rusqlite"] }
+ring = "0.17"
+argon2 = "0.5"
+secrecy = { version = "0.10", features = ["serde"] }
+rpassword = "7"
+zeroize = { version = "1.8", features = ["derive"] }
+rand = "0.8"
+regex = "1"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
 [profile.release]
 lto = "thin"

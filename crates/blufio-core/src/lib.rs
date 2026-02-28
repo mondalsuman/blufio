@@ -13,7 +13,7 @@ pub mod types;
 
 // Re-export key items at crate root for ergonomic imports.
 pub use error::BlufioError;
-pub use types::{AdapterType, HealthStatus, MessageId, SessionId};
+pub use types::{AdapterType, HealthStatus, Message, MessageId, QueueEntry, Session, SessionId};
 
 // Re-export all adapter traits at crate root.
 pub use traits::{
@@ -27,7 +27,7 @@ mod tests {
 
     #[test]
     fn blufio_error_has_all_variants() {
-        // Verify all 8 error variants exist and can be constructed.
+        // Verify all 10 error variants exist and can be constructed.
         let _config = BlufioError::Config("test".into());
         let _storage = BlufioError::Storage {
             source: Box::new(std::io::Error::other("test")),
@@ -51,6 +51,8 @@ mod tests {
         let _timeout = BlufioError::Timeout {
             duration: std::time::Duration::from_secs(30),
         };
+        let _vault = BlufioError::Vault("test".into());
+        let _security = BlufioError::Security("test".into());
         let _internal = BlufioError::Internal("test".into());
     }
 

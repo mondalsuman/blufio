@@ -1,0 +1,28 @@
+[package]
+name = "blufio-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "SQLite persistence layer for the Blufio agent framework"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+rusqlite.workspace = true
+tokio-rusqlite.workspace = true
+refinery.workspace = true
+serde.workspace = true
+serde_json = "1"
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+dirs.workspace = true
+semver.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile = "3"

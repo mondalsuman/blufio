@@ -64,6 +64,34 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
         });
     }
 
+    // Validate vault KDF parameters
+    if config.vault.kdf_memory_cost < 32768 {
+        errors.push(ConfigError::Validation {
+            message: format!(
+                "vault.kdf_memory_cost must be at least 32768 (32 MiB), got {}",
+                config.vault.kdf_memory_cost
+            ),
+        });
+    }
+
+    if config.vault.kdf_iterations < 2 {
+        errors.push(ConfigError::Validation {
+            message: format!(
+                "vault.kdf_iterations must be at least 2, got {}",
+                config.vault.kdf_iterations
+            ),
+        });
+    }
+
+    if config.vault.kdf_parallelism < 1 {
+        errors.push(ConfigError::Validation {
+            message: format!(
+                "vault.kdf_parallelism must be at least 1, got {}",
+                config.vault.kdf_parallelism
+            ),
+        });
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {
