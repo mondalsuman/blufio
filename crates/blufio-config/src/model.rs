@@ -75,6 +75,10 @@ pub struct BlufioConfig {
     /// Prometheus metrics settings.
     #[serde(default)]
     pub prometheus: PrometheusConfig,
+
+    /// Daemon and memory management settings.
+    #[serde(default)]
+    pub daemon: DaemonConfig,
 }
 
 
@@ -746,4 +750,48 @@ impl Default for PrometheusConfig {
 
 fn default_prometheus_enabled() -> bool {
     false
+}
+
+/// Daemon and memory management configuration.
+///
+/// Controls memory monitoring thresholds, health endpoint settings,
+/// and cache shedding behavior for production deployment.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DaemonConfig {
+    /// Heap memory warning threshold in MB. When jemalloc allocated bytes
+    /// exceed this, a warning is logged and caches are proactively shed.
+    #[serde(default = "default_memory_warn_mb")]
+    pub memory_warn_mb: u64,
+
+    /// Heap memory limit in MB. When exceeded, new sessions are rejected
+    /// to prevent OOM on constrained VPS deployments.
+    #[serde(default = "default_memory_limit_mb")]
+    pub memory_limit_mb: u64,
+
+    /// Port for the health endpoint. Defaults to the gateway port.
+    #[serde(default = "default_health_port")]
+    pub health_port: u16,
+}
+
+impl Default for DaemonConfig {
+    fn default() -> Self {
+        Self {
+            memory_warn_mb: default_memory_warn_mb(),
+            memory_limit_mb: default_memory_limit_mb(),
+            health_port: default_health_port(),
+        }
+    }
+}
+
+fn default_memory_warn_mb() -> u64 {
+    150
+}
+
+fn default_memory_limit_mb() -> u64 {
+    200
+}
+
+fn default_health_port() -> u16 {
+    3000
 }
