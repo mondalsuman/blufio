@@ -327,16 +327,15 @@ impl ChannelAdapter for TelegramChannel {
 /// Extracts the chat ID from an outbound message's metadata.
 fn extract_chat_id(msg: &OutboundMessage) -> Result<ChatId, BlufioError> {
     // Try to get chat_id from metadata
-    if let Some(ref metadata) = msg.metadata {
-        if let Ok(meta) = serde_json::from_str::<serde_json::Value>(metadata) {
-            if let Some(chat_id_str) = meta.get("chat_id").and_then(|v| v.as_str()) {
-                let id = chat_id_str.parse::<i64>().map_err(|e| BlufioError::Channel {
-                    message: format!("invalid chat_id in metadata: {e}"),
-                    source: None,
-                })?;
-                return Ok(ChatId(id));
-            }
-        }
+    if let Some(ref metadata) = msg.metadata
+        && let Ok(meta) = serde_json::from_str::<serde_json::Value>(metadata)
+        && let Some(chat_id_str) = meta.get("chat_id").and_then(|v| v.as_str())
+    {
+        let id = chat_id_str.parse::<i64>().map_err(|e| BlufioError::Channel {
+            message: format!("invalid chat_id in metadata: {e}"),
+            source: None,
+        })?;
+        return Ok(ChatId(id));
     }
 
     // Fallback: try channel field as chat ID

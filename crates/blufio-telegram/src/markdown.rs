@@ -40,7 +40,7 @@ pub fn escape_markdown_v2(text: &str) -> String {
                 result.push_str(&temp);
                 let mut found_close = false;
                 let mut close_count = 0;
-                while let Some(c) = chars.next() {
+                for c in chars.by_ref() {
                     result.push(c);
                     if c == '`' {
                         close_count += 1;
@@ -59,7 +59,7 @@ pub fn escape_markdown_v2(text: &str) -> String {
                 // Inline code: find closing `
                 result.push('`');
                 let mut found_close = false;
-                while let Some(c) = chars.next() {
+                for c in chars.by_ref() {
                     result.push(c);
                     if c == '`' {
                         found_close = true;

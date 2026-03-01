@@ -268,6 +268,7 @@ mod tests {
             system: None,
             max_tokens: 1024,
             stream: false,
+            cache_control: None,
         }
     }
 

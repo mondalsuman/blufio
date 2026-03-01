@@ -1,0 +1,24 @@
+[package]
+name = "blufio-context"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Three-zone context engine for Blufio LLM prompt assembly"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+async-trait.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+serde.workspace = true
+serde_json = "1"
+tokio = { workspace = true, features = ["fs"] }
+base64 = "0.22"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

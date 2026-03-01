@@ -135,10 +135,10 @@ impl AgentLoop {
         let chat_id = extract_chat_id_from_metadata(&metadata).unwrap_or_default();
 
         // Send typing indicator.
-        if !chat_id.is_empty() {
-            if let Err(e) = self.channel.send_typing(&chat_id).await {
-                debug!(error = %e, "failed to send typing indicator");
-            }
+        if !chat_id.is_empty()
+            && let Err(e) = self.channel.send_typing(&chat_id).await
+        {
+            debug!(error = %e, "failed to send typing indicator");
         }
 
         // Get the session actor.
@@ -243,14 +243,13 @@ impl AgentLoop {
             }
         } else if sent_message_id.is_some() && !full_response.is_empty() {
             // Final edit to ensure the complete response is shown.
-            if let Some(mid) = &sent_message_id {
-                if let Err(e) = self
+            if let Some(mid) = &sent_message_id
+                && let Err(e) = self
                     .channel
                     .edit_message(&chat_id, mid, &full_response, None)
                     .await
-                {
-                    debug!(error = %e, "failed to send final edit");
-                }
+            {
+                debug!(error = %e, "failed to send final edit");
             }
         }
 

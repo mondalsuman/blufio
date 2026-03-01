@@ -35,11 +35,10 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Initialize Anthropic provider.
     let provider: Arc<dyn ProviderAdapter + Send + Sync> =
-        Arc::new(AnthropicProvider::new(&config).await.map_err(|e| {
+        Arc::new(AnthropicProvider::new(&config).await.inspect_err(|_| {
             eprintln!(
                 "error: Anthropic API key required. Set via: config, ANTHROPIC_API_KEY env var, or `blufio config set-secret anthropic.api_key`"
             );
-            e
         })?);
 
     // Load system prompt.

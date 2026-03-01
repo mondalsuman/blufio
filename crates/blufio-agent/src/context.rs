@@ -45,10 +45,10 @@ pub async fn load_system_prompt(config: &AgentConfig) -> Result<String, BlufioEr
     }
 
     // Priority 2: inline string
-    if let Some(ref prompt) = config.system_prompt {
-        if !prompt.is_empty() {
-            return Ok(prompt.clone());
-        }
+    if let Some(ref prompt) = config.system_prompt
+        && !prompt.is_empty()
+    {
+        return Ok(prompt.clone());
     }
 
     // Priority 3: default
@@ -96,6 +96,7 @@ pub async fn assemble_context(
     Ok(ProviderRequest {
         model: model.to_string(),
         system_prompt: Some(system_prompt.to_string()),
+        system_blocks: None,
         messages,
         max_tokens,
         stream: true,
