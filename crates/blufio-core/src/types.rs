@@ -219,18 +219,22 @@ pub struct ProviderStreamChunk {
     pub error: Option<String>,
 }
 
-// --- Embedding placeholder types ---
+// --- Embedding types ---
 
 /// Input for an embedding adapter.
 #[derive(Debug, Clone)]
 pub struct EmbeddingInput {
-    pub _placeholder: (),
+    /// Text strings to embed.
+    pub texts: Vec<String>,
 }
 
 /// Output from an embedding adapter.
 #[derive(Debug, Clone)]
 pub struct EmbeddingOutput {
-    pub _placeholder: (),
+    /// One embedding vector per input text.
+    pub embeddings: Vec<Vec<f32>>,
+    /// Dimensionality of each embedding vector.
+    pub dimensions: usize,
 }
 
 // --- Auth placeholder types ---

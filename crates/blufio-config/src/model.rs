@@ -46,6 +46,10 @@ pub struct BlufioConfig {
     /// Context engine settings.
     #[serde(default)]
     pub context: ContextConfig,
+
+    /// Memory system settings.
+    #[serde(default)]
+    pub memory: MemoryConfig,
 }
 
 
@@ -339,4 +343,73 @@ fn default_compaction_threshold() -> f64 {
 
 fn default_context_budget() -> u32 {
     180_000
+}
+
+/// Memory system configuration.
+///
+/// Controls long-term memory extraction, storage, and retrieval.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryConfig {
+    /// Enable the memory system. When false, no memory operations occur.
+    #[serde(default = "default_memory_enabled")]
+    pub enabled: bool,
+
+    /// Minimum cosine similarity threshold for memory retrieval (0.0-1.0).
+    /// Memories below this threshold are not loaded into context.
+    #[serde(default = "default_similarity_threshold")]
+    pub similarity_threshold: f64,
+
+    /// Name of the embedding model to use.
+    #[serde(default = "default_model_name")]
+    pub model_name: String,
+
+    /// Model to use for memory extraction (Haiku for cost efficiency).
+    #[serde(default = "default_extraction_model")]
+    pub extraction_model: String,
+
+    /// Seconds of idle time before triggering memory extraction.
+    #[serde(default = "default_idle_timeout_secs")]
+    pub idle_timeout_secs: u64,
+
+    /// Maximum number of candidate results per search method (pre-RRF).
+    #[serde(default = "default_max_retrieval_results")]
+    pub max_retrieval_results: usize,
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_memory_enabled(),
+            similarity_threshold: default_similarity_threshold(),
+            model_name: default_model_name(),
+            extraction_model: default_extraction_model(),
+            idle_timeout_secs: default_idle_timeout_secs(),
+            max_retrieval_results: default_max_retrieval_results(),
+        }
+    }
+}
+
+fn default_memory_enabled() -> bool {
+    true
+}
+
+fn default_similarity_threshold() -> f64 {
+    0.35
+}
+
+fn default_model_name() -> String {
+    "all-MiniLM-L6-v2".to_string()
+}
+
+fn default_extraction_model() -> String {
+    "claude-haiku-4-5-20250901".to_string()
+}
+
+fn default_idle_timeout_secs() -> u64 {
+    300 // 5 minutes
+}
+
+fn default_max_retrieval_results() -> usize {
+    50
 }
