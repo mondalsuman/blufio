@@ -65,6 +65,10 @@ tikv-jemallocator = { workspace = true }
 tikv-jemalloc-ctl = { workspace = true }
 
 [dev-dependencies]
+blufio-test-utils = { path = "../blufio-test-utils" }
+blufio-auth-keypair = { path = "../blufio-auth-keypair" }
+blufio-storage = { path = "../blufio-storage" }
 serde_json = "1"
 tempfile = "3"
 toml.workspace = true
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }

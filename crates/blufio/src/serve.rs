@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use blufio_agent::{AgentLoop, ChannelMultiplexer, HeartbeatRunner};
+use blufio_agent::{AgentLoop, ChannelMultiplexer, DelegationRouter, DelegationTool, HeartbeatRunner};
 use blufio_agent::shutdown;
 use blufio_config::model::BlufioConfig;
 use blufio_context::ContextEngine;
@@ -278,6 +278,31 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             model = config.anthropic.default_model.as_str(),
             "model routing disabled, using default model"
         );
+    }
+
+    // Wire multi-agent delegation (if enabled and agents configured).
+    if config.delegation.enabled && !config.agents.is_empty() {
+        let delegation_router = Arc::new(DelegationRouter::new(
+            &config.agents,
+            provider.clone(),
+            storage.clone() as Arc<dyn StorageAdapter + Send + Sync>,
+            cost_ledger.clone(),
+            budget_tracker.clone(),
+            router.clone(),
+            config.delegation.timeout_secs,
+        ));
+        let delegation_tool = DelegationTool::new(delegation_router);
+        {
+            let mut registry = tool_registry.write().await;
+            registry.register(Arc::new(delegation_tool));
+        }
+        info!(
+            agents = config.agents.len(),
+            timeout_secs = config.delegation.timeout_secs,
+            "multi-agent delegation enabled"
+        );
+    } else {
+        debug!("multi-agent delegation disabled");
     }
 
     // Initialize heartbeat runner (if enabled).

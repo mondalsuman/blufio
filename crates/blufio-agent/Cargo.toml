@@ -10,6 +10,7 @@ description = "Agent loop and session management for Blufio"
 
 [dependencies]
 blufio-core = { path = "../blufio-core" }
+blufio-auth-keypair = { path = "../blufio-auth-keypair" }
 blufio-config = { path = "../blufio-config" }
 blufio-context = { path = "../blufio-context" }
 blufio-cost = { path = "../blufio-cost" }
@@ -28,4 +29,8 @@ serde_json = "1"
 base64 = "0.22"
 
 [dev-dependencies]
+blufio-test-utils = { path = "../blufio-test-utils" }
+blufio-storage = { path = "../blufio-storage" }
 tokio = { workspace = true, features = ["full"] }
+tempfile = "3"
+futures-core = "0.3"

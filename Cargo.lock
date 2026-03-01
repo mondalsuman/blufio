@@ -394,6 +394,7 @@ dependencies = [
  "blufio-skill",
  "blufio-storage",
  "blufio-telegram",
+ "blufio-test-utils",
  "blufio-vault",
  "chrono",
  "clap",
@@ -424,6 +425,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "blufio-auth-keypair",
  "blufio-config",
  "blufio-context",
  "blufio-core",
@@ -431,10 +433,14 @@ dependencies = [
  "blufio-memory",
  "blufio-router",
  "blufio-skill",
+ "blufio-storage",
+ "blufio-test-utils",
  "chrono",
  "futures",
+ "futures-core",
  "semver",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
@@ -466,6 +472,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "blufio-core",
+ "chrono",
  "ed25519-dalek",
  "hex",
  "rand 0.8.5",
@@ -474,6 +481,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -694,6 +702,32 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "blufio-test-utils"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-agent",
+ "blufio-config",
+ "blufio-context",
+ "blufio-core",
+ "blufio-cost",
+ "blufio-router",
+ "blufio-skill",
+ "blufio-storage",
+ "chrono",
+ "futures",
+ "futures-core",
+ "semver",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-rusqlite",
+ "tokio-util",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -381,7 +381,7 @@ async fn handle_skill_command(
             if skills.is_empty() {
                 println!("No skills installed.");
             } else {
-                println!("{:<20} {:<10} {:<12} {}", "NAME", "VERSION", "STATUS", "DESCRIPTION");
+                println!("{:<20} {:<10} {:<12} DESCRIPTION", "NAME", "VERSION", "STATUS");
                 println!("{}", "-".repeat(70));
                 for skill in &skills {
                     println!(
@@ -489,9 +489,7 @@ fn handle_plugin_command(
                         let all_configured = manifest.config_keys.iter().all(|key| {
                             is_config_key_present(config, key)
                         });
-                        if all_configured {
-                            blufio_plugin::PluginStatus::Enabled
-                        } else if manifest.config_keys.is_empty() {
+                        if all_configured || manifest.config_keys.is_empty() {
                             blufio_plugin::PluginStatus::Enabled
                         } else {
                             blufio_plugin::PluginStatus::NotConfigured
@@ -503,8 +501,8 @@ fn handle_plugin_command(
             }
 
             println!(
-                "{:<18} {:<15} {:<16} {}",
-                "NAME", "TYPE", "STATUS", "DESCRIPTION"
+                "{:<18} {:<15} {:<16} DESCRIPTION",
+                "NAME", "TYPE", "STATUS"
             );
             println!("{}", "-".repeat(75));
             for entry in registry.list_all() {
@@ -524,8 +522,8 @@ fn handle_plugin_command(
                 println!("No plugins found matching '{query}'.");
             } else {
                 println!(
-                    "{:<18} {:<15} {}",
-                    "NAME", "TYPE", "DESCRIPTION"
+                    "{:<18} {:<15} DESCRIPTION",
+                    "NAME", "TYPE"
                 );
                 println!("{}", "-".repeat(65));
                 for manifest in &results {
