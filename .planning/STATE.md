@@ -5,36 +5,36 @@ milestone_name: milestone
 status: unknown
 last_updated: "2026-03-01T00:00:00.000Z"
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 7
+  completed_plans: 7
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-28)
+See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 2 complete -- ready for Phase 3 (Agent Loop & Telegram)
+**Current focus:** Phase 3 complete -- ready for Phase 4 (Context Engine & Cost Tracking)
 
 ## Current Position
 
-Phase: 2 of 10 (Persistence & Security Vault)
-Plan: 2 of 2 in current phase (COMPLETE)
-Status: Phase 2 complete
-Last activity: 2026-02-28 -- Plan 02-02 complete (credential vault + network security)
+Phase: 3 of 10 (Agent Loop & Telegram)
+Plan: 3 of 3 in current phase (COMPLETE)
+Status: Phase 3 complete
+Last activity: 2026-03-01 -- Plan 03-03 complete (agent loop + CLI wiring)
 
-Progress: [██........] 20%
+Progress: [███.......] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: ~24min
-- Total execution time: ~1.6 hours
+- Total plans completed: 7
+- Average duration: ~20min
+- Total execution time: ~2.5 hours
 
 **By Phase:**
 
@@ -42,10 +42,11 @@ Progress: [██........] 20%
 |-------|-------|-------|----------|
 | 1 | 2/2 | 23min | 12min |
 | 2 | 2/2 | 75min | 38min |
+| 3 | 3/3 | 45min | 15min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (15min), 01-02 (8min), 02-01 (30min), 02-02 (45min)
-- Trend: increasing complexity per plan as expected
+- Last 5 plans: 02-01 (30min), 02-02 (45min), 03-01 (15min), 03-02 (15min), 03-03 (20min)
+- Trend: Phase 3 plans faster due to established patterns
 
 *Updated after each plan completion*
 
@@ -68,6 +69,11 @@ Recent decisions affecting current work:
 - [02-02]: Used Zeroizing<[u8; 32]> for master key instead of SecretBox
 - [02-02]: BLUFIO_VAULT_KEY env var excluded from config loader via Figment Env::ignore()
 - [02-02]: Vault created lazily on first set-secret call
+- [03-01]: teloxide 0.17 (not 0.13 from research) -- API changed significantly
+- [03-01]: eventsource-stream 0.2 for SSE parsing with reqwest byte streams
+- [03-02]: Mock teloxide Message construction via serde_json::from_value (API-compatible)
+- [03-03]: Session key = channel:sender_id, with storage fallback for crash recovery
+- [03-03]: tracing-subscriber with EnvFilter for configurable log levels
 - [Roadmap]: 10 phases derived from 70 requirements following PRD dependency order
 - [Roadmap]: Research recommends building Anthropic client directly in Phase 3, extracting provider trait
 
@@ -83,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Phase 2 complete (02-01 persistence + 02-02 security). Ready for Phase 3.
+Last session: 2026-03-01
+Stopped at: Phase 3 complete (03-01 core+anthropic, 03-02 telegram, 03-03 agent-loop+cli). Ready for Phase 4.
 Resume file: None
