@@ -83,6 +83,30 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Initialize plugin registry.
     let _registry = initialize_plugin_registry(&config);
 
+    // SEC-03: Vault startup check -- unlock vault if it exists so secrets
+    // are available for provider initialization. Silent no-op when no vault.
+    {
+        let vault_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
+            .await
+            .map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
+        match blufio_vault::vault_startup_check(vault_conn, &config.vault).await {
+            Ok(Some(_vault)) => {
+                info!("vault unlocked -- secrets available");
+            }
+            Ok(None) => {
+                debug!("no vault found -- skipping vault startup check");
+            }
+            Err(e) => {
+                error!(error = %e, "vault startup check failed");
+                eprintln!(
+                    "error: Vault exists but cannot be unlocked. \
+                     Set BLUFIO_VAULT_KEY environment variable or provide passphrase interactively."
+                );
+                return Err(e);
+            }
+        }
+    }
+
     // Initialize storage.
     #[cfg(feature = "sqlite")]
     let storage = {
