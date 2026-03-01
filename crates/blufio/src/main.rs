@@ -12,6 +12,9 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
+mod serve;
+mod shell;
+
 use clap::{Parser, Subcommand};
 
 /// Blufio - An always-on personal AI agent.
@@ -69,10 +72,16 @@ async fn main() {
 
     match cli.command {
         Some(Commands::Serve) => {
-            println!("blufio serve: not yet implemented");
+            if let Err(e) = serve::run_serve(config).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
         }
         Some(Commands::Shell) => {
-            println!("blufio shell: not yet implemented");
+            if let Err(e) = shell::run_shell(config).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
         }
         Some(Commands::Config { action }) => match action {
             Some(ConfigCommands::SetSecret { key }) => {

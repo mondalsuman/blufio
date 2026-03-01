@@ -1,0 +1,25 @@
+[package]
+name = "blufio-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Agent loop and session management for Blufio"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+async-trait.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "signal", "macros", "fs"] }
+tokio-util.workspace = true
+tracing.workspace = true
+futures.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+serde_json = "1"
+base64 = "0.22"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
