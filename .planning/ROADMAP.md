@@ -22,6 +22,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Plugin System & Gateway** - Plugin host, plugin CLI, HTTP/WebSocket gateway
 - [x] **Phase 9: Production Hardening** - systemd, daemon mode, memory bounds, Prometheus, diagnostics, operations
 - [x] **Phase 10: Multi-Agent & Final Integration** - Multi-agent routing, Ed25519 signing, end-to-end validation (completed 2026-03-01)
+- [ ] **Phase 11: Fix Critical Integration Bugs** - Fix 4 cross-phase integration bugs found by milestone audit (Gap Closure)
+- [ ] **Phase 12: Verify Unverified Phases** - Create VERIFICATION.md for phases 2, 5, 6, 8, 9 and fix missing/empty SUMMARYs (Gap Closure)
+- [ ] **Phase 13: Sync Traceability & Documentation** - Sync REQUIREMENTS.md and ROADMAP.md with verified state (Gap Closure)
 
 ## Phase Details
 
@@ -187,6 +190,39 @@ Plans:
 Plans:
 - [ ] 10-01: TBD
 
+### Phase 11: Fix Critical Integration Bugs
+**Goal**: Fix 4 cross-phase integration bugs identified by the v1.0 milestone audit — tool content block serialization, vault startup wiring, keypair auth gateway wiring, and model router bypass in tool follow-up
+**Depends on**: Phase 10
+**Requirements**: LLM-05, SEC-02, SEC-03
+**Gap Closure:** Closes integration gaps P0, P1, P2, P3 and flow gaps 1, 2 from v1.0 audit
+**Success Criteria** (what must be TRUE):
+  1. Multi-turn tool conversations produce correct ToolUse/ToolResult content blocks — no 400 API errors
+  2. `vault_startup_check()` is called during `blufio serve` startup — vault-backed API keys are usable
+  3. `KeypairAuthAdapter` is wired into gateway HTTP auth middleware — unauthenticated requests are rejected when keypair auth is configured
+  4. Tool follow-up requests use the model selected by ModelRouter, not default_model
+
+Plans:
+
+### Phase 12: Verify Unverified Phases
+**Goal**: Create VERIFICATION.md files for the 5 phases that lack formal verification (2, 5, 6, 8, 9), fix missing/empty SUMMARY files, and confirm all 33 unverified requirements are satisfied by the wired code
+**Depends on**: Phase 11
+**Requirements**: PERS-01, PERS-02, PERS-03, PERS-04, PERS-05, SEC-01, SEC-04, SEC-08, SEC-09, SEC-10, MEM-01, MEM-02, MEM-03, MEM-05, LLM-06, PLUG-01, PLUG-02, PLUG-03, PLUG-04, INFRA-05, CORE-04, CORE-07, CORE-08, COST-04, CLI-02, CLI-03, CLI-04, CLI-07, CLI-08, CORE-06
+**Gap Closure:** Closes 33 unsatisfied/partial requirement gaps from v1.0 audit
+
+Plans:
+
+### Phase 13: Sync Traceability & Documentation
+**Goal**: Synchronize REQUIREMENTS.md traceability table and ROADMAP.md progress table with the verified state of all requirements — update statuses, checkboxes, and coverage counts to reflect actual completion
+**Depends on**: Phase 12
+**Requirements**: (meta — covers all 70 v1 requirements traceability)
+**Gap Closure:** Closes documentation drift identified by v1.0 audit (33+ stale Pending statuses, checkbox mismatches, ROADMAP progress table inaccuracies)
+**Success Criteria** (what must be TRUE):
+  1. Every satisfied requirement has `[x]` checkbox and `Complete` status in traceability table
+  2. ROADMAP.md phase checkboxes and progress table accurately reflect completion state
+  3. Coverage count in REQUIREMENTS.md matches actual verified count
+
+Plans:
+
 ## Progress
 
 **Execution Order:**
@@ -205,3 +241,6 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 8. Plugin System & Gateway | 3/3 | Complete | 2026-03-01 |
 | 9. Production Hardening | 3/3 | Complete | 2026-03-01 |
 | 10. Multi-Agent & Final Integration | 3/3 | Complete    | 2026-03-01 |
+| 11. Fix Critical Integration Bugs | 0/0 | Gap closure | - |
+| 12. Verify Unverified Phases | 0/0 | Gap closure | - |
+| 13. Sync Traceability & Documentation | 0/0 | Gap closure | - |

@@ -172,7 +172,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LLM-02 | Phase 3: Agent Loop & Telegram | Complete |
 | LLM-03 | Phase 4: Context Engine & Cost Tracking | Complete |
 | LLM-04 | Phase 4: Context Engine & Cost Tracking | Complete |
-| LLM-05 | Phase 6: Model Routing & Smart Heartbeats | Pending |
+| LLM-05 | Phase 11: Fix Critical Integration Bugs | Pending |
 | LLM-06 | Phase 6: Model Routing & Smart Heartbeats | Pending |
 | LLM-07 | Phase 4: Context Engine & Cost Tracking | Complete |
 | LLM-08 | Phase 3: Agent Loop & Telegram | Complete |
@@ -191,8 +191,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MEM-04 | Phase 4: Context Engine & Cost Tracking | Complete |
 | MEM-05 | Phase 5: Memory & Embeddings | Pending |
 | SEC-01 | Phase 2: Persistence & Security Vault | Pending |
-| SEC-02 | Phase 9: Production Hardening | Pending |
-| SEC-03 | Phase 2: Persistence & Security Vault | Pending |
+| SEC-02 | Phase 11: Fix Critical Integration Bugs | Pending |
+| SEC-03 | Phase 11: Fix Critical Integration Bugs | Pending |
 | SEC-04 | Phase 2: Persistence & Security Vault | Pending |
 | SEC-05 | Phase 7: WASM Skill Sandbox | Complete |
 | SEC-06 | Phase 7: WASM Skill Sandbox | Complete |
