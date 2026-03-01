@@ -50,6 +50,14 @@ pub struct BlufioConfig {
     /// Memory system settings.
     #[serde(default)]
     pub memory: MemoryConfig,
+
+    /// Model routing settings.
+    #[serde(default)]
+    pub routing: RoutingConfig,
+
+    /// Smart heartbeat settings.
+    #[serde(default)]
+    pub heartbeat: HeartbeatConfig,
 }
 
 
@@ -412,4 +420,150 @@ fn default_idle_timeout_secs() -> u64 {
 
 fn default_max_retrieval_results() -> usize {
     50
+}
+
+/// Model routing configuration.
+///
+/// Controls automatic query complexity classification and model tier selection.
+/// When enabled, the agent routes user-facing messages to Haiku (simple),
+/// Sonnet (standard), or Opus (complex) based on heuristic classification.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoutingConfig {
+    /// Enable model routing. When false, uses anthropic.default_model for all messages.
+    #[serde(default = "default_routing_enabled")]
+    pub enabled: bool,
+
+    /// Force all messages to a specific model, bypassing classification.
+    /// Example: "claude-sonnet-4-20250514"
+    #[serde(default)]
+    pub force_model: Option<String>,
+
+    /// Model identifier for simple queries (Haiku tier).
+    #[serde(default = "default_simple_model")]
+    pub simple_model: String,
+
+    /// Model identifier for standard queries (Sonnet tier).
+    #[serde(default = "default_standard_model")]
+    pub standard_model: String,
+
+    /// Model identifier for complex queries (Opus tier).
+    #[serde(default = "default_complex_model")]
+    pub complex_model: String,
+
+    /// Max tokens for simple tier responses.
+    #[serde(default = "default_simple_max_tokens")]
+    pub simple_max_tokens: u32,
+
+    /// Max tokens for standard tier responses.
+    #[serde(default = "default_standard_max_tokens")]
+    pub standard_max_tokens: u32,
+
+    /// Max tokens for complex tier responses.
+    #[serde(default = "default_complex_max_tokens")]
+    pub complex_max_tokens: u32,
+}
+
+impl Default for RoutingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_routing_enabled(),
+            force_model: None,
+            simple_model: default_simple_model(),
+            standard_model: default_standard_model(),
+            complex_model: default_complex_model(),
+            simple_max_tokens: default_simple_max_tokens(),
+            standard_max_tokens: default_standard_max_tokens(),
+            complex_max_tokens: default_complex_max_tokens(),
+        }
+    }
+}
+
+fn default_routing_enabled() -> bool {
+    true
+}
+
+fn default_simple_model() -> String {
+    "claude-haiku-4-5-20250901".to_string()
+}
+
+fn default_standard_model() -> String {
+    "claude-sonnet-4-20250514".to_string()
+}
+
+fn default_complex_model() -> String {
+    "claude-opus-4-20250514".to_string()
+}
+
+fn default_simple_max_tokens() -> u32 {
+    1024
+}
+
+fn default_standard_max_tokens() -> u32 {
+    4096
+}
+
+fn default_complex_max_tokens() -> u32 {
+    8192
+}
+
+/// Smart heartbeat configuration.
+///
+/// Controls proactive check-in behavior. Heartbeats run on Haiku
+/// with their own dedicated budget, separate from conversation costs.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HeartbeatConfig {
+    /// Enable smart heartbeats. Opt-in feature.
+    #[serde(default = "default_heartbeat_enabled")]
+    pub enabled: bool,
+
+    /// Heartbeat check interval in seconds.
+    #[serde(default = "default_heartbeat_interval_secs")]
+    pub interval_secs: u64,
+
+    /// Delivery mode: "immediate" sends Telegram message directly,
+    /// "on_next_message" stores insight for next user interaction.
+    #[serde(default = "default_heartbeat_delivery")]
+    pub delivery: String,
+
+    /// Monthly budget cap for heartbeats in USD. Separate from conversation budget.
+    #[serde(default = "default_heartbeat_monthly_budget_usd")]
+    pub monthly_budget_usd: f64,
+
+    /// Model to use for heartbeat LLM calls.
+    #[serde(default = "default_heartbeat_model")]
+    pub model: String,
+}
+
+impl Default for HeartbeatConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_heartbeat_enabled(),
+            interval_secs: default_heartbeat_interval_secs(),
+            delivery: default_heartbeat_delivery(),
+            monthly_budget_usd: default_heartbeat_monthly_budget_usd(),
+            model: default_heartbeat_model(),
+        }
+    }
+}
+
+fn default_heartbeat_enabled() -> bool {
+    false
+}
+
+fn default_heartbeat_interval_secs() -> u64 {
+    3600 // 1 hour
+}
+
+fn default_heartbeat_delivery() -> String {
+    "on_next_message".to_string()
+}
+
+fn default_heartbeat_monthly_budget_usd() -> f64 {
+    10.0
+}
+
+fn default_heartbeat_model() -> String {
+    "claude-haiku-4-5-20250901".to_string()
 }

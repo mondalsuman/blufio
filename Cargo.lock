@@ -408,6 +408,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "blufio-router"
+version = "0.1.0"
+dependencies = [
+ "blufio-config",
+ "tracing",
+]
+
+[[package]]
 name = "blufio-security"
 version = "0.1.0"
 dependencies = [
