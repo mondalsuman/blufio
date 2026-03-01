@@ -42,6 +42,10 @@ pub struct BlufioConfig {
     /// Cost tracking and budget settings.
     #[serde(default)]
     pub cost: CostConfig,
+
+    /// Context engine settings.
+    #[serde(default)]
+    pub context: ContextConfig,
 }
 
 
@@ -293,4 +297,46 @@ fn default_kdf_iterations() -> u32 {
 
 fn default_kdf_parallelism() -> u32 {
     4
+}
+
+/// Context engine configuration.
+///
+/// Controls context assembly behavior including compaction parameters.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContextConfig {
+    /// Model to use for compaction summarization.
+    #[serde(default = "default_compaction_model")]
+    pub compaction_model: String,
+
+    /// Compaction threshold as fraction of context window (0.0-1.0).
+    /// When estimated tokens exceed this fraction, compaction triggers.
+    #[serde(default = "default_compaction_threshold")]
+    pub compaction_threshold: f64,
+
+    /// Context window budget in tokens.
+    #[serde(default = "default_context_budget")]
+    pub context_budget: u32,
+}
+
+impl Default for ContextConfig {
+    fn default() -> Self {
+        Self {
+            compaction_model: default_compaction_model(),
+            compaction_threshold: default_compaction_threshold(),
+            context_budget: default_context_budget(),
+        }
+    }
+}
+
+fn default_compaction_model() -> String {
+    "claude-haiku-4-5-20250901".to_string()
+}
+
+fn default_compaction_threshold() -> f64 {
+    0.70
+}
+
+fn default_context_budget() -> u32 {
+    180_000
 }

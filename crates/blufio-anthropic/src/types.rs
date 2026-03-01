@@ -5,6 +5,48 @@
 
 use serde::{Deserialize, Serialize};
 
+// --- Cache control types ---
+
+/// Marker for Anthropic prompt caching.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheControlMarker {
+    /// Cache control type (e.g., "ephemeral").
+    #[serde(rename = "type")]
+    pub control_type: String,
+}
+
+impl CacheControlMarker {
+    /// Creates an ephemeral cache control marker.
+    pub fn ephemeral() -> Self {
+        Self {
+            control_type: "ephemeral".to_string(),
+        }
+    }
+}
+
+/// System prompt content -- either a plain string or structured blocks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SystemContent {
+    /// Simple text system prompt.
+    Text(String),
+    /// Array of structured system blocks with optional cache control.
+    Blocks(Vec<SystemBlock>),
+}
+
+/// A structured block within a system prompt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemBlock {
+    /// Block type (e.g., "text").
+    #[serde(rename = "type")]
+    pub block_type: String,
+    /// Text content of the block.
+    pub text: String,
+    /// Optional cache control marker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<CacheControlMarker>,
+}
+
 // --- Request types ---
 
 /// A request to the Anthropic Messages API.
@@ -16,15 +58,19 @@ pub struct MessageRequest {
     /// Conversation messages.
     pub messages: Vec<ApiMessage>,
 
-    /// System prompt (optional).
+    /// System prompt (optional) -- can be plain text or structured blocks.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<SystemContent>,
 
     /// Maximum tokens to generate.
     pub max_tokens: u32,
 
     /// Whether to stream the response.
     pub stream: bool,
+
+    /// Top-level cache control for the request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<CacheControlMarker>,
 }
 
 /// A single message in the Anthropic conversation format.
@@ -109,6 +155,12 @@ pub struct ApiUsage {
     pub input_tokens: u32,
     /// Number of output tokens generated.
     pub output_tokens: u32,
+    /// Number of tokens read from prompt cache.
+    #[serde(default)]
+    pub cache_read_input_tokens: u32,
+    /// Number of tokens written to prompt cache.
+    #[serde(default)]
+    pub cache_creation_input_tokens: u32,
 }
 
 // --- SSE event types ---
@@ -219,9 +271,10 @@ mod tests {
                 role: "user".into(),
                 content: ApiContent::Text("Hello".into()),
             }],
-            system: Some("You are helpful.".into()),
+            system: Some(SystemContent::Text("You are helpful.".into())),
             max_tokens: 4096,
             stream: true,
+            cache_control: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["model"], "claude-sonnet-4-20250514");
@@ -230,6 +283,7 @@ mod tests {
         assert_eq!(json["system"], "You are helpful.");
         assert_eq!(json["messages"][0]["role"], "user");
         assert_eq!(json["messages"][0]["content"], "Hello");
+        assert!(json.get("cache_control").is_none());
     }
 
     #[test]
@@ -240,9 +294,80 @@ mod tests {
             system: None,
             max_tokens: 1024,
             stream: false,
+            cache_control: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert!(json.get("system").is_none());
+    }
+
+    #[test]
+    fn serialize_system_content_text() {
+        let sc = SystemContent::Text("hello".into());
+        let json = serde_json::to_value(&sc).unwrap();
+        assert_eq!(json, "hello");
+    }
+
+    #[test]
+    fn serialize_system_content_blocks() {
+        let sc = SystemContent::Blocks(vec![SystemBlock {
+            block_type: "text".into(),
+            text: "System prompt here.".into(),
+            cache_control: Some(CacheControlMarker::ephemeral()),
+        }]);
+        let json = serde_json::to_value(&sc).unwrap();
+        assert!(json.is_array());
+        assert_eq!(json[0]["type"], "text");
+        assert_eq!(json[0]["text"], "System prompt here.");
+        assert_eq!(json[0]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn serialize_cache_control_marker() {
+        let m = CacheControlMarker::ephemeral();
+        let json = serde_json::to_value(&m).unwrap();
+        assert_eq!(json["type"], "ephemeral");
+    }
+
+    #[test]
+    fn deserialize_api_usage_with_cache_fields() {
+        let json = r#"{
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_input_tokens": 80,
+            "cache_creation_input_tokens": 20
+        }"#;
+        let usage: ApiUsage = serde_json::from_str(json).unwrap();
+        assert_eq!(usage.input_tokens, 100);
+        assert_eq!(usage.output_tokens, 50);
+        assert_eq!(usage.cache_read_input_tokens, 80);
+        assert_eq!(usage.cache_creation_input_tokens, 20);
+    }
+
+    #[test]
+    fn deserialize_api_usage_without_cache_fields_defaults_zero() {
+        let json = r#"{"input_tokens": 10, "output_tokens": 5}"#;
+        let usage: ApiUsage = serde_json::from_str(json).unwrap();
+        assert_eq!(usage.cache_read_input_tokens, 0);
+        assert_eq!(usage.cache_creation_input_tokens, 0);
+    }
+
+    #[test]
+    fn serialize_message_request_with_cache_control() {
+        let req = MessageRequest {
+            model: "claude-sonnet-4-20250514".into(),
+            messages: vec![],
+            system: Some(SystemContent::Blocks(vec![SystemBlock {
+                block_type: "text".into(),
+                text: "cached prompt".into(),
+                cache_control: Some(CacheControlMarker::ephemeral()),
+            }])),
+            max_tokens: 1024,
+            stream: false,
+            cache_control: Some(CacheControlMarker::ephemeral()),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["cache_control"]["type"], "ephemeral");
+        assert!(json["system"].is_array());
     }
 
     #[test]

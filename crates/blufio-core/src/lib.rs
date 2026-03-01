@@ -32,7 +32,7 @@ mod tests {
 
     #[test]
     fn blufio_error_has_all_variants() {
-        // Verify all 10 error variants exist and can be constructed.
+        // Verify all 11 error variants exist and can be constructed.
         let _config = BlufioError::Config("test".into());
         let _storage = BlufioError::Storage {
             source: Box::new(std::io::Error::other("test")),
@@ -58,6 +58,9 @@ mod tests {
         };
         let _vault = BlufioError::Vault("test".into());
         let _security = BlufioError::Security("test".into());
+        let _budget = BlufioError::BudgetExhausted {
+            message: "daily limit reached".into(),
+        };
         let _internal = BlufioError::Internal("test".into());
     }
 

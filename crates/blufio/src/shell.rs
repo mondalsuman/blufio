@@ -4,13 +4,16 @@
 //! `blufio shell` command implementation.
 //!
 //! Launches an interactive REPL with colored prompt, streaming output,
-//! and readline history. Creates a new session per invocation.
+//! and readline history. Uses the three-zone context engine and records
+//! costs for every LLM call. Creates a new session per invocation.
 
 use std::sync::Arc;
 
-use blufio_agent::context;
 use blufio_anthropic::AnthropicProvider;
 use blufio_config::model::BlufioConfig;
+use blufio_context::ContextEngine;
+use blufio_cost::ledger::{CostRecord, FeatureType};
+use blufio_cost::{pricing, BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
     InboundMessage, Message, MessageContent, Session, StreamEventType, TokenUsage,
@@ -21,12 +24,13 @@ use colored::Colorize;
 use futures::StreamExt;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use tracing::debug;
+use tracing::{debug, info};
 
 /// Runs the `blufio shell` interactive REPL.
 ///
 /// Creates a CLI session, prompts for user input, and streams LLM responses
-/// directly to stdout.
+/// directly to stdout. Uses context engine for prompt assembly and records
+/// costs for every call.
 pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
     // Initialize storage.
     let storage = SqliteStorage::new(config.storage.clone());
@@ -35,15 +39,26 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Initialize Anthropic provider.
     let provider: Arc<dyn ProviderAdapter + Send + Sync> =
-        Arc::new(AnthropicProvider::new(&config).await.map_err(|e| {
+        Arc::new(AnthropicProvider::new(&config).await.inspect_err(|_| {
             eprintln!(
                 "error: Anthropic API key required. Set via: config, ANTHROPIC_API_KEY env var, or `blufio config set-secret anthropic.api_key`"
             );
-            e
         })?);
 
-    // Load system prompt.
-    let system_prompt = context::load_system_prompt(&config.agent).await?;
+    // Initialize context engine.
+    let context_engine = Arc::new(
+        ContextEngine::new(&config.agent, &config.context).await?
+    );
+
+    // Initialize cost ledger.
+    let cost_ledger = Arc::new(
+        CostLedger::open(&config.storage.database_path).await?
+    );
+
+    // Initialize budget tracker from existing ledger data.
+    let budget_tracker = Arc::new(tokio::sync::Mutex::new(
+        BudgetTracker::from_ledger(&config.cost, &cost_ledger).await?
+    ));
 
     // Create a new CLI session.
     let session_id = uuid::Uuid::new_v4().to_string();
@@ -88,13 +103,22 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
                     &config,
                     storage.as_ref(),
                     provider.as_ref(),
+                    &context_engine,
+                    &cost_ledger,
+                    &budget_tracker,
                     &session_id,
-                    &system_prompt,
                     trimmed,
                 )
                 .await
                 {
-                    eprintln!("{}: {e}", "error".red());
+                    match &e {
+                        BlufioError::BudgetExhausted { message } => {
+                            eprintln!("{}", message.yellow());
+                        }
+                        _ => {
+                            eprintln!("{}: {e}", "error".red());
+                        }
+                    }
                 }
             }
             Err(ReadlineError::Interrupted) => {
@@ -112,6 +136,15 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     }
 
+    // Log session cost summary on exit.
+    let session_cost = cost_ledger.session_total(&session_id).await.unwrap_or(0.0);
+    if session_cost > 0.0 {
+        println!(
+            "{}",
+            format!("session cost: ${session_cost:.4}").dimmed()
+        );
+    }
+
     // Clean up: close session.
     storage
         .update_session_state(&session_id, "closed")
@@ -122,15 +155,25 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
     Ok(())
 }
 
-/// Handles a single shell message: persists, calls LLM, streams output.
+/// Handles a single shell message: persists, checks budget, assembles context via
+/// context engine, streams output, records costs.
+#[allow(clippy::too_many_arguments)]
 async fn handle_shell_message(
     config: &BlufioConfig,
     storage: &dyn StorageAdapter,
     provider: &dyn ProviderAdapter,
+    context_engine: &ContextEngine,
+    cost_ledger: &CostLedger,
+    budget_tracker: &tokio::sync::Mutex<BudgetTracker>,
     session_id: &str,
-    system_prompt: &str,
     input: &str,
 ) -> Result<(), BlufioError> {
+    // Budget check before LLM call.
+    {
+        let mut tracker = budget_tracker.lock().await;
+        tracker.check_budget()?;
+    }
+
     // Persist user message.
     let now = chrono::Utc::now().to_rfc3339();
     let user_msg = Message {
@@ -155,19 +198,49 @@ async fn handle_shell_message(
         metadata: None,
     };
 
-    // Assemble context.
-    let request = context::assemble_context(
+    // Assemble context using the three-zone context engine.
+    let assembled = context_engine.assemble(
+        provider,
         storage,
         session_id,
-        system_prompt,
         &inbound,
         &config.anthropic.default_model,
         config.anthropic.max_tokens,
     )
     .await?;
 
+    // Record compaction costs if compaction was triggered.
+    if let Some(ref compaction_usage) = assembled.compaction_usage {
+        let compaction_model = assembled.compaction_model.as_deref()
+            .unwrap_or("claude-haiku-4-5-20250901");
+        let model_pricing = pricing::get_pricing(compaction_model);
+        let cost_usd = pricing::calculate_cost(compaction_usage, &model_pricing);
+
+        let record = CostRecord::new(
+            session_id.to_string(),
+            compaction_model.to_string(),
+            FeatureType::Compaction,
+            compaction_usage,
+            cost_usd,
+        );
+
+        cost_ledger.record(&record).await?;
+
+        {
+            let mut tracker = budget_tracker.lock().await;
+            tracker.record_cost(cost_usd);
+        }
+
+        info!(
+            session_id = %session_id,
+            model = %compaction_model,
+            cost_usd = cost_usd,
+            "compaction cost recorded"
+        );
+    }
+
     // Stream the response.
-    let mut stream = provider.stream(request).await?;
+    let mut stream = provider.stream(assembled.request).await?;
     let mut full_response = String::new();
     let mut usage: Option<TokenUsage> = None;
 
@@ -220,11 +293,31 @@ async fn handle_shell_message(
     };
     storage.insert_message(&assistant_msg).await?;
 
-    // Log token usage.
-    if let Some(u) = &usage {
+    // Record message cost.
+    if let Some(ref usage) = usage {
+        let model_pricing = pricing::get_pricing(&config.anthropic.default_model);
+        let cost_usd = pricing::calculate_cost(usage, &model_pricing);
+
+        let record = CostRecord::new(
+            session_id.to_string(),
+            config.anthropic.default_model.clone(),
+            FeatureType::Message,
+            usage,
+            cost_usd,
+        );
+
+        cost_ledger.record(&record).await?;
+
+        {
+            let mut tracker = budget_tracker.lock().await;
+            tracker.record_cost(cost_usd);
+        }
+
         debug!(
-            input_tokens = u.input_tokens,
-            output_tokens = u.output_tokens,
+            session_id = %session_id,
+            input_tokens = usage.input_tokens,
+            output_tokens = usage.output_tokens,
+            cost_usd = cost_usd,
             "shell response complete"
         );
     }

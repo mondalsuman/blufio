@@ -7,6 +7,7 @@
 //! - Receives messages from a channel adapter
 //! - Routes them to per-session actors
 //! - Streams LLM responses back through the channel
+//! - Enforces budget caps and records costs
 //! - Handles graceful shutdown
 
 pub mod context;
@@ -18,6 +19,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blufio_config::model::BlufioConfig;
+use blufio_context::ContextEngine;
+use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
     InboundMessage, OutboundMessage, Session, StreamEventType, TokenUsage,
@@ -37,23 +40,24 @@ pub struct AgentLoop {
     channel: Box<dyn ChannelAdapter + Send + Sync>,
     provider: Arc<dyn ProviderAdapter + Send + Sync>,
     storage: Arc<dyn StorageAdapter + Send + Sync>,
+    context_engine: Arc<ContextEngine>,
+    cost_ledger: Arc<CostLedger>,
+    budget_tracker: Arc<tokio::sync::Mutex<BudgetTracker>>,
     config: BlufioConfig,
     sessions: HashMap<String, SessionActor>,
-    system_prompt: String,
 }
 
 impl AgentLoop {
-    /// Creates a new agent loop with the given adapters and configuration.
-    ///
-    /// Loads the system prompt from config during construction.
+    /// Creates a new agent loop with the given adapters, context engine, and cost components.
     pub async fn new(
         channel: Box<dyn ChannelAdapter + Send + Sync>,
         provider: Arc<dyn ProviderAdapter + Send + Sync>,
         storage: Arc<dyn StorageAdapter + Send + Sync>,
+        context_engine: Arc<ContextEngine>,
+        cost_ledger: Arc<CostLedger>,
+        budget_tracker: Arc<tokio::sync::Mutex<BudgetTracker>>,
         config: BlufioConfig,
     ) -> Result<Self, BlufioError> {
-        let system_prompt = context::load_system_prompt(&config.agent).await?;
-
         info!(
             agent_name = config.agent.name.as_str(),
             "agent loop initialized"
@@ -63,9 +67,11 @@ impl AgentLoop {
             channel,
             provider,
             storage,
+            context_engine,
+            cost_ledger,
+            budget_tracker,
             config,
             sessions: HashMap::new(),
-            system_prompt,
         })
     }
 
@@ -115,6 +121,9 @@ impl AgentLoop {
     }
 
     /// Handles a single inbound message: resolves session, calls LLM, sends response.
+    ///
+    /// If a `BudgetExhausted` error is returned from the session actor, sends
+    /// the budget message to the user instead of logging it as an error.
     async fn handle_inbound(&mut self, inbound: InboundMessage) -> Result<(), BlufioError> {
         let sender_id = inbound.sender_id.clone();
         let channel_name = inbound.channel.clone();
@@ -135,10 +144,10 @@ impl AgentLoop {
         let chat_id = extract_chat_id_from_metadata(&metadata).unwrap_or_default();
 
         // Send typing indicator.
-        if !chat_id.is_empty() {
-            if let Err(e) = self.channel.send_typing(&chat_id).await {
-                debug!(error = %e, "failed to send typing indicator");
-            }
+        if !chat_id.is_empty()
+            && let Err(e) = self.channel.send_typing(&chat_id).await
+        {
+            debug!(error = %e, "failed to send typing indicator");
         }
 
         // Get the session actor.
@@ -146,8 +155,32 @@ impl AgentLoop {
             BlufioError::Internal(format!("session actor not found for {session_id}"))
         })?;
 
-        // Handle message: persist user message, assemble context, get stream.
-        let mut stream = actor.handle_message(inbound).await?;
+        // Handle message: persist user message, check budget, assemble context, get stream.
+        let stream_result = actor.handle_message(inbound).await;
+
+        // Check for BudgetExhausted -- send user-facing message instead of error.
+        let mut stream = match stream_result {
+            Ok(s) => s,
+            Err(BlufioError::BudgetExhausted { ref message }) => {
+                warn!(
+                    session_id = session_id.as_str(),
+                    "budget exhausted, sending user notification"
+                );
+                let out = OutboundMessage {
+                    session_id: Some(session_id.clone()),
+                    channel: channel_name.clone(),
+                    content: message.clone(),
+                    reply_to: None,
+                    parse_mode: None,
+                    metadata: metadata.clone(),
+                };
+                if let Err(e) = self.channel.send(out).await {
+                    error!(error = %e, "failed to send budget exhausted message");
+                }
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        };
 
         // Consume the stream: accumulate text for persistence and send to channel.
         let mut full_response = String::new();
@@ -243,18 +276,17 @@ impl AgentLoop {
             }
         } else if sent_message_id.is_some() && !full_response.is_empty() {
             // Final edit to ensure the complete response is shown.
-            if let Some(mid) = &sent_message_id {
-                if let Err(e) = self
+            if let Some(mid) = &sent_message_id
+                && let Err(e) = self
                     .channel
                     .edit_message(&chat_id, mid, &full_response, None)
                     .await
-                {
-                    debug!(error = %e, "failed to send final edit");
-                }
+            {
+                debug!(error = %e, "failed to send final edit");
             }
         }
 
-        // Persist assistant response.
+        // Persist assistant response (also records cost).
         let actor = self.sessions.get_mut(&session_id).ok_or_else(|| {
             BlufioError::Internal(format!("session actor not found for {session_id}"))
         })?;
@@ -307,7 +339,9 @@ impl AgentLoop {
                     session.id.clone(),
                     self.storage.clone(),
                     self.provider.clone(),
-                    self.system_prompt.clone(),
+                    self.context_engine.clone(),
+                    self.budget_tracker.clone(),
+                    self.cost_ledger.clone(),
                     channel.to_string(),
                     self.config.anthropic.default_model.clone(),
                     self.config.anthropic.max_tokens,
@@ -345,7 +379,9 @@ impl AgentLoop {
             session_id.clone(),
             self.storage.clone(),
             self.provider.clone(),
-            self.system_prompt.clone(),
+            self.context_engine.clone(),
+            self.budget_tracker.clone(),
+            self.cost_ledger.clone(),
             channel.to_string(),
             self.config.anthropic.default_model.clone(),
             self.config.anthropic.max_tokens,

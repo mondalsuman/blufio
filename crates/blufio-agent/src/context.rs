@@ -45,10 +45,10 @@ pub async fn load_system_prompt(config: &AgentConfig) -> Result<String, BlufioEr
     }
 
     // Priority 2: inline string
-    if let Some(ref prompt) = config.system_prompt {
-        if !prompt.is_empty() {
-            return Ok(prompt.clone());
-        }
+    if let Some(ref prompt) = config.system_prompt
+        && !prompt.is_empty()
+    {
+        return Ok(prompt.clone());
     }
 
     // Priority 3: default
@@ -60,8 +60,9 @@ pub async fn load_system_prompt(config: &AgentConfig) -> Result<String, BlufioEr
 
 /// Assembles a [`ProviderRequest`] from session history and the current inbound message.
 ///
-/// Loads the last [`DEFAULT_HISTORY_LIMIT`] messages from storage, converts them
-/// to provider messages, appends the current inbound message, and builds the request.
+/// **Deprecated**: Superseded by `blufio_context::ContextEngine::assemble()` which
+/// provides three-zone assembly with compaction. Kept for the `blufio shell` fallback
+/// and tests.
 pub async fn assemble_context(
     storage: &dyn StorageAdapter,
     session_id: &str,
@@ -96,6 +97,7 @@ pub async fn assemble_context(
     Ok(ProviderRequest {
         model: model.to_string(),
         system_prompt: Some(system_prompt.to_string()),
+        system_blocks: None,
         messages,
         max_tokens,
         stream: true,

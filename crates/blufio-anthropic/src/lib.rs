@@ -25,7 +25,10 @@ use tracing::{debug, info};
 
 use crate::client::AnthropicClient;
 use crate::sse::StreamEvent;
-use crate::types::{ApiContent, ApiContentBlock, ApiMessage, ImageSource, MessageRequest};
+use crate::types::{
+    ApiContent, ApiContentBlock, ApiMessage, CacheControlMarker, ImageSource, MessageRequest,
+    SystemBlock, SystemContent,
+};
 
 /// Anthropic Claude provider implementing [`ProviderAdapter`].
 ///
@@ -84,6 +87,10 @@ impl AnthropicProvider {
     }
 
     /// Converts a [`ProviderRequest`] to an Anthropic [`MessageRequest`].
+    ///
+    /// When `system_blocks` is present, deserializes it as `Vec<SystemBlock>` and
+    /// uses `SystemContent::Blocks`. Otherwise falls back to `SystemContent::Text`
+    /// from `system_prompt` or the provider's default prompt.
     fn to_message_request(&self, request: &ProviderRequest) -> MessageRequest {
         let messages: Vec<ApiMessage> = request
             .messages
@@ -94,10 +101,26 @@ impl AnthropicProvider {
             })
             .collect();
 
-        let system = request
-            .system_prompt
-            .clone()
-            .or_else(|| Some(self.system_prompt.clone()));
+        let system = if let Some(ref blocks_value) = request.system_blocks {
+            // Structured system blocks -- deserialize as Vec<SystemBlock>.
+            match serde_json::from_value::<Vec<SystemBlock>>(blocks_value.clone()) {
+                Ok(blocks) => Some(SystemContent::Blocks(blocks)),
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to parse system_blocks, falling back to text");
+                    let text = request
+                        .system_prompt
+                        .clone()
+                        .unwrap_or_else(|| self.system_prompt.clone());
+                    Some(SystemContent::Text(text))
+                }
+            }
+        } else {
+            let text = request
+                .system_prompt
+                .clone()
+                .or_else(|| Some(self.system_prompt.clone()));
+            text.map(SystemContent::Text)
+        };
 
         MessageRequest {
             model: request.model.clone(),
@@ -105,6 +128,7 @@ impl AnthropicProvider {
             system,
             max_tokens: request.max_tokens,
             stream: request.stream,
+            cache_control: Some(CacheControlMarker::ephemeral()),
         }
     }
 }
@@ -149,8 +173,8 @@ impl ProviderAdapter for AnthropicProvider {
         let content = response
             .content
             .iter()
-            .filter_map(|block| match block {
-                crate::types::ResponseContentBlock::Text { text } => Some(text.as_str()),
+            .map(|block| match block {
+                crate::types::ResponseContentBlock::Text { text } => text.as_str(),
             })
             .collect::<Vec<_>>()
             .join("");
@@ -163,6 +187,8 @@ impl ProviderAdapter for AnthropicProvider {
             usage: TokenUsage {
                 input_tokens: response.usage.input_tokens,
                 output_tokens: response.usage.output_tokens,
+                cache_read_tokens: response.usage.cache_read_input_tokens,
+                cache_creation_tokens: response.usage.cache_creation_input_tokens,
             },
         })
     }
@@ -217,6 +243,8 @@ fn map_stream_event_to_chunk(
             usage: Some(TokenUsage {
                 input_tokens: ms.message.usage.input_tokens,
                 output_tokens: ms.message.usage.output_tokens,
+                cache_read_tokens: ms.message.usage.cache_read_input_tokens,
+                cache_creation_tokens: ms.message.usage.cache_creation_input_tokens,
             }),
             error: None,
         })),
@@ -226,6 +254,8 @@ fn map_stream_event_to_chunk(
             usage: md.usage.map(|u| TokenUsage {
                 input_tokens: u.input_tokens,
                 output_tokens: u.output_tokens,
+                cache_read_tokens: u.cache_read_input_tokens,
+                cache_creation_tokens: u.cache_creation_input_tokens,
             }),
             error: None,
         })),
@@ -248,10 +278,10 @@ fn map_stream_event_to_chunk(
 
 /// Resolves the API key from config or environment.
 fn resolve_api_key(config_key: &Option<String>) -> Result<String, BlufioError> {
-    if let Some(key) = config_key {
-        if !key.is_empty() {
-            return Ok(key.clone());
-        }
+    if let Some(key) = config_key
+        && !key.is_empty()
+    {
+        return Ok(key.clone());
     }
 
     std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
@@ -288,10 +318,10 @@ async fn load_system_prompt(
     }
 
     // Priority 2: inline string
-    if let Some(prompt) = inline_prompt {
-        if !prompt.is_empty() {
-            return prompt.clone();
-        }
+    if let Some(prompt) = inline_prompt
+        && !prompt.is_empty()
+    {
+        return prompt.clone();
     }
 
     // Priority 3: default
@@ -300,10 +330,10 @@ async fn load_system_prompt(
 
 /// Converts core [`ContentBlock`]s to Anthropic API [`ApiContent`].
 fn convert_content_blocks(blocks: &[ContentBlock]) -> ApiContent {
-    if blocks.len() == 1 {
-        if let ContentBlock::Text { text } = &blocks[0] {
-            return ApiContent::Text(text.clone());
-        }
+    if blocks.len() == 1
+        && let ContentBlock::Text { text } = &blocks[0]
+    {
+        return ApiContent::Text(text.clone());
     }
 
     let api_blocks: Vec<ApiContentBlock> = blocks
@@ -453,6 +483,7 @@ mod tests {
         let request = ProviderRequest {
             model: "claude-sonnet-4-20250514".into(),
             system_prompt: None,
+            system_blocks: None,
             messages: vec![ProviderMessage {
                 role: "user".into(),
                 content: vec![ContentBlock::Text {
@@ -466,9 +497,15 @@ mod tests {
         let api_req = provider.to_message_request(&request);
         assert_eq!(api_req.model, "claude-sonnet-4-20250514");
         assert_eq!(api_req.max_tokens, 2048);
-        assert_eq!(api_req.system.as_deref(), Some("Test prompt."));
+        // System falls back to provider default when no system_prompt
+        match &api_req.system {
+            Some(SystemContent::Text(t)) => assert_eq!(t, "Test prompt."),
+            other => panic!("expected SystemContent::Text, got {:?}", other),
+        }
         assert_eq!(api_req.messages.len(), 1);
         assert_eq!(api_req.messages[0].role, "user");
+        // Cache control should be set automatically
+        assert!(api_req.cache_control.is_some());
     }
 
     #[test]
@@ -485,13 +522,54 @@ mod tests {
         let request = ProviderRequest {
             model: "claude-sonnet-4-20250514".into(),
             system_prompt: Some("Override prompt.".into()),
+            system_blocks: None,
             messages: vec![],
             max_tokens: 1024,
             stream: false,
         };
 
         let api_req = provider.to_message_request(&request);
-        assert_eq!(api_req.system.as_deref(), Some("Override prompt."));
+        match &api_req.system {
+            Some(SystemContent::Text(t)) => assert_eq!(t, "Override prompt."),
+            other => panic!("expected SystemContent::Text, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn to_message_request_uses_system_blocks_when_present() {
+        let client = AnthropicClient::new(
+            "test-key".into(),
+            "2023-06-01".into(),
+            "claude-sonnet-4-20250514".into(),
+        )
+        .unwrap();
+
+        let provider = AnthropicProvider::with_client(client, "Default prompt.".into());
+
+        let blocks = serde_json::json!([{
+            "type": "text",
+            "text": "Structured system prompt.",
+            "cache_control": {"type": "ephemeral"}
+        }]);
+
+        let request = ProviderRequest {
+            model: "claude-sonnet-4-20250514".into(),
+            system_prompt: Some("Ignored prompt.".into()),
+            system_blocks: Some(blocks),
+            messages: vec![],
+            max_tokens: 1024,
+            stream: false,
+        };
+
+        let api_req = provider.to_message_request(&request);
+        match &api_req.system {
+            Some(SystemContent::Blocks(blocks)) => {
+                assert_eq!(blocks.len(), 1);
+                assert_eq!(blocks[0].text, "Structured system prompt.");
+                assert!(blocks[0].cache_control.is_some());
+            }
+            other => panic!("expected SystemContent::Blocks, got {:?}", other),
+        }
     }
 
     #[test]

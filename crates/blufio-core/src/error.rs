@@ -55,6 +55,10 @@ pub enum BlufioError {
     #[error("security violation: {0}")]
     Security(String),
 
+    /// Budget cap has been reached (daily or monthly).
+    #[error("budget exhausted: {message}")]
+    BudgetExhausted { message: String },
+
     /// Internal or unexpected errors.
     #[error("internal error: {0}")]
     Internal(String),

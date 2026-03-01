@@ -4,7 +4,8 @@
 //! `blufio serve` command implementation.
 //!
 //! Starts the full Blufio agent with Telegram channel, Anthropic provider,
-//! and SQLite storage. Installs signal handlers for graceful shutdown.
+//! SQLite storage, three-zone context engine, and cost tracking.
+//! Installs signal handlers for graceful shutdown.
 
 use std::sync::Arc;
 
@@ -12,6 +13,8 @@ use blufio_agent::AgentLoop;
 use blufio_agent::shutdown;
 use blufio_anthropic::AnthropicProvider;
 use blufio_config::model::BlufioConfig;
+use blufio_context::ContextEngine;
+use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::{ChannelAdapter, StorageAdapter};
 use blufio_storage::SqliteStorage;
@@ -20,9 +23,9 @@ use tracing::{error, info};
 
 /// Runs the `blufio serve` command.
 ///
-/// Initializes all adapters (storage, provider, channel), marks stale sessions
-/// as interrupted (crash recovery), installs signal handlers, and enters the
-/// main agent loop.
+/// Initializes all adapters (storage, provider, channel), context engine,
+/// cost ledger and budget tracker. Marks stale sessions as interrupted
+/// (crash recovery), installs signal handlers, and enters the main agent loop.
 pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Initialize tracing subscriber.
     init_tracing(&config.agent.log_level);
@@ -36,6 +39,21 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Mark stale sessions as interrupted (crash recovery).
     mark_stale_sessions(storage.as_ref()).await?;
+
+    // Initialize cost ledger (opens its own connection to the same DB).
+    let cost_ledger = Arc::new(
+        CostLedger::open(&config.storage.database_path).await?
+    );
+
+    // Initialize budget tracker from existing ledger data (restart recovery).
+    let budget_tracker = Arc::new(tokio::sync::Mutex::new(
+        BudgetTracker::from_ledger(&config.cost, &cost_ledger).await?
+    ));
+
+    // Initialize context engine.
+    let context_engine = Arc::new(
+        ContextEngine::new(&config.agent, &config.context).await?
+    );
 
     // Initialize Anthropic provider.
     let provider = AnthropicProvider::new(&config).await.map_err(|e| {
@@ -63,11 +81,14 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Install signal handler.
     let cancel = shutdown::install_signal_handler();
 
-    // Create and run agent loop.
+    // Create and run agent loop with context engine and cost tracking.
     let mut agent_loop = AgentLoop::new(
         Box::new(channel),
         provider,
         storage,
+        context_engine,
+        cost_ledger,
+        budget_tracker,
         config,
     )
     .await?;

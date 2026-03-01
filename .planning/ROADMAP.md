@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Project Foundation & Workspace** - Cargo workspace, core traits, config system, build pipeline, licensing
 - [x] **Phase 2: Persistence & Security Vault** - SQLite WAL persistence, credential vault, security defaults
 - [x] **Phase 3: Agent Loop & Telegram** - FSM agent loop, Anthropic provider, Telegram adapter, basic CLI
-- [ ] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps
+- [x] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps (completed 2026-03-01)
 - [ ] **Phase 5: Memory & Embeddings** - ONNX embedding model, semantic memory, hybrid search
 - [ ] **Phase 6: Model Routing & Smart Heartbeats** - Query complexity classification, Haiku/Sonnet/Opus routing
 - [ ] **Phase 7: WASM Skill Sandbox** - wasmtime sandbox, capability manifests, built-in tools, skill registry
@@ -84,11 +84,12 @@ Plans:
   3. Conversation history automatically compacts (summarizes older turns) when approaching context window limits, without losing critical context
   4. Every token spent (messages, tools, compaction) is tracked in the cost ledger with per-session and per-model attribution visible in real-time
   5. When a configured daily or monthly budget cap is reached, the agent stops making LLM calls and reports the budget exhaustion clearly
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md -- Cost ledger crate (blufio-cost): pricing table, SQLite cost ledger, in-memory budget tracker with daily/monthly caps, extended core types (TokenUsage cache fields, BudgetExhausted error), V2 migration
+- [ ] 04-02-PLAN.md -- Context engine crate (blufio-context): three-zone assembly (static/conditional/dynamic), Anthropic cache-aligned system blocks, conversation compaction via Haiku, ConditionalProvider trait stub, ContextConfig
+- [ ] 04-03-PLAN.md -- Integration wiring: SessionActor uses ContextEngine + budget gate + cost recording, serve/shell commands initialize all new components with restart recovery
 
 ### Phase 5: Memory & Embeddings
 **Goal**: The agent remembers long-term facts across conversations using local embedding inference and hybrid search, loading only relevant memories into the context window per-turn
@@ -188,7 +189,7 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 1. Project Foundation & Workspace | 2/2 | Complete | 2026-02-28 |
 | 2. Persistence & Security Vault | 2/2 | Complete | 2026-02-28 |
 | 3. Agent Loop & Telegram | 3/3 | Complete | 2026-03-01 |
-| 4. Context Engine & Cost Tracking | 0/2 | Not started | - |
+| 4. Context Engine & Cost Tracking | 1/3 | Complete    | 2026-03-01 |
 | 5. Memory & Embeddings | 0/2 | Not started | - |
 | 6. Model Routing & Smart Heartbeats | 0/1 | Not started | - |
 | 7. WASM Skill Sandbox | 0/2 | Not started | - |

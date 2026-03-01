@@ -1,0 +1,25 @@
+[package]
+name = "blufio-cost"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Cost tracking, budget enforcement, and pricing for Blufio"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+tokio-rusqlite.workspace = true
+rusqlite.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+serde.workspace = true
+strum.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+tempfile = "3"
+tracing-subscriber.workspace = true

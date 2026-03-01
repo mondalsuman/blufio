@@ -152,6 +152,9 @@ pub struct ProviderRequest {
     pub model: String,
     /// System prompt (injected as system parameter, not a message).
     pub system_prompt: Option<String>,
+    /// Structured system prompt blocks (provider-specific formatting).
+    /// When set, takes precedence over system_prompt.
+    pub system_blocks: Option<serde_json::Value>,
     /// Conversation messages.
     pub messages: Vec<ProviderMessage>,
     /// Maximum tokens to generate.
@@ -167,6 +170,12 @@ pub struct TokenUsage {
     pub input_tokens: u32,
     /// Number of output tokens generated.
     pub output_tokens: u32,
+    /// Number of tokens read from cache (prompt caching).
+    #[serde(default)]
+    pub cache_read_tokens: u32,
+    /// Number of tokens written to cache (prompt caching).
+    #[serde(default)]
+    pub cache_creation_tokens: u32,
 }
 
 /// A response from an LLM provider.
