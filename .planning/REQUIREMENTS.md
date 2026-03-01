@@ -59,8 +59,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SEC-02**: Device keypair authentication required -- no optional auth mode
 - [ ] **SEC-03**: AES-256-GCM encrypted credential vault stores all API keys and bot tokens
 - [ ] **SEC-04**: Vault key derived from passphrase via Argon2id -- never stored on disk
-- [ ] **SEC-05**: WASM skill sandbox (wasmtime) with capability manifests -- skills cannot escape sandbox
-- [ ] **SEC-06**: WASM sandbox enforces fuel limits (CPU), memory limits, and epoch interruption
+- [x] **SEC-05**: WASM skill sandbox (wasmtime) with capability manifests -- skills cannot escape sandbox
+- [x] **SEC-06**: WASM sandbox enforces fuel limits (CPU), memory limits, and epoch interruption
 - [ ] **SEC-07**: Ed25519 signed inter-agent messages -- prevents impersonation in multi-agent setups
 - [ ] **SEC-08**: Secrets redacted from all logs and persisted data before storage
 - [ ] **SEC-09**: SSRF prevention (private IP blocking) enabled by default
@@ -77,12 +77,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Skills & Tools
 
-- [ ] **SKILL-01**: Built-in tools: bash execution, HTTP requests, file I/O with capability controls
-- [ ] **SKILL-02**: WASM skill sandbox executes third-party skills in isolated wasmtime instances
-- [ ] **SKILL-03**: Skill capability manifests declare required permissions (network, filesystem paths, etc.)
-- [ ] **SKILL-04**: Progressive skill discovery: agent sees skill names + descriptions in prompt, loads full SKILL.md on demand
-- [ ] **SKILL-05**: Skill registry tracks installed skills with version, capabilities, and verification status
-- [ ] **SKILL-06**: `blufio skill init` creates working skill scaffold in 3 commands
+- [x] **SKILL-01**: Built-in tools: bash execution, HTTP requests, file I/O with capability controls
+- [x] **SKILL-02**: WASM skill sandbox executes third-party skills in isolated wasmtime instances
+- [x] **SKILL-03**: Skill capability manifests declare required permissions (network, filesystem paths, etc.)
+- [x] **SKILL-04**: Progressive skill discovery: agent sees skill names + descriptions in prompt, loads full SKILL.md on demand
+- [x] **SKILL-05**: Skill registry tracks installed skills with version, capabilities, and verification status
+- [x] **SKILL-06**: `blufio skill init` creates working skill scaffold in 3 commands
 
 ### Plugin System
 
@@ -194,8 +194,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-02 | Phase 9: Production Hardening | Pending |
 | SEC-03 | Phase 2: Persistence & Security Vault | Pending |
 | SEC-04 | Phase 2: Persistence & Security Vault | Pending |
-| SEC-05 | Phase 7: WASM Skill Sandbox | Pending |
-| SEC-06 | Phase 7: WASM Skill Sandbox | Pending |
+| SEC-05 | Phase 7: WASM Skill Sandbox | Complete |
+| SEC-06 | Phase 7: WASM Skill Sandbox | Complete |
 | SEC-07 | Phase 10: Multi-Agent & Final Integration | Pending |
 | SEC-08 | Phase 2: Persistence & Security Vault | Pending |
 | SEC-09 | Phase 2: Persistence & Security Vault | Pending |
@@ -206,12 +206,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COST-04 | Phase 9: Production Hardening | Pending |
 | COST-05 | Phase 4: Context Engine & Cost Tracking | Complete |
 | COST-06 | Phase 4: Context Engine & Cost Tracking | Complete |
-| SKILL-01 | Phase 7: WASM Skill Sandbox | Pending |
-| SKILL-02 | Phase 7: WASM Skill Sandbox | Pending |
-| SKILL-03 | Phase 7: WASM Skill Sandbox | Pending |
-| SKILL-04 | Phase 7: WASM Skill Sandbox | Pending |
-| SKILL-05 | Phase 7: WASM Skill Sandbox | Pending |
-| SKILL-06 | Phase 7: WASM Skill Sandbox | Pending |
+| SKILL-01 | Phase 7: WASM Skill Sandbox | Complete |
+| SKILL-02 | Phase 7: WASM Skill Sandbox | Complete |
+| SKILL-03 | Phase 7: WASM Skill Sandbox | Complete |
+| SKILL-04 | Phase 7: WASM Skill Sandbox | Complete |
+| SKILL-05 | Phase 7: WASM Skill Sandbox | Complete |
+| SKILL-06 | Phase 7: WASM Skill Sandbox | Complete |
 | PLUG-01 | Phase 8: Plugin System & Gateway | Pending |
 | PLUG-02 | Phase 8: Plugin System & Gateway | Pending |
 | PLUG-03 | Phase 8: Plugin System & Gateway | Pending |

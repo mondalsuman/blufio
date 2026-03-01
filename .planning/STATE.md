@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T19:28:39.978Z"
+last_updated: "2026-03-01T20:03:15.000Z"
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 28
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 10 complete (Multi-Agent & Final Integration). All 3 plans executed. v1.0 milestone complete.
+**Current focus:** Phase 7 gap closure (Plan 4) complete. shell.rs tool wiring and WASM host function implementations done.
 
 ## Current Position
 
-Phase: 10 of 10 (Multi-Agent & Final Integration) -- COMPLETE
-Plan: 3 of 3 in Phase 10
-Status: v1.0 milestone COMPLETE -- all phases executed
-Last activity: 2026-03-01 -- Phase 10 execution complete
+Phase: 7 of 10 (WASM Skill Sandbox) -- gap closure complete
+Plan: 4 of 4 in Phase 7 (gap closure plan)
+Status: Phase 7 gap closure complete -- shell.rs tool support and WASM host functions implemented
+Last activity: 2026-03-01 -- Phase 7 Plan 4 gap closure execution complete
 
 Progress: [██████████] 100%
 
@@ -94,6 +94,10 @@ Recent decisions affecting current work:
 - [Phase 05-03]: MemoryProvider derives Clone (cheap Arc internals) instead of Arc wrapping to avoid orphan rules
 - [Phase 05-03]: MemoryStore opens separate SQLite connection to same DB to avoid contention
 - [Phase 05-03]: Idle extraction uses check-on-next-message pattern (not background timer)
+- [Phase 07-04]: Used Handle::current().block_on() for HTTP in WASM host functions instead of reqwest::blocking
+- [Phase 07-04]: HTTP response body stored in result_json for pragmatic WASM memory management
+- [Phase 07-04]: Domain validation uses exact match or subdomain match pattern
+- [Phase 07-04]: Path validation uses starts_with prefix check against manifest-declared paths
 
 ### Pending Todos
 
@@ -108,5 +112,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Phase 9 complete
-Resume file: .planning/phases/09-production-hardening/09-03-SUMMARY.md
+Stopped at: Completed 07-04-PLAN.md
+Resume file: .planning/phases/07-wasm-skill-sandbox/07-04-SUMMARY.md
