@@ -20,6 +20,8 @@ blufio-vault = { path = "../blufio-vault" }
 blufio-agent = { path = "../blufio-agent" }
 blufio-anthropic = { path = "../blufio-anthropic" }
 blufio-telegram = { path = "../blufio-telegram" }
+blufio-context = { path = "../blufio-context" }
+blufio-cost = { path = "../blufio-cost" }
 clap.workspace = true
 rpassword.workspace = true
 secrecy.workspace = true

@@ -95,6 +95,19 @@ impl CostLedger {
         Self { conn }
     }
 
+    /// Open a cost ledger from a database file path.
+    ///
+    /// Creates its own tokio-rusqlite connection to the given path.
+    /// The cost_ledger table must already exist (created by storage migrations).
+    pub async fn open(path: &str) -> Result<Self, BlufioError> {
+        let conn = tokio_rusqlite::Connection::open(path)
+            .await
+            .map_err(|e| BlufioError::Storage {
+                source: Box::new(e),
+            })?;
+        Ok(Self::new(conn))
+    }
+
     /// Record a cost entry in the ledger.
     pub async fn record(&self, record: &CostRecord) -> Result<(), BlufioError> {
         let id = record.id.clone();
