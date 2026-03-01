@@ -6,6 +6,8 @@
 //! Validates semantic constraints that cannot be expressed via serde attributes,
 //! such as valid IP addresses, non-empty paths, and non-negative budgets.
 
+use std::collections::HashSet;
+
 use crate::diagnostic::ConfigError;
 use crate::model::BlufioConfig;
 
@@ -92,6 +94,28 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
         });
     }
 
+    // Validate no duplicate agent names
+    let mut seen_names = HashSet::new();
+    for agent in &config.agents {
+        if !seen_names.insert(&agent.name) {
+            errors.push(ConfigError::Validation {
+                message: format!(
+                    "duplicate agent name `{}` in [[agents]] array",
+                    agent.name
+                ),
+            });
+        }
+    }
+
+    // Validate agent names are non-empty
+    for (i, agent) in config.agents.iter().enumerate() {
+        if agent.name.trim().is_empty() {
+            errors.push(ConfigError::Validation {
+                message: format!("agents[{i}].name must not be empty"),
+            });
+        }
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {
@@ -137,5 +161,104 @@ mod tests {
         config.cost.daily_budget_usd = Some(10.0);
         config.cost.monthly_budget_usd = Some(100.0);
         assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn empty_agents_array_defaults_correctly() {
+        let toml_str = r#"
+[agent]
+name = "test"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.agents.is_empty());
+    }
+
+    #[test]
+    fn agents_array_deserializes_correctly() {
+        let toml_str = r#"
+[agent]
+name = "test"
+
+[[agents]]
+name = "summarizer"
+system_prompt = "You summarize text"
+model = "claude-haiku-4-5-20250901"
+allowed_skills = ["web_search"]
+
+[[agents]]
+name = "coder"
+system_prompt = "You write code"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.agents.len(), 2);
+        assert_eq!(config.agents[0].name, "summarizer");
+        assert_eq!(config.agents[0].system_prompt, "You summarize text");
+        assert_eq!(config.agents[0].model, "claude-haiku-4-5-20250901");
+        assert_eq!(config.agents[0].allowed_skills, vec!["web_search"]);
+        assert_eq!(config.agents[1].name, "coder");
+        assert_eq!(config.agents[1].system_prompt, "You write code");
+        // model defaults to claude-sonnet-4-20250514
+        assert_eq!(config.agents[1].model, "claude-sonnet-4-20250514");
+        assert!(config.agents[1].allowed_skills.is_empty());
+    }
+
+    #[test]
+    fn agents_deny_unknown_fields() {
+        let toml_str = r#"
+[agent]
+name = "test"
+
+[[agents]]
+name = "summarizer"
+system_prompt = "You summarize text"
+unknown_field = "bad"
+"#;
+        let result = toml::from_str::<BlufioConfig>(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn delegation_timeout_defaults_to_60() {
+        let toml_str = r#"
+[agent]
+name = "test"
+
+[delegation]
+enabled = true
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.delegation.enabled);
+        assert_eq!(config.delegation.timeout_secs, 60);
+    }
+
+    #[test]
+    fn delegation_defaults_when_not_specified() {
+        let config = BlufioConfig::default();
+        assert!(!config.delegation.enabled);
+        assert_eq!(config.delegation.timeout_secs, 60);
+    }
+
+    #[test]
+    fn duplicate_agent_names_fails_validation() {
+        use crate::model::AgentSpecConfig;
+        let mut config = BlufioConfig::default();
+        config.agents = vec![
+            AgentSpecConfig {
+                name: "summarizer".to_string(),
+                system_prompt: "prompt1".to_string(),
+                model: "claude-sonnet-4-20250514".to_string(),
+                allowed_skills: vec![],
+            },
+            AgentSpecConfig {
+                name: "summarizer".to_string(),
+                system_prompt: "prompt2".to_string(),
+                model: "claude-sonnet-4-20250514".to_string(),
+                allowed_skills: vec![],
+            },
+        ];
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("duplicate agent name"))
+        ));
     }
 }
