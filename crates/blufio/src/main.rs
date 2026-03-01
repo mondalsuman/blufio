@@ -12,8 +12,11 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
+mod backup;
+mod doctor;
 mod serve;
 mod shell;
+mod status;
 
 use clap::{Parser, Subcommand};
 
@@ -32,6 +35,34 @@ enum Commands {
     Serve,
     /// Launch an interactive REPL session.
     Shell,
+    /// Show agent status (connects to health endpoint).
+    Status {
+        /// Output as structured JSON for scripting.
+        #[arg(long)]
+        json: bool,
+        /// Disable colored output.
+        #[arg(long)]
+        plain: bool,
+    },
+    /// Run diagnostic checks against the environment.
+    Doctor {
+        /// Run additional intensive checks (DB integrity, memory, disk).
+        #[arg(long)]
+        deep: bool,
+        /// Disable colored output.
+        #[arg(long)]
+        plain: bool,
+    },
+    /// Create an atomic backup of the SQLite database.
+    Backup {
+        /// Destination path for the backup file.
+        path: String,
+    },
+    /// Restore the database from a backup file.
+    Restore {
+        /// Path to the backup file to restore from.
+        path: String,
+    },
     /// Manage Blufio configuration and vault secrets.
     Config {
         #[command(subcommand)]
@@ -59,6 +90,13 @@ enum ConfigCommands {
     },
     /// List all secrets stored in the vault (names and masked previews only).
     ListSecrets,
+    /// Get the current resolved value for a config key (dotted path).
+    Get {
+        /// Config key path (e.g., "agent.name", "storage.database_path").
+        key: String,
+    },
+    /// Validate the configuration file and report any errors.
+    Validate,
 }
 
 /// Skill management subcommands.
@@ -142,6 +180,30 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::Status { json, plain }) => {
+            if let Err(e) = status::run_status(&config, json, plain).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Doctor { deep, plain }) => {
+            if let Err(e) = doctor::run_doctor(&config, deep, plain).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Backup { path }) => {
+            if let Err(e) = backup::run_backup(&config.storage.database_path, &path) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Restore { path }) => {
+            if let Err(e) = backup::run_restore(&config.storage.database_path, &path) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
         Some(Commands::Config { action }) => match action {
             Some(ConfigCommands::SetSecret { key }) => {
                 if let Err(e) = cmd_set_secret(&config, &key).await {
@@ -153,6 +215,23 @@ async fn main() {
                 if let Err(e) = cmd_list_secrets(&config).await {
                     eprintln!("error: {e}");
                     std::process::exit(1);
+                }
+            }
+            Some(ConfigCommands::Get { key }) => {
+                if let Err(e) = cmd_config_get(&config, &key) {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+            Some(ConfigCommands::Validate) => {
+                match blufio_config::load_and_validate() {
+                    Ok(_) => {
+                        println!("Configuration is valid.");
+                    }
+                    Err(errors) => {
+                        blufio_config::render_errors(&errors);
+                        std::process::exit(1);
+                    }
                 }
             }
             None => {
@@ -518,6 +597,44 @@ fn is_config_key_present(
     }
 }
 
+/// Handle `blufio config get <key>`.
+///
+/// Resolves a dotted config key path to its current value. Uses serde_json
+/// serialization to traverse the config struct generically.
+fn cmd_config_get(
+    config: &blufio_config::model::BlufioConfig,
+    key: &str,
+) -> Result<(), blufio_core::BlufioError> {
+    // Serialize the full config to a JSON Value for generic traversal.
+    let value = serde_json::to_value(config).map_err(|e| {
+        blufio_core::BlufioError::Internal(format!("failed to serialize config: {e}"))
+    })?;
+
+    // Walk the dotted key path.
+    let parts: Vec<&str> = key.split('.').collect();
+    let mut current = &value;
+
+    for part in &parts {
+        match current.get(part) {
+            Some(v) => current = v,
+            None => {
+                return Err(blufio_core::BlufioError::Config(format!(
+                    "unknown config key: {key}"
+                )));
+            }
+        }
+    }
+
+    // Print the resolved value.
+    match current {
+        serde_json::Value::String(s) => println!("{s}"),
+        serde_json::Value::Null => println!("null"),
+        other => println!("{other}"),
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -649,6 +766,137 @@ mod tests {
         // This should succeed gracefully -- no vault exists.
         let result = cmd_list_secrets(&config).await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn cli_parses_status() {
+        let cli = Cli::parse_from(["blufio", "status"]);
+        match cli.command {
+            Some(Commands::Status { json, plain }) => {
+                assert!(!json);
+                assert!(!plain);
+            }
+            _ => panic!("expected Status command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_status_json() {
+        let cli = Cli::parse_from(["blufio", "status", "--json"]);
+        match cli.command {
+            Some(Commands::Status { json, plain }) => {
+                assert!(json);
+                assert!(!plain);
+            }
+            _ => panic!("expected Status --json command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_status_plain() {
+        let cli = Cli::parse_from(["blufio", "status", "--plain"]);
+        match cli.command {
+            Some(Commands::Status { json, plain }) => {
+                assert!(!json);
+                assert!(plain);
+            }
+            _ => panic!("expected Status --plain command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_doctor() {
+        let cli = Cli::parse_from(["blufio", "doctor"]);
+        match cli.command {
+            Some(Commands::Doctor { deep, plain }) => {
+                assert!(!deep);
+                assert!(!plain);
+            }
+            _ => panic!("expected Doctor command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_doctor_deep() {
+        let cli = Cli::parse_from(["blufio", "doctor", "--deep"]);
+        match cli.command {
+            Some(Commands::Doctor { deep, plain }) => {
+                assert!(deep);
+                assert!(!plain);
+            }
+            _ => panic!("expected Doctor --deep command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_backup() {
+        let cli = Cli::parse_from(["blufio", "backup", "/tmp/backup.db"]);
+        match cli.command {
+            Some(Commands::Backup { path }) => {
+                assert_eq!(path, "/tmp/backup.db");
+            }
+            _ => panic!("expected Backup command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_restore() {
+        let cli = Cli::parse_from(["blufio", "restore", "/tmp/backup.db"]);
+        match cli.command {
+            Some(Commands::Restore { path }) => {
+                assert_eq!(path, "/tmp/backup.db");
+            }
+            _ => panic!("expected Restore command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_config_get() {
+        let cli = Cli::parse_from(["blufio", "config", "get", "agent.name"]);
+        match cli.command {
+            Some(Commands::Config {
+                action: Some(ConfigCommands::Get { key }),
+            }) => {
+                assert_eq!(key, "agent.name");
+            }
+            _ => panic!("expected Config Get command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_config_validate() {
+        let cli = Cli::parse_from(["blufio", "config", "validate"]);
+        match cli.command {
+            Some(Commands::Config {
+                action: Some(ConfigCommands::Validate),
+            }) => {}
+            _ => panic!("expected Config Validate command"),
+        }
+    }
+
+    #[test]
+    fn config_get_agent_name() {
+        let config = BlufioConfig::default();
+        // Use serde_json traversal approach
+        let value = serde_json::to_value(&config).unwrap();
+        let agent_name = value.get("agent").unwrap().get("name").unwrap();
+        assert_eq!(agent_name, "blufio");
+    }
+
+    #[test]
+    fn config_get_resolves_known_keys() {
+        let config = BlufioConfig::default();
+        // Should succeed for known keys
+        assert!(cmd_config_get(&config, "agent.name").is_ok());
+        assert!(cmd_config_get(&config, "storage.database_path").is_ok());
+        assert!(cmd_config_get(&config, "agent.log_level").is_ok());
+        assert!(cmd_config_get(&config, "daemon.memory_warn_mb").is_ok());
+    }
+
+    #[test]
+    fn config_get_fails_for_unknown_key() {
+        let config = BlufioConfig::default();
+        assert!(cmd_config_get(&config, "nonexistent.key").is_err());
     }
 
     #[test]

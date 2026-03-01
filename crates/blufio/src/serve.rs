@@ -235,6 +235,24 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     }
 
+    // SEC-02: Device keypair authentication is required when gateway is enabled.
+    #[cfg(feature = "keypair")]
+    {
+        if config.gateway.enabled && config.gateway.bearer_token.is_none() {
+            warn!("gateway enabled without bearer_token -- keypair auth will be used");
+        }
+        info!("keypair auth available (SEC-02)");
+    }
+    #[cfg(not(feature = "keypair"))]
+    {
+        if config.gateway.enabled {
+            return Err(BlufioError::Security(
+                "SEC-02: device keypair authentication is required but keypair feature is disabled"
+                    .to_string(),
+            ));
+        }
+    }
+
     // Connect all channels via multiplexer.
     mux.connect().await?;
     info!(
