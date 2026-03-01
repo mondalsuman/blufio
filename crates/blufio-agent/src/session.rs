@@ -26,6 +26,7 @@ use blufio_core::types::{
 };
 use blufio_core::{ProviderAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider};
+use blufio_router::{ModelRouter, RoutingDecision};
 use futures::Stream;
 use tracing::{debug, info, warn};
 
@@ -64,7 +65,7 @@ impl std::fmt::Display for SessionState {
 /// - Persisting inbound user messages
 /// - Checking budget before LLM calls
 /// - Assembling context via the three-zone context engine
-/// - Calling the LLM provider
+/// - Calling the LLM provider with per-message model routing
 /// - Recording costs (message, compaction, and extraction) after responses
 /// - Persisting assistant responses
 /// - Setting/clearing memory queries for context injection
@@ -82,8 +83,16 @@ pub struct SessionActor {
     /// Memory extractor for end-of-conversation fact extraction.
     memory_extractor: Option<Arc<MemoryExtractor>>,
     channel: String,
-    model: String,
-    max_tokens: u32,
+    /// Model router for per-message complexity classification and model selection.
+    router: Arc<ModelRouter>,
+    /// Default model used when routing is disabled.
+    default_model: String,
+    /// Default max tokens used when routing is disabled.
+    default_max_tokens: u32,
+    /// Whether model routing is enabled.
+    routing_enabled: bool,
+    /// Last routing decision for cost recording in persist_response.
+    last_routing_decision: Option<RoutingDecision>,
     /// Timestamp of last message received -- for idle extraction detection.
     last_message_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Idle timeout for triggering extraction (from config).
@@ -91,7 +100,7 @@ pub struct SessionActor {
 }
 
 impl SessionActor {
-    /// Creates a new session actor with context engine, cost tracking, and memory.
+    /// Creates a new session actor with context engine, cost tracking, routing, and memory.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         session_id: String,
@@ -103,8 +112,10 @@ impl SessionActor {
         memory_provider: Option<MemoryProvider>,
         memory_extractor: Option<Arc<MemoryExtractor>>,
         channel: String,
-        model: String,
-        max_tokens: u32,
+        router: Arc<ModelRouter>,
+        default_model: String,
+        default_max_tokens: u32,
+        routing_enabled: bool,
         idle_timeout_secs: u64,
     ) -> Self {
         Self {
@@ -118,8 +129,11 @@ impl SessionActor {
             memory_provider,
             memory_extractor,
             channel,
-            model,
-            max_tokens,
+            router,
+            default_model,
+            default_max_tokens,
+            routing_enabled,
+            last_routing_decision: None,
             last_message_at: None,
             idle_timeout: Duration::from_secs(idle_timeout_secs),
         }
@@ -138,6 +152,14 @@ impl SessionActor {
     /// Returns the channel this session belongs to.
     pub fn channel(&self) -> &str {
         &self.channel
+    }
+
+    /// Returns the last routing decision (if routing is enabled).
+    ///
+    /// Used by the agent loop to detect budget downgrades and add
+    /// transparent notifications to the response.
+    pub fn last_routing_decision(&self) -> Option<&RoutingDecision> {
+        self.last_routing_decision.as_ref()
     }
 
     /// Handles an inbound message: persists it, checks budget, assembles context,
@@ -162,8 +184,14 @@ impl SessionActor {
         // Check for idle extraction trigger (before updating last_message_at).
         self.maybe_trigger_idle_extraction().await;
 
-        // Persist the inbound user message.
-        let text_content = context::message_content_to_text(&inbound.content);
+        // Extract text content and handle per-message model override.
+        let raw_text = context::message_content_to_text(&inbound.content);
+
+        // Parse per-message override (/opus, /haiku, /sonnet) and strip prefix.
+        let (_, clean_text) = blufio_router::parse_model_override(&raw_text);
+        let text_content = clean_text.to_string();
+
+        // Persist the inbound user message (with override prefix stripped).
         let now = chrono::Utc::now().to_rfc3339();
         let msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
@@ -193,6 +221,49 @@ impl SessionActor {
             tracker.check_budget()?;
         }
 
+        // Determine model and max_tokens via routing or defaults.
+        let (model, max_tokens) = if self.routing_enabled {
+            // Get recent context for classification momentum.
+            let recent_msgs = self.storage.get_messages(&self.session_id, Some(3)).await?;
+            let recent_strings: Vec<String> = recent_msgs.iter().map(|m| m.content.clone()).collect();
+            let recent_refs: Vec<&str> = recent_strings.iter().map(|s| s.as_str()).collect();
+
+            // Get budget utilization for downgrade logic.
+            let budget_util = {
+                let tracker = self.budget_tracker.lock().await;
+                tracker.budget_utilization()
+            };
+
+            // Route using the raw text (which may have the /opus etc prefix).
+            let decision = self.router.route(&raw_text, &recent_refs, budget_util);
+
+            if decision.downgraded {
+                info!(
+                    session_id = %self.session_id,
+                    intended = %decision.intended_model,
+                    actual = %decision.actual_model,
+                    reason = %decision.reason,
+                    "model downgraded due to budget"
+                );
+            } else {
+                debug!(
+                    session_id = %self.session_id,
+                    model = %decision.actual_model,
+                    tier = %decision.tier,
+                    reason = %decision.reason,
+                    "routed message"
+                );
+            }
+
+            let model = decision.actual_model.clone();
+            let max_tokens = decision.max_tokens;
+            self.last_routing_decision = Some(decision);
+            (model, max_tokens)
+        } else {
+            self.last_routing_decision = None;
+            (self.default_model.clone(), self.default_max_tokens)
+        };
+
         // Set current query on memory provider for retrieval.
         if let Some(ref mp) = self.memory_provider {
             mp.set_current_query(&self.session_id, &text_content).await;
@@ -204,8 +275,8 @@ impl SessionActor {
             self.storage.as_ref(),
             &self.session_id,
             &inbound,
-            &self.model,
-            self.max_tokens,
+            &model,
+            max_tokens,
         )
         .await;
 
@@ -283,17 +354,26 @@ impl SessionActor {
         );
 
         // Record cost in ledger and budget tracker.
+        // Use routing decision to track intended vs actual model.
         if let Some(ref usage) = usage {
-            let model_pricing = pricing::get_pricing(&self.model);
+            let (model_for_cost, intended_model) = match &self.last_routing_decision {
+                Some(d) => (d.actual_model.clone(), Some(d.intended_model.clone())),
+                None => (self.default_model.clone(), None),
+            };
+
+            let model_pricing = pricing::get_pricing(&model_for_cost);
             let cost_usd = pricing::calculate_cost(usage, &model_pricing);
 
-            let record = CostRecord::new(
+            let mut record = CostRecord::new(
                 self.session_id.clone(),
-                self.model.clone(),
+                model_for_cost.clone(),
                 FeatureType::Message,
                 usage,
                 cost_usd,
             );
+            if let Some(intended) = intended_model {
+                record = record.with_intended_model(intended);
+            }
 
             self.cost_ledger.record(&record).await?;
 
@@ -304,7 +384,8 @@ impl SessionActor {
 
             info!(
                 session_id = %self.session_id,
-                model = %self.model,
+                model = %model_for_cost,
+                intended_model = ?record.intended_model,
                 input_tokens = usage.input_tokens,
                 output_tokens = usage.output_tokens,
                 cache_read_tokens = usage.cache_read_tokens,

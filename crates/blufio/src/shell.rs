@@ -21,6 +21,7 @@ use blufio_core::types::{
 };
 use blufio_core::{ProviderAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
+use blufio_router::ModelRouter;
 use blufio_storage::SqliteStorage;
 use colored::Colorize;
 use futures::StreamExt;
@@ -81,6 +82,9 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
         BudgetTracker::from_ledger(&config.cost, &cost_ledger).await?
     ));
 
+    // Initialize model router for per-message routing (even in shell mode).
+    let router = Arc::new(ModelRouter::new(config.routing.clone()));
+
     // Create a new CLI session.
     let session_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -128,6 +132,7 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
                     &cost_ledger,
                     &budget_tracker,
                     memory_provider.as_ref(),
+                    &router,
                     &session_id,
                     trimmed,
                 )
@@ -178,8 +183,8 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
     Ok(())
 }
 
-/// Handles a single shell message: persists, checks budget, assembles context via
-/// context engine, streams output, records costs.
+/// Handles a single shell message: persists, checks budget, routes model,
+/// assembles context via context engine, streams output, records costs.
 #[allow(clippy::too_many_arguments)]
 async fn handle_shell_message(
     config: &BlufioConfig,
@@ -189,6 +194,7 @@ async fn handle_shell_message(
     cost_ledger: &CostLedger,
     budget_tracker: &tokio::sync::Mutex<BudgetTracker>,
     memory_provider: Option<&MemoryProvider>,
+    router: &ModelRouter,
     session_id: &str,
     input: &str,
 ) -> Result<(), BlufioError> {
@@ -198,22 +204,54 @@ async fn handle_shell_message(
         tracker.check_budget()?;
     }
 
-    // Persist user message.
+    // Parse per-message model override and strip prefix.
+    let (_, clean_input) = blufio_router::parse_model_override(input);
+
+    // Persist user message (with override prefix stripped).
     let now = chrono::Utc::now().to_rfc3339();
     let user_msg = Message {
         id: uuid::Uuid::new_v4().to_string(),
         session_id: session_id.to_string(),
         role: "user".to_string(),
-        content: input.to_string(),
+        content: clean_input.to_string(),
         token_count: None,
         metadata: None,
         created_at: now,
     };
     storage.insert_message(&user_msg).await?;
 
+    // Route the message to the appropriate model.
+    let (model, max_tokens, intended_model) = if config.routing.enabled {
+        let recent_msgs = storage.get_messages(session_id, Some(3)).await?;
+        let recent_strings: Vec<String> = recent_msgs.iter().map(|m| m.content.clone()).collect();
+        let recent_refs: Vec<&str> = recent_strings.iter().map(|s| s.as_str()).collect();
+
+        let budget_util = {
+            let tracker = budget_tracker.lock().await;
+            tracker.budget_utilization()
+        };
+
+        let decision = router.route(input, &recent_refs, budget_util);
+
+        if decision.downgraded {
+            let short = ModelRouter::short_model_name(&decision.actual_model);
+            eprintln!(
+                "{}",
+                format!("(Using {short} -- budget downgrade)").dimmed()
+            );
+        }
+
+        let model = decision.actual_model.clone();
+        let max_tokens = decision.max_tokens;
+        let intended = Some(decision.intended_model.clone());
+        (model, max_tokens, intended)
+    } else {
+        (config.anthropic.default_model.clone(), config.anthropic.max_tokens, None)
+    };
+
     // Set current query on memory provider for retrieval.
     if let Some(mp) = memory_provider {
-        mp.set_current_query(session_id, input).await;
+        mp.set_current_query(session_id, clean_input).await;
     }
 
     // Create InboundMessage for context assembly.
@@ -222,7 +260,7 @@ async fn handle_shell_message(
         session_id: Some(session_id.to_string()),
         channel: "cli".to_string(),
         sender_id: "local".to_string(),
-        content: MessageContent::Text(input.to_string()),
+        content: MessageContent::Text(clean_input.to_string()),
         timestamp: chrono::Utc::now().to_rfc3339(),
         metadata: None,
     };
@@ -233,8 +271,8 @@ async fn handle_shell_message(
         storage,
         session_id,
         &inbound,
-        &config.anthropic.default_model,
-        config.anthropic.max_tokens,
+        &model,
+        max_tokens,
     )
     .await;
 
@@ -329,18 +367,21 @@ async fn handle_shell_message(
     };
     storage.insert_message(&assistant_msg).await?;
 
-    // Record message cost.
+    // Record message cost with routed model and intended_model tracking.
     if let Some(ref usage) = usage {
-        let model_pricing = pricing::get_pricing(&config.anthropic.default_model);
+        let model_pricing = pricing::get_pricing(&model);
         let cost_usd = pricing::calculate_cost(usage, &model_pricing);
 
-        let record = CostRecord::new(
+        let mut record = CostRecord::new(
             session_id.to_string(),
-            config.anthropic.default_model.clone(),
+            model.clone(),
             FeatureType::Message,
             usage,
             cost_usd,
         );
+        if let Some(ref intended) = intended_model {
+            record = record.with_intended_model(intended.clone());
+        }
 
         cost_ledger.record(&record).await?;
 
@@ -351,6 +392,8 @@ async fn handle_shell_message(
 
         debug!(
             session_id = %session_id,
+            model = %model,
+            intended_model = ?intended_model,
             input_tokens = usage.input_tokens,
             output_tokens = usage.output_tokens,
             cost_usd = cost_usd,

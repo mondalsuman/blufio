@@ -28,6 +28,7 @@ use blufio_core::types::{
 };
 use blufio_core::{ChannelAdapter, ProviderAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider};
+use blufio_router::ModelRouter;
 
 pub use heartbeat::HeartbeatRunner;
 use futures::StreamExt;
@@ -51,12 +52,17 @@ pub struct AgentLoop {
     memory_provider: Option<MemoryProvider>,
     /// Memory extractor for end-of-conversation fact extraction.
     memory_extractor: Option<Arc<MemoryExtractor>>,
+    /// Model router for per-message complexity-based model selection.
+    router: Arc<ModelRouter>,
+    /// Heartbeat runner for proactive check-ins (None = disabled).
+    heartbeat_runner: Option<Arc<HeartbeatRunner>>,
     config: BlufioConfig,
     sessions: HashMap<String, SessionActor>,
 }
 
 impl AgentLoop {
-    /// Creates a new agent loop with the given adapters, context engine, and cost components.
+    /// Creates a new agent loop with the given adapters, context engine, cost components,
+    /// model router, and optional heartbeat runner.
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         channel: Box<dyn ChannelAdapter + Send + Sync>,
@@ -67,6 +73,8 @@ impl AgentLoop {
         budget_tracker: Arc<tokio::sync::Mutex<BudgetTracker>>,
         memory_provider: Option<MemoryProvider>,
         memory_extractor: Option<Arc<MemoryExtractor>>,
+        router: Arc<ModelRouter>,
+        heartbeat_runner: Option<Arc<HeartbeatRunner>>,
         config: BlufioConfig,
     ) -> Result<Self, BlufioError> {
         info!(
@@ -83,6 +91,8 @@ impl AgentLoop {
             budget_tracker,
             memory_provider,
             memory_extractor,
+            router,
+            heartbeat_runner,
             config,
             sessions: HashMap::new(),
         })
@@ -137,10 +147,25 @@ impl AgentLoop {
     ///
     /// If a `BudgetExhausted` error is returned from the session actor, sends
     /// the budget message to the user instead of logging it as an error.
+    ///
+    /// Integrates heartbeat delivery: if a pending heartbeat exists from the
+    /// `on_next_message` delivery mode, it is prepended to the response.
     async fn handle_inbound(&mut self, inbound: InboundMessage) -> Result<(), BlufioError> {
         let sender_id = inbound.sender_id.clone();
         let channel_name = inbound.channel.clone();
         let metadata = inbound.metadata.clone();
+
+        // Notify heartbeat runner of incoming message (for skip-when-unchanged detection).
+        if let Some(ref runner) = self.heartbeat_runner {
+            runner.notify_message_received().await;
+        }
+
+        // Check for pending heartbeat (on_next_message delivery).
+        let pending_heartbeat = if let Some(ref runner) = self.heartbeat_runner {
+            runner.take_pending_heartbeat().await
+        } else {
+            None
+        };
 
         debug!(
             sender_id = sender_id.as_str(),
@@ -274,12 +299,47 @@ impl AgentLoop {
             }
         }
 
+        // Build the final display content, optionally prepending:
+        // 1. Pending heartbeat content (on_next_message delivery)
+        // 2. Budget downgrade notification
+        let mut display_response = String::new();
+
+        // Prepend pending heartbeat if present.
+        if let Some(ref hb) = pending_heartbeat {
+            display_response.push_str(hb);
+            display_response.push_str("\n\n---\n\n");
+        }
+
+        // Check for budget downgrade notification from the session actor.
+        {
+            let actor = self.sessions.get(&session_id).ok_or_else(|| {
+                BlufioError::Internal(format!("session actor not found for {session_id}"))
+            })?;
+            if let Some(decision) = actor.last_routing_decision() {
+                if decision.downgraded {
+                    let short_name = blufio_router::ModelRouter::short_model_name(&decision.actual_model);
+                    let note = format!(
+                        "_(Using {} -- budget at {:.0}%)_\n\n",
+                        short_name,
+                        // Approximate from reason string -- just show the note
+                        // without re-querying budget since decision.reason has the info
+                        decision.reason.split("budget at ").last()
+                            .and_then(|s| s.strip_suffix(')'))
+                            .unwrap_or("high")
+                    );
+                    display_response.push_str(&note);
+                }
+            }
+        }
+
+        display_response.push_str(&full_response);
+
         // If we haven't sent anything yet (non-edit channel or no delta arrived), send now.
-        if sent_message_id.is_none() && !full_response.is_empty() {
+        if sent_message_id.is_none() && !display_response.is_empty() {
             let out = OutboundMessage {
                 session_id: Some(session_id.clone()),
                 channel: channel_name.clone(),
-                content: full_response.clone(),
+                content: display_response.clone(),
                 reply_to: None,
                 parse_mode: None,
                 metadata: metadata.clone(),
@@ -287,12 +347,12 @@ impl AgentLoop {
             if let Err(e) = self.channel.send(out).await {
                 error!(error = %e, "failed to send response message");
             }
-        } else if sent_message_id.is_some() && !full_response.is_empty() {
+        } else if sent_message_id.is_some() && !display_response.is_empty() {
             // Final edit to ensure the complete response is shown.
             if let Some(mid) = &sent_message_id
                 && let Err(e) = self
                     .channel
-                    .edit_message(&chat_id, mid, &full_response, None)
+                    .edit_message(&chat_id, mid, &display_response, None)
                     .await
             {
                 debug!(error = %e, "failed to send final edit");
@@ -300,6 +360,7 @@ impl AgentLoop {
         }
 
         // Persist assistant response (also records cost).
+        // Note: We persist the raw LLM response, not the display_response with prefixes.
         let actor = self.sessions.get_mut(&session_id).ok_or_else(|| {
             BlufioError::Internal(format!("session actor not found for {session_id}"))
         })?;
@@ -358,8 +419,10 @@ impl AgentLoop {
                     self.memory_provider.as_ref().cloned(),
                     self.memory_extractor.clone(),
                     channel.to_string(),
+                    self.router.clone(),
                     self.config.anthropic.default_model.clone(),
                     self.config.anthropic.max_tokens,
+                    self.config.routing.enabled,
                     self.config.memory.idle_timeout_secs,
                 );
                 let session_id = session.id.clone();
@@ -401,8 +464,10 @@ impl AgentLoop {
             self.memory_provider.as_ref().cloned(),
             self.memory_extractor.clone(),
             channel.to_string(),
+            self.router.clone(),
             self.config.anthropic.default_model.clone(),
             self.config.anthropic.max_tokens,
+            self.config.routing.enabled,
             self.config.memory.idle_timeout_secs,
         );
         self.sessions.insert(session_key, actor);

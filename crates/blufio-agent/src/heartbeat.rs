@@ -19,7 +19,7 @@ use std::sync::Arc;
 use blufio_config::model::{CostConfig, HeartbeatConfig};
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
-    ContentBlock, ProviderMessage, ProviderRequest, ProviderResponse, TokenUsage,
+    ContentBlock, ProviderMessage, ProviderRequest, TokenUsage,
 };
 use blufio_core::{ProviderAdapter, StorageAdapter};
 use blufio_cost::budget::BudgetTracker;
