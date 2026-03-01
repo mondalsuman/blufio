@@ -69,10 +69,13 @@ Plans:
   5. Sending SIGTERM triggers graceful shutdown -- active sessions drain before exit, no messages are lost
 **Plans**: 3 plans
 
+**Plans**: 4 plans
+
 Plans:
 - [x] 03-01-PLAN.md -- Core types extension + Anthropic provider with SSE streaming (Wave 1)
 - [x] 03-02-PLAN.md -- Telegram channel adapter with MarkdownV2, media, streaming, long polling (Wave 2)
 - [x] 03-03-PLAN.md -- Agent loop, session FSM, context assembly, graceful shutdown, serve + shell CLI (Wave 3)
+- [ ] 03-04-PLAN.md -- Gap closure: replace drain_sessions() stub with poll-based session state monitoring (Wave 1)
 
 ### Phase 4: Context Engine & Cost Tracking
 **Goal**: The agent assembles prompts intelligently using three-zone context (static/conditional/dynamic) with Anthropic prompt cache alignment, tracks every token spent across all features, and enforces budget caps with kill switches
