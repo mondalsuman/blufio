@@ -60,8 +60,9 @@ pub async fn load_system_prompt(config: &AgentConfig) -> Result<String, BlufioEr
 
 /// Assembles a [`ProviderRequest`] from session history and the current inbound message.
 ///
-/// Loads the last [`DEFAULT_HISTORY_LIMIT`] messages from storage, converts them
-/// to provider messages, appends the current inbound message, and builds the request.
+/// **Deprecated**: Superseded by `blufio_context::ContextEngine::assemble()` which
+/// provides three-zone assembly with compaction. Kept for the `blufio shell` fallback
+/// and tests.
 pub async fn assemble_context(
     storage: &dyn StorageAdapter,
     session_id: &str,

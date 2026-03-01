@@ -11,6 +11,8 @@ description = "Agent loop and session management for Blufio"
 [dependencies]
 blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
+blufio-context = { path = "../blufio-context" }
+blufio-cost = { path = "../blufio-cost" }
 async-trait.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "signal", "macros", "fs"] }
 tokio-util.workspace = true
