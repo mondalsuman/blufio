@@ -68,12 +68,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Cost & Observability
 
-- [ ] **COST-01**: Unified cost ledger tracks every token across all features (messages, heartbeats, tools, compaction)
-- [ ] **COST-02**: Per-session and per-model cost attribution in real-time
-- [ ] **COST-03**: Configurable daily and monthly budget caps with hard kill switch when exhausted
+- [x] **COST-01**: Unified cost ledger tracks every token across all features (messages, heartbeats, tools, compaction)
+- [x] **COST-02**: Per-session and per-model cost attribution in real-time
+- [x] **COST-03**: Configurable daily and monthly budget caps with hard kill switch when exhausted
 - [ ] **COST-04**: Prometheus metrics endpoint exports token usage, latency percentiles, error rates, memory usage
-- [ ] **COST-05**: Structured error handling with Result<T,E> everywhere -- zero empty catch blocks
-- [ ] **COST-06**: All errors logged with context using tracing crate -- structured, filterable
+- [x] **COST-05**: Structured error handling with Result<T,E> everywhere -- zero empty catch blocks
+- [x] **COST-06**: All errors logged with context using tracing crate -- structured, filterable
 
 ### Skills & Tools
 
@@ -200,12 +200,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-08 | Phase 2: Persistence & Security Vault | Pending |
 | SEC-09 | Phase 2: Persistence & Security Vault | Pending |
 | SEC-10 | Phase 2: Persistence & Security Vault | Pending |
-| COST-01 | Phase 4: Context Engine & Cost Tracking | Pending |
-| COST-02 | Phase 4: Context Engine & Cost Tracking | Pending |
-| COST-03 | Phase 4: Context Engine & Cost Tracking | Pending |
+| COST-01 | Phase 4: Context Engine & Cost Tracking | Complete |
+| COST-02 | Phase 4: Context Engine & Cost Tracking | Complete |
+| COST-03 | Phase 4: Context Engine & Cost Tracking | Complete |
 | COST-04 | Phase 9: Production Hardening | Pending |
-| COST-05 | Phase 4: Context Engine & Cost Tracking | Pending |
-| COST-06 | Phase 4: Context Engine & Cost Tracking | Pending |
+| COST-05 | Phase 4: Context Engine & Cost Tracking | Complete |
+| COST-06 | Phase 4: Context Engine & Cost Tracking | Complete |
 | SKILL-01 | Phase 7: WASM Skill Sandbox | Pending |
 | SKILL-02 | Phase 7: WASM Skill Sandbox | Pending |
 | SKILL-03 | Phase 7: WASM Skill Sandbox | Pending |
