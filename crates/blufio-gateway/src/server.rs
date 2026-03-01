@@ -22,6 +22,15 @@ use crate::auth::{auth_middleware, AuthConfig};
 use crate::handlers;
 use crate::ws;
 
+/// Health state for unauthenticated health/metrics endpoints.
+#[derive(Clone)]
+pub struct HealthState {
+    /// Process start time for uptime calculation.
+    pub start_time: std::time::Instant,
+    /// Optional Prometheus metrics render function.
+    pub prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>>,
+}
+
 /// Shared state for axum request handlers.
 #[derive(Clone)]
 pub struct GatewayState {
@@ -33,6 +42,8 @@ pub struct GatewayState {
     pub ws_senders: Arc<DashMap<String, mpsc::Sender<String>>>,
     /// Authentication configuration.
     pub auth: AuthConfig,
+    /// Health state for unauthenticated endpoints.
+    pub health: HealthState,
 }
 
 /// Gateway server configuration (mirrors GatewayConfig from blufio-config).
@@ -59,6 +70,12 @@ pub async fn start_server(
 ) -> Result<(), BlufioError> {
     let auth_state = state.auth.clone();
 
+    // Unauthenticated public routes (health + metrics for systemd and Prometheus).
+    let public_routes = Router::new()
+        .route("/health", get(handlers::get_public_health))
+        .route("/metrics", get(handlers::get_public_metrics))
+        .with_state(state.clone());
+
     // Routes requiring authentication.
     let api_routes = Router::new()
         .route("/v1/messages", post(handlers::post_messages))
@@ -76,6 +93,7 @@ pub async fn start_server(
         .with_state(state);
 
     let app = Router::new()
+        .merge(public_routes)
         .merge(api_routes)
         .merge(ws_routes)
         .layer(CorsLayer::permissive());
@@ -113,6 +131,10 @@ mod tests {
             ws_senders: Arc::new(DashMap::new()),
             auth: AuthConfig {
                 bearer_token: None,
+            },
+            health: HealthState {
+                start_time: std::time::Instant::now(),
+                prometheus_render: None,
             },
         };
         let _cloned = state.clone();
