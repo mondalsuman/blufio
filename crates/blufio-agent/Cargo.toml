@@ -13,6 +13,7 @@ blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
 blufio-context = { path = "../blufio-context" }
 blufio-cost = { path = "../blufio-cost" }
+blufio-memory = { path = "../blufio-memory" }
 async-trait.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "signal", "macros", "fs"] }
 tokio-util.workspace = true

@@ -23,6 +23,8 @@ pub enum FeatureType {
     Tool,
     /// Periodic heartbeat or keep-alive prompt.
     Heartbeat,
+    /// Memory extraction via Haiku (background fact extraction).
+    Extraction,
 }
 
 /// A single cost record representing one LLM API call.
@@ -365,6 +367,35 @@ mod tests {
         assert_eq!(ft.to_string(), "Message");
         let parsed = FeatureType::from_str("Compaction").unwrap();
         assert_eq!(parsed, FeatureType::Compaction);
+        let extraction = FeatureType::from_str("Extraction").unwrap();
+        assert_eq!(extraction, FeatureType::Extraction);
+        assert_eq!(FeatureType::Extraction.to_string(), "Extraction");
+    }
+
+    #[tokio::test]
+    async fn record_extraction_cost() {
+        let conn = test_db().await;
+        let ledger = CostLedger::new(conn);
+        let usage = TokenUsage {
+            input_tokens: 200,
+            output_tokens: 100,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+        };
+        let record = CostRecord::new(
+            "sess-extract".to_string(),
+            "claude-haiku-4-5-20250901".to_string(),
+            FeatureType::Extraction,
+            &usage,
+            0.0005,
+        );
+        ledger.record(&record).await.unwrap();
+
+        let total = ledger.session_total("sess-extract").await.unwrap();
+        assert!(
+            (total - 0.0005).abs() < 1e-10,
+            "extraction cost should be recorded, got {total}"
+        );
     }
 
     #[test]

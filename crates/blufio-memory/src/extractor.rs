@@ -68,6 +68,11 @@ impl MemoryExtractor {
         }
     }
 
+    /// Returns the extraction model name (for cost tracking).
+    pub fn extraction_model(&self) -> &str {
+        &self.extraction_model
+    }
+
     /// Extract memories from a conversation using LLM.
     ///
     /// Calls the extraction model (Haiku) to identify factual information,

@@ -22,6 +22,10 @@ use crate::retriever::HybridRetriever;
 /// Before each context assembly, the SessionActor calls `set_current_query`
 /// with the user's message. The provider then retrieves matching memories
 /// and formats them as a structured block.
+///
+/// Clone is cheap: both `retriever` and `current_queries` are `Arc`-wrapped,
+/// so clones share the same underlying state.
+#[derive(Clone)]
 pub struct MemoryProvider {
     retriever: Arc<HybridRetriever>,
     /// Per-session current query, set by SessionActor before context assembly.
@@ -97,6 +101,7 @@ impl ConditionalProvider for MemoryProvider {
         }])
     }
 }
+
 
 #[cfg(test)]
 mod tests {
