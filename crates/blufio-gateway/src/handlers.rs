@@ -201,6 +201,46 @@ pub async fn get_health(State(_state): State<GatewayState>) -> Json<HealthRespon
     })
 }
 
+/// Response body for GET /health (unauthenticated).
+#[derive(Debug, Serialize)]
+pub struct PublicHealthResponse {
+    /// Health status string.
+    pub status: String,
+    /// Uptime in seconds.
+    pub uptime_secs: u64,
+}
+
+/// GET /health (unauthenticated)
+///
+/// Returns basic health status for systemd health checks and monitoring.
+/// Does not require authentication. Returns minimal information.
+pub async fn get_public_health(State(state): State<GatewayState>) -> Json<PublicHealthResponse> {
+    let uptime = state.health.start_time.elapsed().as_secs();
+    Json(PublicHealthResponse {
+        status: "healthy".to_string(),
+        uptime_secs: uptime,
+    })
+}
+
+/// GET /metrics (unauthenticated)
+///
+/// Returns Prometheus metrics in text format for scraping.
+/// Does not require authentication.
+pub async fn get_public_metrics(State(state): State<GatewayState>) -> Response {
+    match &state.health.prometheus_render {
+        Some(render_fn) => {
+            let body = render_fn();
+            (
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+                body,
+            )
+                .into_response()
+        }
+        None => (StatusCode::SERVICE_UNAVAILABLE, "Metrics not available").into_response(),
+    }
+}
+
 /// GET /v1/sessions
 ///
 /// Returns list of active sessions.
@@ -268,5 +308,16 @@ mod tests {
         let resp = SessionListResponse { sessions: vec![] };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"sessions\":[]"));
+    }
+
+    #[test]
+    fn public_health_response_serializes() {
+        let resp = PublicHealthResponse {
+            status: "healthy".to_string(),
+            uptime_secs: 120,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"status\":\"healthy\""));
+        assert!(json.contains("\"uptime_secs\":120"));
     }
 }

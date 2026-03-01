@@ -1,0 +1,47 @@
+# Blufio AI Agent - systemd service unit
+# Install: cp contrib/blufio.service /etc/systemd/system/
+# Enable:  systemctl enable blufio && systemctl start blufio
+
+[Unit]
+Description=Blufio AI Agent
+Documentation=https://github.com/blufio/blufio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=-/var/lib/blufio/hooks/pre-start.sh
+ExecStart=/usr/local/bin/blufio serve
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 15); do curl -sf http://127.0.0.1:3000/health > /dev/null 2>&1 && exit 0; sleep 1; done; exit 1'
+ExecStopPost=-/var/lib/blufio/hooks/post-stop.sh
+Restart=on-failure
+RestartSec=5s
+StartLimitBurst=3
+StartLimitIntervalSec=60
+TimeoutStopSec=30
+
+User=blufio
+Group=blufio
+WorkingDirectory=/var/lib/blufio
+
+Environment=RUST_LOG=blufio=info
+EnvironmentFile=-/etc/blufio/environment
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/blufio
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitNOFILE=65536
+
+# Memory limit (systemd-level protection)
+MemoryMax=256M
+MemoryHigh=200M
+
+[Install]
+WantedBy=multi-user.target

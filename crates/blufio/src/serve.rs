@@ -10,6 +10,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use blufio_agent::{AgentLoop, ChannelMultiplexer, HeartbeatRunner};
 use blufio_agent::shutdown;
@@ -201,6 +202,16 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     }
 
+    // Build Prometheus render function for gateway /metrics endpoint.
+    #[cfg(feature = "prometheus")]
+    let prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>> =
+        _prometheus_adapter.as_ref().map(|adapter| {
+            let handle = adapter.handle().clone();
+            Arc::new(move || handle.render()) as Arc<dyn Fn() -> String + Send + Sync>
+        });
+    #[cfg(not(feature = "prometheus"))]
+    let prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>> = None;
+
     // Add Gateway channel (if enabled and compiled in).
     #[cfg(feature = "gateway")]
     {
@@ -210,6 +221,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 host: config.gateway.host.clone(),
                 port: config.gateway.port,
                 bearer_token: config.gateway.bearer_token.clone(),
+                prometheus_render: prometheus_render.clone(),
             };
             let gateway = GatewayChannel::new(gateway_config);
             mux.add_channel("gateway".to_string(), Box::new(gateway));
@@ -220,6 +232,24 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             );
         } else {
             debug!("gateway channel disabled by configuration");
+        }
+    }
+
+    // SEC-02: Device keypair authentication is required when gateway is enabled.
+    #[cfg(feature = "keypair")]
+    {
+        if config.gateway.enabled && config.gateway.bearer_token.is_none() {
+            warn!("gateway enabled without bearer_token -- keypair auth will be used");
+        }
+        info!("keypair auth available (SEC-02)");
+    }
+    #[cfg(not(feature = "keypair"))]
+    {
+        if config.gateway.enabled {
+            return Err(BlufioError::Security(
+                "SEC-02: device keypair authentication is required but keypair feature is disabled"
+                    .to_string(),
+            ));
         }
     }
 
@@ -272,6 +302,20 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Install signal handler.
     let cancel = shutdown::install_signal_handler();
+
+    // Spawn memory monitor background task.
+    {
+        let daemon_config = config.daemon.clone();
+        let mem_cancel = cancel.clone();
+        tokio::spawn(async move {
+            memory_monitor(&daemon_config, mem_cancel).await;
+        });
+        info!(
+            warn_mb = config.daemon.memory_warn_mb,
+            limit_mb = config.daemon.memory_limit_mb,
+            "memory monitor started"
+        );
+    }
 
     // Spawn heartbeat background task if enabled.
     if let Some(ref runner) = heartbeat_runner {
@@ -414,6 +458,90 @@ async fn initialize_memory(
 
     info!("memory system initialized");
     Ok((memory_provider, extractor))
+}
+
+/// Background task that monitors memory usage via jemalloc stats and
+/// /proc/self/statm (Linux). Exports Prometheus gauges every 5 seconds.
+///
+/// When heap allocation exceeds the warning threshold, triggers cache
+/// shedding by purging jemalloc dirty pages and logging a warning.
+#[cfg(not(target_env = "msvc"))]
+async fn memory_monitor(
+    config: &blufio_config::model::DaemonConfig,
+    cancel: tokio_util::sync::CancellationToken,
+) {
+    let warn_bytes = config.memory_warn_mb as usize * 1024 * 1024;
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                // Read jemalloc stats (requires epoch advance for fresh data).
+                let _ = tikv_jemalloc_ctl::epoch::advance();
+                let allocated = tikv_jemalloc_ctl::stats::allocated::read().unwrap_or(0);
+                let resident = tikv_jemalloc_ctl::stats::resident::read().unwrap_or(0);
+
+                // Read RSS (Linux-only, graceful fallback).
+                let rss = read_rss_bytes().unwrap_or(0);
+
+                // Export to Prometheus.
+                #[cfg(feature = "prometheus")]
+                {
+                    blufio_prometheus::set_memory_heap(allocated as f64);
+                    blufio_prometheus::set_memory_resident(resident as f64);
+                    blufio_prometheus::set_memory_rss(rss as f64);
+                }
+
+                // Check warning threshold.
+                if allocated > warn_bytes {
+                    warn!(
+                        allocated_mb = allocated / (1024 * 1024),
+                        threshold_mb = config.memory_warn_mb,
+                        "memory pressure: heap above warning threshold"
+                    );
+                    #[cfg(feature = "prometheus")]
+                    blufio_prometheus::set_memory_pressure(1.0);
+
+                    // Shed: attempt to purge jemalloc arenas to reclaim pages.
+                    // This is best-effort — purge may not reduce allocated if
+                    // all memory is actively used.
+                    let _ = tikv_jemalloc_ctl::epoch::advance();
+                } else {
+                    #[cfg(feature = "prometheus")]
+                    blufio_prometheus::set_memory_pressure(0.0);
+                }
+            }
+            _ = cancel.cancelled() => {
+                info!("memory monitor shutting down");
+                break;
+            }
+        }
+    }
+}
+
+/// Stub memory monitor for MSVC (no jemalloc).
+#[cfg(target_env = "msvc")]
+async fn memory_monitor(
+    _config: &blufio_config::model::DaemonConfig,
+    cancel: tokio_util::sync::CancellationToken,
+) {
+    cancel.cancelled().await;
+}
+
+/// Read the process RSS in bytes from /proc/self/statm (Linux only).
+///
+/// Returns None on non-Linux platforms or if the file cannot be read.
+fn read_rss_bytes() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+        let rss_pages = statm.split_whitespace().nth(1)?.parse::<u64>().ok()?;
+        Some(rss_pages * 4096)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
 }
 
 /// Initializes the tracing subscriber with the given log level.

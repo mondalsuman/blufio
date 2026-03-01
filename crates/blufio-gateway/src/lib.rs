@@ -27,13 +27,13 @@ use blufio_core::types::{
 use blufio_core::BlufioError;
 
 use crate::auth::AuthConfig;
-use crate::server::{GatewayState, ServerConfig};
+use crate::server::{GatewayState, HealthState, ServerConfig};
 
 /// Gateway channel adapter configuration.
 ///
 /// Mirrors `GatewayConfig` from `blufio-config` to avoid a dependency on
 /// the config crate from the gateway crate.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GatewayChannelConfig {
     /// Enable the gateway.
     pub enabled: bool,
@@ -43,6 +43,23 @@ pub struct GatewayChannelConfig {
     pub port: u16,
     /// Bearer token for auth.
     pub bearer_token: Option<String>,
+    /// Optional Prometheus metrics render function for /metrics endpoint.
+    pub prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>>,
+}
+
+impl std::fmt::Debug for GatewayChannelConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GatewayChannelConfig")
+            .field("enabled", &self.enabled)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("bearer_token", &self.bearer_token)
+            .field(
+                "prometheus_render",
+                &self.prometheus_render.as_ref().map(|_| "<fn>"),
+            )
+            .finish()
+    }
 }
 
 /// HTTP/WebSocket gateway implementing ChannelAdapter.
@@ -133,6 +150,10 @@ impl ChannelAdapter for GatewayChannel {
             ws_senders: Arc::clone(&self.ws_senders),
             auth: AuthConfig {
                 bearer_token: self.config.bearer_token.clone(),
+            },
+            health: HealthState {
+                start_time: std::time::Instant::now(),
+                prometheus_render: self.config.prometheus_render.clone(),
             },
         };
 
@@ -226,6 +247,7 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 0, // Will bind to random port
             bearer_token: None,
+            prometheus_render: None,
         }
     }
 

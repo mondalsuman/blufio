@@ -19,6 +19,7 @@ use blufio_core::BlufioError;
 
 pub use recording::{
     record_latency, record_message, record_tokens, set_active_sessions, set_budget_remaining,
+    set_memory_heap, set_memory_rss, set_memory_resident, set_memory_pressure, record_error,
 };
 
 /// Prometheus metrics adapter.
