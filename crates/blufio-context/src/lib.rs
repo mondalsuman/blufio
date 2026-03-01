@@ -119,6 +119,7 @@ impl ContextEngine {
             messages: all_messages,
             max_tokens,
             stream: true,
+            tools: None,
         };
 
         // 6. Return AssembledContext with compaction info.
@@ -180,6 +181,7 @@ mod tests {
                 messages: vec![],
                 max_tokens: 1024,
                 stream: true,
+                tools: None,
             },
             compaction_usage: Some(TokenUsage {
                 input_tokens: 100,
@@ -206,6 +208,7 @@ mod tests {
                 messages: vec![],
                 max_tokens: 1024,
                 stream: true,
+                tools: None,
             },
             compaction_usage: None,
             compaction_model: None,

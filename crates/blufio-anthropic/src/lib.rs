@@ -10,6 +10,7 @@ pub mod client;
 pub mod sse;
 pub mod types;
 
+use std::collections::HashMap;
 use std::pin::Pin;
 
 use async_trait::async_trait;
@@ -18,7 +19,7 @@ use blufio_core::error::BlufioError;
 use blufio_core::traits::{PluginAdapter, ProviderAdapter};
 use blufio_core::types::{
     AdapterType, ContentBlock, HealthStatus, ProviderRequest, ProviderResponse,
-    ProviderStreamChunk, StreamEventType, TokenUsage,
+    ProviderStreamChunk, StreamEventType, TokenUsage, ToolUseData,
 };
 use futures::stream::{Stream, StreamExt};
 use tracing::{debug, info};
@@ -27,7 +28,7 @@ use crate::client::AnthropicClient;
 use crate::sse::StreamEvent;
 use crate::types::{
     ApiContent, ApiContentBlock, ApiMessage, CacheControlMarker, ImageSource, MessageRequest,
-    SystemBlock, SystemContent,
+    ResponseContentBlock, SystemBlock, SystemContent,
 };
 
 /// Anthropic Claude provider implementing [`ProviderAdapter`].
@@ -122,6 +123,14 @@ impl AnthropicProvider {
             text.map(SystemContent::Text)
         };
 
+        // Convert tool definitions from serde_json::Value to ToolDefinition structs.
+        let tools = request.tools.as_ref().map(|tool_values| {
+            tool_values
+                .iter()
+                .filter_map(|v| serde_json::from_value::<crate::types::ToolDefinition>(v.clone()).ok())
+                .collect::<Vec<_>>()
+        }).and_then(|v| if v.is_empty() { None } else { Some(v) });
+
         MessageRequest {
             model: request.model.clone(),
             messages,
@@ -129,6 +138,7 @@ impl AnthropicProvider {
             max_tokens: request.max_tokens,
             stream: request.stream,
             cache_control: Some(CacheControlMarker::ephemeral()),
+            tools,
         }
     }
 }
@@ -173,8 +183,9 @@ impl ProviderAdapter for AnthropicProvider {
         let content = response
             .content
             .iter()
-            .map(|block| match block {
-                crate::types::ResponseContentBlock::Text { text } => text.as_str(),
+            .filter_map(|block| match block {
+                ResponseContentBlock::Text { text } => Some(text.as_str()),
+                ResponseContentBlock::ToolUse { .. } => None,
             })
             .collect::<Vec<_>>()
             .join("");
@@ -203,26 +214,50 @@ impl ProviderAdapter for AnthropicProvider {
         let api_request = self.to_message_request(&request);
         let event_stream = self.client.stream_message(&api_request).await?;
 
-        // Map StreamEvent -> ProviderStreamChunk, filtering out non-content events.
-        let chunk_stream = event_stream.filter_map(|result| async move {
-            match result {
-                Ok(event) => map_stream_event_to_chunk(event),
+        // Stateful stream that accumulates tool_use JSON across deltas.
+        // Key: content block index -> (tool_use_id, tool_name, accumulated_json)
+        let mut tool_use_blocks: HashMap<usize, (String, String, String)> = HashMap::new();
+        let mut stop_reason: Option<String> = None;
+
+        let chunk_stream = event_stream.filter_map(move |result| {
+            let chunk = match result {
+                Ok(event) => map_stream_event_to_chunk_stateful(
+                    event,
+                    &mut tool_use_blocks,
+                    &mut stop_reason,
+                ),
                 Err(e) => Some(Err(e)),
-            }
+            };
+            async move { chunk }
         });
 
         Ok(Box::pin(chunk_stream))
     }
 }
 
-/// Maps an SSE [`StreamEvent`] to a [`ProviderStreamChunk`].
+/// Maps an SSE [`StreamEvent`] to a [`ProviderStreamChunk`] with stateful
+/// accumulation of tool_use JSON deltas.
 ///
-/// Returns `None` for events that don't produce user-facing output
-/// (Ping, ContentBlockStart, ContentBlockStop).
-fn map_stream_event_to_chunk(
+/// `tool_use_blocks` tracks active tool_use content blocks by their index.
+/// When a tool_use block starts, its id and name are stored. Input JSON
+/// deltas are accumulated. On block stop, the complete JSON is parsed and
+/// a chunk with `tool_use` data is emitted.
+fn map_stream_event_to_chunk_stateful(
     event: StreamEvent,
+    tool_use_blocks: &mut HashMap<usize, (String, String, String)>,
+    stop_reason: &mut Option<String>,
 ) -> Option<Result<ProviderStreamChunk, BlufioError>> {
     match event {
+        StreamEvent::ContentBlockStart(cbs) => {
+            // Check if this is a tool_use block.
+            match &cbs.content_block {
+                ResponseContentBlock::ToolUse { id, name, .. } => {
+                    tool_use_blocks.insert(cbs.index, (id.clone(), name.clone(), String::new()));
+                    None
+                }
+                ResponseContentBlock::Text { .. } => None,
+            }
+        }
         StreamEvent::ContentBlockDelta(delta) => {
             match delta.delta {
                 crate::types::SseDelta::TextDelta { text } => Some(Ok(ProviderStreamChunk {
@@ -230,11 +265,41 @@ fn map_stream_event_to_chunk(
                     text: Some(text),
                     usage: None,
                     error: None,
+                    tool_use: None,
+                    stop_reason: None,
                 })),
-                crate::types::SseDelta::InputJsonDelta { .. } => {
-                    // Tool use deltas -- skip for now (Phase 3 doesn't use tool calling).
+                crate::types::SseDelta::InputJsonDelta { partial_json } => {
+                    // Accumulate partial JSON for tool_use blocks.
+                    if let Some((_id, _name, json)) = tool_use_blocks.get_mut(&delta.index)
+                    {
+                        json.push_str(&partial_json);
+                    }
                     None
                 }
+            }
+        }
+        StreamEvent::ContentBlockStop(cbs) => {
+            // If this was a tool_use block, parse the accumulated JSON and emit.
+            if let Some((id, name, json_str)) = tool_use_blocks.remove(&cbs.index) {
+                let input = if json_str.is_empty() {
+                    serde_json::Value::Object(serde_json::Map::new())
+                } else {
+                    serde_json::from_str(&json_str).unwrap_or_else(|e| {
+                        tracing::warn!(error = %e, json = %json_str, "failed to parse tool_use input JSON");
+                        serde_json::json!({"_parse_error": e.to_string(), "_raw": json_str})
+                    })
+                };
+
+                Some(Ok(ProviderStreamChunk {
+                    event_type: StreamEventType::ContentBlockStop,
+                    text: None,
+                    usage: None,
+                    error: None,
+                    tool_use: Some(ToolUseData { id, name, input }),
+                    stop_reason: None,
+                }))
+            } else {
+                None
             }
         }
         StreamEvent::MessageStart(ms) => Some(Ok(ProviderStreamChunk {
@@ -247,32 +312,46 @@ fn map_stream_event_to_chunk(
                 cache_creation_tokens: ms.message.usage.cache_creation_input_tokens,
             }),
             error: None,
+            tool_use: None,
+            stop_reason: None,
         })),
-        StreamEvent::MessageDelta(md) => Some(Ok(ProviderStreamChunk {
-            event_type: StreamEventType::MessageDelta,
-            text: None,
-            usage: md.usage.map(|u| TokenUsage {
-                input_tokens: u.input_tokens,
-                output_tokens: u.output_tokens,
-                cache_read_tokens: u.cache_read_input_tokens,
-                cache_creation_tokens: u.cache_creation_input_tokens,
-            }),
-            error: None,
-        })),
+        StreamEvent::MessageDelta(md) => {
+            // Capture the stop_reason for use in subsequent events.
+            if let Some(ref reason) = md.delta.stop_reason {
+                *stop_reason = Some(reason.clone());
+            }
+            Some(Ok(ProviderStreamChunk {
+                event_type: StreamEventType::MessageDelta,
+                text: None,
+                usage: md.usage.map(|u| TokenUsage {
+                    input_tokens: u.input_tokens,
+                    output_tokens: u.output_tokens,
+                    cache_read_tokens: u.cache_read_input_tokens,
+                    cache_creation_tokens: u.cache_creation_input_tokens,
+                }),
+                error: None,
+                tool_use: None,
+                stop_reason: md.delta.stop_reason,
+            }))
+        }
         StreamEvent::MessageStop => Some(Ok(ProviderStreamChunk {
             event_type: StreamEventType::MessageStop,
             text: None,
             usage: None,
             error: None,
+            tool_use: None,
+            stop_reason: stop_reason.clone(),
         })),
         StreamEvent::Error(err) => Some(Ok(ProviderStreamChunk {
             event_type: StreamEventType::Error,
             text: None,
             usage: None,
             error: Some(format!("{}: {}", err.error.type_, err.error.message)),
+            tool_use: None,
+            stop_reason: None,
         })),
-        // Ping, ContentBlockStart, ContentBlockStop -- no user-facing output.
-        _ => None,
+        // Ping -- no user-facing output.
+        StreamEvent::Ping => None,
     }
 }
 
@@ -492,6 +571,7 @@ mod tests {
             }],
             max_tokens: 2048,
             stream: true,
+            tools: None,
         };
 
         let api_req = provider.to_message_request(&request);
@@ -526,6 +606,7 @@ mod tests {
             messages: vec![],
             max_tokens: 1024,
             stream: false,
+            tools: None,
         };
 
         let api_req = provider.to_message_request(&request);
@@ -559,6 +640,7 @@ mod tests {
             messages: vec![],
             max_tokens: 1024,
             stream: false,
+            tools: None,
         };
 
         let api_req = provider.to_message_request(&request);
@@ -574,42 +656,149 @@ mod tests {
 
     #[test]
     fn map_content_block_delta_text() {
+        let mut tool_blocks = HashMap::new();
+        let mut stop_reason = None;
         let event = StreamEvent::ContentBlockDelta(crate::types::SseContentBlockDelta {
             index: 0,
             delta: crate::types::SseDelta::TextDelta {
                 text: "Hello".into(),
             },
         });
-        let chunk = map_stream_event_to_chunk(event).unwrap().unwrap();
+        let chunk = map_stream_event_to_chunk_stateful(event, &mut tool_blocks, &mut stop_reason)
+            .unwrap()
+            .unwrap();
         assert_eq!(chunk.event_type, StreamEventType::ContentBlockDelta);
         assert_eq!(chunk.text.as_deref(), Some("Hello"));
     }
 
     #[test]
     fn map_message_stop_event() {
+        let mut tool_blocks = HashMap::new();
+        let mut stop_reason = None;
         let event = StreamEvent::MessageStop;
-        let chunk = map_stream_event_to_chunk(event).unwrap().unwrap();
+        let chunk = map_stream_event_to_chunk_stateful(event, &mut tool_blocks, &mut stop_reason)
+            .unwrap()
+            .unwrap();
         assert_eq!(chunk.event_type, StreamEventType::MessageStop);
         assert!(chunk.text.is_none());
     }
 
     #[test]
     fn map_ping_returns_none() {
+        let mut tool_blocks = HashMap::new();
+        let mut stop_reason = None;
         let event = StreamEvent::Ping;
-        assert!(map_stream_event_to_chunk(event).is_none());
+        assert!(
+            map_stream_event_to_chunk_stateful(event, &mut tool_blocks, &mut stop_reason).is_none()
+        );
     }
 
     #[test]
     fn map_error_event() {
+        let mut tool_blocks = HashMap::new();
+        let mut stop_reason = None;
         let event = StreamEvent::Error(crate::types::SseError {
             error: crate::types::SseErrorDetail {
                 type_: "overloaded_error".into(),
                 message: "Overloaded".into(),
             },
         });
-        let chunk = map_stream_event_to_chunk(event).unwrap().unwrap();
+        let chunk = map_stream_event_to_chunk_stateful(event, &mut tool_blocks, &mut stop_reason)
+            .unwrap()
+            .unwrap();
         assert_eq!(chunk.event_type, StreamEventType::Error);
         assert!(chunk.error.as_ref().unwrap().contains("overloaded_error"));
+    }
+
+    #[test]
+    fn map_tool_use_block_accumulates_json() {
+        let mut tool_blocks = HashMap::new();
+        let mut stop_reason = None;
+
+        // 1. content_block_start with tool_use
+        let start_event = StreamEvent::ContentBlockStart(crate::types::SseContentBlockStart {
+            index: 1,
+            content_block: ResponseContentBlock::ToolUse {
+                id: "toolu_abc".into(),
+                name: "bash".into(),
+                input: serde_json::json!({}),
+            },
+        });
+        assert!(
+            map_stream_event_to_chunk_stateful(start_event, &mut tool_blocks, &mut stop_reason)
+                .is_none()
+        );
+
+        // 2. Two input_json_delta events
+        let delta1 = StreamEvent::ContentBlockDelta(crate::types::SseContentBlockDelta {
+            index: 1,
+            delta: crate::types::SseDelta::InputJsonDelta {
+                partial_json: "{\"command\":".into(),
+            },
+        });
+        assert!(
+            map_stream_event_to_chunk_stateful(delta1, &mut tool_blocks, &mut stop_reason)
+                .is_none()
+        );
+
+        let delta2 = StreamEvent::ContentBlockDelta(crate::types::SseContentBlockDelta {
+            index: 1,
+            delta: crate::types::SseDelta::InputJsonDelta {
+                partial_json: "\"echo hello\"}".into(),
+            },
+        });
+        assert!(
+            map_stream_event_to_chunk_stateful(delta2, &mut tool_blocks, &mut stop_reason)
+                .is_none()
+        );
+
+        // 3. content_block_stop emits the tool_use chunk
+        let stop_event = StreamEvent::ContentBlockStop(crate::types::SseContentBlockStop {
+            index: 1,
+        });
+        let chunk =
+            map_stream_event_to_chunk_stateful(stop_event, &mut tool_blocks, &mut stop_reason)
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(chunk.event_type, StreamEventType::ContentBlockStop);
+        let tool_use = chunk.tool_use.unwrap();
+        assert_eq!(tool_use.id, "toolu_abc");
+        assert_eq!(tool_use.name, "bash");
+        assert_eq!(tool_use.input["command"], "echo hello");
+    }
+
+    #[test]
+    fn map_text_block_stop_returns_none() {
+        let mut tool_blocks = HashMap::new();
+        let mut stop_reason = None;
+        // Stop for a text block (not in tool_use_blocks) should return None
+        let event = StreamEvent::ContentBlockStop(crate::types::SseContentBlockStop { index: 0 });
+        assert!(
+            map_stream_event_to_chunk_stateful(event, &mut tool_blocks, &mut stop_reason).is_none()
+        );
+    }
+
+    #[test]
+    fn map_message_delta_captures_stop_reason() {
+        let mut tool_blocks = HashMap::new();
+        let mut stop_reason = None;
+        let event = StreamEvent::MessageDelta(crate::types::SseMessageDelta {
+            delta: crate::types::SseMessageDeltaInfo {
+                stop_reason: Some("tool_use".into()),
+            },
+            usage: Some(crate::types::ApiUsage {
+                input_tokens: 50,
+                output_tokens: 30,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+            }),
+        });
+        let chunk = map_stream_event_to_chunk_stateful(event, &mut tool_blocks, &mut stop_reason)
+            .unwrap()
+            .unwrap();
+        assert_eq!(chunk.stop_reason.as_deref(), Some("tool_use"));
+        assert_eq!(stop_reason.as_deref(), Some("tool_use"));
     }
 
     #[test]

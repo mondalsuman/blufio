@@ -60,6 +60,7 @@ pub async fn generate_compaction_summary(
         }],
         max_tokens: 1024,
         stream: false,
+        tools: None,
     };
 
     let response = provider.complete(request).await?;

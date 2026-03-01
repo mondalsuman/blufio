@@ -101,6 +101,7 @@ pub async fn assemble_context(
         messages,
         max_tokens,
         stream: true,
+        tools: None,
     })
 }
 

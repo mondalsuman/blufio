@@ -59,6 +59,13 @@ pub enum BlufioError {
     #[error("budget exhausted: {message}")]
     BudgetExhausted { message: String },
 
+    /// Skill or tool execution errors.
+    #[error("skill error: {message}")]
+    Skill {
+        message: String,
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+
     /// Internal or unexpected errors.
     #[error("internal error: {0}")]
     Internal(String),

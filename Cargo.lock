@@ -432,6 +432,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "blufio-skill"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-core",
+ "blufio-security",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "blufio-storage"
 version = "0.1.0"
 dependencies = [

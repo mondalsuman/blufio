@@ -161,6 +161,9 @@ pub struct ProviderRequest {
     pub max_tokens: u32,
     /// Whether to stream the response.
     pub stream: bool,
+    /// Tool definitions to send to the provider (Anthropic format).
+    /// When present, the LLM may respond with tool_use content blocks.
+    pub tools: Option<Vec<serde_json::Value>>,
 }
 
 /// Token usage statistics from a provider response.
@@ -206,6 +209,17 @@ pub enum StreamEventType {
     Error,
 }
 
+/// Data for a tool_use content block parsed from a streaming response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolUseData {
+    /// Unique ID for this tool use (links to tool_result).
+    pub id: String,
+    /// Name of the tool being invoked.
+    pub name: String,
+    /// Parsed JSON input for the tool.
+    pub input: serde_json::Value,
+}
+
 /// A single chunk from a streaming LLM provider response.
 #[derive(Debug, Clone)]
 pub struct ProviderStreamChunk {
@@ -217,6 +231,10 @@ pub struct ProviderStreamChunk {
     pub usage: Option<TokenUsage>,
     /// Error message (for Error events).
     pub error: Option<String>,
+    /// Tool use data (for ContentBlockStop on a tool_use block).
+    pub tool_use: Option<ToolUseData>,
+    /// Stop reason from the provider (e.g., "end_turn", "tool_use").
+    pub stop_reason: Option<String>,
 }
 
 // --- Embedding types ---
