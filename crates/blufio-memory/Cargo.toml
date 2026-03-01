@@ -10,6 +10,7 @@ description = "Long-term memory system with ONNX embeddings and hybrid search fo
 
 [dependencies]
 blufio-core = { path = "../blufio-core" }
+blufio-context = { path = "../blufio-context" }
 blufio-storage = { path = "../blufio-storage" }
 blufio-config = { path = "../blufio-config" }
 ort.workspace = true
