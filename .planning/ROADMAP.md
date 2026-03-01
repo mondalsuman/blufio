@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Plugin System & Gateway** - Plugin host, plugin CLI, HTTP/WebSocket gateway
 - [x] **Phase 9: Production Hardening** - systemd, daemon mode, memory bounds, Prometheus, diagnostics, operations
 - [x] **Phase 10: Multi-Agent & Final Integration** - Multi-agent routing, Ed25519 signing, end-to-end validation (completed 2026-03-01)
-- [ ] **Phase 11: Fix Critical Integration Bugs** - Fix 4 cross-phase integration bugs found by milestone audit (Gap Closure)
+- [x] **Phase 11: Fix Critical Integration Bugs** - Fix 4 cross-phase integration bugs found by milestone audit (Gap Closure)
 - [ ] **Phase 12: Verify Unverified Phases** - Create VERIFICATION.md for phases 2, 5, 6, 8, 9 and fix missing/empty SUMMARYs (Gap Closure)
 - [ ] **Phase 13: Sync Traceability & Documentation** - Sync REQUIREMENTS.md and ROADMAP.md with verified state (Gap Closure)
 
@@ -202,6 +202,10 @@ Plans:
   4. Tool follow-up requests use the model selected by ModelRouter, not default_model
 
 Plans:
+- [x] 11-01-PLAN.md -- P0: Tool content block serialization (ToolUse/ToolResult ContentBlock variants, converter, agent tool loop)
+- [x] 11-02-PLAN.md -- P1: Vault startup wiring (vault_startup_check call in serve.rs before provider init)
+- [x] 11-03-PLAN.md -- P2: Keypair auth gateway wiring (dual-auth middleware, keypair signature verification, fail-closed)
+- [x] 11-04-PLAN.md -- P3: Model router bypass (routing-decision-aware tool follow-up model selection)
 
 ### Phase 12: Verify Unverified Phases
 **Goal**: Create VERIFICATION.md files for the 5 phases that lack formal verification (2, 5, 6, 8, 9), fix missing/empty SUMMARY files, and confirm all 33 unverified requirements are satisfied by the wired code
@@ -241,6 +245,6 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 8. Plugin System & Gateway | 3/3 | Complete | 2026-03-01 |
 | 9. Production Hardening | 3/3 | Complete | 2026-03-01 |
 | 10. Multi-Agent & Final Integration | 3/3 | Complete    | 2026-03-01 |
-| 11. Fix Critical Integration Bugs | 0/0 | Gap closure | - |
+| 11. Fix Critical Integration Bugs | 4/4 | Complete | 2026-03-01 |
 | 12. Verify Unverified Phases | 0/0 | Gap closure | - |
 | 13. Sync Traceability & Documentation | 0/0 | Gap closure | - |
