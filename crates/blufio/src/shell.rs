@@ -17,17 +17,22 @@ use blufio_cost::ledger::{CostRecord, FeatureType};
 use blufio_cost::{pricing, BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
-    InboundMessage, Message, MessageContent, Session, StreamEventType, TokenUsage,
+    ContentBlock, InboundMessage, Message, MessageContent, ProviderMessage, ProviderRequest,
+    Session, StreamEventType, TokenUsage, ToolUseData,
 };
 use blufio_core::{ProviderAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
 use blufio_router::ModelRouter;
+use blufio_skill::{SkillProvider, ToolRegistry};
 use blufio_storage::SqliteStorage;
 use colored::Colorize;
 use futures::StreamExt;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use tracing::{debug, info, warn};
+
+/// Maximum number of tool_use/tool_result loop iterations per message.
+const MAX_TOOL_ITERATIONS: usize = 10;
 
 /// Runs the `blufio shell` interactive REPL.
 ///
@@ -76,6 +81,19 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
         info!("memory system disabled (onnx feature not enabled)");
         None
     };
+
+    // Initialize tool registry with built-in tools.
+    let mut tool_registry = ToolRegistry::new();
+    blufio_skill::builtin::register_builtins(&mut tool_registry);
+    info!("tool registry initialized with {} built-in tools", tool_registry.len());
+    let tool_registry = Arc::new(tokio::sync::RwLock::new(tool_registry));
+
+    // Register SkillProvider with context engine for progressive tool discovery.
+    let skill_provider = SkillProvider::new(
+        tool_registry.clone(),
+        config.skill.max_skills_in_prompt,
+    );
+    context_engine.add_conditional_provider(Box::new(skill_provider));
 
     let context_engine = Arc::new(context_engine);
 
@@ -140,6 +158,7 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
                     &budget_tracker,
                     memory_provider.as_ref(),
                     &router,
+                    &tool_registry,
                     &session_id,
                     trimmed,
                 )
@@ -202,6 +221,7 @@ async fn handle_shell_message(
     budget_tracker: &tokio::sync::Mutex<BudgetTracker>,
     memory_provider: Option<&MemoryProvider>,
     router: &ModelRouter,
+    tool_registry: &tokio::sync::RwLock<ToolRegistry>,
     session_id: &str,
     input: &str,
 ) -> Result<(), BlufioError> {
@@ -320,42 +340,221 @@ async fn handle_shell_message(
         );
     }
 
-    // Stream the response.
-    let mut stream = provider.stream(assembled.request).await?;
-    let mut full_response = String::new();
-    let mut usage: Option<TokenUsage> = None;
+    // Inject tool definitions into the assembled request.
+    let mut request = assembled.request;
+    {
+        let registry = tool_registry.read().await;
+        if registry.len() > 0 {
+            request.tools = Some(registry.tool_definitions());
+        }
+    }
 
-    while let Some(chunk_result) = stream.next().await {
-        match chunk_result {
-            Ok(chunk) => match chunk.event_type {
-                StreamEventType::ContentBlockDelta => {
-                    if let Some(text) = &chunk.text {
-                        print!("{text}");
-                        std::io::Write::flush(&mut std::io::stdout()).ok();
-                        full_response.push_str(text);
+    // Stream the response with tool_use/tool_result loop.
+    let mut stream = provider.stream(request.clone()).await?;
+    let mut full_response = String::new();
+    let mut all_messages = request.messages.clone();
+
+    for iteration in 0..=MAX_TOOL_ITERATIONS {
+        // Consume the stream, collecting text, usage, tool_use blocks, and stop_reason.
+        let mut iter_text = String::new();
+        let mut usage: Option<TokenUsage> = None;
+        let mut tool_uses: Vec<ToolUseData> = Vec::new();
+        let mut stop_reason: Option<String> = None;
+
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => match chunk.event_type {
+                    StreamEventType::ContentBlockDelta => {
+                        if let Some(text) = &chunk.text {
+                            print!("{text}");
+                            std::io::Write::flush(&mut std::io::stdout()).ok();
+                            iter_text.push_str(text);
+                        }
                     }
-                }
-                StreamEventType::MessageStart | StreamEventType::MessageDelta => {
-                    if let Some(u) = chunk.usage {
-                        usage = Some(u);
+                    StreamEventType::ContentBlockStop => {
+                        if let Some(tu) = chunk.tool_use {
+                            tool_uses.push(tu);
+                        }
                     }
-                }
-                StreamEventType::MessageStop => {
+                    StreamEventType::MessageStart | StreamEventType::MessageDelta => {
+                        if let Some(u) = chunk.usage {
+                            usage = Some(u);
+                        }
+                        if let Some(sr) = &chunk.stop_reason {
+                            stop_reason = Some(sr.clone());
+                        }
+                    }
+                    StreamEventType::MessageStop => {
+                        break;
+                    }
+                    StreamEventType::Error => {
+                        if let Some(err) = &chunk.error {
+                            eprintln!("\n{}: {err}", "error".red());
+                        }
+                        break;
+                    }
+                    _ => {}
+                },
+                Err(e) => {
+                    eprintln!("\n{}: {e}", "error".red());
                     break;
                 }
-                StreamEventType::Error => {
-                    if let Some(err) = &chunk.error {
-                        eprintln!("\n{}: {err}", "error".red());
-                    }
-                    break;
-                }
-                _ => {}
-            },
-            Err(e) => {
-                eprintln!("\n{}: {e}", "error".red());
-                break;
             }
         }
+
+        full_response.push_str(&iter_text);
+
+        // Record cost for this LLM call.
+        if let Some(ref usage) = usage {
+            let model_pricing = pricing::get_pricing(&model);
+            let cost_usd = pricing::calculate_cost(usage, &model_pricing);
+
+            let mut record = CostRecord::new(
+                session_id.to_string(),
+                model.clone(),
+                FeatureType::Message,
+                usage,
+                cost_usd,
+            );
+            if let Some(ref intended) = intended_model {
+                record = record.with_intended_model(intended.clone());
+            }
+
+            cost_ledger.record(&record).await?;
+
+            {
+                let mut tracker = budget_tracker.lock().await;
+                tracker.record_cost(cost_usd);
+            }
+
+            debug!(
+                session_id = %session_id,
+                model = %model,
+                intended_model = ?intended_model,
+                input_tokens = usage.input_tokens,
+                output_tokens = usage.output_tokens,
+                cost_usd = cost_usd,
+                iteration = iteration,
+                "shell LLM call complete"
+            );
+        }
+
+        // Check if we have tool_use blocks to execute.
+        let has_tool_use = !tool_uses.is_empty()
+            || stop_reason.as_deref() == Some("tool_use");
+
+        if !has_tool_use || tool_uses.is_empty() {
+            // No tool calls -- we're done.
+            break;
+        }
+
+        if iteration >= MAX_TOOL_ITERATIONS {
+            warn!(
+                session_id = %session_id,
+                iterations = iteration,
+                "maximum tool iterations reached, forcing text response"
+            );
+            break;
+        }
+
+        // Execute tools and build tool_result messages.
+        info!(
+            session_id = %session_id,
+            tool_count = tool_uses.len(),
+            iteration = iteration,
+            "executing tool calls in shell"
+        );
+
+        // Build the assistant message with tool_use content blocks.
+        let mut assistant_content_blocks: Vec<serde_json::Value> = Vec::new();
+        if !iter_text.is_empty() {
+            assistant_content_blocks.push(serde_json::json!({
+                "type": "text",
+                "text": iter_text,
+            }));
+        }
+        for tu in &tool_uses {
+            assistant_content_blocks.push(serde_json::json!({
+                "type": "tool_use",
+                "id": tu.id,
+                "name": tu.name,
+                "input": tu.input,
+            }));
+        }
+
+        // Append the assistant message with tool_use blocks.
+        all_messages.push(ProviderMessage {
+            role: "assistant".to_string(),
+            content: vec![ContentBlock::Text {
+                text: serde_json::to_string(&assistant_content_blocks)
+                    .unwrap_or_default(),
+            }],
+        });
+
+        // Execute each tool and collect results.
+        let mut tool_result_blocks: Vec<serde_json::Value> = Vec::new();
+        {
+            let registry = tool_registry.read().await;
+            for tu in &tool_uses {
+                eprintln!(
+                    "{}",
+                    format!("[tool: {}] executing...", tu.name).dimmed()
+                );
+                let output = if let Some(tool) = registry.get(&tu.name) {
+                    match tool.invoke(tu.input.clone()).await {
+                        Ok(output) => output,
+                        Err(e) => blufio_skill::ToolOutput {
+                            content: format!("Tool error: {e}"),
+                            is_error: true,
+                        },
+                    }
+                } else {
+                    blufio_skill::ToolOutput {
+                        content: format!("Unknown tool: {}", tu.name),
+                        is_error: true,
+                    }
+                };
+
+                tool_result_blocks.push(serde_json::json!({
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "content": output.content,
+                    "is_error": output.is_error,
+                }));
+            }
+        }
+
+        // Append the user message with tool_result blocks.
+        all_messages.push(ProviderMessage {
+            role: "user".to_string(),
+            content: vec![ContentBlock::Text {
+                text: serde_json::to_string(&tool_result_blocks)
+                    .unwrap_or_default(),
+            }],
+        });
+
+        // Build follow-up request with updated messages.
+        let tool_defs = {
+            let registry = tool_registry.read().await;
+            if !registry.is_empty() {
+                Some(registry.tool_definitions())
+            } else {
+                None
+            }
+        };
+
+        let follow_up_request = ProviderRequest {
+            model: model.clone(),
+            system_prompt: request.system_prompt.clone(),
+            system_blocks: request.system_blocks.clone(),
+            messages: all_messages.clone(),
+            max_tokens: request.max_tokens,
+            stream: true,
+            tools: tool_defs,
+        };
+
+        // Re-call the LLM with tool results.
+        stream = provider.stream(follow_up_request).await?;
     }
 
     // Print newline after response.
@@ -368,45 +567,11 @@ async fn handle_shell_message(
         session_id: session_id.to_string(),
         role: "assistant".to_string(),
         content: full_response,
-        token_count: usage.as_ref().map(|u| i64::from(u.output_tokens)),
+        token_count: None,
         metadata: None,
         created_at: now,
     };
     storage.insert_message(&assistant_msg).await?;
-
-    // Record message cost with routed model and intended_model tracking.
-    if let Some(ref usage) = usage {
-        let model_pricing = pricing::get_pricing(&model);
-        let cost_usd = pricing::calculate_cost(usage, &model_pricing);
-
-        let mut record = CostRecord::new(
-            session_id.to_string(),
-            model.clone(),
-            FeatureType::Message,
-            usage,
-            cost_usd,
-        );
-        if let Some(ref intended) = intended_model {
-            record = record.with_intended_model(intended.clone());
-        }
-
-        cost_ledger.record(&record).await?;
-
-        {
-            let mut tracker = budget_tracker.lock().await;
-            tracker.record_cost(cost_usd);
-        }
-
-        debug!(
-            session_id = %session_id,
-            model = %model,
-            intended_model = ?intended_model,
-            input_tokens = usage.input_tokens,
-            output_tokens = usage.output_tokens,
-            cost_usd = cost_usd,
-            "shell response complete"
-        );
-    }
 
     Ok(())
 }

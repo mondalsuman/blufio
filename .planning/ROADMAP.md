@@ -131,12 +131,13 @@ Plans:
   3. Skill capability manifests declare required permissions (network access, filesystem paths, etc.) and the sandbox enforces these declarations -- a skill without network permission cannot make HTTP calls
   4. The agent sees skill names and one-line descriptions in its prompt, and loads full SKILL.md documentation only when invoking a skill (progressive discovery)
   5. `blufio skill init` scaffolds a working skill project and the skill registry tracks installed skills with version, capabilities, and verification status
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
-- [ ] 07-01-PLAN.md -- Tool calling foundation: blufio-skill crate with Tool trait + ToolRegistry, BashTool + HttpTool + FileTool built-ins, Anthropic tool_use/tool_result types + SSE parsing (Wave 1)
-- [ ] 07-02-PLAN.md -- WASM sandbox + skill registry: SkillManifest parser, wasmtime WasmSkillRuntime with fuel/memory/epoch, capability-gated host functions, SkillStore, scaffold generator, SkillConfig, V5 migration (Wave 1)
-- [ ] 07-03-PLAN.md -- Agent integration: SkillProvider (ConditionalProvider), session FSM tool_use loop, blufio skill CLI, serve.rs/shell.rs wiring (Wave 2)
+- [x] 07-01-PLAN.md -- Tool calling foundation: blufio-skill crate with Tool trait + ToolRegistry, BashTool + HttpTool + FileTool built-ins, Anthropic tool_use/tool_result types + SSE parsing (Wave 1)
+- [x] 07-02-PLAN.md -- WASM sandbox + skill registry: SkillManifest parser, wasmtime WasmSkillRuntime with fuel/memory/epoch, capability-gated host functions, SkillStore, scaffold generator, SkillConfig, V5 migration (Wave 1)
+- [x] 07-03-PLAN.md -- Agent integration: SkillProvider (ConditionalProvider), session FSM tool_use loop, blufio skill CLI, serve.rs/shell.rs wiring (Wave 2)
+- [ ] 07-04-PLAN.md -- Gap closure: wire ToolRegistry into shell.rs, implement real WASM host functions with traps for denied capabilities (Wave 1)
 
 ### Phase 8: Plugin System & Gateway
 **Goal**: The plugin host loads adapter plugins implementing the seven adapter traits (Channel, Provider, Storage, Embedding, Observability, Auth, SkillRuntime), a CLI manages the plugin lifecycle, and an HTTP/WebSocket gateway enables API access alongside channel messaging
@@ -197,7 +198,7 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 4. Context Engine & Cost Tracking | 1/3 | Complete    | 2026-03-01 |
 | 5. Memory & Embeddings | 3/3 | Complete | 2026-03-01 |
 | 6. Model Routing & Smart Heartbeats | 3/3 | Complete | 2026-03-01 |
-| 7. WASM Skill Sandbox | 0/3 | Planning complete | - |
+| 7. WASM Skill Sandbox | 3/4 | Gap closure planned | - |
 | 8. Plugin System & Gateway | 3/3 | Complete | 2026-03-01 |
 | 9. Production Hardening | 3/3 | Complete | 2026-03-01 |
 | 10. Multi-Agent & Final Integration | 3/3 | Complete    | 2026-03-01 |
