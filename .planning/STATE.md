@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T20:21:40.623Z"
+last_updated: "2026-03-01T20:26:43.762Z"
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 29
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Retroactive plan documentation -- Phase 3 Plan 1 (Anthropic provider) SUMMARY created.
+**Current focus:** Retroactive plan documentation -- Phase 3 Plan 2 (Telegram adapter) SUMMARY created.
 
 ## Current Position
 
 Phase: 3 of 10 (Agent Loop + Telegram) -- retroactive documentation
-Plan: 1 of 3 in Phase 3 (completed, SUMMARY documented)
-Status: 03-01-PLAN.md complete -- Anthropic provider and core types documented
-Last activity: 2026-03-01 -- Phase 3 Plan 1 SUMMARY creation
+Plan: 2 of 3 in Phase 3 (completed, SUMMARY documented)
+Status: 03-02-PLAN.md complete -- Telegram channel adapter documented
+Last activity: 2026-03-01 -- Phase 3 Plan 2 SUMMARY creation
 
-Progress: [████████░░] 79% (23/29 plans documented)
+Progress: [████████░░] 83% (24/29 plans documented)
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [████████░░] 79% (23/29 plans documented)
 
 *Updated after each plan completion*
 | Phase 03 P01 | 5min | 2 tasks | 13 files |
+| Phase 03 P02 | 3min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,10 @@ Recent decisions affecting current work:
 - [03-01]: teloxide 0.17 (not 0.13 from research) -- API changed significantly
 - [03-01]: eventsource-stream 0.2 for SSE parsing with reqwest byte streams
 - [03-02]: Mock teloxide Message construction via serde_json::from_value (API-compatible)
+- [03-02]: MarkdownV2 with plain text fallback on parse errors for send and edit operations
+- [03-02]: SPLIT_THRESHOLD at 3800 chars to leave margin for escaping overhead below 4096
+- [03-02]: Empty allowed_users list rejects all (secure default)
+- [03-02]: chat_id stored in InboundMessage metadata JSON for response routing
 - [03-03]: Session key = channel:sender_id, with storage fallback for crash recovery
 - [03-03]: tracing-subscriber with EnvFilter for configurable log levels
 - [Roadmap]: 10 phases derived from 70 requirements following PRD dependency order
@@ -113,5 +118,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03-01-PLAN.md (retroactive SUMMARY documentation)
-Resume file: .planning/phases/03-agent-loop-telegram/03-01-SUMMARY.md
+Stopped at: Completed 03-02-PLAN.md (retroactive SUMMARY documentation)
+Resume file: .planning/phases/03-agent-loop-telegram/03-02-SUMMARY.md

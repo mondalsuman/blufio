@@ -31,10 +31,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Channel
 
-- [ ] **CHAN-01**: Telegram channel adapter receives and sends messages via Telegram Bot API
-- [ ] **CHAN-02**: Channel adapter trait (`ChannelAdapter`) enables future channel plugins without core changes
-- [ ] **CHAN-03**: Telegram adapter handles message types: text, images, documents, voice (with transcription hook)
-- [ ] **CHAN-04**: Telegram adapter implements reliable long-polling with automatic reconnection
+- [x] **CHAN-01**: Telegram channel adapter receives and sends messages via Telegram Bot API
+- [x] **CHAN-02**: Channel adapter trait (`ChannelAdapter`) enables future channel plugins without core changes
+- [x] **CHAN-03**: Telegram adapter handles message types: text, images, documents, voice (with transcription hook)
+- [x] **CHAN-04**: Telegram adapter implements reliable long-polling with automatic reconnection
 
 ### Persistence
 
@@ -176,10 +176,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LLM-06 | Phase 6: Model Routing & Smart Heartbeats | Pending |
 | LLM-07 | Phase 4: Context Engine & Cost Tracking | Complete |
 | LLM-08 | Phase 3: Agent Loop & Telegram | Complete |
-| CHAN-01 | Phase 3: Agent Loop & Telegram | Pending |
-| CHAN-02 | Phase 3: Agent Loop & Telegram | Pending |
-| CHAN-03 | Phase 3: Agent Loop & Telegram | Pending |
-| CHAN-04 | Phase 3: Agent Loop & Telegram | Pending |
+| CHAN-01 | Phase 3: Agent Loop & Telegram | Complete |
+| CHAN-02 | Phase 3: Agent Loop & Telegram | Complete |
+| CHAN-03 | Phase 3: Agent Loop & Telegram | Complete |
+| CHAN-04 | Phase 3: Agent Loop & Telegram | Complete |
 | PERS-01 | Phase 2: Persistence & Security Vault | Pending |
 | PERS-02 | Phase 2: Persistence & Security Vault | Pending |
 | PERS-03 | Phase 2: Persistence & Security Vault | Pending |
