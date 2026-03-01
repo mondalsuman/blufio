@@ -1,0 +1,31 @@
+[package]
+name = "blufio-test-utils"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Test utilities for Blufio integration tests"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-agent = { path = "../blufio-agent" }
+blufio-config = { path = "../blufio-config" }
+blufio-context = { path = "../blufio-context" }
+blufio-cost = { path = "../blufio-cost" }
+blufio-router = { path = "../blufio-router" }
+blufio-skill = { path = "../blufio-skill" }
+blufio-storage = { path = "../blufio-storage" }
+async-trait.workspace = true
+futures.workspace = true
+futures-core = "0.3"
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
+tokio-rusqlite.workspace = true
+tokio-util.workspace = true
+serde_json = "1"
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+semver.workspace = true
+tempfile = "3"
