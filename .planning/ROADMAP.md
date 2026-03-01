@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Memory & Embeddings** - ONNX embedding model, semantic memory, hybrid search
 - [x] **Phase 6: Model Routing & Smart Heartbeats** - Query complexity classification, Haiku/Sonnet/Opus routing
 - [ ] **Phase 7: WASM Skill Sandbox** - wasmtime sandbox, capability manifests, built-in tools, skill registry
-- [ ] **Phase 8: Plugin System & Gateway** - Plugin host, plugin CLI, HTTP/WebSocket gateway
+- [x] **Phase 8: Plugin System & Gateway** - Plugin host, plugin CLI, HTTP/WebSocket gateway
 - [ ] **Phase 9: Production Hardening** - systemd, daemon mode, memory bounds, Prometheus, diagnostics, operations
 - [ ] **Phase 10: Multi-Agent & Final Integration** - Multi-agent routing, Ed25519 signing, end-to-end validation
 
@@ -147,11 +147,12 @@ Plans:
   2. Plugin manifests (plugin.toml) declare name, version, adapter type, capabilities, and minimum Blufio version -- incompatible plugins are rejected with clear errors
   3. Default install ships with Telegram, Anthropic, SQLite, local ONNX, Prometheus, and device keypair as the standard plugin bundle
   4. HTTP API and WebSocket connections via the axum gateway can send messages and receive responses alongside Telegram channel messaging
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
+- [x] 08-01-PLAN.md -- Plugin system foundation: PluginRegistry, PluginManifest, built-in catalog, plugin CLI commands
+- [x] 08-02-PLAN.md -- HTTP/WebSocket gateway: axum server, GatewayChannel, auth middleware, SSE streaming, WebSocket handler
+- [x] 08-03-PLAN.md -- Integration: Prometheus metrics, Ed25519 auth, ChannelMultiplexer, PluginRegistry-based serve.rs, Cargo features
 
 ### Phase 9: Production Hardening
 **Goal**: The agent runs as a production daemon on a $4/month VPS for months without restart, OOM, or security incident -- with systemd integration, memory bounds, Prometheus observability, full CLI diagnostics, and operational tooling
@@ -197,6 +198,6 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 5. Memory & Embeddings | 3/3 | Complete | 2026-03-01 |
 | 6. Model Routing & Smart Heartbeats | 3/3 | Complete | 2026-03-01 |
 | 7. WASM Skill Sandbox | 0/3 | Planning complete | - |
-| 8. Plugin System & Gateway | 0/2 | Not started | - |
+| 8. Plugin System & Gateway | 3/3 | Complete | 2026-03-01 |
 | 9. Production Hardening | 0/3 | Not started | - |
 | 10. Multi-Agent & Final Integration | 0/1 | Not started | - |
