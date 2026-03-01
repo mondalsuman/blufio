@@ -10,8 +10,8 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Core Agent
 
 - [ ] **CORE-01**: Agent executes FSM-per-session loop: receive -> assemble context -> call LLM -> execute tools -> respond
-- [ ] **CORE-02**: Agent handles streaming responses from LLM providers with partial output delivery
-- [ ] **CORE-03**: Agent gracefully shuts down on SIGTERM, draining active sessions before exit
+- [x] **CORE-02**: Agent handles streaming responses from LLM providers with partial output delivery
+- [x] **CORE-03**: Agent gracefully shuts down on SIGTERM, draining active sessions before exit
 - [ ] **CORE-04**: Agent runs as background daemon, auto-restarts on crash via systemd
 - [ ] **CORE-05**: Binary ships as single static executable (~25MB core) with musl static linking
 - [ ] **CORE-06**: Process uses jemalloc allocator with bounded LRU caches, bounded channels (backpressure), and lock timeouts
@@ -20,21 +20,21 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### LLM Provider
 
-- [ ] **LLM-01**: Provider trait abstracts LLM interaction (complete, stream, embed) behind pluggable interface
-- [ ] **LLM-02**: Anthropic provider adapter supports Claude models with streaming and tool calling
+- [x] **LLM-01**: Provider trait abstracts LLM interaction (complete, stream, embed) behind pluggable interface
+- [x] **LLM-02**: Anthropic provider adapter supports Claude models with streaming and tool calling
 - [x] **LLM-03**: Three-zone context engine assembles prompts from static (system prompt, cached), conditional (skills/memory per-relevance), and dynamic (current turn) zones
 - [x] **LLM-04**: Context engine aligns prompt structure to exploit Anthropic prompt caching (target 50-65% cache hit rate)
 - [ ] **LLM-05**: Model router classifies query complexity and routes to Haiku (simple), Sonnet (standard), or Opus (complex)
 - [ ] **LLM-06**: Smart heartbeats run on Haiku with skip-when-unchanged logic, costing <=/$10/month
 - [x] **LLM-07**: Token overhead per turn stays <=3,000 for simple queries and <=5,000 weighted average
-- [ ] **LLM-08**: System prompt and agent personality are configurable via TOML + optional markdown files
+- [x] **LLM-08**: System prompt and agent personality are configurable via TOML + optional markdown files
 
 ### Channel
 
-- [ ] **CHAN-01**: Telegram channel adapter receives and sends messages via Telegram Bot API
-- [ ] **CHAN-02**: Channel adapter trait (`ChannelAdapter`) enables future channel plugins without core changes
-- [ ] **CHAN-03**: Telegram adapter handles message types: text, images, documents, voice (with transcription hook)
-- [ ] **CHAN-04**: Telegram adapter implements reliable long-polling with automatic reconnection
+- [x] **CHAN-01**: Telegram channel adapter receives and sends messages via Telegram Bot API
+- [x] **CHAN-02**: Channel adapter trait (`ChannelAdapter`) enables future channel plugins without core changes
+- [x] **CHAN-03**: Telegram adapter handles message types: text, images, documents, voice (with transcription hook)
+- [x] **CHAN-04**: Telegram adapter implements reliable long-polling with automatic reconnection
 
 ### Persistence
 
@@ -161,25 +161,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CORE-01 | Phase 3: Agent Loop & Telegram | Pending |
-| CORE-02 | Phase 3: Agent Loop & Telegram | Pending |
-| CORE-03 | Phase 3: Agent Loop & Telegram | Pending |
+| CORE-02 | Phase 3: Agent Loop & Telegram | Complete |
+| CORE-03 | Phase 3: Agent Loop & Telegram | Complete |
 | CORE-04 | Phase 9: Production Hardening | Pending |
 | CORE-05 | Phase 1: Project Foundation & Workspace | Pending |
 | CORE-06 | Phase 1: Project Foundation & Workspace | Pending |
 | CORE-07 | Phase 9: Production Hardening | Pending |
 | CORE-08 | Phase 9: Production Hardening | Pending |
-| LLM-01 | Phase 3: Agent Loop & Telegram | Pending |
-| LLM-02 | Phase 3: Agent Loop & Telegram | Pending |
+| LLM-01 | Phase 3: Agent Loop & Telegram | Complete |
+| LLM-02 | Phase 3: Agent Loop & Telegram | Complete |
 | LLM-03 | Phase 4: Context Engine & Cost Tracking | Complete |
 | LLM-04 | Phase 4: Context Engine & Cost Tracking | Complete |
-| LLM-05 | Phase 6: Model Routing & Smart Heartbeats | Pending |
+| LLM-05 | Phase 11: Fix Critical Integration Bugs | Pending |
 | LLM-06 | Phase 6: Model Routing & Smart Heartbeats | Pending |
 | LLM-07 | Phase 4: Context Engine & Cost Tracking | Complete |
-| LLM-08 | Phase 3: Agent Loop & Telegram | Pending |
-| CHAN-01 | Phase 3: Agent Loop & Telegram | Pending |
-| CHAN-02 | Phase 3: Agent Loop & Telegram | Pending |
-| CHAN-03 | Phase 3: Agent Loop & Telegram | Pending |
-| CHAN-04 | Phase 3: Agent Loop & Telegram | Pending |
+| LLM-08 | Phase 3: Agent Loop & Telegram | Complete |
+| CHAN-01 | Phase 3: Agent Loop & Telegram | Complete |
+| CHAN-02 | Phase 3: Agent Loop & Telegram | Complete |
+| CHAN-03 | Phase 3: Agent Loop & Telegram | Complete |
+| CHAN-04 | Phase 3: Agent Loop & Telegram | Complete |
 | PERS-01 | Phase 2: Persistence & Security Vault | Pending |
 | PERS-02 | Phase 2: Persistence & Security Vault | Pending |
 | PERS-03 | Phase 2: Persistence & Security Vault | Pending |
@@ -191,8 +191,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MEM-04 | Phase 4: Context Engine & Cost Tracking | Complete |
 | MEM-05 | Phase 5: Memory & Embeddings | Pending |
 | SEC-01 | Phase 2: Persistence & Security Vault | Pending |
-| SEC-02 | Phase 9: Production Hardening | Pending |
-| SEC-03 | Phase 2: Persistence & Security Vault | Pending |
+| SEC-02 | Phase 11: Fix Critical Integration Bugs | Pending |
+| SEC-03 | Phase 11: Fix Critical Integration Bugs | Pending |
 | SEC-04 | Phase 2: Persistence & Security Vault | Pending |
 | SEC-05 | Phase 7: WASM Skill Sandbox | Complete |
 | SEC-06 | Phase 7: WASM Skill Sandbox | Complete |

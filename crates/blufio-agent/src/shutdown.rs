@@ -57,45 +57,77 @@ pub fn install_signal_handler() -> CancellationToken {
 
 /// Drains active sessions, waiting up to `timeout` for them to complete.
 ///
-/// Sessions in the [`Responding`](SessionState::Responding) state are given
-/// time to finish their current response. Sessions in other states are
-/// considered immediately drainable.
+/// Polls session states at 100ms intervals until all sessions reach
+/// [`Idle`](SessionState::Idle) or [`Draining`](SessionState::Draining),
+/// or the timeout is exceeded.
+///
+/// Sessions in active states ([`Responding`](SessionState::Responding),
+/// [`Processing`](SessionState::Processing), [`Receiving`](SessionState::Receiving),
+/// [`ToolExecuting`](SessionState::ToolExecuting)) are given time to finish.
+/// When the timeout is reached, each undrained session is logged with its
+/// ID and current state for debugging.
 pub async fn drain_sessions(
     sessions: &HashMap<String, SessionActor>,
     timeout: Duration,
 ) {
-    let responding_count = sessions
+    // Count sessions that are NOT idle and NOT already draining (need draining).
+    let active_count = sessions
         .values()
-        .filter(|s| s.state() == SessionState::Responding)
+        .filter(|s| {
+            let state = s.state();
+            state != SessionState::Idle && state != SessionState::Draining
+        })
         .count();
 
-    if responding_count == 0 {
+    if active_count == 0 {
         info!("no active sessions to drain");
         return;
     }
 
     info!(
-        count = responding_count,
+        count = active_count,
         "waiting for active sessions to complete"
     );
 
-    // Wait for the timeout period. In a full implementation, we would
-    // monitor each session's state transition. For now, we just wait
-    // the timeout and log the result.
-    tokio::time::sleep(timeout).await;
+    // Poll session states at short intervals until all are idle/draining or timeout.
+    let poll_interval = Duration::from_millis(100);
+    let deadline = tokio::time::Instant::now() + timeout;
 
-    let still_active = sessions
-        .values()
-        .filter(|s| s.state() == SessionState::Responding)
-        .count();
+    loop {
+        let still_active = sessions
+            .values()
+            .filter(|s| {
+                let state = s.state();
+                state != SessionState::Idle && state != SessionState::Draining
+            })
+            .count();
 
-    if still_active == 0 {
-        info!("all sessions drained successfully");
-    } else {
-        warn!(
-            remaining = still_active,
-            "timeout reached, some sessions interrupted"
-        );
+        if still_active == 0 {
+            info!("all sessions drained successfully");
+            return;
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            // Log which sessions are still active.
+            for (key, session) in sessions {
+                let state = session.state();
+                if state != SessionState::Idle && state != SessionState::Draining {
+                    warn!(
+                        session_key = key.as_str(),
+                        session_id = session.session_id(),
+                        state = %state,
+                        "session did not drain within timeout"
+                    );
+                }
+            }
+            warn!(
+                remaining = still_active,
+                "timeout reached, some sessions did not complete"
+            );
+            return;
+        }
+
+        tokio::time::sleep(poll_interval).await;
     }
 }
 

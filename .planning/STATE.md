@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T20:09:05.575Z"
+last_updated: "2026-03-01T20:54:21.615Z"
 progress:
   total_phases: 10
-  completed_phases: 7
-  total_plans: 29
-  completed_plans: 22
+  completed_phases: 8
+  total_plans: 30
+  completed_plans: 25
 ---
 
 # Project State
@@ -18,21 +18,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 7 gap closure (Plan 4) complete. shell.rs tool wiring and WASM host function implementations done.
+**Current focus:** Phase 3 gap closure -- drain_sessions stub replaced with poll-based monitoring (03-04).
 
 ## Current Position
 
-Phase: 7 of 10 (WASM Skill Sandbox) -- gap closure complete
-Plan: 4 of 4 in Phase 7 (gap closure plan)
-Status: Phase 7 gap closure complete -- shell.rs tool support and WASM host functions implemented
-Last activity: 2026-03-01 -- Phase 7 Plan 4 gap closure execution complete
+Phase: 3 of 10 (Agent Loop + Telegram) -- gap closure complete
+Plan: 4 of 4 in Phase 3 (completed, gap closure drain_sessions)
+Status: 03-04-PLAN.md complete -- drain_sessions stub replaced with poll-based monitoring
+Last activity: 2026-03-01 -- Phase 3 Plan 4 execution (gap closure)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 86% (25/29 plans documented)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: ~18min
 - Total execution time: ~3.8 hours
 
@@ -51,6 +51,9 @@ Progress: [██████████] 100%
 - Trend: Phase 5 plans moderate complexity due to ort API issues in 05-01; 05-02 and 05-03 smooth
 
 *Updated after each plan completion*
+| Phase 03 P01 | 5min | 2 tasks | 13 files |
+| Phase 03 P02 | 3min | 2 tasks | 6 files |
+| Phase 03 P04 | 2min | 1 task | 1 file |
 
 ## Accumulated Context
 
@@ -74,6 +77,10 @@ Recent decisions affecting current work:
 - [03-01]: teloxide 0.17 (not 0.13 from research) -- API changed significantly
 - [03-01]: eventsource-stream 0.2 for SSE parsing with reqwest byte streams
 - [03-02]: Mock teloxide Message construction via serde_json::from_value (API-compatible)
+- [03-02]: MarkdownV2 with plain text fallback on parse errors for send and edit operations
+- [03-02]: SPLIT_THRESHOLD at 3800 chars to leave margin for escaping overhead below 4096
+- [03-02]: Empty allowed_users list rejects all (secure default)
+- [03-02]: chat_id stored in InboundMessage metadata JSON for response routing
 - [03-03]: Session key = channel:sender_id, with storage fallback for crash recovery
 - [03-03]: tracing-subscriber with EnvFilter for configurable log levels
 - [Roadmap]: 10 phases derived from 70 requirements following PRD dependency order
@@ -98,6 +105,9 @@ Recent decisions affecting current work:
 - [Phase 07-04]: HTTP response body stored in result_json for pragmatic WASM memory management
 - [Phase 07-04]: Domain validation uses exact match or subdomain match pattern
 - [Phase 07-04]: Path validation uses starts_with prefix check against manifest-declared paths
+- [03-04]: 100ms poll interval for drain_sessions -- fast exit with negligible CPU overhead
+- [03-04]: Both Idle and Draining states treated as 'done' in drain polling loop
+- [03-04]: Per-session diagnostic logging on timeout for production shutdown debugging
 
 ### Pending Todos
 
@@ -112,5 +122,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 07-04-PLAN.md
-Resume file: .planning/phases/07-wasm-skill-sandbox/07-04-SUMMARY.md
+Stopped at: Completed 03-04-PLAN.md (gap closure -- drain_sessions)
+Resume file: .planning/phases/03-agent-loop-telegram/03-04-SUMMARY.md
