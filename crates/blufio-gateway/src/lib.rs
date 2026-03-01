@@ -43,6 +43,8 @@ pub struct GatewayChannelConfig {
     pub port: u16,
     /// Bearer token for auth.
     pub bearer_token: Option<String>,
+    /// Ed25519 public key for keypair signature verification.
+    pub keypair_public_key: Option<ed25519_dalek::VerifyingKey>,
     /// Optional Prometheus metrics render function for /metrics endpoint.
     pub prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>>,
 }
@@ -53,7 +55,8 @@ impl std::fmt::Debug for GatewayChannelConfig {
             .field("enabled", &self.enabled)
             .field("host", &self.host)
             .field("port", &self.port)
-            .field("bearer_token", &self.bearer_token)
+            .field("bearer_token", &self.bearer_token.as_ref().map(|_| "[redacted]"))
+            .field("keypair_public_key", &self.keypair_public_key.is_some())
             .field(
                 "prometheus_render",
                 &self.prometheus_render.as_ref().map(|_| "<fn>"),
@@ -150,6 +153,7 @@ impl ChannelAdapter for GatewayChannel {
             ws_senders: Arc::clone(&self.ws_senders),
             auth: AuthConfig {
                 bearer_token: self.config.bearer_token.clone(),
+                keypair_public_key: self.config.keypair_public_key,
             },
             health: HealthState {
                 start_time: std::time::Instant::now(),
@@ -247,6 +251,7 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 0, // Will bind to random port
             bearer_token: None,
+            keypair_public_key: None,
             prometheus_render: None,
         }
     }

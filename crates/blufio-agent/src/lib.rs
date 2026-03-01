@@ -345,36 +345,6 @@ impl AgentLoop {
                 self.storage.insert_message(&msg).await?;
             }
 
-            // Build the tool_result ProviderMessages for the follow-up LLM call.
-            let tool_result_blocks: Vec<serde_json::Value> = tool_results
-                .iter()
-                .map(|(tool_use_id, output)| {
-                    serde_json::json!({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": output.content,
-                        "is_error": output.is_error,
-                    })
-                })
-                .collect();
-
-            // Build the assistant message with tool_use content blocks for the LLM.
-            let mut assistant_content_blocks: Vec<serde_json::Value> = Vec::new();
-            if !text.is_empty() {
-                assistant_content_blocks.push(serde_json::json!({
-                    "type": "text",
-                    "text": text,
-                }));
-            }
-            for tu in &tool_uses {
-                assistant_content_blocks.push(serde_json::json!({
-                    "type": "tool_use",
-                    "id": tu.id,
-                    "name": tu.name,
-                    "input": tu.input,
-                }));
-            }
-
             // Re-assemble context for the follow-up call by getting history from storage.
             // The persisted messages now include the tool_use and tool_result messages.
             let history = self.storage.get_messages(&session_id, Some(50)).await?;
@@ -396,22 +366,35 @@ impl AgentLoop {
                 messages.pop();
             }
 
-            // Re-add the assistant message with structured tool_use blocks.
+            // Re-add the assistant message with structured tool_use content blocks.
+            let mut assistant_blocks: Vec<ContentBlock> = Vec::new();
+            if !text.is_empty() {
+                assistant_blocks.push(ContentBlock::Text { text: text.clone() });
+            }
+            for tu in &tool_uses {
+                assistant_blocks.push(ContentBlock::ToolUse {
+                    id: tu.id.clone(),
+                    name: tu.name.clone(),
+                    input: tu.input.clone(),
+                });
+            }
             messages.push(ProviderMessage {
                 role: "assistant".to_string(),
-                content: vec![ContentBlock::Text {
-                    text: serde_json::to_string(&assistant_content_blocks)
-                        .unwrap_or_default(),
-                }],
+                content: assistant_blocks,
             });
 
-            // Re-add the user message with tool_result blocks.
+            // Re-add the user message with structured tool_result content blocks.
+            let result_blocks: Vec<ContentBlock> = tool_results
+                .iter()
+                .map(|(tool_use_id, output)| ContentBlock::ToolResult {
+                    tool_use_id: tool_use_id.clone(),
+                    content: output.content.clone(),
+                    is_error: if output.is_error { Some(true) } else { None },
+                })
+                .collect();
             messages.push(ProviderMessage {
                 role: "user".to_string(),
-                content: vec![ContentBlock::Text {
-                    text: serde_json::to_string(&tool_result_blocks)
-                        .unwrap_or_default(),
-                }],
+                content: result_blocks,
             });
 
             // Build follow-up ProviderRequest.
@@ -428,12 +411,34 @@ impl AgentLoop {
                 }
             };
 
+            // P3 fix: Use the model from the initial routing decision for this session,
+            // not the hardcoded default_model. This ensures tool follow-ups use the same
+            // model tier that was selected for the initial request (e.g., Opus for complex queries).
+            let (follow_up_model, follow_up_max_tokens) = match actor.last_routing_decision() {
+                Some(decision) => {
+                    debug!(
+                        session_id = %session_id,
+                        model = %decision.actual_model,
+                        "tool follow-up using routed model"
+                    );
+                    (decision.actual_model.clone(), decision.max_tokens)
+                }
+                None => {
+                    debug!(
+                        session_id = %session_id,
+                        model = %self.config.anthropic.default_model,
+                        "tool follow-up using default model (no routing decision)"
+                    );
+                    (self.config.anthropic.default_model.clone(), self.config.anthropic.max_tokens)
+                }
+            };
+
             let follow_up_request = ProviderRequest {
-                model: self.config.anthropic.default_model.clone(),
+                model: follow_up_model,
                 system_prompt: None,
                 system_blocks: None,
                 messages,
-                max_tokens: self.config.anthropic.max_tokens,
+                max_tokens: follow_up_max_tokens,
                 stream: true,
                 tools: tool_defs,
             };

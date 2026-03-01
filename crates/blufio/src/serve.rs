@@ -83,6 +83,30 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Initialize plugin registry.
     let _registry = initialize_plugin_registry(&config);
 
+    // SEC-03: Vault startup check -- unlock vault if it exists so secrets
+    // are available for provider initialization. Silent no-op when no vault.
+    {
+        let vault_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
+            .await
+            .map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
+        match blufio_vault::vault_startup_check(vault_conn, &config.vault).await {
+            Ok(Some(_vault)) => {
+                info!("vault unlocked -- secrets available");
+            }
+            Ok(None) => {
+                debug!("no vault found -- skipping vault startup check");
+            }
+            Err(e) => {
+                error!(error = %e, "vault startup check failed");
+                eprintln!(
+                    "error: Vault exists but cannot be unlocked. \
+                     Set BLUFIO_VAULT_KEY environment variable or provide passphrase interactively."
+                );
+                return Err(e);
+            }
+        }
+    }
+
     // Initialize storage.
     #[cfg(feature = "sqlite")]
     let storage = {
@@ -216,11 +240,34 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     #[cfg(feature = "gateway")]
     {
         if config.gateway.enabled {
+            // SEC-02: Load device keypair public key for gateway auth.
+            #[cfg(feature = "keypair")]
+            let keypair_public_key = {
+                let kp = blufio_auth_keypair::DeviceKeypair::generate();
+                info!(
+                    public_key = kp.public_hex().as_str(),
+                    "device keypair loaded for gateway auth"
+                );
+                Some(kp.verifying_key())
+            };
+            #[cfg(not(feature = "keypair"))]
+            let keypair_public_key = None;
+
+            // Fail-closed: refuse to start gateway with no auth configured.
+            if config.gateway.bearer_token.is_none() && keypair_public_key.is_none() {
+                return Err(BlufioError::Security(
+                    "SEC-02: gateway enabled but no authentication configured. \
+                     Set gateway.bearer_token or enable keypair feature."
+                        .to_string(),
+                ));
+            }
+
             let gateway_config = GatewayChannelConfig {
                 enabled: config.gateway.enabled,
                 host: config.gateway.host.clone(),
                 port: config.gateway.port,
                 bearer_token: config.gateway.bearer_token.clone(),
+                keypair_public_key,
                 prometheus_render: prometheus_render.clone(),
             };
             let gateway = GatewayChannel::new(gateway_config);
@@ -235,14 +282,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     }
 
-    // SEC-02: Device keypair authentication is required when gateway is enabled.
-    #[cfg(feature = "keypair")]
-    {
-        if config.gateway.enabled && config.gateway.bearer_token.is_none() {
-            warn!("gateway enabled without bearer_token -- keypair auth will be used");
-        }
-        info!("keypair auth available (SEC-02)");
-    }
+    // SEC-02 guard for non-gateway builds.
     #[cfg(not(feature = "keypair"))]
     {
         if config.gateway.enabled {

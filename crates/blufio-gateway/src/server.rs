@@ -131,6 +131,7 @@ mod tests {
             ws_senders: Arc::new(DashMap::new()),
             auth: AuthConfig {
                 bearer_token: None,
+                keypair_public_key: None,
             },
             health: HealthState {
                 start_time: std::time::Instant::now(),

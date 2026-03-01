@@ -134,6 +134,21 @@ pub enum ContentBlock {
         media_type: String,
         data: String,
     },
+    /// Tool use content block (assistant requests tool execution).
+    #[serde(rename = "tool_use")]
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
+    /// Tool result content block (user provides tool execution result).
+    #[serde(rename = "tool_result")]
+    ToolResult {
+        tool_use_id: String,
+        content: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        is_error: Option<bool>,
+    },
 }
 
 /// A single message in a provider conversation.

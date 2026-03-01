@@ -43,6 +43,11 @@ impl DeviceKeypair {
         self.signing_key.to_bytes()
     }
 
+    /// Get the Ed25519 verifying key (public key) for signature verification.
+    pub fn verifying_key(&self) -> VerifyingKey {
+        self.verifying_key
+    }
+
     /// Get the public key bytes.
     pub fn public_bytes(&self) -> [u8; 32] {
         self.verifying_key.to_bytes()

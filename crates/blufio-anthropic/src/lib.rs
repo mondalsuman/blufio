@@ -430,6 +430,20 @@ fn convert_content_blocks(blocks: &[ContentBlock]) -> ApiContent {
                     data: data.clone(),
                 },
             },
+            ContentBlock::ToolUse { id, name, input } => ApiContentBlock::ToolUse {
+                id: id.clone(),
+                name: name.clone(),
+                input: input.clone(),
+            },
+            ContentBlock::ToolResult {
+                tool_use_id,
+                content,
+                is_error,
+            } => ApiContentBlock::ToolResult {
+                tool_use_id: tool_use_id.clone(),
+                content: content.clone(),
+                is_error: *is_error,
+            },
         })
         .collect();
 
