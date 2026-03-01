@@ -11,6 +11,7 @@
 //! - Handles graceful shutdown
 
 pub mod context;
+pub mod heartbeat;
 pub mod session;
 pub mod shutdown;
 
@@ -27,6 +28,8 @@ use blufio_core::types::{
 };
 use blufio_core::{ChannelAdapter, ProviderAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider};
+
+pub use heartbeat::HeartbeatRunner;
 use futures::StreamExt;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
