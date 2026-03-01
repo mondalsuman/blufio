@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Model Routing & Smart Heartbeats** - Query complexity classification, Haiku/Sonnet/Opus routing
 - [ ] **Phase 7: WASM Skill Sandbox** - wasmtime sandbox, capability manifests, built-in tools, skill registry
 - [x] **Phase 8: Plugin System & Gateway** - Plugin host, plugin CLI, HTTP/WebSocket gateway
-- [ ] **Phase 9: Production Hardening** - systemd, daemon mode, memory bounds, Prometheus, diagnostics, operations
+- [x] **Phase 9: Production Hardening** - systemd, daemon mode, memory bounds, Prometheus, diagnostics, operations
 - [ ] **Phase 10: Multi-Agent & Final Integration** - Multi-agent routing, Ed25519 signing, end-to-end validation
 
 ## Phase Details
@@ -164,12 +164,12 @@ Plans:
   3. Prometheus metrics endpoint exports token usage, latency percentiles, error rates, and memory usage -- scrapeable by standard Prometheus setup
   4. `blufio status` shows running agent state, active sessions, memory usage, and cost summary; `blufio doctor` runs full diagnostics (LLM connectivity, DB integrity, channel status); `blufio config get/set/set-secret/validate` manages configuration
   5. Device keypair authentication is required (no optional auth mode), backup/restore and log rotation scripts work, and shell lifecycle hooks execute correctly
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 09-01: TBD
-- [ ] 09-02: TBD
-- [ ] 09-03: TBD
+- [x] 09-01-PLAN.md -- Memory monitoring, Prometheus memory/error metrics, DaemonConfig, unauthenticated /health and /metrics gateway endpoints
+- [x] 09-02-PLAN.md -- CLI diagnostics (status/doctor/config get/validate), systemd unit file, logrotate config, SEC-02 keypair auth enforcement
+- [x] 09-03-PLAN.md -- SQLite backup/restore CLI commands using rusqlite Backup API
 
 ### Phase 10: Multi-Agent & Final Integration
 **Goal**: Multiple specialized agents can delegate work to each other via Ed25519-signed inter-session messages, and the complete system passes end-to-end integration validation across all 70 v1 requirements
@@ -199,5 +199,5 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 6. Model Routing & Smart Heartbeats | 3/3 | Complete | 2026-03-01 |
 | 7. WASM Skill Sandbox | 0/3 | Planning complete | - |
 | 8. Plugin System & Gateway | 3/3 | Complete | 2026-03-01 |
-| 9. Production Hardening | 0/3 | Not started | - |
+| 9. Production Hardening | 3/3 | Complete | 2026-03-01 |
 | 10. Multi-Agent & Final Integration | 0/1 | Not started | - |
