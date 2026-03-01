@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T20:26:43.762Z"
+last_updated: "2026-03-01T20:46:48Z"
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 29
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Retroactive plan documentation -- Phase 3 Plan 2 (Telegram adapter) SUMMARY created.
+**Current focus:** Phase 3 gap closure -- drain_sessions stub replaced with poll-based monitoring (03-04).
 
 ## Current Position
 
-Phase: 3 of 10 (Agent Loop + Telegram) -- retroactive documentation
-Plan: 2 of 3 in Phase 3 (completed, SUMMARY documented)
-Status: 03-02-PLAN.md complete -- Telegram channel adapter documented
-Last activity: 2026-03-01 -- Phase 3 Plan 2 SUMMARY creation
+Phase: 3 of 10 (Agent Loop + Telegram) -- gap closure complete
+Plan: 4 of 4 in Phase 3 (completed, gap closure drain_sessions)
+Status: 03-04-PLAN.md complete -- drain_sessions stub replaced with poll-based monitoring
+Last activity: 2026-03-01 -- Phase 3 Plan 4 execution (gap closure)
 
-Progress: [████████░░] 83% (24/29 plans documented)
+Progress: [████████░░] 86% (25/29 plans documented)
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [████████░░] 83% (24/29 plans documented)
 *Updated after each plan completion*
 | Phase 03 P01 | 5min | 2 tasks | 13 files |
 | Phase 03 P02 | 3min | 2 tasks | 6 files |
+| Phase 03 P04 | 2min | 1 task | 1 file |
 
 ## Accumulated Context
 
@@ -104,6 +105,9 @@ Recent decisions affecting current work:
 - [Phase 07-04]: HTTP response body stored in result_json for pragmatic WASM memory management
 - [Phase 07-04]: Domain validation uses exact match or subdomain match pattern
 - [Phase 07-04]: Path validation uses starts_with prefix check against manifest-declared paths
+- [03-04]: 100ms poll interval for drain_sessions -- fast exit with negligible CPU overhead
+- [03-04]: Both Idle and Draining states treated as 'done' in drain polling loop
+- [03-04]: Per-session diagnostic logging on timeout for production shutdown debugging
 
 ### Pending Todos
 
@@ -118,5 +122,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03-02-PLAN.md (retroactive SUMMARY documentation)
-Resume file: .planning/phases/03-agent-loop-telegram/03-02-SUMMARY.md
+Stopped at: Completed 03-04-PLAN.md (gap closure -- drain_sessions)
+Resume file: .planning/phases/03-agent-loop-telegram/03-04-SUMMARY.md

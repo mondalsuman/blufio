@@ -11,7 +11,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **CORE-01**: Agent executes FSM-per-session loop: receive -> assemble context -> call LLM -> execute tools -> respond
 - [x] **CORE-02**: Agent handles streaming responses from LLM providers with partial output delivery
-- [ ] **CORE-03**: Agent gracefully shuts down on SIGTERM, draining active sessions before exit
+- [x] **CORE-03**: Agent gracefully shuts down on SIGTERM, draining active sessions before exit
 - [ ] **CORE-04**: Agent runs as background daemon, auto-restarts on crash via systemd
 - [ ] **CORE-05**: Binary ships as single static executable (~25MB core) with musl static linking
 - [ ] **CORE-06**: Process uses jemalloc allocator with bounded LRU caches, bounded channels (backpressure), and lock timeouts
@@ -162,7 +162,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | CORE-01 | Phase 3: Agent Loop & Telegram | Pending |
 | CORE-02 | Phase 3: Agent Loop & Telegram | Complete |
-| CORE-03 | Phase 3: Agent Loop & Telegram | Pending |
+| CORE-03 | Phase 3: Agent Loop & Telegram | Complete |
 | CORE-04 | Phase 9: Production Hardening | Pending |
 | CORE-05 | Phase 1: Project Foundation & Workspace | Pending |
 | CORE-06 | Phase 1: Project Foundation & Workspace | Pending |
