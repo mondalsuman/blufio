@@ -259,6 +259,7 @@ dependencies = [
  "blufio-core",
  "blufio-cost",
  "blufio-memory",
+ "blufio-router",
  "blufio-storage",
  "blufio-telegram",
  "blufio-vault",
@@ -292,6 +293,7 @@ dependencies = [
  "blufio-core",
  "blufio-cost",
  "blufio-memory",
+ "blufio-router",
  "chrono",
  "futures",
  "serde_json",
@@ -405,6 +407,14 @@ dependencies = [
  "tokio-rusqlite",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "blufio-router"
+version = "0.1.0"
+dependencies = [
+ "blufio-config",
+ "tracing",
 ]
 
 [[package]]

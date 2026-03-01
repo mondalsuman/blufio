@@ -50,10 +50,16 @@ pub struct CostRecord {
     pub cost_usd: f64,
     /// ISO 8601 timestamp.
     pub created_at: String,
+    /// Model the classifier intended before budget downgrades.
+    /// `None` when routing is disabled or no downgrade occurred.
+    pub intended_model: Option<String>,
 }
 
 impl CostRecord {
     /// Create a new cost record from a token usage and calculated cost.
+    ///
+    /// `intended_model` defaults to `None`. Use [`with_intended_model`](Self::with_intended_model)
+    /// to set it when model routing is active and a budget downgrade occurred.
     pub fn new(
         session_id: String,
         model: String,
@@ -72,7 +78,16 @@ impl CostRecord {
             cache_creation_tokens: usage.cache_creation_tokens,
             cost_usd,
             created_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            intended_model: None,
         }
+    }
+
+    /// Set the intended model (before budget downgrades) on this record.
+    ///
+    /// Returns `self` for builder-style chaining.
+    pub fn with_intended_model(mut self, intended: String) -> Self {
+        self.intended_model = Some(intended);
+        self
     }
 }
 
@@ -122,13 +137,15 @@ impl CostLedger {
         let cache_creation_tokens = record.cache_creation_tokens;
         let cost_usd = record.cost_usd;
         let created_at = record.created_at.clone();
+        let intended_model = record.intended_model.clone();
 
         self.conn
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO cost_ledger (id, session_id, model, feature_type, \
                      input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, \
-                     cost_usd, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                     cost_usd, created_at, intended_model) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                     rusqlite::params![
                         id,
                         session_id,
@@ -140,6 +157,7 @@ impl CostLedger {
                         cache_creation_tokens,
                         cost_usd,
                         created_at,
+                        intended_model,
                     ],
                 )?;
                 Ok(())
@@ -150,6 +168,7 @@ impl CostLedger {
         info!(
             session_id = %record.session_id,
             model = %record.model,
+            intended_model = ?record.intended_model,
             input_tokens = record.input_tokens,
             output_tokens = record.output_tokens,
             cache_read_tokens = record.cache_read_tokens,
@@ -236,7 +255,8 @@ mod tests {
                     cache_read_tokens INTEGER NOT NULL DEFAULT 0,
                     cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
                     cost_usd REAL NOT NULL DEFAULT 0.0,
-                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    intended_model TEXT
                 );
                 CREATE INDEX idx_cost_ledger_session ON cost_ledger(session_id);
                 CREATE INDEX idx_cost_ledger_created ON cost_ledger(created_at);
@@ -261,6 +281,7 @@ mod tests {
             cache_creation_tokens: 0,
             cost_usd,
             created_at: created_at.to_string(),
+            intended_model: None,
         }
     }
 
@@ -417,5 +438,69 @@ mod tests {
         assert_eq!(rec.cache_read_tokens, 100);
         assert!(!rec.id.is_empty());
         assert!(!rec.created_at.is_empty());
+        assert!(rec.intended_model.is_none(), "intended_model should default to None");
+    }
+
+    #[test]
+    fn cost_record_with_intended_model() {
+        let usage = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+        };
+        let rec = CostRecord::new(
+            "s1".to_string(),
+            "claude-haiku-4-5-20250901".to_string(),
+            FeatureType::Message,
+            &usage,
+            0.001,
+        )
+        .with_intended_model("claude-opus-4-20250514".to_string());
+
+        assert_eq!(rec.model, "claude-haiku-4-5-20250901");
+        assert_eq!(
+            rec.intended_model.as_deref(),
+            Some("claude-opus-4-20250514")
+        );
+    }
+
+    #[tokio::test]
+    async fn record_persists_intended_model() {
+        let conn = test_db().await;
+        let ledger = CostLedger::new(conn);
+        let usage = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+        };
+        let record = CostRecord::new(
+            "sess-route".to_string(),
+            "claude-sonnet-4-20250514".to_string(),
+            FeatureType::Message,
+            &usage,
+            0.002,
+        )
+        .with_intended_model("claude-opus-4-20250514".to_string());
+
+        ledger.record(&record).await.unwrap();
+
+        // Verify intended_model was persisted by querying the database directly.
+        let id = record.id.clone();
+        let intended = ledger
+            .conn
+            .call(move |conn| -> Result<Option<String>, rusqlite::Error> {
+                let intended: Option<String> = conn.query_row(
+                    "SELECT intended_model FROM cost_ledger WHERE id = ?1",
+                    rusqlite::params![id],
+                    |row| row.get(0),
+                )?;
+                Ok(intended)
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(intended.as_deref(), Some("claude-opus-4-20250514"));
     }
 }

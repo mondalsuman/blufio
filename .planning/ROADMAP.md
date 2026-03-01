@@ -16,8 +16,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Persistence & Security Vault** - SQLite WAL persistence, credential vault, security defaults
 - [x] **Phase 3: Agent Loop & Telegram** - FSM agent loop, Anthropic provider, Telegram adapter, basic CLI
 - [x] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps (completed 2026-03-01)
-- [ ] **Phase 5: Memory & Embeddings** - ONNX embedding model, semantic memory, hybrid search
-- [ ] **Phase 6: Model Routing & Smart Heartbeats** - Query complexity classification, Haiku/Sonnet/Opus routing
+- [x] **Phase 5: Memory & Embeddings** - ONNX embedding model, semantic memory, hybrid search
+- [x] **Phase 6: Model Routing & Smart Heartbeats** - Query complexity classification, Haiku/Sonnet/Opus routing
 - [ ] **Phase 7: WASM Skill Sandbox** - wasmtime sandbox, capability manifests, built-in tools, skill registry
 - [ ] **Phase 8: Plugin System & Gateway** - Plugin host, plugin CLI, HTTP/WebSocket gateway
 - [ ] **Phase 9: Production Hardening** - systemd, daemon mode, memory bounds, Prometheus, diagnostics, operations
@@ -114,10 +114,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Simple queries ("what time is it?", "hi") are routed to Haiku, standard queries to Sonnet, and complex multi-step reasoning queries to Opus -- verifiable via cost ledger model attribution
   2. Smart heartbeats run on Haiku with skip-when-unchanged logic, costing no more than $10/month for always-on operation
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 06-01: TBD
+- [x] 06-01-PLAN.md -- blufio-router crate: heuristic QueryClassifier, budget-aware ModelRouter, RoutingConfig/HeartbeatConfig, CostRecord intended_model, V4 migration (Wave 1)
+- [x] 06-02-PLAN.md -- HeartbeatRunner: background proactive check-ins on Haiku, skip-when-unchanged, dedicated $10/month budget, delivery modes (Wave 1)
+- [x] 06-03-PLAN.md -- Integration wiring: SessionActor per-message routing, serve.rs heartbeat spawn, budget downgrade notifications, on_next_message delivery (Wave 2)
 
 ### Phase 7: WASM Skill Sandbox
 **Goal**: Third-party skills execute in isolated WASM sandboxes with capability manifests, fuel metering, and memory limits -- the agent discovers skills progressively and executes them safely alongside built-in tools
@@ -192,7 +194,7 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 3. Agent Loop & Telegram | 3/3 | Complete | 2026-03-01 |
 | 4. Context Engine & Cost Tracking | 1/3 | Complete    | 2026-03-01 |
 | 5. Memory & Embeddings | 3/3 | Complete | 2026-03-01 |
-| 6. Model Routing & Smart Heartbeats | 0/1 | Not started | - |
+| 6. Model Routing & Smart Heartbeats | 3/3 | Complete | 2026-03-01 |
 | 7. WASM Skill Sandbox | 0/2 | Not started | - |
 | 8. Plugin System & Gateway | 0/2 | Not started | - |
 | 9. Production Hardening | 0/3 | Not started | - |

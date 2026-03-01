@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use blufio_agent::AgentLoop;
+use blufio_agent::{AgentLoop, HeartbeatRunner};
 use blufio_agent::shutdown;
 use blufio_anthropic::AnthropicProvider;
 use blufio_config::model::BlufioConfig;
@@ -19,9 +19,10 @@ use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::{ChannelAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
+use blufio_router::ModelRouter;
 use blufio_storage::SqliteStorage;
 use blufio_telegram::TelegramChannel;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Runs the `blufio serve` command.
 ///
@@ -95,10 +96,93 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     channel.connect().await?;
     info!("Telegram channel connected");
 
+    // Initialize model router.
+    let router = Arc::new(ModelRouter::new(config.routing.clone()));
+    if config.routing.enabled {
+        if let Some(ref forced) = config.routing.force_model {
+            info!(model = forced.as_str(), "model routing enabled with forced model");
+        } else {
+            info!(
+                simple = config.routing.simple_model.as_str(),
+                standard = config.routing.standard_model.as_str(),
+                complex = config.routing.complex_model.as_str(),
+                "model routing enabled"
+            );
+        }
+    } else {
+        info!(
+            model = config.anthropic.default_model.as_str(),
+            "model routing disabled, using default model"
+        );
+    }
+
+    // Initialize heartbeat runner (if enabled).
+    let heartbeat_runner = if config.heartbeat.enabled {
+        let runner = Arc::new(HeartbeatRunner::new(
+            config.heartbeat.clone(),
+            provider.clone(),
+            storage.clone(),
+            cost_ledger.clone(),
+        ));
+        info!(
+            interval_secs = config.heartbeat.interval_secs,
+            delivery = config.heartbeat.delivery.as_str(),
+            monthly_budget = config.heartbeat.monthly_budget_usd,
+            "heartbeat system enabled"
+        );
+        Some(runner)
+    } else {
+        info!("heartbeat system disabled");
+        None
+    };
+
     // Install signal handler.
     let cancel = shutdown::install_signal_handler();
 
-    // Create and run agent loop with context engine and cost tracking.
+    // Spawn heartbeat background task if enabled.
+    if let Some(ref runner) = heartbeat_runner {
+        let hb_runner = runner.clone();
+        let hb_cancel = cancel.clone();
+        let interval_secs = config.heartbeat.interval_secs;
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(
+                std::time::Duration::from_secs(interval_secs),
+            );
+            // Skip the first immediate tick.
+            interval.tick().await;
+
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        match hb_runner.execute().await {
+                            Ok(Some(result)) if result.has_content => {
+                                info!(
+                                    content_len = result.content.len(),
+                                    "heartbeat generated actionable content"
+                                );
+                            }
+                            Ok(Some(_)) => {
+                                debug!("heartbeat executed but no actionable content");
+                            }
+                            Ok(None) => {
+                                debug!("heartbeat skipped (unchanged state)");
+                            }
+                            Err(e) => {
+                                warn!(error = %e, "heartbeat execution failed (non-fatal)");
+                            }
+                        }
+                    }
+                    _ = hb_cancel.cancelled() => {
+                        info!("heartbeat task shutting down");
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    // Create and run agent loop with context engine, cost tracking, and routing.
     let mut agent_loop = AgentLoop::new(
         Box::new(channel),
         provider,
@@ -108,6 +192,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         budget_tracker,
         memory_provider,
         memory_extractor,
+        router,
+        heartbeat_runner,
         config,
     )
     .await?;

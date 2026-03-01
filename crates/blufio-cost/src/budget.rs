@@ -152,6 +152,25 @@ impl BudgetTracker {
     pub fn monthly_total(&self) -> f64 {
         self.monthly_total_usd
     }
+
+    /// Returns the higher of daily or monthly budget utilization as a fraction (0.0-1.0+).
+    ///
+    /// The model router uses this to apply budget-aware downgrades:
+    /// - >= 0.80: downgrade one model tier
+    /// - >= 0.95: route everything to Haiku
+    ///
+    /// Returns 0.0 if no caps are configured.
+    pub fn budget_utilization(&self) -> f64 {
+        let daily_util = match self.daily_cap {
+            Some(cap) if cap > 0.0 => self.daily_total_usd / cap,
+            _ => 0.0,
+        };
+        let monthly_util = match self.monthly_cap {
+            Some(cap) if cap > 0.0 => self.monthly_total_usd / cap,
+            _ => 0.0,
+        };
+        daily_util.max(monthly_util)
+    }
 }
 
 #[cfg(test)]
@@ -229,6 +248,57 @@ mod tests {
         assert!((tracker.monthly_total() - 8.0).abs() < f64::EPSILON);
     }
 
+    #[test]
+    fn budget_utilization_with_daily_cap() {
+        let config = config_with_caps(Some(10.0), Some(100.0));
+        let mut tracker = BudgetTracker::new(&config);
+        tracker.record_cost(8.5);
+        let util = tracker.budget_utilization();
+        // Daily: 8.5/10 = 0.85, Monthly: 8.5/100 = 0.085 -> max = 0.85
+        assert!(
+            (util - 0.85).abs() < 1e-10,
+            "expected 0.85, got {util}"
+        );
+    }
+
+    #[test]
+    fn budget_utilization_with_monthly_cap() {
+        let config = config_with_caps(None, Some(50.0));
+        let mut tracker = BudgetTracker::new(&config);
+        tracker.record_cost(25.0);
+        let util = tracker.budget_utilization();
+        // No daily cap -> 0.0, Monthly: 25/50 = 0.5 -> max = 0.5
+        assert!(
+            (util - 0.5).abs() < 1e-10,
+            "expected 0.5, got {util}"
+        );
+    }
+
+    #[test]
+    fn budget_utilization_no_caps() {
+        let config = config_with_caps(None, None);
+        let mut tracker = BudgetTracker::new(&config);
+        tracker.record_cost(999_999.0);
+        let util = tracker.budget_utilization();
+        assert!(
+            util.abs() < 1e-10,
+            "expected 0.0 with no caps, got {util}"
+        );
+    }
+
+    #[test]
+    fn budget_utilization_over_100_percent() {
+        let config = config_with_caps(Some(10.0), None);
+        let mut tracker = BudgetTracker::new(&config);
+        tracker.record_cost(12.0);
+        let util = tracker.budget_utilization();
+        // 12/10 = 1.2 (over 100%)
+        assert!(
+            (util - 1.2).abs() < 1e-10,
+            "expected 1.2, got {util}"
+        );
+    }
+
     #[tokio::test]
     async fn from_ledger_initializes_totals() {
         // Create in-memory DB with cost_ledger table
@@ -247,7 +317,8 @@ mod tests {
                     cache_read_tokens INTEGER NOT NULL DEFAULT 0,
                     cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
                     cost_usd REAL NOT NULL DEFAULT 0.0,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    intended_model TEXT
                 );",
             )?;
             Ok(())
@@ -270,6 +341,7 @@ mod tests {
             cache_creation_tokens: 0,
             cost_usd: 3.50,
             created_at: format!("{today}T12:00:00.000Z"),
+            intended_model: None,
         };
         ledger.record(&record).await.unwrap();
 

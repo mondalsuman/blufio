@@ -23,6 +23,7 @@ blufio-telegram = { path = "../blufio-telegram" }
 blufio-context = { path = "../blufio-context" }
 blufio-cost = { path = "../blufio-cost" }
 blufio-memory = { path = "../blufio-memory" }
+blufio-router = { path = "../blufio-router" }
 tokio-rusqlite.workspace = true
 clap.workspace = true
 rpassword.workspace = true
