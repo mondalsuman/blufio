@@ -13,6 +13,14 @@
 //! - [`builtin::FileTool`] -- Read and write files
 
 pub mod builtin;
+pub mod manifest;
+pub mod sandbox;
+pub mod scaffold;
+pub mod store;
 pub mod tool;
 
+pub use manifest::{load_manifest, parse_manifest};
+pub use sandbox::WasmSkillRuntime;
+pub use scaffold::scaffold_skill;
+pub use store::SkillStore;
 pub use tool::{Tool, ToolOutput, ToolRegistry};

@@ -269,24 +269,122 @@ pub struct AuthIdentity {
     pub _placeholder: (),
 }
 
-// --- Skill placeholder types ---
+// --- Skill types ---
 
 /// Manifest describing a skill's capabilities and requirements.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillManifest {
-    pub _placeholder: (),
+    /// Unique name of the skill (alphanumeric + hyphens).
+    pub name: String,
+    /// Semantic version string.
+    pub version: String,
+    /// Human-readable description.
+    pub description: String,
+    /// Optional author identifier.
+    #[serde(default)]
+    pub author: Option<String>,
+    /// Capabilities the skill declares it needs.
+    #[serde(default)]
+    pub capabilities: SkillCapabilities,
+    /// Resource limits for the WASM sandbox.
+    #[serde(default)]
+    pub resources: SkillResources,
+    /// WASM binary filename (relative to skill directory).
+    #[serde(default = "default_wasm_entry")]
+    pub wasm_entry: String,
+}
+
+fn default_wasm_entry() -> String {
+    "skill.wasm".to_string()
+}
+
+/// Capabilities a skill declares it needs.
+///
+/// Each capability must be explicitly declared in the skill manifest.
+/// The WASM sandbox only exposes host functions matching declared capabilities.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SkillCapabilities {
+    /// Network access capability (domain-scoped).
+    #[serde(default)]
+    pub network: Option<NetworkCapability>,
+    /// Filesystem access capability (path-scoped).
+    #[serde(default)]
+    pub filesystem: Option<FilesystemCapability>,
+    /// Environment variables the skill may read.
+    #[serde(default)]
+    pub env: Vec<String>,
+}
+
+/// Network capability: which domains the skill may access.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkCapability {
+    /// Allowed domain names (e.g., ["api.example.com"]).
+    pub domains: Vec<String>,
+}
+
+/// Filesystem capability: which paths the skill may read/write.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilesystemCapability {
+    /// Paths the skill may read from.
+    #[serde(default)]
+    pub read: Vec<String>,
+    /// Paths the skill may write to.
+    #[serde(default)]
+    pub write: Vec<String>,
+}
+
+/// Resource limits for a WASM skill sandbox.
+///
+/// Conservative defaults: 1B fuel (~1s of compute), 16MB memory, 5s wall-clock timeout.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillResources {
+    /// Fuel limit for WASM execution (default: 1,000,000,000).
+    #[serde(default = "default_fuel")]
+    pub fuel: u64,
+    /// Maximum memory in megabytes (default: 16).
+    #[serde(default = "default_memory_mb")]
+    pub memory_mb: u32,
+    /// Epoch-based wall-clock timeout in seconds (default: 5).
+    #[serde(default = "default_epoch_timeout")]
+    pub epoch_timeout_secs: u64,
+}
+
+fn default_fuel() -> u64 {
+    1_000_000_000
+}
+fn default_memory_mb() -> u32 {
+    16
+}
+fn default_epoch_timeout() -> u64 {
+    5
+}
+
+impl Default for SkillResources {
+    fn default() -> Self {
+        Self {
+            fuel: default_fuel(),
+            memory_mb: default_memory_mb(),
+            epoch_timeout_secs: default_epoch_timeout(),
+        }
+    }
 }
 
 /// An invocation request for a skill.
 #[derive(Debug, Clone)]
 pub struct SkillInvocation {
-    pub _placeholder: (),
+    /// Name of the skill to invoke.
+    pub skill_name: String,
+    /// JSON input to pass to the skill.
+    pub input: serde_json::Value,
 }
 
 /// The result of a skill invocation.
 #[derive(Debug, Clone)]
 pub struct SkillResult {
-    pub _placeholder: (),
+    /// Text content returned by the skill.
+    pub content: String,
+    /// Whether the invocation resulted in an error.
+    pub is_error: bool,
 }
 
 // --- Observability placeholder types ---
