@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Project Foundation & Workspace** - Cargo workspace, core traits, config system, build pipeline, licensing
 - [x] **Phase 2: Persistence & Security Vault** - SQLite WAL persistence, credential vault, security defaults
 - [x] **Phase 3: Agent Loop & Telegram** - FSM agent loop, Anthropic provider, Telegram adapter, basic CLI
-- [ ] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps
+- [x] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps (completed 2026-03-01)
 - [ ] **Phase 5: Memory & Embeddings** - ONNX embedding model, semantic memory, hybrid search
 - [ ] **Phase 6: Model Routing & Smart Heartbeats** - Query complexity classification, Haiku/Sonnet/Opus routing
 - [ ] **Phase 7: WASM Skill Sandbox** - wasmtime sandbox, capability manifests, built-in tools, skill registry
@@ -189,7 +189,7 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 1. Project Foundation & Workspace | 2/2 | Complete | 2026-02-28 |
 | 2. Persistence & Security Vault | 2/2 | Complete | 2026-02-28 |
 | 3. Agent Loop & Telegram | 3/3 | Complete | 2026-03-01 |
-| 4. Context Engine & Cost Tracking | 1/3 | In Progress|  |
+| 4. Context Engine & Cost Tracking | 1/3 | Complete    | 2026-03-01 |
 | 5. Memory & Embeddings | 0/2 | Not started | - |
 | 6. Model Routing & Smart Heartbeats | 0/1 | Not started | - |
 | 7. WASM Skill Sandbox | 0/2 | Not started | - |
