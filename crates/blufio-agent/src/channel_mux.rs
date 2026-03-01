@@ -39,6 +39,12 @@ pub struct ChannelMultiplexer {
     inbound_tx: mpsc::Sender<InboundMessage>,
 }
 
+impl Default for ChannelMultiplexer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChannelMultiplexer {
     /// Create a new empty multiplexer.
     pub fn new() -> Self {
@@ -100,9 +106,7 @@ impl PluginAdapter for ChannelMultiplexer {
             }
         }
 
-        if any_unhealthy {
-            Ok(HealthStatus::Degraded(degraded_reasons.join("; ")))
-        } else if !degraded_reasons.is_empty() {
+        if any_unhealthy || !degraded_reasons.is_empty() {
             Ok(HealthStatus::Degraded(degraded_reasons.join("; ")))
         } else {
             Ok(HealthStatus::Healthy)
@@ -180,14 +184,13 @@ impl ChannelAdapter for ChannelMultiplexer {
                                     serde_json::json!({"source_channel": channel_name})
                                         .to_string(),
                                 );
-                            } else if let Some(ref meta_str) = msg.metadata {
-                                if let Ok(mut meta) =
+                            } else if let Some(ref meta_str) = msg.metadata
+                                && let Ok(mut meta) =
                                     serde_json::from_str::<serde_json::Value>(meta_str)
-                                {
-                                    meta["source_channel"] =
-                                        serde_json::Value::String(channel_name.clone());
-                                    msg.metadata = Some(meta.to_string());
-                                }
+                            {
+                                meta["source_channel"] =
+                                    serde_json::Value::String(channel_name.clone());
+                                msg.metadata = Some(meta.to_string());
                             }
 
                             // Set the channel name on the message.
@@ -239,14 +242,13 @@ impl ChannelAdapter for ChannelMultiplexer {
         }
 
         // Fall back to source_channel from metadata.
-        if let Some(ref meta_str) = msg.metadata {
-            if let Ok(meta) = serde_json::from_str::<serde_json::Value>(meta_str) {
-                if let Some(source) = meta.get("source_channel").and_then(|v| v.as_str()) {
-                    for (name, channel) in self.connected_channels.iter() {
-                        if name == source {
-                            return channel.send(msg).await;
-                        }
-                    }
+        if let Some(ref meta_str) = msg.metadata
+            && let Ok(meta) = serde_json::from_str::<serde_json::Value>(meta_str)
+            && let Some(source) = meta.get("source_channel").and_then(|v| v.as_str())
+        {
+            for (name, channel) in self.connected_channels.iter() {
+                if name == source {
+                    return channel.send(msg).await;
                 }
             }
         }

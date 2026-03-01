@@ -12,9 +12,12 @@
 
 pub mod channel_mux;
 pub mod context;
+pub mod delegation;
 pub mod heartbeat;
 pub mod session;
 pub mod shutdown;
+
+pub use delegation::{DelegationRouter, DelegationTool};
 
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -459,20 +462,20 @@ impl AgentLoop {
             let actor = self.sessions.get(&session_id).ok_or_else(|| {
                 BlufioError::Internal(format!("session actor not found for {session_id}"))
             })?;
-            if let Some(decision) = actor.last_routing_decision() {
-                if decision.downgraded {
-                    let short_name = blufio_router::ModelRouter::short_model_name(&decision.actual_model);
-                    let note = format!(
-                        "_(Using {} -- budget at {:.0}%)_\n\n",
-                        short_name,
-                        // Approximate from reason string -- just show the note
-                        // without re-querying budget since decision.reason has the info
-                        decision.reason.split("budget at ").last()
-                            .and_then(|s| s.strip_suffix(')'))
-                            .unwrap_or("high")
-                    );
-                    display_response.push_str(&note);
-                }
+            if let Some(decision) = actor.last_routing_decision()
+                && decision.downgraded
+            {
+                let short_name = blufio_router::ModelRouter::short_model_name(&decision.actual_model);
+                let note = format!(
+                    "_(Using {} -- budget at {:.0}%)_\n\n",
+                    short_name,
+                    // Approximate from reason string -- just show the note
+                    // without re-querying budget since decision.reason has the info
+                    decision.reason.split("budget at ").last()
+                        .and_then(|s| s.strip_suffix(')'))
+                        .unwrap_or("high")
+                );
+                display_response.push_str(&note);
             }
         }
 

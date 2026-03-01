@@ -79,6 +79,14 @@ pub struct BlufioConfig {
     /// Daemon and memory management settings.
     #[serde(default)]
     pub daemon: DaemonConfig,
+
+    /// Specialist agent definitions for multi-agent delegation.
+    #[serde(default)]
+    pub agents: Vec<AgentSpecConfig>,
+
+    /// Multi-agent delegation settings.
+    #[serde(default)]
+    pub delegation: DelegationConfig,
 }
 
 
@@ -667,7 +675,7 @@ fn default_skill_enabled() -> bool {
 ///
 /// Controls which compiled-in adapters are enabled/disabled.
 /// Each entry in the `plugins` map overrides the default enabled state.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PluginConfig {
     /// Per-plugin enable/disable overrides.
@@ -675,14 +683,6 @@ pub struct PluginConfig {
     /// Value: true = enabled, false = disabled.
     #[serde(default)]
     pub plugins: HashMap<String, bool>,
-}
-
-impl Default for PluginConfig {
-    fn default() -> Self {
-        Self {
-            plugins: HashMap::new(),
-        }
-    }
 }
 
 /// HTTP/WebSocket gateway configuration.
@@ -794,4 +794,59 @@ fn default_memory_limit_mb() -> u64 {
 
 fn default_health_port() -> u16 {
     3000
+}
+
+/// Configuration for a specialist agent used in multi-agent delegation.
+///
+/// Defined via `[[agents]]` TOML array entries. Each specialist agent
+/// has its own system prompt, model, and allowed skill set.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentSpecConfig {
+    /// Unique name for this specialist agent.
+    pub name: String,
+
+    /// System prompt that defines the specialist's behavior.
+    pub system_prompt: String,
+
+    /// LLM model to use for this specialist.
+    #[serde(default = "default_specialist_model")]
+    pub model: String,
+
+    /// List of tool/skill names this specialist is allowed to use.
+    #[serde(default)]
+    pub allowed_skills: Vec<String>,
+}
+
+fn default_specialist_model() -> String {
+    "claude-sonnet-4-20250514".to_string()
+}
+
+/// Multi-agent delegation configuration.
+///
+/// Controls whether delegation is enabled and how long to wait
+/// for specialist responses before timing out.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DelegationConfig {
+    /// Enable multi-agent delegation.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Timeout in seconds for specialist responses.
+    #[serde(default = "default_delegation_timeout")]
+    pub timeout_secs: u64,
+}
+
+impl Default for DelegationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            timeout_secs: default_delegation_timeout(),
+        }
+    }
+}
+
+fn default_delegation_timeout() -> u64 {
+    60
 }

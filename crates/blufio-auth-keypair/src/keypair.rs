@@ -4,7 +4,7 @@
 //! Ed25519 device keypair generation and token validation.
 
 use blufio_core::BlufioError;
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 
 /// An Ed25519 device keypair for authentication.
@@ -61,6 +61,49 @@ impl DeviceKeypair {
         let expected = self.public_hex();
         token == expected
     }
+
+    /// Sign arbitrary bytes with this keypair's private key.
+    ///
+    /// Returns an Ed25519 signature over the provided message bytes.
+    /// Used for signing inter-agent messages (SEC-07).
+    pub fn sign(&self, message: &[u8]) -> Signature {
+        self.signing_key.sign(message)
+    }
+
+    /// Verify a signature against this keypair's public key using strict mode.
+    ///
+    /// Strict verification rejects weak public keys per ed25519-dalek security
+    /// recommendations, preventing weak key forgery attacks.
+    ///
+    /// Returns `Ok(())` if the signature is valid, or `BlufioError::Security`
+    /// if verification fails.
+    pub fn verify_strict(
+        &self,
+        message: &[u8],
+        signature: &Signature,
+    ) -> Result<(), BlufioError> {
+        self.verifying_key
+            .verify_strict(message, signature)
+            .map_err(|e| {
+                BlufioError::Security(format!("Ed25519 signature verification failed: {e}"))
+            })
+    }
+
+    /// Verify a signature against this keypair's public key (non-strict).
+    ///
+    /// Less strict than `verify_strict` -- permits weak public keys.
+    /// Prefer `verify_strict` for inter-agent message verification.
+    pub fn verify(
+        &self,
+        message: &[u8],
+        signature: &Signature,
+    ) -> Result<(), BlufioError> {
+        self.verifying_key
+            .verify(message, signature)
+            .map_err(|e| {
+                BlufioError::Security(format!("Ed25519 signature verification failed: {e}"))
+            })
+    }
 }
 
 #[cfg(test)]
@@ -109,5 +152,86 @@ mod tests {
         let kp1 = DeviceKeypair::generate();
         let kp2 = DeviceKeypair::generate();
         assert_ne!(kp1.public_hex(), kp2.public_hex());
+    }
+
+    #[test]
+    fn sign_produces_64_byte_signature() {
+        let kp = DeviceKeypair::generate();
+        let sig = kp.sign(b"hello world");
+        assert_eq!(sig.to_bytes().len(), 64);
+    }
+
+    #[test]
+    fn verify_strict_succeeds_for_correct_signature() {
+        let kp = DeviceKeypair::generate();
+        let message = b"test payload";
+        let sig = kp.sign(message);
+        assert!(kp.verify_strict(message, &sig).is_ok());
+    }
+
+    #[test]
+    fn verify_strict_fails_for_tampered_bytes() {
+        let kp = DeviceKeypair::generate();
+        let sig = kp.sign(b"original message");
+        let result = kp.verify_strict(b"tampered message", &sig);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            BlufioError::Security(msg) => {
+                assert!(msg.contains("Ed25519 signature verification failed"));
+            }
+            other => panic!("expected Security error, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_strict_fails_for_wrong_keypair() {
+        let kp1 = DeviceKeypair::generate();
+        let kp2 = DeviceKeypair::generate();
+        let message = b"signed by kp1";
+        let sig = kp1.sign(message);
+        // Verify against kp2's public key should fail
+        let result = kp2.verify_strict(message, &sig);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sign_verify_roundtrip_empty_bytes() {
+        let kp = DeviceKeypair::generate();
+        let message = b"";
+        let sig = kp.sign(message);
+        assert!(kp.verify_strict(message, &sig).is_ok());
+    }
+
+    #[test]
+    fn sign_verify_roundtrip_small_payload() {
+        let kp = DeviceKeypair::generate();
+        let message = b"small";
+        let sig = kp.sign(message);
+        assert!(kp.verify_strict(message, &sig).is_ok());
+    }
+
+    #[test]
+    fn sign_verify_roundtrip_large_payload() {
+        let kp = DeviceKeypair::generate();
+        let message = vec![0xABu8; 10 * 1024]; // 10KB
+        let sig = kp.sign(&message);
+        assert!(kp.verify_strict(&message, &sig).is_ok());
+    }
+
+    #[test]
+    fn verify_non_strict_succeeds_for_correct_signature() {
+        let kp = DeviceKeypair::generate();
+        let message = b"test verify non-strict";
+        let sig = kp.sign(message);
+        assert!(kp.verify(message, &sig).is_ok());
+    }
+
+    #[test]
+    fn verify_non_strict_fails_for_tampered_bytes() {
+        let kp = DeviceKeypair::generate();
+        let sig = kp.sign(b"original");
+        let result = kp.verify(b"tampered", &sig);
+        assert!(result.is_err());
     }
 }

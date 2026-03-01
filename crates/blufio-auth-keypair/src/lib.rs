@@ -7,8 +7,11 @@
 //! The keypair is generated on first run and can be stored in the vault for persistence.
 
 pub mod keypair;
+pub mod message;
 
+pub use ed25519_dalek::Signature;
 pub use keypair::DeviceKeypair;
+pub use message::{AgentMessage, AgentMessageType, SignedAgentMessage};
 
 use async_trait::async_trait;
 
