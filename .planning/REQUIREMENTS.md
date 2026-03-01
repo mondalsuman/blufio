@@ -22,11 +22,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **LLM-01**: Provider trait abstracts LLM interaction (complete, stream, embed) behind pluggable interface
 - [ ] **LLM-02**: Anthropic provider adapter supports Claude models with streaming and tool calling
-- [ ] **LLM-03**: Three-zone context engine assembles prompts from static (system prompt, cached), conditional (skills/memory per-relevance), and dynamic (current turn) zones
-- [ ] **LLM-04**: Context engine aligns prompt structure to exploit Anthropic prompt caching (target 50-65% cache hit rate)
+- [x] **LLM-03**: Three-zone context engine assembles prompts from static (system prompt, cached), conditional (skills/memory per-relevance), and dynamic (current turn) zones
+- [x] **LLM-04**: Context engine aligns prompt structure to exploit Anthropic prompt caching (target 50-65% cache hit rate)
 - [ ] **LLM-05**: Model router classifies query complexity and routes to Haiku (simple), Sonnet (standard), or Opus (complex)
 - [ ] **LLM-06**: Smart heartbeats run on Haiku with skip-when-unchanged logic, costing <=/$10/month
-- [ ] **LLM-07**: Token overhead per turn stays <=3,000 for simple queries and <=5,000 weighted average
+- [x] **LLM-07**: Token overhead per turn stays <=3,000 for simple queries and <=5,000 weighted average
 - [ ] **LLM-08**: System prompt and agent personality are configurable via TOML + optional markdown files
 
 ### Channel
@@ -49,7 +49,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **MEM-01**: Memory system stores and retrieves long-term facts using hybrid search (vector + BM25)
 - [ ] **MEM-02**: Local ONNX embedding model runs inference without external API calls
 - [ ] **MEM-03**: Context engine loads only relevant memories per-turn based on semantic similarity
-- [ ] **MEM-04**: Conversation history compacts automatically when approaching context window limits
+- [x] **MEM-04**: Conversation history compacts automatically when approaching context window limits
 
 - [ ] **MEM-05**: Memory embeddings stored in SQLite with efficient cosine similarity search
 
@@ -170,11 +170,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-08 | Phase 9: Production Hardening | Pending |
 | LLM-01 | Phase 3: Agent Loop & Telegram | Pending |
 | LLM-02 | Phase 3: Agent Loop & Telegram | Pending |
-| LLM-03 | Phase 4: Context Engine & Cost Tracking | Pending |
-| LLM-04 | Phase 4: Context Engine & Cost Tracking | Pending |
+| LLM-03 | Phase 4: Context Engine & Cost Tracking | Complete |
+| LLM-04 | Phase 4: Context Engine & Cost Tracking | Complete |
 | LLM-05 | Phase 6: Model Routing & Smart Heartbeats | Pending |
 | LLM-06 | Phase 6: Model Routing & Smart Heartbeats | Pending |
-| LLM-07 | Phase 4: Context Engine & Cost Tracking | Pending |
+| LLM-07 | Phase 4: Context Engine & Cost Tracking | Complete |
 | LLM-08 | Phase 3: Agent Loop & Telegram | Pending |
 | CHAN-01 | Phase 3: Agent Loop & Telegram | Pending |
 | CHAN-02 | Phase 3: Agent Loop & Telegram | Pending |
@@ -188,7 +188,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MEM-01 | Phase 5: Memory & Embeddings | Pending |
 | MEM-02 | Phase 5: Memory & Embeddings | Pending |
 | MEM-03 | Phase 5: Memory & Embeddings | Pending |
-| MEM-04 | Phase 4: Context Engine & Cost Tracking | Pending |
+| MEM-04 | Phase 4: Context Engine & Cost Tracking | Complete |
 | MEM-05 | Phase 5: Memory & Embeddings | Pending |
 | SEC-01 | Phase 2: Persistence & Security Vault | Pending |
 | SEC-02 | Phase 9: Production Hardening | Pending |

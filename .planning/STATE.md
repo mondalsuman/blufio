@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 4 in progress -- Cost tracking complete, context engine next
+**Current focus:** Phase 4 in progress -- Cost tracking and context engine complete, integration next
 
 ## Current Position
 
 Phase: 4 of 10 (Context Engine & Cost Tracking)
-Plan: 1 of 3 in current phase (COMPLETE)
-Status: Plan 04-01 complete
-Last activity: 2026-03-01 -- Plan 04-01 complete (cost tracking crate)
+Plan: 2 of 3 in current phase (COMPLETE)
+Status: Plan 04-02 complete
+Last activity: 2026-03-01 -- Plan 04-02 complete (blufio-context crate with three-zone assembly)
 
 Progress: [████......] 40%
 
@@ -43,11 +43,11 @@ Progress: [████......] 40%
 | 1 | 2/2 | 23min | 12min |
 | 2 | 2/2 | 75min | 38min |
 | 3 | 3/3 | 45min | 15min |
-| 4 | 1/3 | 6min | 6min |
+| 4 | 2/3 | 19min | 10min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (45min), 03-01 (15min), 03-02 (15min), 03-03 (20min), 04-01 (6min)
-- Trend: Phase 4 plan 01 fastest yet due to established patterns and focused scope
+- Last 5 plans: 03-01 (15min), 03-02 (15min), 03-03 (20min), 04-01 (6min), 04-02 (13min)
+- Trend: Phase 4 plans efficient due to established patterns and focused scope
 
 *Updated after each plan completion*
 
@@ -80,6 +80,10 @@ Recent decisions affecting current work:
 - [04-01]: Used blufio_config::model::CostConfig import path (not re-exported from crate root)
 - [04-01]: Pricing uses substring matching with Sonnet fallback for unknown models
 - [04-01]: BudgetTracker is not thread-safe by design -- matches single-threaded agent loop
+- [04-02]: system_blocks as serde_json::Value on ProviderRequest keeps core types provider-agnostic
+- [04-02]: Compaction token usage propagated via DynamicResult/AssembledContext for explicit cost recording
+- [04-02]: Duplicated message_content_to_blocks in blufio-context to avoid circular dep with blufio-agent
+- [04-02]: CacheControlMarker::ephemeral() auto-applied on all Anthropic requests for prompt caching
 
 ### Pending Todos
 
@@ -94,5 +98,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 04-01-PLAN.md (blufio-cost crate with pricing, ledger, budget). Ready for 04-02 (context engine).
+Stopped at: Completed 04-02-PLAN.md (blufio-context crate with three-zone assembly, compaction, Anthropic cache support). Ready for 04-03 (integration).
 Resume file: None
