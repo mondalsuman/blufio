@@ -96,6 +96,7 @@ impl MemoryExtractor {
             }],
             max_tokens: 2048,
             stream: false,
+            tools: None,
         };
 
         let response = provider.complete(request).await?;

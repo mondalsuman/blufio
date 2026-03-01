@@ -47,6 +47,19 @@ pub struct SystemBlock {
     pub cache_control: Option<CacheControlMarker>,
 }
 
+// --- Tool types ---
+
+/// A tool definition for the Anthropic Messages API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    /// Tool name (unique identifier).
+    pub name: String,
+    /// Human-readable description of what the tool does.
+    pub description: String,
+    /// JSON Schema describing the tool's input parameters.
+    pub input_schema: serde_json::Value,
+}
+
 // --- Request types ---
 
 /// A request to the Anthropic Messages API.
@@ -71,6 +84,10 @@ pub struct MessageRequest {
     /// Top-level cache control for the request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_control: Option<CacheControlMarker>,
+
+    /// Tool definitions available for the model to use.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDefinition>>,
 }
 
 /// A single message in the Anthropic conversation format.
@@ -103,6 +120,21 @@ pub enum ApiContentBlock {
     /// Image content block (base64 encoded).
     #[serde(rename = "image")]
     Image { source: ImageSource },
+    /// Tool use content block (sent by assistant).
+    #[serde(rename = "tool_use")]
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
+    /// Tool result content block (sent by user in response to tool_use).
+    #[serde(rename = "tool_result")]
+    ToolResult {
+        tool_use_id: String,
+        content: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        is_error: Option<bool>,
+    },
 }
 
 /// Source data for an image content block.
@@ -146,6 +178,13 @@ pub enum ResponseContentBlock {
     /// Text content block.
     #[serde(rename = "text")]
     Text { text: String },
+    /// Tool use content block -- the model is requesting a tool invocation.
+    #[serde(rename = "tool_use")]
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
 }
 
 /// Token usage statistics from the API.
@@ -275,6 +314,7 @@ mod tests {
             max_tokens: 4096,
             stream: true,
             cache_control: None,
+            tools: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["model"], "claude-sonnet-4-20250514");
@@ -295,6 +335,7 @@ mod tests {
             max_tokens: 1024,
             stream: false,
             cache_control: None,
+            tools: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert!(json.get("system").is_none());
@@ -364,6 +405,7 @@ mod tests {
             max_tokens: 1024,
             stream: false,
             cache_control: Some(CacheControlMarker::ephemeral()),
+            tools: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["cache_control"]["type"], "ephemeral");
@@ -477,5 +519,141 @@ mod tests {
             }
             _ => panic!("expected Blocks"),
         }
+    }
+
+    #[test]
+    fn serialize_message_request_with_tools() {
+        let req = MessageRequest {
+            model: "claude-sonnet-4-20250514".into(),
+            messages: vec![],
+            system: None,
+            max_tokens: 1024,
+            stream: false,
+            cache_control: None,
+            tools: Some(vec![ToolDefinition {
+                name: "bash".into(),
+                description: "Execute a bash command".into(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"}
+                    },
+                    "required": ["command"]
+                }),
+            }]),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        let tools = json["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["name"], "bash");
+        assert_eq!(tools[0]["description"], "Execute a bash command");
+        assert!(tools[0]["input_schema"]["properties"]["command"].is_object());
+    }
+
+    #[test]
+    fn serialize_message_request_without_tools_omits_field() {
+        let req = MessageRequest {
+            model: "claude-sonnet-4-20250514".into(),
+            messages: vec![],
+            system: None,
+            max_tokens: 1024,
+            stream: false,
+            cache_control: None,
+            tools: None,
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert!(json.get("tools").is_none());
+    }
+
+    #[test]
+    fn deserialize_tool_use_response_content_block() {
+        let json = r#"{
+            "type": "tool_use",
+            "id": "toolu_abc123",
+            "name": "bash",
+            "input": {"command": "echo hello"}
+        }"#;
+        let block: ResponseContentBlock = serde_json::from_str(json).unwrap();
+        match block {
+            ResponseContentBlock::ToolUse { id, name, input } => {
+                assert_eq!(id, "toolu_abc123");
+                assert_eq!(name, "bash");
+                assert_eq!(input["command"], "echo hello");
+            }
+            _ => panic!("expected ToolUse"),
+        }
+    }
+
+    #[test]
+    fn serialize_tool_result_content_block() {
+        let block = ApiContentBlock::ToolResult {
+            tool_use_id: "toolu_abc123".into(),
+            content: "hello\n".into(),
+            is_error: None,
+        };
+        let json = serde_json::to_value(&block).unwrap();
+        assert_eq!(json["type"], "tool_result");
+        assert_eq!(json["tool_use_id"], "toolu_abc123");
+        assert_eq!(json["content"], "hello\n");
+        assert!(json.get("is_error").is_none());
+    }
+
+    #[test]
+    fn serialize_tool_result_with_error() {
+        let block = ApiContentBlock::ToolResult {
+            tool_use_id: "toolu_xyz".into(),
+            content: "command failed".into(),
+            is_error: Some(true),
+        };
+        let json = serde_json::to_value(&block).unwrap();
+        assert_eq!(json["type"], "tool_result");
+        assert_eq!(json["is_error"], true);
+    }
+
+    #[test]
+    fn serialize_tool_use_content_block() {
+        let block = ApiContentBlock::ToolUse {
+            id: "toolu_abc".into(),
+            name: "bash".into(),
+            input: serde_json::json!({"command": "ls"}),
+        };
+        let json = serde_json::to_value(&block).unwrap();
+        assert_eq!(json["type"], "tool_use");
+        assert_eq!(json["id"], "toolu_abc");
+        assert_eq!(json["name"], "bash");
+        assert_eq!(json["input"]["command"], "ls");
+    }
+
+    #[test]
+    fn deserialize_tool_definition() {
+        let json = r#"{
+            "name": "http",
+            "description": "Make HTTP requests",
+            "input_schema": {"type": "object", "properties": {"url": {"type": "string"}}}
+        }"#;
+        let def: ToolDefinition = serde_json::from_str(json).unwrap();
+        assert_eq!(def.name, "http");
+        assert_eq!(def.description, "Make HTTP requests");
+    }
+
+    #[test]
+    fn deserialize_message_response_with_tool_use() {
+        let json = r#"{
+            "id": "msg_tool",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Let me run that command."},
+                {"type": "tool_use", "id": "toolu_123", "name": "bash", "input": {"command": "echo hi"}}
+            ],
+            "model": "claude-sonnet-4-20250514",
+            "stop_reason": "tool_use",
+            "usage": {"input_tokens": 20, "output_tokens": 15}
+        }"#;
+        let resp: MessageResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.content.len(), 2);
+        assert!(matches!(&resp.content[0], ResponseContentBlock::Text { .. }));
+        assert!(matches!(&resp.content[1], ResponseContentBlock::ToolUse { .. }));
+        assert_eq!(resp.stop_reason, Some("tool_use".into()));
     }
 }

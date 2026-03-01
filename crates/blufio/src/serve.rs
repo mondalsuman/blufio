@@ -20,6 +20,7 @@ use blufio_core::error::BlufioError;
 use blufio_core::{ChannelAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
 use blufio_router::ModelRouter;
+use blufio_skill::{SkillProvider, ToolRegistry};
 use blufio_storage::SqliteStorage;
 use blufio_telegram::TelegramChannel;
 use tracing::{debug, error, info, warn};
@@ -70,6 +71,19 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         info!("memory system disabled by configuration");
         (None, None)
     };
+
+    // Initialize tool registry with built-in tools.
+    let mut tool_registry = ToolRegistry::new();
+    blufio_skill::builtin::register_builtins(&mut tool_registry);
+    info!("tool registry initialized with {} built-in tools", tool_registry.len());
+    let tool_registry = Arc::new(tokio::sync::RwLock::new(tool_registry));
+
+    // Register SkillProvider with context engine for progressive tool discovery.
+    let skill_provider = SkillProvider::new(
+        tool_registry.clone(),
+        config.skill.max_skills_in_prompt,
+    );
+    context_engine.add_conditional_provider(Box::new(skill_provider));
 
     let context_engine = Arc::new(context_engine);
 
@@ -182,7 +196,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         });
     }
 
-    // Create and run agent loop with context engine, cost tracking, and routing.
+    // Create and run agent loop with context engine, cost tracking, routing, and tools.
     let mut agent_loop = AgentLoop::new(
         Box::new(channel),
         provider,
@@ -194,6 +208,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         memory_extractor,
         router,
         heartbeat_runner,
+        tool_registry,
         config,
     )
     .await?;

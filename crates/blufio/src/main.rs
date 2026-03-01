@@ -37,6 +37,11 @@ enum Commands {
         #[command(subcommand)]
         action: Option<ConfigCommands>,
     },
+    /// Manage Blufio skills (WASM plugins).
+    Skill {
+        #[command(subcommand)]
+        action: SkillCommands,
+    },
 }
 
 /// Config management subcommands.
@@ -49,6 +54,30 @@ enum ConfigCommands {
     },
     /// List all secrets stored in the vault (names and masked previews only).
     ListSecrets,
+}
+
+/// Skill management subcommands.
+#[derive(Subcommand, Debug)]
+enum SkillCommands {
+    /// Create a new skill project scaffold.
+    Init {
+        /// Name of the skill to create.
+        name: String,
+    },
+    /// List all installed skills.
+    List,
+    /// Install a WASM skill from a file.
+    Install {
+        /// Path to the .wasm file.
+        wasm_path: String,
+        /// Path to the skill.toml manifest.
+        manifest_path: String,
+    },
+    /// Remove an installed skill.
+    Remove {
+        /// Name of the skill to remove.
+        name: String,
+    },
 }
 
 #[tokio::main]
@@ -100,6 +129,12 @@ async fn main() {
                 println!("blufio config: use --help for available config commands");
             }
         },
+        Some(Commands::Skill { action }) => {
+            if let Err(e) = handle_skill_command(&config, action).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
         None => {
             println!("blufio: use --help for available commands");
         }
@@ -203,6 +238,116 @@ fn read_secret_value(key: &str) -> Result<String, blufio_core::BlufioError> {
             ));
         }
         Ok(value.to_string())
+    }
+}
+
+/// Handle `blufio skill <action>` subcommands.
+async fn handle_skill_command(
+    config: &blufio_config::model::BlufioConfig,
+    action: SkillCommands,
+) -> Result<(), blufio_core::BlufioError> {
+    match action {
+        SkillCommands::Init { name } => {
+            let target_dir = std::path::Path::new(".");
+            blufio_skill::scaffold_skill(&name, target_dir)?;
+            eprintln!("Skill project '{name}' created successfully.");
+            eprintln!("  cd {name} && cargo build --target wasm32-wasip1 --release");
+            Ok(())
+        }
+        SkillCommands::List => {
+            let conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
+                .await
+                .map_err(|e| blufio_core::BlufioError::Storage {
+                    source: Box::new(e),
+                })?;
+            let store = blufio_skill::SkillStore::new(std::sync::Arc::new(conn));
+            let skills = store.list().await?;
+
+            if skills.is_empty() {
+                println!("No skills installed.");
+            } else {
+                println!("{:<20} {:<10} {:<12} {}", "NAME", "VERSION", "STATUS", "DESCRIPTION");
+                println!("{}", "-".repeat(70));
+                for skill in &skills {
+                    println!(
+                        "{:<20} {:<10} {:<12} {}",
+                        skill.name, skill.version, skill.verification_status, skill.description
+                    );
+                }
+            }
+            Ok(())
+        }
+        SkillCommands::Install { wasm_path, manifest_path } => {
+            // Read and parse the manifest.
+            let manifest_content = std::fs::read_to_string(&manifest_path).map_err(|e| {
+                blufio_core::BlufioError::Skill {
+                    message: format!("failed to read manifest '{}': {e}", manifest_path),
+                    source: Some(Box::new(e)),
+                }
+            })?;
+            let manifest = blufio_skill::parse_manifest(&manifest_content)?;
+
+            // Verify the WASM file exists.
+            if !std::path::Path::new(&wasm_path).exists() {
+                return Err(blufio_core::BlufioError::Skill {
+                    message: format!("WASM file '{}' not found", wasm_path),
+                    source: None,
+                });
+            }
+
+            // Serialize capabilities to JSON for storage.
+            let capabilities_json = serde_json::to_string(&manifest.capabilities)
+                .unwrap_or_else(|_| "{}".to_string());
+
+            // Open DB and store the skill.
+            let conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
+                .await
+                .map_err(|e| blufio_core::BlufioError::Storage {
+                    source: Box::new(e),
+                })?;
+            let store = blufio_skill::SkillStore::new(std::sync::Arc::new(conn));
+
+            store
+                .install(
+                    &manifest.name,
+                    &manifest.version,
+                    &manifest.description,
+                    manifest.author.as_deref(),
+                    &wasm_path,
+                    &manifest_content,
+                    &capabilities_json,
+                )
+                .await?;
+
+            eprintln!("Skill '{}' v{} installed successfully.", manifest.name, manifest.version);
+
+            // Print capabilities summary.
+            if manifest.capabilities.network.is_some() {
+                eprintln!("  Capabilities: network access");
+            }
+            if manifest.capabilities.filesystem.is_some() {
+                eprintln!("  Capabilities: filesystem access");
+            }
+            if !manifest.capabilities.env.is_empty() {
+                eprintln!(
+                    "  Capabilities: env vars ({})",
+                    manifest.capabilities.env.join(", ")
+                );
+            }
+
+            Ok(())
+        }
+        SkillCommands::Remove { name } => {
+            let conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
+                .await
+                .map_err(|e| blufio_core::BlufioError::Storage {
+                    source: Box::new(e),
+                })?;
+            let store = blufio_skill::SkillStore::new(std::sync::Arc::new(conn));
+            store.remove(&name).await?;
+            eprintln!("Skill '{name}' removed.");
+            Ok(())
+        }
     }
 }
 
@@ -337,6 +482,66 @@ mod tests {
         // This should succeed gracefully -- no vault exists.
         let result = cmd_list_secrets(&config).await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn cli_parses_skill_init() {
+        let cli = Cli::parse_from(["blufio", "skill", "init", "my-skill"]);
+        match cli.command {
+            Some(Commands::Skill {
+                action: SkillCommands::Init { name },
+            }) => {
+                assert_eq!(name, "my-skill");
+            }
+            _ => panic!("expected Skill Init command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_skill_list() {
+        let cli = Cli::parse_from(["blufio", "skill", "list"]);
+        match cli.command {
+            Some(Commands::Skill {
+                action: SkillCommands::List,
+            }) => {}
+            _ => panic!("expected Skill List command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_skill_install() {
+        let cli = Cli::parse_from([
+            "blufio",
+            "skill",
+            "install",
+            "path/to/skill.wasm",
+            "path/to/skill.toml",
+        ]);
+        match cli.command {
+            Some(Commands::Skill {
+                action: SkillCommands::Install {
+                    wasm_path,
+                    manifest_path,
+                },
+            }) => {
+                assert_eq!(wasm_path, "path/to/skill.wasm");
+                assert_eq!(manifest_path, "path/to/skill.toml");
+            }
+            _ => panic!("expected Skill Install command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_skill_remove() {
+        let cli = Cli::parse_from(["blufio", "skill", "remove", "my-skill"]);
+        match cli.command {
+            Some(Commands::Skill {
+                action: SkillCommands::Remove { name },
+            }) => {
+                assert_eq!(name, "my-skill");
+            }
+            _ => panic!("expected Skill Remove command"),
+        }
     }
 
     #[tokio::test]

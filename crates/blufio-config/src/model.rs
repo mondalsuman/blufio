@@ -58,6 +58,10 @@ pub struct BlufioConfig {
     /// Smart heartbeat settings.
     #[serde(default)]
     pub heartbeat: HeartbeatConfig,
+
+    /// WASM skill sandbox settings.
+    #[serde(default)]
+    pub skill: SkillConfig,
 }
 
 
@@ -566,4 +570,78 @@ fn default_heartbeat_monthly_budget_usd() -> f64 {
 
 fn default_heartbeat_model() -> String {
     "claude-haiku-4-5-20250901".to_string()
+}
+
+/// WASM skill sandbox configuration.
+///
+/// Controls skill installation directory, default resource limits for WASM
+/// sandboxes, and the maximum number of skill tool definitions included
+/// in LLM prompts.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SkillConfig {
+    /// Directory where installed skill WASM bundles are stored.
+    #[serde(default = "default_skills_dir")]
+    pub skills_dir: String,
+
+    /// Default fuel limit for WASM execution (overridden by skill manifest).
+    #[serde(default = "default_skill_fuel")]
+    pub default_fuel: u64,
+
+    /// Default memory limit in megabytes for WASM execution.
+    #[serde(default = "default_skill_memory_mb")]
+    pub default_memory_mb: u32,
+
+    /// Default epoch timeout in seconds for WASM wall-clock limit.
+    #[serde(default = "default_skill_epoch_timeout")]
+    pub default_epoch_timeout_secs: u64,
+
+    /// Maximum number of skill tool definitions included in LLM prompts.
+    #[serde(default = "default_max_skills_in_prompt")]
+    pub max_skills_in_prompt: usize,
+
+    /// Enable the skill system. When false, no skills are loaded or executed.
+    #[serde(default = "default_skill_enabled")]
+    pub enabled: bool,
+}
+
+impl Default for SkillConfig {
+    fn default() -> Self {
+        Self {
+            skills_dir: default_skills_dir(),
+            default_fuel: default_skill_fuel(),
+            default_memory_mb: default_skill_memory_mb(),
+            default_epoch_timeout_secs: default_skill_epoch_timeout(),
+            max_skills_in_prompt: default_max_skills_in_prompt(),
+            enabled: default_skill_enabled(),
+        }
+    }
+}
+
+fn default_skills_dir() -> String {
+    dirs::data_dir()
+        .map(|p| p.join("blufio").join("skills"))
+        .unwrap_or_else(|| std::path::PathBuf::from("skills"))
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn default_skill_fuel() -> u64 {
+    1_000_000_000
+}
+
+fn default_skill_memory_mb() -> u32 {
+    16
+}
+
+fn default_skill_epoch_timeout() -> u64 {
+    5
+}
+
+fn default_max_skills_in_prompt() -> usize {
+    20
+}
+
+fn default_skill_enabled() -> bool {
+    false
 }

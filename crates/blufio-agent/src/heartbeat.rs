@@ -215,6 +215,7 @@ Prefix your message with \"[Check-in] \" so the user knows this is proactive, no
             }],
             max_tokens: 256,
             stream: false,
+            tools: None,
         }
     }
 
