@@ -25,6 +25,7 @@ blufio-cost = { path = "../blufio-cost" }
 blufio-memory = { path = "../blufio-memory" }
 blufio-router = { path = "../blufio-router" }
 blufio-skill = { path = "../blufio-skill" }
+blufio-plugin = { path = "../blufio-plugin" }
 tokio-rusqlite.workspace = true
 clap.workspace = true
 rpassword.workspace = true
@@ -47,3 +48,4 @@ tikv-jemalloc-ctl = { workspace = true }
 [dev-dependencies]
 serde_json = "1"
 tempfile = "3"
+toml.workspace = true

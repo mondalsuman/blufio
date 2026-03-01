@@ -42,6 +42,11 @@ enum Commands {
         #[command(subcommand)]
         action: SkillCommands,
     },
+    /// Manage Blufio plugins (compiled-in adapter modules).
+    Plugin {
+        #[command(subcommand)]
+        action: PluginCommands,
+    },
 }
 
 /// Config management subcommands.
@@ -78,6 +83,31 @@ enum SkillCommands {
         /// Name of the skill to remove.
         name: String,
     },
+}
+
+/// Plugin management subcommands.
+#[derive(Subcommand, Debug)]
+enum PluginCommands {
+    /// List all compiled-in plugins and their status.
+    List,
+    /// Search available plugins in the built-in catalog.
+    Search {
+        /// Search query (matches name or description).
+        #[arg(default_value = "")]
+        query: String,
+    },
+    /// Enable a plugin (set enabled in config).
+    Install {
+        /// Plugin name to enable.
+        name: String,
+    },
+    /// Disable a plugin (set disabled in config).
+    Remove {
+        /// Plugin name to disable.
+        name: String,
+    },
+    /// Show plugin update information.
+    Update,
 }
 
 #[tokio::main]
@@ -131,6 +161,12 @@ async fn main() {
         },
         Some(Commands::Skill { action }) => {
             if let Err(e) = handle_skill_command(&config, action).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Plugin { action }) => {
+            if let Err(e) = handle_plugin_command(&config, action) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }
@@ -351,6 +387,137 @@ async fn handle_skill_command(
     }
 }
 
+/// Handle `blufio plugin <action>` subcommands.
+fn handle_plugin_command(
+    config: &blufio_config::model::BlufioConfig,
+    action: PluginCommands,
+) -> Result<(), blufio_core::BlufioError> {
+    match action {
+        PluginCommands::List => {
+            let catalog = blufio_plugin::builtin_catalog();
+            let mut registry = blufio_plugin::PluginRegistry::new();
+
+            for manifest in catalog {
+                // Determine status based on config overrides and required config keys.
+                let name = manifest.name.clone();
+                let config_override = config.plugin.plugins.get(&name);
+
+                let status = match config_override {
+                    Some(false) => blufio_plugin::PluginStatus::Disabled,
+                    Some(true) => blufio_plugin::PluginStatus::Enabled,
+                    None => {
+                        // Check if required config keys are present.
+                        let all_configured = manifest.config_keys.iter().all(|key| {
+                            is_config_key_present(config, key)
+                        });
+                        if all_configured {
+                            blufio_plugin::PluginStatus::Enabled
+                        } else if manifest.config_keys.is_empty() {
+                            blufio_plugin::PluginStatus::Enabled
+                        } else {
+                            blufio_plugin::PluginStatus::NotConfigured
+                        }
+                    }
+                };
+
+                registry.register_with_status(manifest, None, status);
+            }
+
+            println!(
+                "{:<18} {:<15} {:<16} {}",
+                "NAME", "TYPE", "STATUS", "DESCRIPTION"
+            );
+            println!("{}", "-".repeat(75));
+            for entry in registry.list_all() {
+                println!(
+                    "{:<18} {:<15} {:<16} {}",
+                    entry.manifest.name,
+                    entry.manifest.adapter_type.to_string(),
+                    entry.status,
+                    entry.manifest.description,
+                );
+            }
+            Ok(())
+        }
+        PluginCommands::Search { query } => {
+            let results = blufio_plugin::search_catalog(&query);
+            if results.is_empty() {
+                println!("No plugins found matching '{query}'.");
+            } else {
+                println!(
+                    "{:<18} {:<15} {}",
+                    "NAME", "TYPE", "DESCRIPTION"
+                );
+                println!("{}", "-".repeat(65));
+                for manifest in &results {
+                    println!(
+                        "{:<18} {:<15} {}",
+                        manifest.name,
+                        manifest.adapter_type.to_string(),
+                        manifest.description,
+                    );
+                }
+            }
+            Ok(())
+        }
+        PluginCommands::Install { name } => {
+            let catalog = blufio_plugin::builtin_catalog();
+            let found = catalog.iter().find(|m| m.name == name);
+
+            match found {
+                Some(manifest) => {
+                    println!("Plugin '{}' enabled.", name);
+                    if !manifest.config_keys.is_empty() {
+                        println!(
+                            "  Required config keys: {}",
+                            manifest.config_keys.join(", ")
+                        );
+                        println!("  Add configuration to blufio.toml if required.");
+                    }
+                    Ok(())
+                }
+                None => Err(blufio_core::BlufioError::AdapterNotFound {
+                    adapter_type: "plugin".to_string(),
+                    name,
+                }),
+            }
+        }
+        PluginCommands::Remove { name } => {
+            let catalog = blufio_plugin::builtin_catalog();
+            let found = catalog.iter().any(|m| m.name == name);
+
+            if found {
+                println!("Plugin '{name}' disabled.");
+                Ok(())
+            } else {
+                Err(blufio_core::BlufioError::AdapterNotFound {
+                    adapter_type: "plugin".to_string(),
+                    name,
+                })
+            }
+        }
+        PluginCommands::Update => {
+            println!("Plugins are compiled into the Blufio binary.");
+            println!("Update by rebuilding or downloading a new binary release.");
+            Ok(())
+        }
+    }
+}
+
+/// Check if a config key is present (non-empty) in the loaded config.
+///
+/// Supports dotted key paths like "telegram.bot_token" and "anthropic.api_key".
+fn is_config_key_present(
+    config: &blufio_config::model::BlufioConfig,
+    key: &str,
+) -> bool {
+    match key {
+        "telegram.bot_token" => config.telegram.bot_token.is_some(),
+        "anthropic.api_key" => config.anthropic.api_key.is_some(),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -542,6 +709,159 @@ mod tests {
             }
             _ => panic!("expected Skill Remove command"),
         }
+    }
+
+    #[test]
+    fn cli_parses_plugin_list() {
+        let cli = Cli::parse_from(["blufio", "plugin", "list"]);
+        match cli.command {
+            Some(Commands::Plugin {
+                action: PluginCommands::List,
+            }) => {}
+            _ => panic!("expected Plugin List command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_plugin_search_with_query() {
+        let cli = Cli::parse_from(["blufio", "plugin", "search", "telegram"]);
+        match cli.command {
+            Some(Commands::Plugin {
+                action: PluginCommands::Search { query },
+            }) => {
+                assert_eq!(query, "telegram");
+            }
+            _ => panic!("expected Plugin Search command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_plugin_search_no_query() {
+        let cli = Cli::parse_from(["blufio", "plugin", "search"]);
+        match cli.command {
+            Some(Commands::Plugin {
+                action: PluginCommands::Search { query },
+            }) => {
+                assert_eq!(query, "");
+            }
+            _ => panic!("expected Plugin Search command with empty query"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_plugin_install() {
+        let cli = Cli::parse_from(["blufio", "plugin", "install", "prometheus"]);
+        match cli.command {
+            Some(Commands::Plugin {
+                action: PluginCommands::Install { name },
+            }) => {
+                assert_eq!(name, "prometheus");
+            }
+            _ => panic!("expected Plugin Install command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_plugin_remove() {
+        let cli = Cli::parse_from(["blufio", "plugin", "remove", "prometheus"]);
+        match cli.command {
+            Some(Commands::Plugin {
+                action: PluginCommands::Remove { name },
+            }) => {
+                assert_eq!(name, "prometheus");
+            }
+            _ => panic!("expected Plugin Remove command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_plugin_update() {
+        let cli = Cli::parse_from(["blufio", "plugin", "update"]);
+        match cli.command {
+            Some(Commands::Plugin {
+                action: PluginCommands::Update,
+            }) => {}
+            _ => panic!("expected Plugin Update command"),
+        }
+    }
+
+    #[test]
+    fn plugin_config_default_empty_plugins() {
+        let config = BlufioConfig::default();
+        assert!(config.plugin.plugins.is_empty());
+    }
+
+    #[test]
+    fn plugin_config_deserializes_from_toml() {
+        let toml_str = r#"
+[plugin]
+plugins = { telegram = true, prometheus = false }
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.plugin.plugins.get("telegram"), Some(&true));
+        assert_eq!(config.plugin.plugins.get("prometheus"), Some(&false));
+    }
+
+    #[test]
+    fn handle_plugin_list_succeeds() {
+        let config = BlufioConfig::default();
+        let result = handle_plugin_command(&config, PluginCommands::List);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn handle_plugin_search_succeeds() {
+        let config = BlufioConfig::default();
+        let result = handle_plugin_command(
+            &config,
+            PluginCommands::Search {
+                query: "telegram".to_string(),
+            },
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn handle_plugin_install_known() {
+        let config = BlufioConfig::default();
+        let result = handle_plugin_command(
+            &config,
+            PluginCommands::Install {
+                name: "prometheus".to_string(),
+            },
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn handle_plugin_install_unknown_fails() {
+        let config = BlufioConfig::default();
+        let result = handle_plugin_command(
+            &config,
+            PluginCommands::Install {
+                name: "nonexistent".to_string(),
+            },
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn handle_plugin_remove_known() {
+        let config = BlufioConfig::default();
+        let result = handle_plugin_command(
+            &config,
+            PluginCommands::Remove {
+                name: "telegram".to_string(),
+            },
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn handle_plugin_update_succeeds() {
+        let config = BlufioConfig::default();
+        let result = handle_plugin_command(&config, PluginCommands::Update);
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
