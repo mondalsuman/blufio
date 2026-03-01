@@ -3,7 +3,10 @@
 
 //! Provider adapter trait for LLM provider integrations (Anthropic, OpenAI, etc.).
 
+use std::pin::Pin;
+
 use async_trait::async_trait;
+use futures_core::Stream;
 
 use crate::error::BlufioError;
 use crate::traits::adapter::PluginAdapter;
@@ -25,5 +28,8 @@ pub trait ProviderAdapter: PluginAdapter {
     async fn stream(
         &self,
         request: ProviderRequest,
-    ) -> Result<Box<dyn Iterator<Item = ProviderStreamChunk> + Send>, BlufioError>;
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>>,
+        BlufioError,
+    >;
 }

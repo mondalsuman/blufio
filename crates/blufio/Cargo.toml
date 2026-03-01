@@ -17,11 +17,22 @@ blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
 blufio-storage = { path = "../blufio-storage" }
 blufio-vault = { path = "../blufio-vault" }
+blufio-agent = { path = "../blufio-agent" }
+blufio-anthropic = { path = "../blufio-anthropic" }
+blufio-telegram = { path = "../blufio-telegram" }
 clap.workspace = true
 rpassword.workspace = true
 secrecy.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 tokio = { workspace = true, features = ["full"] }
+tokio-util.workspace = true
+rustyline.workspace = true
+colored.workspace = true
+futures.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+serde_json = "1"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { workspace = true }

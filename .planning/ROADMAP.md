@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Project Foundation & Workspace** - Cargo workspace, core traits, config system, build pipeline, licensing
 - [x] **Phase 2: Persistence & Security Vault** - SQLite WAL persistence, credential vault, security defaults
-- [ ] **Phase 3: Agent Loop & Telegram** - FSM agent loop, Anthropic provider, Telegram adapter, basic CLI
+- [x] **Phase 3: Agent Loop & Telegram** - FSM agent loop, Anthropic provider, Telegram adapter, basic CLI
 - [ ] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps
 - [ ] **Phase 5: Memory & Embeddings** - ONNX embedding model, semantic memory, hybrid search
 - [ ] **Phase 6: Model Routing & Smart Heartbeats** - Query complexity classification, Haiku/Sonnet/Opus routing
@@ -67,12 +67,12 @@ Plans:
   3. Conversations persist across restarts -- rebooting the agent and sending a follow-up message continues the prior conversation
   4. `blufio serve` starts the agent with zero-config defaults (Telegram + Anthropic + SQLite) and `blufio shell` provides an interactive REPL for testing
   5. Sending SIGTERM triggers graceful shutdown -- active sessions drain before exit, no messages are lost
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [x] 03-01-PLAN.md -- Core types extension + Anthropic provider with SSE streaming (Wave 1)
+- [x] 03-02-PLAN.md -- Telegram channel adapter with MarkdownV2, media, streaming, long polling (Wave 2)
+- [x] 03-03-PLAN.md -- Agent loop, session FSM, context assembly, graceful shutdown, serve + shell CLI (Wave 3)
 
 ### Phase 4: Context Engine & Cost Tracking
 **Goal**: The agent assembles prompts intelligently using three-zone context (static/conditional/dynamic) with Anthropic prompt cache alignment, tracks every token spent across all features, and enforces budget caps with kill switches
@@ -187,7 +187,7 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 |-------|----------------|--------|-----------|
 | 1. Project Foundation & Workspace | 2/2 | Complete | 2026-02-28 |
 | 2. Persistence & Security Vault | 2/2 | Complete | 2026-02-28 |
-| 3. Agent Loop & Telegram | 0/3 | Not started | - |
+| 3. Agent Loop & Telegram | 3/3 | Complete | 2026-03-01 |
 | 4. Context Engine & Cost Tracking | 0/2 | Not started | - |
 | 5. Memory & Embeddings | 0/2 | Not started | - |
 | 6. Model Routing & Smart Heartbeats | 0/1 | Not started | - |

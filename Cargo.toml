@@ -36,7 +36,14 @@ rpassword = "7"
 zeroize = { version = "1.8", features = ["derive"] }
 rand = "0.8"
 regex = "1"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"], default-features = false }
+tokio-util = { version = "0.7", features = ["rt"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rustyline = "14"
+colored = "2"
 
 [profile.release]
 lto = "thin"
