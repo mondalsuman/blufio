@@ -255,18 +255,22 @@ pub struct EmbeddingOutput {
     pub dimensions: usize,
 }
 
-// --- Auth placeholder types ---
+// --- Auth types ---
 
 /// An authentication token to be verified.
 #[derive(Debug, Clone)]
 pub struct AuthToken {
-    pub _placeholder: (),
+    /// The raw bearer token string.
+    pub token: String,
 }
 
 /// A verified identity from an auth adapter.
 #[derive(Debug, Clone)]
 pub struct AuthIdentity {
-    pub _placeholder: (),
+    /// Unique identifier for the authenticated entity.
+    pub id: String,
+    /// Human-readable label (e.g., device name).
+    pub label: Option<String>,
 }
 
 // --- Skill types ---
@@ -387,12 +391,29 @@ pub struct SkillResult {
     pub is_error: bool,
 }
 
-// --- Observability placeholder types ---
+// --- Observability types ---
 
 /// A metric or telemetry event.
 #[derive(Debug, Clone)]
-pub struct MetricEvent {
-    pub _placeholder: (),
+pub enum MetricEvent {
+    /// Increment a counter.
+    Counter {
+        name: String,
+        value: u64,
+        labels: Vec<(String, String)>,
+    },
+    /// Set a gauge value.
+    Gauge {
+        name: String,
+        value: f64,
+        labels: Vec<(String, String)>,
+    },
+    /// Record a histogram observation.
+    Histogram {
+        name: String,
+        value: f64,
+        labels: Vec<(String, String)>,
+    },
 }
 
 // --- Storage domain types ---

@@ -71,6 +71,10 @@ pub struct BlufioConfig {
     /// HTTP/WebSocket gateway settings.
     #[serde(default)]
     pub gateway: GatewayConfig,
+
+    /// Prometheus metrics settings.
+    #[serde(default)]
+    pub prometheus: PrometheusConfig,
 }
 
 
@@ -719,4 +723,27 @@ fn default_gateway_host() -> String {
 
 fn default_gateway_port() -> u16 {
     3000
+}
+
+/// Prometheus metrics configuration.
+///
+/// Controls Prometheus metrics collection and export via the gateway /metrics endpoint.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrometheusConfig {
+    /// Enable Prometheus metrics collection and export.
+    #[serde(default = "default_prometheus_enabled")]
+    pub enabled: bool,
+}
+
+impl Default for PrometheusConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_prometheus_enabled(),
+        }
+    }
+}
+
+fn default_prometheus_enabled() -> bool {
+    false
 }
