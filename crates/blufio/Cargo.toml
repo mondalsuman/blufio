@@ -12,20 +12,36 @@ description = "An always-on personal AI agent"
 name = "blufio"
 path = "src/main.rs"
 
+[features]
+default = ["telegram", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway"]
+telegram = ["dep:blufio-telegram"]
+anthropic = ["dep:blufio-anthropic"]
+sqlite = ["dep:blufio-storage"]
+onnx = []
+prometheus = ["dep:blufio-prometheus"]
+keypair = ["dep:blufio-auth-keypair"]
+gateway = ["dep:blufio-gateway"]
+
 [dependencies]
 blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
-blufio-storage = { path = "../blufio-storage" }
 blufio-vault = { path = "../blufio-vault" }
 blufio-agent = { path = "../blufio-agent" }
-blufio-anthropic = { path = "../blufio-anthropic" }
-blufio-telegram = { path = "../blufio-telegram" }
 blufio-context = { path = "../blufio-context" }
 blufio-cost = { path = "../blufio-cost" }
-blufio-memory = { path = "../blufio-memory" }
 blufio-router = { path = "../blufio-router" }
 blufio-skill = { path = "../blufio-skill" }
 blufio-plugin = { path = "../blufio-plugin" }
+
+# Optional adapter crates (controlled by feature flags).
+blufio-storage = { path = "../blufio-storage", optional = true }
+blufio-telegram = { path = "../blufio-telegram", optional = true }
+blufio-anthropic = { path = "../blufio-anthropic", optional = true }
+blufio-memory = { path = "../blufio-memory" }
+blufio-gateway = { path = "../blufio-gateway", optional = true }
+blufio-prometheus = { path = "../blufio-prometheus", optional = true }
+blufio-auth-keypair = { path = "../blufio-auth-keypair", optional = true }
+
 tokio-rusqlite.workspace = true
 clap.workspace = true
 rpassword.workspace = true

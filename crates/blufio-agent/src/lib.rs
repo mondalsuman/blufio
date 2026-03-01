@@ -10,6 +10,7 @@
 //! - Enforces budget caps and records costs
 //! - Handles graceful shutdown
 
+pub mod channel_mux;
 pub mod context;
 pub mod heartbeat;
 pub mod session;
@@ -33,6 +34,7 @@ use blufio_memory::{MemoryExtractor, MemoryProvider};
 use blufio_router::ModelRouter;
 use blufio_skill::ToolRegistry;
 
+pub use channel_mux::ChannelMultiplexer;
 pub use heartbeat::HeartbeatRunner;
 use futures::{Stream, StreamExt};
 use tokio_util::sync::CancellationToken;

@@ -17,6 +17,7 @@ blufio-memory = { path = "../blufio-memory" }
 blufio-router = { path = "../blufio-router" }
 blufio-skill = { path = "../blufio-skill" }
 async-trait.workspace = true
+semver.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "signal", "macros", "fs"] }
 tokio-util.workspace = true
 tracing.workspace = true

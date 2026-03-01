@@ -53,6 +53,7 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
         ContextEngine::new(&config.agent, &config.context).await?;
 
     // Initialize memory system (if enabled).
+    #[cfg(feature = "onnx")]
     let memory_provider: Option<MemoryProvider> = if config.memory.enabled {
         match initialize_memory(&config, &mut context_engine).await {
             Ok((mp, _extractor)) => {
@@ -67,6 +68,12 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     } else {
         info!("memory system disabled by configuration");
+        None
+    };
+
+    #[cfg(not(feature = "onnx"))]
+    let memory_provider: Option<MemoryProvider> = {
+        info!("memory system disabled (onnx feature not enabled)");
         None
     };
 
@@ -408,6 +415,7 @@ async fn handle_shell_message(
 /// retriever, provider, and extractor. Registers the provider with ContextEngine.
 ///
 /// Returns (MemoryProvider, MemoryExtractor) on success.
+#[allow(dead_code)]
 async fn initialize_memory(
     config: &BlufioConfig,
     context_engine: &mut ContextEngine,
