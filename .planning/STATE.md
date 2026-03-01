@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T10:35:55.287Z"
+last_updated: "2026-03-01T12:00:00.000Z"
 progress:
-  total_phases: 4
-  completed_phases: 3
-  total_plans: 10
-  completed_plans: 8
+  total_phases: 5
+  completed_phases: 4
+  total_plans: 13
+  completed_plans: 12
 ---
 
 # Project State
@@ -18,23 +18,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 4 complete -- Context engine, cost tracking, and integration all wired. Ready for Phase 5.
+**Current focus:** Phase 5 plans executed (memory & embeddings). All 3 plans complete. Phase not yet officially advanced.
 
 ## Current Position
 
-Phase: 4 of 10 (Context Engine & Cost Tracking) -- COMPLETE
-Plan: 3 of 3 in current phase (COMPLETE)
-Status: Phase 04 complete
-Last activity: 2026-03-01 -- Plan 04-03 complete (integration of context engine and cost tracking into agent loop)
+Phase: 4 of 10 (Context Engine & Cost Tracking) -- COMPLETE (phase pointer not advanced per --no-transition)
+Phase 5: Memory & Embeddings -- All 3 plans executed (05-01, 05-02, 05-03)
+Plan: 3 of 3 in Phase 5 (COMPLETE)
+Status: Phase 05 plans complete, pending official phase transition
+Last activity: 2026-03-01 -- Plan 05-03 complete (agent loop integration with memory system)
 
-Progress: [█████.....] 45%
+Progress: [██████....] 55%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 12
 - Average duration: ~18min
-- Total execution time: ~2.8 hours
+- Total execution time: ~3.8 hours
 
 **By Phase:**
 
@@ -44,10 +45,11 @@ Progress: [█████.....] 45%
 | 2 | 2/2 | 75min | 38min |
 | 3 | 3/3 | 45min | 15min |
 | 4 | 3/3 | 30min | 10min |
+| 5 | 3/3 | ~60min | ~20min |
 
 **Recent Trend:**
-- Last 5 plans: 03-02 (15min), 03-03 (20min), 04-01 (6min), 04-02 (13min), 04-03 (11min)
-- Trend: Phase 4 plans efficient due to established patterns and focused scope
+- Last 5 plans: 04-02 (13min), 04-03 (11min), 05-01 (25min), 05-02 (15min), 05-03 (15min)
+- Trend: Phase 5 plans moderate complexity due to ort API issues in 05-01; 05-02 and 05-03 smooth
 
 *Updated after each plan completion*
 
@@ -86,6 +88,13 @@ Recent decisions affecting current work:
 - [04-02]: CacheControlMarker::ephemeral() auto-applied on all Anthropic requests for prompt caching
 - [Phase 04-03]: CostLedger::open(path) for standalone DB connections in serve/shell
 - [Phase 04-03]: BudgetExhausted sends user-facing message via channel, not logged as error
+- [Phase 05-01]: ndarray 0.17 required for ort 2.0.0-rc.11 compatibility (0.16 breaks TensorArrayData)
+- [Phase 05-01]: ort features: std, ndarray, download-binaries, copy-dylibs, tls-native all required
+- [Phase 05-01]: storage_err helper function to avoid tokio_rusqlite type inference issues in store.rs
+- [Phase 05-02]: EmbeddingAdapter trait import required in scope for embed() method calls
+- [Phase 05-03]: MemoryProvider derives Clone (cheap Arc internals) instead of Arc wrapping to avoid orphan rules
+- [Phase 05-03]: MemoryStore opens separate SQLite connection to same DB to avoid contention
+- [Phase 05-03]: Idle extraction uses check-on-next-message pattern (not background timer)
 
 ### Pending Todos
 
@@ -93,12 +102,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Research]: ort 2.0 is release candidate (rc.11), not stable -- monitor for breaking changes before Phase 5
+- [Research]: ort 2.0 is release candidate (rc.11), not stable -- monitor for breaking changes
 - [Research]: WASM Component Model still evolving -- verify wasmtime 40.x security features during Phase 7 planning
-- [Research]: Embedding model (ONNX) performance on musl static builds not validated -- test during Phase 5
+- [Research]: Embedding model (ONNX) performance on musl static builds not validated -- test end-to-end
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 04-03-PLAN.md (integration of context engine and cost tracking into agent loop). Phase 4 complete. Ready for Phase 5.
+Stopped at: Completed Phase 5 plans (05-01, 05-02, 05-03). All memory system components built and integrated. Ready for Phase 6.
 Resume file: None

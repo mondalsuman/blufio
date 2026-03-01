@@ -100,11 +100,12 @@ Plans:
   2. Embedding inference runs locally via ONNX model with zero external API calls -- works fully offline for memory operations
   3. Memory retrieval uses hybrid search (vector similarity + BM25 keyword matching) and returns relevant results within 100ms
   4. Only memories with sufficient semantic similarity to the current turn are loaded into context -- irrelevant memories do not consume tokens
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [x] 05-01-PLAN.md -- ONNX embedder (OnnxEmbedder), SQLite memory store (MemoryStore), memory types, model manager (ModelManager)
+- [x] 05-02-PLAN.md -- Hybrid retriever (HybridRetriever with RRF fusion), LLM memory extractor (MemoryExtractor), ConditionalProvider (MemoryProvider)
+- [x] 05-03-PLAN.md -- Agent loop integration: startup init, ContextEngine registration, SessionActor memory query set/clear, idle extraction, cost tracking
 
 ### Phase 6: Model Routing & Smart Heartbeats
 **Goal**: The agent automatically routes queries to the appropriate Claude model (Haiku for simple, Sonnet for standard, Opus for complex) based on query complexity classification, and runs background heartbeats cheaply on Haiku
@@ -190,7 +191,7 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 2. Persistence & Security Vault | 2/2 | Complete | 2026-02-28 |
 | 3. Agent Loop & Telegram | 3/3 | Complete | 2026-03-01 |
 | 4. Context Engine & Cost Tracking | 1/3 | Complete    | 2026-03-01 |
-| 5. Memory & Embeddings | 0/2 | Not started | - |
+| 5. Memory & Embeddings | 3/3 | Complete | 2026-03-01 |
 | 6. Model Routing & Smart Heartbeats | 0/1 | Not started | - |
 | 7. WASM Skill Sandbox | 0/2 | Not started | - |
 | 8. Plugin System & Gateway | 0/2 | Not started | - |
