@@ -8,11 +8,17 @@
 //! on the skill's manifest -- a skill without network permission cannot call
 //! `http_request`.
 //!
+//! Capability-denied host functions trap (return `Err(wasmtime::Error)`) instead
+//! of returning error codes. This ensures the WASM execution halts immediately
+//! with a descriptive error, which is caught by the invoke() error handler and
+//! returned as a SkillResult with is_error=true.
+//!
 //! The [`Engine`] and compiled [`Module`]s are shared across invocations for
 //! efficiency (compilation happens once at load time).
 
 use std::collections::HashMap;
 
+use anyhow::anyhow;
 use blufio_core::BlufioError;
 use blufio_core::types::{SkillInvocation, SkillManifest, SkillResult};
 use tracing::{debug, info, warn};
@@ -20,7 +26,8 @@ use wasmtime::{Caller, Config, Engine, Linker, Memory, Module, Store};
 
 /// State stored in each wasmtime Store for a single skill invocation.
 struct SkillState {
-    /// The skill's manifest (for capability checks in future host function impls).
+    /// The skill's manifest (for capability checks in host function impls).
+    /// Accessed via caller.data() in host function closures during invocation.
     #[allow(dead_code)]
     manifest: SkillManifest,
     /// Accumulated log output from the skill.
@@ -208,6 +215,10 @@ impl WasmSkillRuntime {
                     format!(
                         "Skill '{skill_name}' exceeded wall-clock timeout ({timeout}s): {error_msg}"
                     )
+                } else if error_msg.contains("capability not permitted") {
+                    format!(
+                        "Skill '{skill_name}' capability denied: {error_msg}"
+                    )
                 } else {
                     format!("Skill '{skill_name}' execution error: {error_msg}")
                 };
@@ -240,8 +251,9 @@ impl WasmSkillRuntime {
 /// Defines capability-gated host functions in the linker.
 ///
 /// Each host function checks the skill's manifest capabilities before executing.
-/// Functions for capabilities the skill has not declared are defined but trap
-/// with "capability not permitted" on invocation.
+/// Functions for capabilities the skill has not declared trap with
+/// "capability not permitted" on invocation (via `Err(anyhow!(...))` which
+/// wasmtime converts to a wasm trap).
 fn define_host_functions(
     linker: &mut Linker<SkillState>,
     manifest: &SkillManifest,
@@ -319,77 +331,220 @@ fn define_host_functions(
         .map_err(linker_err)?;
 
     // --- http_request: capability-gated ---
+    // Traps if network capability is not declared. When permitted, makes a real
+    // HTTP request using reqwest (via tokio runtime handle) with domain validation
+    // and SSRF prevention. Stores response body in result_json, returns status code.
     let has_network = manifest.capabilities.network.is_some();
+    let allowed_domains: Vec<String> = manifest
+        .capabilities
+        .network
+        .as_ref()
+        .map(|n| n.domains.clone())
+        .unwrap_or_default();
     linker
         .func_wrap(
             "blufio",
             "http_request",
-            move |_caller: Caller<'_, SkillState>,
-                  _url_ptr: i32,
-                  _url_len: i32,
+            move |mut caller: Caller<'_, SkillState>,
+                  url_ptr: i32,
+                  url_len: i32,
                   _method: i32,
                   _body_ptr: i32,
                   _body_len: i32|
-                  -> i32 {
+                  -> Result<i32, wasmtime::Error> {
                 if !has_network {
                     warn!("skill attempted http_request without network capability");
-                    return -1; // Error: capability not permitted
+                    return Err(anyhow!("capability not permitted: skill lacks network permission").into());
                 }
-                // TODO: implement actual HTTP request via host in future iteration
-                // For now, return -1 to indicate not yet implemented
-                -1
+
+                let memory = match caller.get_export("memory") {
+                    Some(wasmtime::Extern::Memory(mem)) => mem,
+                    _ => return Err(anyhow!("WASM module has no exported memory").into()),
+                };
+
+                let url = match read_string_from_memory(&memory, &caller, url_ptr, url_len) {
+                    Some(u) => u,
+                    None => return Err(anyhow!("failed to read URL from WASM memory").into()),
+                };
+
+                // Validate URL domain against the manifest's allowed domains.
+                let parsed_url = reqwest::Url::parse(&url)
+                    .map_err(|e| anyhow!("invalid URL '{url}': {e}"))?;
+
+                if let Some(domain) = parsed_url.host_str() {
+                    if !allowed_domains.iter().any(|d| domain == d || domain.ends_with(&format!(".{d}"))) {
+                        return Err(anyhow!(
+                            "capability not permitted: domain '{domain}' not in allowed list {:?}",
+                            allowed_domains
+                        ).into());
+                    }
+                } else {
+                    return Err(anyhow!("URL has no host: {url}").into());
+                }
+
+                // SSRF prevention: block private/internal IPs.
+                if let Err(e) = blufio_security::ssrf::validate_url_host(&url) {
+                    return Err(anyhow!("SSRF blocked: {e}").into());
+                }
+
+                // Make the HTTP request using the tokio runtime handle.
+                // We are inside spawn_blocking, so Handle::current() is available.
+                let handle = tokio::runtime::Handle::current();
+                let response = handle.block_on(async {
+                    let client = reqwest::Client::new();
+                    client.get(&url).send().await
+                });
+
+                match response {
+                    Ok(resp) => {
+                        let status = resp.status().as_u16() as i32;
+                        let body = handle.block_on(async {
+                            resp.text().await.unwrap_or_default()
+                        });
+
+                        // Store the response body in result_json for the skill to access.
+                        caller.data_mut().result_json = Some(body);
+                        info!(url = %url, status = status, "WASM http_request completed");
+                        Ok(status)
+                    }
+                    Err(e) => {
+                        warn!(url = %url, error = %e, "WASM http_request failed");
+                        Err(anyhow!("HTTP request failed: {e}").into())
+                    }
+                }
             },
         )
         .map_err(linker_err)?;
 
     // --- read_file: capability-gated ---
+    // Traps if filesystem read capability is not declared. When permitted,
+    // reads file content, validates path against manifest's read paths,
+    // stores content in result_json, and returns content length.
     let has_fs_read = manifest
         .capabilities
         .filesystem
         .as_ref()
         .is_some_and(|f| !f.read.is_empty());
+    let read_paths: Vec<String> = manifest
+        .capabilities
+        .filesystem
+        .as_ref()
+        .map(|f| f.read.clone())
+        .unwrap_or_default();
     linker
         .func_wrap(
             "blufio",
             "read_file",
-            move |_caller: Caller<'_, SkillState>,
-                  _path_ptr: i32,
-                  _path_len: i32,
+            move |mut caller: Caller<'_, SkillState>,
+                  path_ptr: i32,
+                  path_len: i32,
                   _buf_ptr: i32,
                   _buf_len: i32|
-                  -> i32 {
+                  -> Result<i32, wasmtime::Error> {
                 if !has_fs_read {
                     warn!("skill attempted read_file without filesystem read capability");
-                    return -1;
+                    return Err(anyhow!("capability not permitted: skill lacks filesystem read permission").into());
                 }
-                // TODO: implement actual file read with path validation in future iteration
-                -1
+
+                let memory = match caller.get_export("memory") {
+                    Some(wasmtime::Extern::Memory(mem)) => mem,
+                    _ => return Err(anyhow!("WASM module has no exported memory").into()),
+                };
+
+                let path = match read_string_from_memory(&memory, &caller, path_ptr, path_len) {
+                    Some(p) => p,
+                    None => return Err(anyhow!("failed to read path from WASM memory").into()),
+                };
+
+                // Validate that the path starts with one of the manifest's read paths.
+                let path_allowed = read_paths.iter().any(|allowed| path.starts_with(allowed));
+                if !path_allowed {
+                    return Err(anyhow!(
+                        "capability not permitted: path '{}' not within allowed read paths {:?}",
+                        path, read_paths
+                    ).into());
+                }
+
+                // Read the file.
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => {
+                        let len = content.len() as i32;
+                        caller.data_mut().result_json = Some(content);
+                        info!(path = %path, len = len, "WASM read_file completed");
+                        Ok(len)
+                    }
+                    Err(e) => {
+                        Err(anyhow!("read_file failed for '{}': {}", path, e).into())
+                    }
+                }
             },
         )
         .map_err(linker_err)?;
 
     // --- write_file: capability-gated ---
+    // Traps if filesystem write capability is not declared. When permitted,
+    // reads data from WASM memory, validates path against manifest's write paths,
+    // writes to disk, and returns 0 on success.
     let has_fs_write = manifest
         .capabilities
         .filesystem
         .as_ref()
         .is_some_and(|f| !f.write.is_empty());
+    let write_paths: Vec<String> = manifest
+        .capabilities
+        .filesystem
+        .as_ref()
+        .map(|f| f.write.clone())
+        .unwrap_or_default();
     linker
         .func_wrap(
             "blufio",
             "write_file",
-            move |_caller: Caller<'_, SkillState>,
-                  _path_ptr: i32,
-                  _path_len: i32,
-                  _data_ptr: i32,
-                  _data_len: i32|
-                  -> i32 {
+            move |mut caller: Caller<'_, SkillState>,
+                  path_ptr: i32,
+                  path_len: i32,
+                  data_ptr: i32,
+                  data_len: i32|
+                  -> Result<i32, wasmtime::Error> {
                 if !has_fs_write {
                     warn!("skill attempted write_file without filesystem write capability");
-                    return -1;
+                    return Err(anyhow!("capability not permitted: skill lacks filesystem write permission").into());
                 }
-                // TODO: implement actual file write with path validation in future iteration
-                -1
+
+                let memory = match caller.get_export("memory") {
+                    Some(wasmtime::Extern::Memory(mem)) => mem,
+                    _ => return Err(anyhow!("WASM module has no exported memory").into()),
+                };
+
+                let path = match read_string_from_memory(&memory, &caller, path_ptr, path_len) {
+                    Some(p) => p,
+                    None => return Err(anyhow!("failed to read path from WASM memory").into()),
+                };
+
+                let data = match read_string_from_memory(&memory, &caller, data_ptr, data_len) {
+                    Some(d) => d,
+                    None => return Err(anyhow!("failed to read data from WASM memory").into()),
+                };
+
+                // Validate that the path starts with one of the manifest's write paths.
+                let path_allowed = write_paths.iter().any(|allowed| path.starts_with(allowed));
+                if !path_allowed {
+                    return Err(anyhow!(
+                        "capability not permitted: path '{}' not within allowed write paths {:?}",
+                        path, write_paths
+                    ).into());
+                }
+
+                // Write the file.
+                match std::fs::write(&path, data.as_bytes()) {
+                    Ok(()) => {
+                        info!(path = %path, len = data.len(), "WASM write_file completed");
+                        Ok(0)
+                    }
+                    Err(e) => {
+                        Err(anyhow!("write_file failed for '{}': {}", path, e).into())
+                    }
+                }
             },
         )
         .map_err(linker_err)?;
@@ -479,7 +634,7 @@ fn linker_err(e: anyhow::Error) -> BlufioError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blufio_core::types::SkillResources;
+    use blufio_core::types::{NetworkCapability, SkillCapabilities, SkillResources};
 
     #[test]
     fn sandbox_runtime_creates_successfully() {
@@ -679,7 +834,372 @@ mod tests {
         );
     }
 
-    /// Helper: create a test manifest.
+    #[tokio::test]
+    async fn sandbox_http_request_denied_produces_trap() {
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+
+        // Skill that calls http_request with no network capability.
+        // The host function should trap (not return -1).
+        let wat = r#"(module
+            (import "blufio" "http_request" (func $http_request (param i32 i32 i32 i32 i32) (result i32)))
+            (func (export "run")
+                ;; Write a URL "http://example.com" to memory at offset 0
+                (i32.store8 (i32.const 0) (i32.const 104))   ;; h
+                (i32.store8 (i32.const 1) (i32.const 116))   ;; t
+                (i32.store8 (i32.const 2) (i32.const 116))   ;; t
+                (i32.store8 (i32.const 3) (i32.const 112))   ;; p
+                (i32.store8 (i32.const 4) (i32.const 58))    ;; :
+                (i32.store8 (i32.const 5) (i32.const 47))    ;; /
+                (i32.store8 (i32.const 6) (i32.const 47))    ;; /
+                (i32.store8 (i32.const 7) (i32.const 101))   ;; e
+                (i32.store8 (i32.const 8) (i32.const 120))   ;; x
+                (i32.store8 (i32.const 9) (i32.const 97))    ;; a
+                (i32.store8 (i32.const 10) (i32.const 109))  ;; m
+                (i32.store8 (i32.const 11) (i32.const 112))  ;; p
+                (i32.store8 (i32.const 12) (i32.const 108))  ;; l
+                (i32.store8 (i32.const 13) (i32.const 101))  ;; e
+                (i32.store8 (i32.const 14) (i32.const 46))   ;; .
+                (i32.store8 (i32.const 15) (i32.const 99))   ;; c
+                (i32.store8 (i32.const 16) (i32.const 111))  ;; o
+                (i32.store8 (i32.const 17) (i32.const 109))  ;; m
+                ;; Call http_request(url_ptr=0, url_len=18, method=0, body_ptr=0, body_len=0)
+                (drop (call $http_request (i32.const 0) (i32.const 18) (i32.const 0) (i32.const 0) (i32.const 0)))
+            )
+            (memory (export "memory") 1)
+        )"#;
+        let wasm = wat::parse_str(wat).unwrap();
+
+        // Manifest with NO network capability.
+        let manifest = test_manifest();
+        runtime.load_skill(manifest, &wasm).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(result.is_error, "Expected error result, got: {}", result.content);
+        assert!(
+            result.content.contains("capability not permitted"),
+            "Expected 'capability not permitted' in error, got: {}",
+            result.content
+        );
+    }
+
+    #[tokio::test]
+    async fn sandbox_read_file_denied_produces_trap() {
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+
+        // Skill that calls read_file with no filesystem capability.
+        let wat = r#"(module
+            (import "blufio" "read_file" (func $read_file (param i32 i32 i32 i32) (result i32)))
+            (func (export "run")
+                ;; Write "/tmp/test" to memory at offset 0
+                (i32.store8 (i32.const 0) (i32.const 47))   ;; /
+                (i32.store8 (i32.const 1) (i32.const 116))  ;; t
+                (i32.store8 (i32.const 2) (i32.const 109))  ;; m
+                (i32.store8 (i32.const 3) (i32.const 112))  ;; p
+                (i32.store8 (i32.const 4) (i32.const 47))   ;; /
+                (i32.store8 (i32.const 5) (i32.const 116))  ;; t
+                (i32.store8 (i32.const 6) (i32.const 101))  ;; e
+                (i32.store8 (i32.const 7) (i32.const 115))  ;; s
+                (i32.store8 (i32.const 8) (i32.const 116))  ;; t
+                ;; Call read_file(path_ptr=0, path_len=9, buf_ptr=0, buf_len=0)
+                (drop (call $read_file (i32.const 0) (i32.const 9) (i32.const 0) (i32.const 0)))
+            )
+            (memory (export "memory") 1)
+        )"#;
+        let wasm = wat::parse_str(wat).unwrap();
+
+        // Manifest with NO filesystem capability.
+        let manifest = test_manifest();
+        runtime.load_skill(manifest, &wasm).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(result.is_error, "Expected error result, got: {}", result.content);
+        assert!(
+            result.content.contains("capability not permitted"),
+            "Expected 'capability not permitted' in error, got: {}",
+            result.content
+        );
+    }
+
+    #[tokio::test]
+    async fn sandbox_write_file_denied_produces_trap() {
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+
+        // Skill that calls write_file with no filesystem capability.
+        let wat = r#"(module
+            (import "blufio" "write_file" (func $write_file (param i32 i32 i32 i32) (result i32)))
+            (func (export "run")
+                ;; Write "/tmp/out" to memory at offset 0
+                (i32.store8 (i32.const 0) (i32.const 47))   ;; /
+                (i32.store8 (i32.const 1) (i32.const 116))  ;; t
+                (i32.store8 (i32.const 2) (i32.const 109))  ;; m
+                (i32.store8 (i32.const 3) (i32.const 112))  ;; p
+                (i32.store8 (i32.const 4) (i32.const 47))   ;; /
+                (i32.store8 (i32.const 5) (i32.const 111))  ;; o
+                (i32.store8 (i32.const 6) (i32.const 117))  ;; u
+                (i32.store8 (i32.const 7) (i32.const 116))  ;; t
+                ;; Write "hi" to memory at offset 100
+                (i32.store8 (i32.const 100) (i32.const 104))  ;; h
+                (i32.store8 (i32.const 101) (i32.const 105))  ;; i
+                ;; Call write_file(path_ptr=0, path_len=8, data_ptr=100, data_len=2)
+                (drop (call $write_file (i32.const 0) (i32.const 8) (i32.const 100) (i32.const 2)))
+            )
+            (memory (export "memory") 1)
+        )"#;
+        let wasm = wat::parse_str(wat).unwrap();
+
+        // Manifest with NO filesystem capability.
+        let manifest = test_manifest();
+        runtime.load_skill(manifest, &wasm).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(result.is_error, "Expected error result, got: {}", result.content);
+        assert!(
+            result.content.contains("capability not permitted"),
+            "Expected 'capability not permitted' in error, got: {}",
+            result.content
+        );
+    }
+
+    #[tokio::test]
+    async fn sandbox_read_file_with_permission_reads_real_file() {
+        use blufio_core::types::FilesystemCapability;
+
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+
+        // Create a temporary file to read.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        std::fs::write(&test_file, "hello from file").unwrap();
+
+        let file_path = test_file.to_str().unwrap();
+        let dir_path = temp_dir.path().to_str().unwrap();
+
+        // Build WAT that writes the file path to memory and calls read_file.
+        let path_bytes: Vec<u8> = file_path.as_bytes().to_vec();
+        let mut store_instrs = String::new();
+        for (i, &b) in path_bytes.iter().enumerate() {
+            store_instrs.push_str(&format!(
+                "                (i32.store8 (i32.const {i}) (i32.const {b}))\n"
+            ));
+        }
+
+        let wat = format!(
+            r#"(module
+            (import "blufio" "read_file" (func $read_file (param i32 i32 i32 i32) (result i32)))
+            (func (export "run")
+{store_instrs}                ;; Call read_file(path_ptr=0, path_len={path_len}, buf_ptr=0, buf_len=0)
+                (drop (call $read_file (i32.const 0) (i32.const {path_len}) (i32.const 0) (i32.const 0)))
+            )
+            (memory (export "memory") 1)
+        )"#,
+            path_len = path_bytes.len(),
+        );
+        let wasm = wat::parse_str(&wat).unwrap();
+
+        // Manifest WITH filesystem read capability.
+        let mut manifest = test_manifest();
+        manifest.capabilities.filesystem = Some(FilesystemCapability {
+            read: vec![dir_path.to_string()],
+            write: vec![],
+        });
+
+        runtime.load_skill(manifest, &wasm).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(!result.is_error, "Unexpected error: {}", result.content);
+        assert_eq!(result.content, "hello from file");
+    }
+
+    #[tokio::test]
+    async fn sandbox_write_file_with_permission_writes_real_file() {
+        use blufio_core::types::FilesystemCapability;
+
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+
+        // Create a temporary directory for writing.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let test_file = temp_dir.path().join("output.txt");
+        let file_path = test_file.to_str().unwrap();
+        let dir_path = temp_dir.path().to_str().unwrap();
+
+        // Build WAT that writes the file path and data to memory, then calls write_file.
+        let path_bytes: Vec<u8> = file_path.as_bytes().to_vec();
+        let data_bytes: Vec<u8> = b"written by wasm".to_vec();
+        let data_offset = 200; // Put data at offset 200 to avoid overlap with path
+
+        let mut store_instrs = String::new();
+        for (i, &b) in path_bytes.iter().enumerate() {
+            store_instrs.push_str(&format!(
+                "                (i32.store8 (i32.const {i}) (i32.const {b}))\n"
+            ));
+        }
+        for (i, &b) in data_bytes.iter().enumerate() {
+            store_instrs.push_str(&format!(
+                "                (i32.store8 (i32.const {}) (i32.const {b}))\n",
+                data_offset + i
+            ));
+        }
+
+        let wat = format!(
+            r#"(module
+            (import "blufio" "write_file" (func $write_file (param i32 i32 i32 i32) (result i32)))
+            (func (export "run")
+{store_instrs}                ;; Call write_file(path_ptr=0, path_len={path_len}, data_ptr={data_offset}, data_len={data_len})
+                (drop (call $write_file (i32.const 0) (i32.const {path_len}) (i32.const {data_offset}) (i32.const {data_len})))
+            )
+            (memory (export "memory") 1)
+        )"#,
+            path_len = path_bytes.len(),
+            data_len = data_bytes.len(),
+        );
+        let wasm = wat::parse_str(&wat).unwrap();
+
+        // Manifest WITH filesystem write capability.
+        let mut manifest = test_manifest();
+        manifest.capabilities.filesystem = Some(FilesystemCapability {
+            read: vec![],
+            write: vec![dir_path.to_string()],
+        });
+
+        runtime.load_skill(manifest, &wasm).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(!result.is_error, "Unexpected error: {}", result.content);
+
+        // Verify the file was written.
+        let content = std::fs::read_to_string(&test_file).unwrap();
+        assert_eq!(content, "written by wasm");
+    }
+
+    #[tokio::test]
+    async fn sandbox_read_file_outside_allowed_path_traps() {
+        use blufio_core::types::FilesystemCapability;
+
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+
+        // Create a temporary file to read.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let test_file = temp_dir.path().join("secret.txt");
+        std::fs::write(&test_file, "secret data").unwrap();
+
+        let file_path = test_file.to_str().unwrap();
+
+        // Build WAT that tries to read a file.
+        let path_bytes: Vec<u8> = file_path.as_bytes().to_vec();
+        let mut store_instrs = String::new();
+        for (i, &b) in path_bytes.iter().enumerate() {
+            store_instrs.push_str(&format!(
+                "                (i32.store8 (i32.const {i}) (i32.const {b}))\n"
+            ));
+        }
+
+        let wat = format!(
+            r#"(module
+            (import "blufio" "read_file" (func $read_file (param i32 i32 i32 i32) (result i32)))
+            (func (export "run")
+{store_instrs}                (drop (call $read_file (i32.const 0) (i32.const {path_len}) (i32.const 0) (i32.const 0)))
+            )
+            (memory (export "memory") 1)
+        )"#,
+            path_len = path_bytes.len(),
+        );
+        let wasm = wat::parse_str(&wat).unwrap();
+
+        // Manifest WITH filesystem read capability but for a DIFFERENT path.
+        let mut manifest = test_manifest();
+        manifest.capabilities.filesystem = Some(FilesystemCapability {
+            read: vec!["/some/other/path".to_string()],
+            write: vec![],
+        });
+
+        runtime.load_skill(manifest, &wasm).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(result.is_error, "Expected error, got: {}", result.content);
+        assert!(
+            result.content.contains("capability not permitted"),
+            "Expected path validation error, got: {}",
+            result.content
+        );
+    }
+
+    #[tokio::test]
+    async fn sandbox_http_request_domain_not_allowed_traps() {
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+
+        // Skill that calls http_request with a URL whose domain is not in the allowlist.
+        let wat = r#"(module
+            (import "blufio" "http_request" (func $http_request (param i32 i32 i32 i32 i32) (result i32)))
+            (func (export "run")
+                ;; Write "http://evil.com" to memory at offset 0
+                (i32.store8 (i32.const 0) (i32.const 104))   ;; h
+                (i32.store8 (i32.const 1) (i32.const 116))   ;; t
+                (i32.store8 (i32.const 2) (i32.const 116))   ;; t
+                (i32.store8 (i32.const 3) (i32.const 112))   ;; p
+                (i32.store8 (i32.const 4) (i32.const 58))    ;; :
+                (i32.store8 (i32.const 5) (i32.const 47))    ;; /
+                (i32.store8 (i32.const 6) (i32.const 47))    ;; /
+                (i32.store8 (i32.const 7) (i32.const 101))   ;; e
+                (i32.store8 (i32.const 8) (i32.const 118))   ;; v
+                (i32.store8 (i32.const 9) (i32.const 105))   ;; i
+                (i32.store8 (i32.const 10) (i32.const 108))  ;; l
+                (i32.store8 (i32.const 11) (i32.const 46))   ;; .
+                (i32.store8 (i32.const 12) (i32.const 99))   ;; c
+                (i32.store8 (i32.const 13) (i32.const 111))  ;; o
+                (i32.store8 (i32.const 14) (i32.const 109))  ;; m
+                ;; Call http_request(url_ptr=0, url_len=15, method=0, body_ptr=0, body_len=0)
+                (drop (call $http_request (i32.const 0) (i32.const 15) (i32.const 0) (i32.const 0) (i32.const 0)))
+            )
+            (memory (export "memory") 1)
+        )"#;
+        let wasm = wat::parse_str(wat).unwrap();
+
+        // Manifest WITH network capability but only for "api.example.com".
+        let mut manifest = test_manifest();
+        manifest.capabilities.network = Some(NetworkCapability {
+            domains: vec!["api.example.com".to_string()],
+        });
+
+        runtime.load_skill(manifest, &wasm).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(result.is_error, "Expected error result, got: {}", result.content);
+        assert!(
+            result.content.contains("capability not permitted") || result.content.contains("not in allowed list"),
+            "Expected domain validation error, got: {}",
+            result.content
+        );
+    }
+
+    /// Helper: create a test manifest with no capabilities.
     fn test_manifest() -> SkillManifest {
         SkillManifest {
             name: "test-skill".to_string(),
