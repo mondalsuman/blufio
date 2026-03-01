@@ -1,0 +1,33 @@
+[package]
+name = "blufio-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Long-term memory system with ONNX embeddings and hybrid search for Blufio"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-context = { path = "../blufio-context" }
+blufio-storage = { path = "../blufio-storage" }
+blufio-config = { path = "../blufio-config" }
+ort.workspace = true
+tokenizers.workspace = true
+ndarray.workspace = true
+async-trait.workspace = true
+tokio = { workspace = true, features = ["fs", "sync"] }
+tokio-rusqlite.workspace = true
+rusqlite.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json = "1"
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+semver.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"

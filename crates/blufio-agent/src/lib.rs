@@ -26,6 +26,7 @@ use blufio_core::types::{
     InboundMessage, OutboundMessage, Session, StreamEventType, TokenUsage,
 };
 use blufio_core::{ChannelAdapter, ProviderAdapter, StorageAdapter};
+use blufio_memory::{MemoryExtractor, MemoryProvider};
 use futures::StreamExt;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -43,12 +44,17 @@ pub struct AgentLoop {
     context_engine: Arc<ContextEngine>,
     cost_ledger: Arc<CostLedger>,
     budget_tracker: Arc<tokio::sync::Mutex<BudgetTracker>>,
+    /// Memory provider for setting current query before context assembly.
+    memory_provider: Option<MemoryProvider>,
+    /// Memory extractor for end-of-conversation fact extraction.
+    memory_extractor: Option<Arc<MemoryExtractor>>,
     config: BlufioConfig,
     sessions: HashMap<String, SessionActor>,
 }
 
 impl AgentLoop {
     /// Creates a new agent loop with the given adapters, context engine, and cost components.
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         channel: Box<dyn ChannelAdapter + Send + Sync>,
         provider: Arc<dyn ProviderAdapter + Send + Sync>,
@@ -56,6 +62,8 @@ impl AgentLoop {
         context_engine: Arc<ContextEngine>,
         cost_ledger: Arc<CostLedger>,
         budget_tracker: Arc<tokio::sync::Mutex<BudgetTracker>>,
+        memory_provider: Option<MemoryProvider>,
+        memory_extractor: Option<Arc<MemoryExtractor>>,
         config: BlufioConfig,
     ) -> Result<Self, BlufioError> {
         info!(
@@ -70,6 +78,8 @@ impl AgentLoop {
             context_engine,
             cost_ledger,
             budget_tracker,
+            memory_provider,
+            memory_extractor,
             config,
             sessions: HashMap::new(),
         })
@@ -342,9 +352,12 @@ impl AgentLoop {
                     self.context_engine.clone(),
                     self.budget_tracker.clone(),
                     self.cost_ledger.clone(),
+                    self.memory_provider.as_ref().cloned(),
+                    self.memory_extractor.clone(),
                     channel.to_string(),
                     self.config.anthropic.default_model.clone(),
                     self.config.anthropic.max_tokens,
+                    self.config.memory.idle_timeout_secs,
                 );
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
@@ -382,9 +395,12 @@ impl AgentLoop {
             self.context_engine.clone(),
             self.budget_tracker.clone(),
             self.cost_ledger.clone(),
+            self.memory_provider.as_ref().cloned(),
+            self.memory_extractor.clone(),
             channel.to_string(),
             self.config.anthropic.default_model.clone(),
             self.config.anthropic.max_tokens,
+            self.config.memory.idle_timeout_secs,
         );
         self.sessions.insert(session_key, actor);
 

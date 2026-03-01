@@ -7,6 +7,7 @@
 //! SQLite storage, three-zone context engine, and cost tracking.
 //! Installs signal handlers for graceful shutdown.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use blufio_agent::AgentLoop;
@@ -17,9 +18,10 @@ use blufio_context::ContextEngine;
 use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::{ChannelAdapter, StorageAdapter};
+use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
 use blufio_storage::SqliteStorage;
 use blufio_telegram::TelegramChannel;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// Runs the `blufio serve` command.
 ///
@@ -51,9 +53,24 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     ));
 
     // Initialize context engine.
-    let context_engine = Arc::new(
-        ContextEngine::new(&config.agent, &config.context).await?
-    );
+    let mut context_engine =
+        ContextEngine::new(&config.agent, &config.context).await?;
+
+    // Initialize memory system (if enabled).
+    let (memory_provider, memory_extractor) = if config.memory.enabled {
+        match initialize_memory(&config, &mut context_engine).await {
+            Ok((mp, me)) => (Some(mp), Some(me)),
+            Err(e) => {
+                warn!(error = %e, "memory system initialization failed, continuing without memory");
+                (None, None)
+            }
+        }
+    } else {
+        info!("memory system disabled by configuration");
+        (None, None)
+    };
+
+    let context_engine = Arc::new(context_engine);
 
     // Initialize Anthropic provider.
     let provider = AnthropicProvider::new(&config).await.map_err(|e| {
@@ -89,6 +106,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         context_engine,
         cost_ledger,
         budget_tracker,
+        memory_provider,
+        memory_extractor,
         config,
     )
     .await?;
@@ -119,6 +138,60 @@ async fn mark_stale_sessions(
         }
     }
     Ok(())
+}
+
+/// Initializes the memory system: downloads model, creates embedder, store,
+/// retriever, provider, and extractor. Registers the provider with ContextEngine.
+///
+/// Returns (MemoryProvider, MemoryExtractor) on success.
+async fn initialize_memory(
+    config: &BlufioConfig,
+    context_engine: &mut ContextEngine,
+) -> Result<(MemoryProvider, Arc<MemoryExtractor>), BlufioError> {
+    // Determine data directory (parent of the database path).
+    let db_path = PathBuf::from(&config.storage.database_path);
+    let data_dir = db_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    // Download model on first run.
+    let model_manager = ModelManager::new(data_dir);
+    info!("ensuring embedding model is available...");
+    let model_path = model_manager.ensure_model().await?;
+    info!(path = %model_path.display(), "embedding model ready");
+
+    // Create ONNX embedder.
+    let embedder = Arc::new(OnnxEmbedder::new(&model_path)?);
+
+    // Create memory store (opens its own connection to the same DB).
+    let memory_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
+        .await
+        .map_err(|e| BlufioError::Storage {
+            source: Box::new(e),
+        })?;
+    let memory_store = Arc::new(MemoryStore::new(memory_conn));
+
+    // Create hybrid retriever.
+    let retriever = Arc::new(HybridRetriever::new(
+        memory_store.clone(),
+        embedder.clone(),
+        config.memory.clone(),
+    ));
+
+    // Create memory provider and register with context engine.
+    let memory_provider = MemoryProvider::new(retriever);
+    context_engine.add_conditional_provider(Box::new(memory_provider.clone()));
+
+    // Create memory extractor.
+    let extractor = Arc::new(MemoryExtractor::new(
+        memory_store,
+        embedder,
+        config.memory.extraction_model.clone(),
+    ));
+
+    info!("memory system initialized");
+    Ok((memory_provider, extractor))
 }
 
 /// Initializes the tracing subscriber with the given log level.

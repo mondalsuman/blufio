@@ -7,6 +7,7 @@
 //! and readline history. Uses the three-zone context engine and records
 //! costs for every LLM call. Creates a new session per invocation.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use blufio_anthropic::AnthropicProvider;
@@ -19,12 +20,13 @@ use blufio_core::types::{
     InboundMessage, Message, MessageContent, Session, StreamEventType, TokenUsage,
 };
 use blufio_core::{ProviderAdapter, StorageAdapter};
+use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
 use blufio_storage::SqliteStorage;
 use colored::Colorize;
 use futures::StreamExt;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Runs the `blufio shell` interactive REPL.
 ///
@@ -46,9 +48,28 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
         })?);
 
     // Initialize context engine.
-    let context_engine = Arc::new(
-        ContextEngine::new(&config.agent, &config.context).await?
-    );
+    let mut context_engine =
+        ContextEngine::new(&config.agent, &config.context).await?;
+
+    // Initialize memory system (if enabled).
+    let memory_provider: Option<MemoryProvider> = if config.memory.enabled {
+        match initialize_memory(&config, &mut context_engine).await {
+            Ok((mp, _extractor)) => {
+                // Shell mode uses the provider for retrieval; extractor is used
+                // inline below for explicit commands.
+                Some(mp)
+            }
+            Err(e) => {
+                warn!(error = %e, "memory system initialization failed, continuing without memory");
+                None
+            }
+        }
+    } else {
+        info!("memory system disabled by configuration");
+        None
+    };
+
+    let context_engine = Arc::new(context_engine);
 
     // Initialize cost ledger.
     let cost_ledger = Arc::new(
@@ -106,9 +127,11 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
                     &context_engine,
                     &cost_ledger,
                     &budget_tracker,
+                    memory_provider.as_ref(),
                     &session_id,
                     trimmed,
                 )
+
                 .await
                 {
                     match &e {
@@ -165,6 +188,7 @@ async fn handle_shell_message(
     context_engine: &ContextEngine,
     cost_ledger: &CostLedger,
     budget_tracker: &tokio::sync::Mutex<BudgetTracker>,
+    memory_provider: Option<&MemoryProvider>,
     session_id: &str,
     input: &str,
 ) -> Result<(), BlufioError> {
@@ -187,6 +211,11 @@ async fn handle_shell_message(
     };
     storage.insert_message(&user_msg).await?;
 
+    // Set current query on memory provider for retrieval.
+    if let Some(mp) = memory_provider {
+        mp.set_current_query(session_id, input).await;
+    }
+
     // Create InboundMessage for context assembly.
     let inbound = InboundMessage {
         id: uuid::Uuid::new_v4().to_string(),
@@ -207,7 +236,14 @@ async fn handle_shell_message(
         &config.anthropic.default_model,
         config.anthropic.max_tokens,
     )
-    .await?;
+    .await;
+
+    // Clear current query on memory provider (regardless of assembly outcome).
+    if let Some(mp) = memory_provider {
+        mp.clear_current_query(session_id).await;
+    }
+
+    let assembled = assembled?;
 
     // Record compaction costs if compaction was triggered.
     if let Some(ref compaction_usage) = assembled.compaction_usage {
@@ -323,4 +359,58 @@ async fn handle_shell_message(
     }
 
     Ok(())
+}
+
+/// Initializes the memory system: downloads model, creates embedder, store,
+/// retriever, provider, and extractor. Registers the provider with ContextEngine.
+///
+/// Returns (MemoryProvider, MemoryExtractor) on success.
+async fn initialize_memory(
+    config: &BlufioConfig,
+    context_engine: &mut ContextEngine,
+) -> Result<(MemoryProvider, Arc<MemoryExtractor>), BlufioError> {
+    // Determine data directory (parent of the database path).
+    let db_path = PathBuf::from(&config.storage.database_path);
+    let data_dir = db_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    // Download model on first run.
+    let model_manager = ModelManager::new(data_dir);
+    info!("ensuring embedding model is available...");
+    let model_path = model_manager.ensure_model().await?;
+    info!(path = %model_path.display(), "embedding model ready");
+
+    // Create ONNX embedder.
+    let embedder = Arc::new(OnnxEmbedder::new(&model_path)?);
+
+    // Create memory store (opens its own connection to the same DB).
+    let memory_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
+        .await
+        .map_err(|e| BlufioError::Storage {
+            source: Box::new(e),
+        })?;
+    let memory_store = Arc::new(MemoryStore::new(memory_conn));
+
+    // Create hybrid retriever.
+    let retriever = Arc::new(HybridRetriever::new(
+        memory_store.clone(),
+        embedder.clone(),
+        config.memory.clone(),
+    ));
+
+    // Create memory provider and register with context engine.
+    let memory_provider = MemoryProvider::new(retriever);
+    context_engine.add_conditional_provider(Box::new(memory_provider.clone()));
+
+    // Create memory extractor.
+    let extractor = Arc::new(MemoryExtractor::new(
+        memory_store,
+        embedder,
+        config.memory.extraction_model.clone(),
+    ));
+
+    info!("memory system initialized");
+    Ok((memory_provider, extractor))
 }

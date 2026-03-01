@@ -44,6 +44,9 @@ futures = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rustyline = "14"
 colored = "2"
+ort = { version = "=2.0.0-rc.11", default-features = false, features = ["std", "ndarray", "download-binaries", "copy-dylibs", "tls-native"] }
+tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
+ndarray = "0.17"
 
 [profile.release]
 lto = "thin"
