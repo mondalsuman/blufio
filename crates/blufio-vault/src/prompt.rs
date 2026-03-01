@@ -79,8 +79,10 @@ pub fn get_vault_passphrase_with_confirm() -> Result<SecretString, BlufioError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn get_passphrase_from_env_var() {
         // SAFETY: test-only env mutation. Tests using env vars must not run in parallel.
         unsafe { std::env::set_var(VAULT_KEY_ENV_VAR, "test-passphrase") };
@@ -91,6 +93,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn get_passphrase_with_confirm_from_env_var() {
         unsafe { std::env::set_var(VAULT_KEY_ENV_VAR, "test-passphrase") };
         let result = get_vault_passphrase_with_confirm();
@@ -100,6 +103,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn empty_env_var_is_rejected() {
         unsafe { std::env::set_var(VAULT_KEY_ENV_VAR, "") };
         // In CI/test, stdin is not a terminal, so this will fail.

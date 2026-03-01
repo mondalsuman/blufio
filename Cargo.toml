@@ -57,6 +57,7 @@ metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 hex = "0.4"
+serial_test = "3"
 
 [profile.release]
 lto = "thin"
