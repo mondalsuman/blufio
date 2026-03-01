@@ -7,6 +7,7 @@
 //! config keys at startup, providing actionable error messages.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Top-level Blufio configuration.
 ///
@@ -62,6 +63,18 @@ pub struct BlufioConfig {
     /// WASM skill sandbox settings.
     #[serde(default)]
     pub skill: SkillConfig,
+
+    /// Plugin system settings.
+    #[serde(default)]
+    pub plugin: PluginConfig,
+
+    /// HTTP/WebSocket gateway settings.
+    #[serde(default)]
+    pub gateway: GatewayConfig,
+
+    /// Prometheus metrics settings.
+    #[serde(default)]
+    pub prometheus: PrometheusConfig,
 }
 
 
@@ -643,5 +656,94 @@ fn default_max_skills_in_prompt() -> usize {
 }
 
 fn default_skill_enabled() -> bool {
+    false
+}
+
+/// Plugin system configuration.
+///
+/// Controls which compiled-in adapters are enabled/disabled.
+/// Each entry in the `plugins` map overrides the default enabled state.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PluginConfig {
+    /// Per-plugin enable/disable overrides.
+    /// Key: plugin name (e.g., "telegram", "anthropic").
+    /// Value: true = enabled, false = disabled.
+    #[serde(default)]
+    pub plugins: HashMap<String, bool>,
+}
+
+impl Default for PluginConfig {
+    fn default() -> Self {
+        Self {
+            plugins: HashMap::new(),
+        }
+    }
+}
+
+/// HTTP/WebSocket gateway configuration.
+///
+/// Controls the API gateway server for programmatic access alongside
+/// channel-based messaging (e.g., Telegram).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayConfig {
+    /// Enable the HTTP/WebSocket gateway.
+    #[serde(default = "default_gateway_enabled")]
+    pub enabled: bool,
+    /// Host address to bind the gateway server.
+    #[serde(default = "default_gateway_host")]
+    pub host: String,
+    /// Port for the gateway server.
+    #[serde(default = "default_gateway_port")]
+    pub port: u16,
+    /// Bearer token for API authentication. If empty, auth is disabled.
+    #[serde(default)]
+    pub bearer_token: Option<String>,
+}
+
+impl Default for GatewayConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_gateway_enabled(),
+            host: default_gateway_host(),
+            port: default_gateway_port(),
+            bearer_token: None,
+        }
+    }
+}
+
+fn default_gateway_enabled() -> bool {
+    false
+}
+
+fn default_gateway_host() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_gateway_port() -> u16 {
+    3000
+}
+
+/// Prometheus metrics configuration.
+///
+/// Controls Prometheus metrics collection and export via the gateway /metrics endpoint.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrometheusConfig {
+    /// Enable Prometheus metrics collection and export.
+    #[serde(default = "default_prometheus_enabled")]
+    pub enabled: bool,
+}
+
+impl Default for PrometheusConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_prometheus_enabled(),
+        }
+    }
+}
+
+fn default_prometheus_enabled() -> bool {
     false
 }

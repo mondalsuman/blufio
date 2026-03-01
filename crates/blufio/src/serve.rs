@@ -3,43 +3,95 @@
 
 //! `blufio serve` command implementation.
 //!
-//! Starts the full Blufio agent with Telegram channel, Anthropic provider,
-//! SQLite storage, three-zone context engine, and cost tracking.
-//! Installs signal handlers for graceful shutdown.
+//! Starts the full Blufio agent with configured channel adapters, Anthropic
+//! provider, SQLite storage, three-zone context engine, and cost tracking.
+//! Uses the PluginRegistry to discover and initialize compiled-in adapters,
+//! and the ChannelMultiplexer to aggregate multiple channels.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use blufio_agent::{AgentLoop, HeartbeatRunner};
+use blufio_agent::{AgentLoop, ChannelMultiplexer, HeartbeatRunner};
 use blufio_agent::shutdown;
-use blufio_anthropic::AnthropicProvider;
 use blufio_config::model::BlufioConfig;
 use blufio_context::ContextEngine;
 use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::{ChannelAdapter, StorageAdapter};
-use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
+use blufio_plugin::{PluginRegistry, PluginStatus, builtin_catalog};
 use blufio_router::ModelRouter;
 use blufio_skill::{SkillProvider, ToolRegistry};
-use blufio_storage::SqliteStorage;
-use blufio_telegram::TelegramChannel;
 use tracing::{debug, error, info, warn};
+
+#[cfg(feature = "anthropic")]
+use blufio_anthropic::AnthropicProvider;
+
+#[cfg(feature = "sqlite")]
+use blufio_storage::SqliteStorage;
+
+#[cfg(feature = "telegram")]
+use blufio_telegram::TelegramChannel;
+
+#[cfg(feature = "gateway")]
+use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
+
+use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
+
+/// Initializes the plugin registry with the built-in catalog.
+///
+/// Each adapter in the catalog is registered with a status determined by
+/// the user's plugin configuration overrides. By default, all compiled-in
+/// adapters are enabled.
+fn initialize_plugin_registry(config: &BlufioConfig) -> PluginRegistry {
+    let mut registry = PluginRegistry::new();
+    let catalog = builtin_catalog();
+
+    for manifest in catalog {
+        let name = manifest.name.clone();
+        // Determine status from config overrides.
+        let status = if let Some(&enabled) = config.plugin.plugins.get(&name) {
+            if enabled {
+                PluginStatus::Enabled
+            } else {
+                PluginStatus::Disabled
+            }
+        } else {
+            PluginStatus::Enabled // Default: all compiled-in adapters enabled
+        };
+        registry.register_with_status(manifest, None, status);
+    }
+
+    info!(
+        count = registry.len(),
+        "plugin registry initialized"
+    );
+    registry
+}
 
 /// Runs the `blufio serve` command.
 ///
-/// Initializes all adapters (storage, provider, channel), context engine,
-/// cost ledger and budget tracker. Marks stale sessions as interrupted
-/// (crash recovery), installs signal handlers, and enters the main agent loop.
+/// Initializes all adapters via the PluginRegistry pattern, creates a
+/// ChannelMultiplexer for multi-channel support, and enters the main
+/// agent loop. Supports graceful shutdown via signal handlers.
 pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Initialize tracing subscriber.
     init_tracing(&config.agent.log_level);
 
     info!("starting blufio serve");
 
+    // Initialize plugin registry.
+    let _registry = initialize_plugin_registry(&config);
+
     // Initialize storage.
-    let storage = SqliteStorage::new(config.storage.clone());
-    storage.initialize().await?;
-    let storage = Arc::new(storage);
+    #[cfg(feature = "sqlite")]
+    let storage = {
+        let storage = SqliteStorage::new(config.storage.clone());
+        storage.initialize().await?;
+        Arc::new(storage)
+    };
+
+    #[cfg(not(feature = "sqlite"))]
+    compile_error!("blufio requires the 'sqlite' feature for storage");
 
     // Mark stale sessions as interrupted (crash recovery).
     mark_stale_sessions(storage.as_ref()).await?;
@@ -59,6 +111,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         ContextEngine::new(&config.agent, &config.context).await?;
 
     // Initialize memory system (if enabled).
+    #[cfg(feature = "onnx")]
     let (memory_provider, memory_extractor) = if config.memory.enabled {
         match initialize_memory(&config, &mut context_engine).await {
             Ok((mp, me)) => (Some(mp), Some(me)),
@@ -69,6 +122,12 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     } else {
         info!("memory system disabled by configuration");
+        (None, None)
+    };
+
+    #[cfg(not(feature = "onnx"))]
+    let (memory_provider, memory_extractor): (Option<MemoryProvider>, Option<Arc<MemoryExtractor>>) = {
+        info!("memory system disabled (onnx feature not enabled)");
         (None, None)
     };
 
@@ -88,27 +147,88 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     let context_engine = Arc::new(context_engine);
 
     // Initialize Anthropic provider.
-    let provider = AnthropicProvider::new(&config).await.map_err(|e| {
-        error!(error = %e, "failed to initialize Anthropic provider");
-        eprintln!(
-            "error: Anthropic API key required. Set via: config, ANTHROPIC_API_KEY env var, or `blufio config set-secret anthropic.api_key`"
-        );
-        e
-    })?;
-    let provider = Arc::new(provider);
+    #[cfg(feature = "anthropic")]
+    let provider = {
+        let p = AnthropicProvider::new(&config).await.map_err(|e| {
+            error!(error = %e, "failed to initialize Anthropic provider");
+            eprintln!(
+                "error: Anthropic API key required. Set via: config, ANTHROPIC_API_KEY env var, or `blufio config set-secret anthropic.api_key`"
+            );
+            e
+        })?;
+        Arc::new(p)
+    };
 
-    // Initialize Telegram channel.
-    let mut channel = TelegramChannel::new(config.telegram.clone()).map_err(|e| {
-        error!(error = %e, "failed to initialize Telegram channel");
-        eprintln!(
-            "error: Telegram bot token required. Set via: config or `blufio config set-secret telegram.bot_token`"
-        );
-        e
-    })?;
+    #[cfg(not(feature = "anthropic"))]
+    compile_error!("blufio requires the 'anthropic' feature for the LLM provider");
 
-    // Connect to Telegram.
-    channel.connect().await?;
-    info!("Telegram channel connected");
+    // Initialize Prometheus metrics (if enabled and compiled in).
+    #[cfg(feature = "prometheus")]
+    let _prometheus_adapter = if config.prometheus.enabled {
+        match blufio_prometheus::PrometheusAdapter::new() {
+            Ok(adapter) => {
+                info!("prometheus metrics enabled");
+                Some(adapter)
+            }
+            Err(e) => {
+                warn!(error = %e, "prometheus initialization failed, continuing without metrics");
+                None
+            }
+        }
+    } else {
+        debug!("prometheus metrics disabled by configuration");
+        None
+    };
+
+    // Build channel multiplexer.
+    let mut mux = ChannelMultiplexer::new();
+
+    // Add Telegram channel (if enabled and configured).
+    #[cfg(feature = "telegram")]
+    {
+        if config.telegram.bot_token.is_some() {
+            let telegram = TelegramChannel::new(config.telegram.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize Telegram channel");
+                eprintln!(
+                    "error: Telegram bot token required. Set via: config or `blufio config set-secret telegram.bot_token`"
+                );
+                e
+            })?;
+            mux.add_channel("telegram".to_string(), Box::new(telegram));
+            info!("telegram channel added to multiplexer");
+        } else {
+            info!("telegram channel skipped (no bot_token configured)");
+        }
+    }
+
+    // Add Gateway channel (if enabled and compiled in).
+    #[cfg(feature = "gateway")]
+    {
+        if config.gateway.enabled {
+            let gateway_config = GatewayChannelConfig {
+                enabled: config.gateway.enabled,
+                host: config.gateway.host.clone(),
+                port: config.gateway.port,
+                bearer_token: config.gateway.bearer_token.clone(),
+            };
+            let gateway = GatewayChannel::new(gateway_config);
+            mux.add_channel("gateway".to_string(), Box::new(gateway));
+            info!(
+                host = config.gateway.host.as_str(),
+                port = config.gateway.port,
+                "gateway channel added to multiplexer"
+            );
+        } else {
+            debug!("gateway channel disabled by configuration");
+        }
+    }
+
+    // Connect all channels via multiplexer.
+    mux.connect().await?;
+    info!(
+        channels = mux.channel_count(),
+        "channel multiplexer connected"
+    );
 
     // Initialize model router.
     let router = Arc::new(ModelRouter::new(config.routing.clone()));
@@ -196,9 +316,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         });
     }
 
-    // Create and run agent loop with context engine, cost tracking, routing, and tools.
+    // Create and run agent loop with channel multiplexer.
     let mut agent_loop = AgentLoop::new(
-        Box::new(channel),
+        Box::new(mux),
         provider,
         storage,
         context_engine,
@@ -245,6 +365,7 @@ async fn mark_stale_sessions(
 /// retriever, provider, and extractor. Registers the provider with ContextEngine.
 ///
 /// Returns (MemoryProvider, MemoryExtractor) on success.
+#[allow(dead_code)]
 async fn initialize_memory(
     config: &BlufioConfig,
     context_engine: &mut ContextEngine,

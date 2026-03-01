@@ -1,0 +1,28 @@
+[package]
+name = "blufio-gateway"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "HTTP/WebSocket gateway implementing ChannelAdapter for the Blufio framework"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+async-trait.workspace = true
+axum.workspace = true
+axum-extra.workspace = true
+tower-http.workspace = true
+tokio = { workspace = true, features = ["sync", "net", "macros", "rt"] }
+serde.workspace = true
+serde_json = "1"
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+semver.workspace = true
+dashmap.workspace = true
+futures.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }

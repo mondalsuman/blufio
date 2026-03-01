@@ -49,6 +49,14 @@ tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
 ndarray = "0.17"
 wasmtime = "40"
 wasmtime-wasi = "40"
+axum = { version = "0.8", features = ["ws"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+dashmap = "6"
+metrics = "0.24"
+metrics-exporter-prometheus = "0.16"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+hex = "0.4"
 
 [profile.release]
 lto = "thin"
