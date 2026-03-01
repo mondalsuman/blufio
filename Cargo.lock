@@ -309,6 +309,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "blufio-context"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64",
+ "blufio-config",
+ "blufio-core",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "blufio-core"
 version = "0.1.0"
 dependencies = [
@@ -319,6 +335,24 @@ dependencies = [
  "serde_json",
  "strum",
  "thiserror",
+]
+
+[[package]]
+name = "blufio-cost"
+version = "0.1.0"
+dependencies = [
+ "blufio-config",
+ "blufio-core",
+ "chrono",
+ "rusqlite",
+ "serde",
+ "strum",
+ "tempfile",
+ "tokio",
+ "tokio-rusqlite",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
