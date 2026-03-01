@@ -10,6 +10,7 @@ description = "Tool trait, registry, and built-in tools for the Blufio agent fra
 
 [dependencies]
 blufio-core = { path = "../blufio-core" }
+blufio-context = { path = "../blufio-context" }
 blufio-security = { path = "../blufio-security" }
 async-trait.workspace = true
 serde.workspace = true

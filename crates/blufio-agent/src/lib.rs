@@ -16,6 +16,7 @@ pub mod session;
 pub mod shutdown;
 
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -24,14 +25,16 @@ use blufio_context::ContextEngine;
 use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
-    InboundMessage, OutboundMessage, Session, StreamEventType, TokenUsage,
+    ContentBlock, InboundMessage, OutboundMessage, ProviderMessage, ProviderRequest,
+    ProviderStreamChunk, Session, StreamEventType, TokenUsage, ToolUseData,
 };
 use blufio_core::{ChannelAdapter, ProviderAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider};
 use blufio_router::ModelRouter;
+use blufio_skill::ToolRegistry;
 
 pub use heartbeat::HeartbeatRunner;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
@@ -56,13 +59,15 @@ pub struct AgentLoop {
     router: Arc<ModelRouter>,
     /// Heartbeat runner for proactive check-ins (None = disabled).
     heartbeat_runner: Option<Arc<HeartbeatRunner>>,
+    /// Registry of available tools (built-in and WASM skills).
+    tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
     config: BlufioConfig,
     sessions: HashMap<String, SessionActor>,
 }
 
 impl AgentLoop {
     /// Creates a new agent loop with the given adapters, context engine, cost components,
-    /// model router, and optional heartbeat runner.
+    /// model router, tool registry, and optional heartbeat runner.
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         channel: Box<dyn ChannelAdapter + Send + Sync>,
@@ -75,6 +80,7 @@ impl AgentLoop {
         memory_extractor: Option<Arc<MemoryExtractor>>,
         router: Arc<ModelRouter>,
         heartbeat_runner: Option<Arc<HeartbeatRunner>>,
+        tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
         config: BlufioConfig,
     ) -> Result<Self, BlufioError> {
         info!(
@@ -93,6 +99,7 @@ impl AgentLoop {
             memory_extractor,
             router,
             heartbeat_runner,
+            tool_registry,
             config,
             sessions: HashMap::new(),
         })
@@ -150,6 +157,10 @@ impl AgentLoop {
     ///
     /// Integrates heartbeat delivery: if a pending heartbeat exists from the
     /// `on_next_message` delivery mode, it is prepended to the response.
+    ///
+    /// After the LLM responds, if the response contains `tool_use` blocks,
+    /// executes the tools, sends tool_result back, and re-calls the LLM
+    /// in a loop (capped at [`MAX_TOOL_ITERATIONS`]).
     async fn handle_inbound(&mut self, inbound: InboundMessage) -> Result<(), BlufioError> {
         let sender_id = inbound.sender_id.clone();
         let channel_name = inbound.channel.clone();
@@ -220,83 +231,214 @@ impl AgentLoop {
             Err(e) => return Err(e),
         };
 
-        // Consume the stream: accumulate text for persistence and send to channel.
+        // Consume the initial stream and enter the tool loop.
+        let max_iterations = {
+            let actor = self.sessions.get(&session_id).ok_or_else(|| {
+                BlufioError::Internal(format!("session actor not found for {session_id}"))
+            })?;
+            actor.max_tool_iterations()
+        };
+
         let mut full_response = String::new();
         let mut usage: Option<TokenUsage> = None;
         let mut sent_message_id: Option<String> = None;
         let supports_edit = self.channel.capabilities().supports_edit;
 
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    match chunk.event_type {
-                        StreamEventType::ContentBlockDelta => {
-                            if let Some(text) = &chunk.text {
-                                full_response.push_str(text);
+        // Tool loop: consume stream, check for tool_use, execute, re-call LLM.
+        for iteration in 0..=max_iterations {
+            let (text, stream_usage, tool_uses, stop_reason) = consume_stream(&mut stream).await;
 
-                                if supports_edit {
-                                    // Edit-in-place streaming.
-                                    match &sent_message_id {
-                                        None => {
-                                            // Send initial message.
-                                            let out = OutboundMessage {
-                                                session_id: Some(session_id.clone()),
-                                                channel: channel_name.clone(),
-                                                content: full_response.clone(),
-                                                reply_to: None,
-                                                parse_mode: None,
-                                                metadata: metadata.clone(),
-                                            };
-                                            match self.channel.send(out).await {
-                                                Ok(mid) => {
-                                                    sent_message_id = Some(mid.0);
-                                                }
-                                                Err(e) => {
-                                                    warn!(error = %e, "failed to send initial message");
-                                                }
-                                            }
-                                        }
-                                        Some(mid) => {
-                                            // Edit existing message.
-                                            if let Err(e) = self
-                                                .channel
-                                                .edit_message(
-                                                    &chat_id,
-                                                    mid,
-                                                    &full_response,
-                                                    None,
-                                                )
-                                                .await
-                                            {
-                                                debug!(error = %e, "failed to edit message");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+            full_response.push_str(&text);
+            if let Some(u) = stream_usage {
+                usage = Some(u);
+            }
+
+            // Stream text to channel (edit-in-place or send).
+            if !text.is_empty() && supports_edit {
+                match &sent_message_id {
+                    None => {
+                        let out = OutboundMessage {
+                            session_id: Some(session_id.clone()),
+                            channel: channel_name.clone(),
+                            content: full_response.clone(),
+                            reply_to: None,
+                            parse_mode: None,
+                            metadata: metadata.clone(),
+                        };
+                        match self.channel.send(out).await {
+                            Ok(mid) => sent_message_id = Some(mid.0),
+                            Err(e) => warn!(error = %e, "failed to send initial message"),
                         }
-                        StreamEventType::MessageStart | StreamEventType::MessageDelta => {
-                            if let Some(u) = chunk.usage {
-                                usage = Some(u);
-                            }
+                    }
+                    Some(mid) => {
+                        if let Err(e) = self
+                            .channel
+                            .edit_message(&chat_id, mid, &full_response, None)
+                            .await
+                        {
+                            debug!(error = %e, "failed to edit message");
                         }
-                        StreamEventType::MessageStop => {
-                            break;
-                        }
-                        StreamEventType::Error => {
-                            if let Some(err) = &chunk.error {
-                                error!(error = err.as_str(), "LLM stream error");
-                            }
-                            break;
-                        }
-                        _ => {}
                     }
                 }
-                Err(e) => {
-                    error!(error = %e, "stream chunk error");
-                    break;
-                }
             }
+
+            // Check if we have tool_use blocks to execute.
+            let has_tool_use = !tool_uses.is_empty()
+                || stop_reason.as_deref() == Some("tool_use");
+
+            if !has_tool_use || tool_uses.is_empty() {
+                // No tool calls -- we're done with this message.
+                break;
+            }
+
+            if iteration >= max_iterations {
+                warn!(
+                    session_id = %session_id,
+                    iterations = iteration,
+                    "maximum tool iterations reached, forcing text response"
+                );
+                // Persist what we have and break -- the LLM's last response is the final answer.
+                break;
+            }
+
+            // Execute tools via the session actor.
+            info!(
+                session_id = %session_id,
+                tool_count = tool_uses.len(),
+                iteration = iteration,
+                "executing tool calls"
+            );
+
+            let actor = self.sessions.get_mut(&session_id).ok_or_else(|| {
+                BlufioError::Internal(format!("session actor not found for {session_id}"))
+            })?;
+
+            // Persist the assistant message with tool_use content (text + tool calls).
+            actor.persist_response(&text, usage.clone()).await?;
+
+            let tool_results = actor.execute_tools(&tool_uses).await?;
+
+            // Build tool_result messages and persist them as user messages.
+            // Each tool_result is a separate content block in a single user message.
+            for (tool_use_id, output) in &tool_results {
+                let now = chrono::Utc::now().to_rfc3339();
+                let result_content = serde_json::json!({
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": output.content,
+                    "is_error": output.is_error,
+                });
+                let msg = blufio_core::types::Message {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    session_id: session_id.clone(),
+                    role: "user".to_string(),
+                    content: result_content.to_string(),
+                    token_count: None,
+                    metadata: Some(serde_json::json!({"tool_result": true}).to_string()),
+                    created_at: now,
+                };
+                self.storage.insert_message(&msg).await?;
+            }
+
+            // Build the tool_result ProviderMessages for the follow-up LLM call.
+            let tool_result_blocks: Vec<serde_json::Value> = tool_results
+                .iter()
+                .map(|(tool_use_id, output)| {
+                    serde_json::json!({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "content": output.content,
+                        "is_error": output.is_error,
+                    })
+                })
+                .collect();
+
+            // Build the assistant message with tool_use content blocks for the LLM.
+            let mut assistant_content_blocks: Vec<serde_json::Value> = Vec::new();
+            if !text.is_empty() {
+                assistant_content_blocks.push(serde_json::json!({
+                    "type": "text",
+                    "text": text,
+                }));
+            }
+            for tu in &tool_uses {
+                assistant_content_blocks.push(serde_json::json!({
+                    "type": "tool_use",
+                    "id": tu.id,
+                    "name": tu.name,
+                    "input": tu.input,
+                }));
+            }
+
+            // Re-assemble context for the follow-up call by getting history from storage.
+            // The persisted messages now include the tool_use and tool_result messages.
+            let history = self.storage.get_messages(&session_id, Some(50)).await?;
+            let mut messages: Vec<ProviderMessage> = history
+                .iter()
+                .map(|m| ProviderMessage {
+                    role: m.role.clone(),
+                    content: vec![ContentBlock::Text {
+                        text: m.content.clone(),
+                    }],
+                })
+                .collect();
+
+            // Replace the last assistant + user tool_result messages with properly
+            // structured content blocks (the storage only has text representations).
+            // Pop the tool_result user messages and the assistant tool_use message.
+            let tool_result_count = tool_results.len();
+            for _ in 0..(tool_result_count + 1) {
+                messages.pop();
+            }
+
+            // Re-add the assistant message with structured tool_use blocks.
+            messages.push(ProviderMessage {
+                role: "assistant".to_string(),
+                content: vec![ContentBlock::Text {
+                    text: serde_json::to_string(&assistant_content_blocks)
+                        .unwrap_or_default(),
+                }],
+            });
+
+            // Re-add the user message with tool_result blocks.
+            messages.push(ProviderMessage {
+                role: "user".to_string(),
+                content: vec![ContentBlock::Text {
+                    text: serde_json::to_string(&tool_result_blocks)
+                        .unwrap_or_default(),
+                }],
+            });
+
+            // Build follow-up ProviderRequest.
+            let actor = self.sessions.get(&session_id).ok_or_else(|| {
+                BlufioError::Internal(format!("session actor not found for {session_id}"))
+            })?;
+
+            let tool_defs = {
+                let registry = actor.tool_registry().read().await;
+                if !registry.is_empty() {
+                    Some(registry.tool_definitions())
+                } else {
+                    None
+                }
+            };
+
+            let follow_up_request = ProviderRequest {
+                model: self.config.anthropic.default_model.clone(),
+                system_prompt: None,
+                system_blocks: None,
+                messages,
+                max_tokens: self.config.anthropic.max_tokens,
+                stream: true,
+                tools: tool_defs,
+            };
+
+            // Re-call the LLM with tool results.
+            stream = self.provider.stream(follow_up_request).await?;
+
+            // Reset for next iteration -- clear text accumulator but keep the
+            // full_response for the final display.
+            full_response.clear();
         }
 
         // Build the final display content, optionally prepending:
@@ -359,7 +501,7 @@ impl AgentLoop {
             }
         }
 
-        // Persist assistant response (also records cost).
+        // Persist final assistant response (also records cost).
         // Note: We persist the raw LLM response, not the display_response with prefixes.
         let actor = self.sessions.get_mut(&session_id).ok_or_else(|| {
             BlufioError::Internal(format!("session actor not found for {session_id}"))
@@ -424,6 +566,7 @@ impl AgentLoop {
                     self.config.anthropic.max_tokens,
                     self.config.routing.enabled,
                     self.config.memory.idle_timeout_secs,
+                    self.tool_registry.clone(),
                 );
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
@@ -469,11 +612,67 @@ impl AgentLoop {
             self.config.anthropic.max_tokens,
             self.config.routing.enabled,
             self.config.memory.idle_timeout_secs,
+            self.tool_registry.clone(),
         );
         self.sessions.insert(session_key, actor);
 
         Ok(session_id)
     }
+}
+
+/// Consumes a provider stream, collecting text, usage, tool_use blocks, and stop_reason.
+///
+/// Returns `(text, usage, tool_uses, stop_reason)`.
+async fn consume_stream(
+    stream: &mut Pin<Box<dyn Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>>,
+) -> (String, Option<TokenUsage>, Vec<ToolUseData>, Option<String>) {
+    let mut text = String::new();
+    let mut usage: Option<TokenUsage> = None;
+    let mut tool_uses: Vec<ToolUseData> = Vec::new();
+    let mut stop_reason: Option<String> = None;
+
+    while let Some(chunk_result) = stream.next().await {
+        match chunk_result {
+            Ok(chunk) => {
+                match chunk.event_type {
+                    StreamEventType::ContentBlockDelta => {
+                        if let Some(t) = &chunk.text {
+                            text.push_str(t);
+                        }
+                    }
+                    StreamEventType::ContentBlockStop => {
+                        if let Some(tu) = chunk.tool_use {
+                            tool_uses.push(tu);
+                        }
+                    }
+                    StreamEventType::MessageStart | StreamEventType::MessageDelta => {
+                        if let Some(u) = chunk.usage {
+                            usage = Some(u);
+                        }
+                        if let Some(sr) = &chunk.stop_reason {
+                            stop_reason = Some(sr.clone());
+                        }
+                    }
+                    StreamEventType::MessageStop => {
+                        break;
+                    }
+                    StreamEventType::Error => {
+                        if let Some(err) = &chunk.error {
+                            error!(error = err.as_str(), "LLM stream error");
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            Err(e) => {
+                error!(error = %e, "stream chunk error");
+                break;
+            }
+        }
+    }
+
+    (text, usage, tool_uses, stop_reason)
 }
 
 /// Extracts chat_id from an optional JSON metadata string.

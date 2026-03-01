@@ -14,12 +14,14 @@
 
 pub mod builtin;
 pub mod manifest;
+pub mod provider;
 pub mod sandbox;
 pub mod scaffold;
 pub mod store;
 pub mod tool;
 
 pub use manifest::{load_manifest, parse_manifest};
+pub use provider::SkillProvider;
 pub use sandbox::WasmSkillRuntime;
 pub use scaffold::scaffold_skill;
 pub use store::SkillStore;

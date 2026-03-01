@@ -22,15 +22,20 @@ use blufio_cost::BudgetTracker;
 use blufio_cost::CostLedger;
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
-    InboundMessage, Message, ProviderStreamChunk, TokenUsage,
+    InboundMessage, Message, ProviderStreamChunk, TokenUsage, ToolUseData,
 };
 use blufio_core::{ProviderAdapter, StorageAdapter};
 use blufio_memory::{MemoryExtractor, MemoryProvider};
 use blufio_router::{ModelRouter, RoutingDecision};
+use blufio_skill::{ToolOutput, ToolRegistry};
 use futures::Stream;
+use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::context;
+
+/// Maximum number of tool call iterations before forcing a text response.
+pub const MAX_TOOL_ITERATIONS: usize = 10;
 
 /// States in the session FSM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +48,8 @@ pub enum SessionState {
     Processing,
     /// Streaming response back to the channel.
     Responding,
+    /// Executing tools from a tool_use response.
+    ToolExecuting,
     /// Graceful shutdown: finishing current response before exit.
     Draining,
 }
@@ -54,6 +61,7 @@ impl std::fmt::Display for SessionState {
             SessionState::Receiving => write!(f, "receiving"),
             SessionState::Processing => write!(f, "processing"),
             SessionState::Responding => write!(f, "responding"),
+            SessionState::ToolExecuting => write!(f, "tool_executing"),
             SessionState::Draining => write!(f, "draining"),
         }
     }
@@ -97,10 +105,14 @@ pub struct SessionActor {
     last_message_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Idle timeout for triggering extraction (from config).
     idle_timeout: Duration,
+    /// Registry of available tools (built-in and WASM skills).
+    tool_registry: Arc<RwLock<ToolRegistry>>,
+    /// Maximum number of tool call iterations per message.
+    max_tool_iterations: usize,
 }
 
 impl SessionActor {
-    /// Creates a new session actor with context engine, cost tracking, routing, and memory.
+    /// Creates a new session actor with context engine, cost tracking, routing, memory, and tools.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         session_id: String,
@@ -117,6 +129,7 @@ impl SessionActor {
         default_max_tokens: u32,
         routing_enabled: bool,
         idle_timeout_secs: u64,
+        tool_registry: Arc<RwLock<ToolRegistry>>,
     ) -> Self {
         Self {
             session_id,
@@ -136,6 +149,8 @@ impl SessionActor {
             last_routing_decision: None,
             last_message_at: None,
             idle_timeout: Duration::from_secs(idle_timeout_secs),
+            tool_registry,
+            max_tool_iterations: MAX_TOOL_ITERATIONS,
         }
     }
 
@@ -285,7 +300,15 @@ impl SessionActor {
             mp.clear_current_query(&self.session_id).await;
         }
 
-        let assembled = assembled?;
+        let mut assembled = assembled?;
+
+        // Inject tool definitions from the tool registry into the request.
+        {
+            let registry = self.tool_registry.read().await;
+            if !registry.is_empty() {
+                assembled.request.tools = Some(registry.tool_definitions());
+            }
+        }
 
         // Record compaction costs if compaction was triggered during assembly.
         // Compaction is a separate Haiku LLM call that must be recorded with
@@ -398,6 +421,81 @@ impl SessionActor {
         self.state = SessionState::Idle;
 
         Ok(())
+    }
+
+    /// Returns the maximum number of tool call iterations per message.
+    pub fn max_tool_iterations(&self) -> usize {
+        self.max_tool_iterations
+    }
+
+    /// Returns a reference to the tool registry.
+    pub fn tool_registry(&self) -> &Arc<RwLock<ToolRegistry>> {
+        &self.tool_registry
+    }
+
+    /// Executes a batch of tool calls and returns the results.
+    ///
+    /// For each [`ToolUseData`] block, looks up the tool in the registry,
+    /// invokes it, and collects the results as `(tool_use_id, content, is_error)`.
+    ///
+    /// Transitions state to [`SessionState::ToolExecuting`] during execution
+    /// and back to [`SessionState::Processing`] when done.
+    pub async fn execute_tools(
+        &mut self,
+        tool_uses: &[ToolUseData],
+    ) -> Result<Vec<(String, ToolOutput)>, BlufioError> {
+        self.state = SessionState::ToolExecuting;
+
+        let mut results = Vec::with_capacity(tool_uses.len());
+
+        for tu in tool_uses {
+            let registry = self.tool_registry.read().await;
+            let output = match registry.get(&tu.name) {
+                Some(tool) => {
+                    debug!(
+                        session_id = %self.session_id,
+                        tool = %tu.name,
+                        tool_use_id = %tu.id,
+                        "executing tool"
+                    );
+                    // Drop the read guard before the async invoke to avoid holding
+                    // the lock across an await point.
+                    drop(registry);
+                    match tool.invoke(tu.input.clone()).await {
+                        Ok(output) => output,
+                        Err(e) => {
+                            warn!(
+                                session_id = %self.session_id,
+                                tool = %tu.name,
+                                error = %e,
+                                "tool invocation failed"
+                            );
+                            ToolOutput {
+                                content: format!("Error: {e}"),
+                                is_error: true,
+                            }
+                        }
+                    }
+                }
+                None => {
+                    drop(registry);
+                    warn!(
+                        session_id = %self.session_id,
+                        tool = %tu.name,
+                        "tool not found in registry"
+                    );
+                    ToolOutput {
+                        content: format!("Error: tool '{}' not found", tu.name),
+                        is_error: true,
+                    }
+                }
+            };
+
+            results.push((tu.id.clone(), output));
+        }
+
+        self.state = SessionState::Processing;
+        Ok(results)
     }
 
     /// Checks if enough idle time has passed since the last message to trigger
@@ -528,6 +626,7 @@ mod tests {
         assert_eq!(SessionState::Receiving.to_string(), "receiving");
         assert_eq!(SessionState::Processing.to_string(), "processing");
         assert_eq!(SessionState::Responding.to_string(), "responding");
+        assert_eq!(SessionState::ToolExecuting.to_string(), "tool_executing");
         assert_eq!(SessionState::Draining.to_string(), "draining");
     }
 
@@ -535,6 +634,12 @@ mod tests {
     fn session_state_equality() {
         assert_eq!(SessionState::Idle, SessionState::Idle);
         assert_ne!(SessionState::Idle, SessionState::Responding);
+        assert_ne!(SessionState::ToolExecuting, SessionState::Processing);
+    }
+
+    #[test]
+    fn max_tool_iterations_constant() {
+        assert_eq!(MAX_TOOL_ITERATIONS, 10);
     }
 
     #[test]
@@ -556,5 +661,12 @@ mod tests {
         let me: Option<Arc<MemoryExtractor>> = None;
         assert!(mp.is_none());
         assert!(me.is_none());
+    }
+
+    #[test]
+    fn tool_registry_can_be_shared() {
+        // Verify that Arc<RwLock<ToolRegistry>> can be constructed for the session actor.
+        let registry = Arc::new(RwLock::new(ToolRegistry::new()));
+        assert_eq!(registry.blocking_read().len(), 0);
     }
 }
