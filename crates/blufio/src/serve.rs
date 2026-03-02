@@ -185,6 +185,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             );
             e
         })?;
+        info!("anthropic provider initialized with TLS 1.2+ enforcement and SSRF protection");
         Arc::new(p)
     };
 
