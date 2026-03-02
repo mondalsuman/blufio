@@ -25,6 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Fix Critical Integration Bugs** - Fix 4 cross-phase integration bugs found by milestone audit (Gap Closure)
 - [x] **Phase 12: Verify Unverified Phases** - Create VERIFICATION.md for phases 2, 5, 6, 8, 9 and fix missing/empty SUMMARYs (Gap Closure) (completed 2026-03-01)
 - [x] **Phase 13: Sync Traceability & Documentation** - Sync REQUIREMENTS.md and ROADMAP.md with verified state (Gap Closure) (completed 2026-03-02)
+- [ ] **Phase 14: Wire Cross-Phase Integration** - Wire security defaults and business metrics into runtime code paths (Gap Closure)
 
 ## Phase Details
 
@@ -235,6 +236,19 @@ Plans:
 Plans:
 - [ ] 13-01-PLAN.md -- Sync REQUIREMENTS.md and ROADMAP.md with verified state of all 70 v1 requirements
 
+### Phase 14: Wire Cross-Phase Integration
+**Goal**: Wire three cross-phase integration points identified by the v1.0 re-audit — use the secure TLS client for Anthropic API calls, install secret redaction in the tracing subscriber, and add Prometheus business metric call sites in agent code
+**Depends on**: Phase 13
+**Requirements**: SEC-03, SEC-04, SEC-08, SEC-09, COST-04, INFRA-05
+**Gap Closure:** Closes integration gaps INT-01, INT-02, INT-03 and flow gaps FLOW-01, FLOW-02 from v1.0 re-audit
+**Success Criteria** (what must be TRUE):
+  1. AnthropicClient uses `build_secure_client()` from blufio-security with TLS 1.2+ enforcement and SsrfSafeResolver
+  2. `init_tracing()` wraps its writer with `RedactingWriter` — API keys and tokens are redacted from all log output
+  3. Prometheus counters for messages, errors, tokens, and active sessions are incremented at runtime — visible on `/metrics` endpoint
+
+Plans:
+- (to be planned)
+
 ## Progress
 
 **Execution Order:**
@@ -256,3 +270,4 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 11. Fix Critical Integration Bugs | 4/4 | Complete | 2026-03-01 |
 | 12. Verify Unverified Phases | 5/5 | Complete | 2026-03-01 |
 | 13. Sync Traceability & Documentation | 1/1 | Complete   | 2026-03-02 |
+| 14. Wire Cross-Phase Integration | 0/0 | Pending | — |
