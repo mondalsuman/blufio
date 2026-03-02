@@ -372,7 +372,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         let delegation_tool = DelegationTool::new(delegation_router);
         {
             let mut registry = tool_registry.write().await;
-            registry.register(Arc::new(delegation_tool));
+            registry
+                .register(Arc::new(delegation_tool))
+                .expect("register delegation tool");
         }
         info!(
             agents = config.agents.len(),

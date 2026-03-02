@@ -23,6 +23,7 @@ tracing.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true
 anyhow = "1"
+regex.workspace = true
 chrono.workspace = true
 rusqlite.workspace = true
 

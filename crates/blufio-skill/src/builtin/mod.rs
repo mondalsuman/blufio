@@ -17,10 +17,19 @@ use crate::ToolRegistry;
 use std::sync::Arc;
 
 /// Registers all built-in tools into the given registry.
+///
+/// Built-in tools are marked with [`ToolRegistry::register_builtin`] so they
+/// always win on collision with external MCP tools.
 pub fn register_builtins(registry: &mut ToolRegistry) {
-    registry.register(Arc::new(BashTool));
-    registry.register(Arc::new(HttpTool::new()));
-    registry.register(Arc::new(FileTool));
+    registry
+        .register_builtin(Arc::new(BashTool))
+        .expect("register built-in: bash");
+    registry
+        .register_builtin(Arc::new(HttpTool::new()))
+        .expect("register built-in: http");
+    registry
+        .register_builtin(Arc::new(FileTool))
+        .expect("register built-in: file");
 }
 
 #[cfg(test)]
