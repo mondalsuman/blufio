@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 17 of 19 (MCP Server HTTP + Resources)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: Executing
-Last activity: 2026-03-02 -- Plan 17-01 HTTP Transport + Auth + CORS completed
+Last activity: 2026-03-02 -- Plan 17-03 MCP Resources completed
 
 Progress: [########################......] 16/19 phases (v1.0 complete, v1.1 Phases 15-16 done, Phase 17 in progress)
 
@@ -39,8 +39,8 @@ Progress: [########################......] 16/19 phases (v1.0 complete, v1.1 Pha
 **v1.1:**
 - Phase 15: 4 plans completed
 - Phase 16: 3 plans completed
-- Phase 17: 2 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files)
-- Total plans completed: 9
+- Phase 17: 3 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files; 17-03, 17min, 2 tasks, 6 files)
+- Total plans completed: 10
 
 ## Accumulated Context
 
@@ -69,6 +69,10 @@ v1.1 decisions so far:
 - MCP router nested at /mcp before permissive CorsLayer (restricted CORS on MCP routes)
 - GatewayChannel.set_mcp_router() for pre-connect MCP injection (avoids Router in Clone config)
 - Signal handler moved earlier in serve.rs for MCP CancellationToken availability
+- blufio:// URI scheme for MCP resource addressing (memory/{id}, memory/search, sessions, sessions/{id})
+- with_resources() builder pattern: stdio mode skips resources, HTTP mode injects MemoryStore + StorageAdapter
+- Memory resources exclude embedding vectors (explicit field selection, not serde derive)
+- initialize_memory returns 3-tuple to expose Arc<MemoryStore> for MCP resource sharing
 
 ### Pending Todos
 
@@ -83,5 +87,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 17-01-PLAN.md (HTTP Transport + Auth + CORS)
-Next action: Execute 17-03-PLAN.md (Resources) or 17-04-PLAN.md
+Stopped at: Completed 17-03-PLAN.md (MCP Resources)
+Next action: Execute 17-04-PLAN.md (Prompts + Notifications)

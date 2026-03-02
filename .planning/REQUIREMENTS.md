@@ -25,8 +25,8 @@ Requirements for MCP Integration milestone. Each maps to roadmap phases.
 - [ ] **SRVR-05**: Tool input validation against inputSchema with JSON-RPC -32602 errors
 - [x] **SRVR-06**: Streamable HTTP transport mounted on existing gateway at /mcp
 - [x] **SRVR-07**: MCP-specific auth middleware for HTTP transport (bearer token)
-- [ ] **SRVR-08**: Memory exposed as MCP resources (blufio://memory/{id}, search template)
-- [ ] **SRVR-09**: Session history exposed as read-only MCP resources
+- [x] **SRVR-08**: Memory exposed as MCP resources (blufio://memory/{id}, search template)
+- [x] **SRVR-09**: Session history exposed as read-only MCP resources
 - [ ] **SRVR-10**: Prompt templates via prompts/list and prompts/get
 - [x] **SRVR-11**: Tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
 - [ ] **SRVR-12**: Explicit MCP tool export allowlist (bash permanently excluded, default empty)
@@ -116,8 +116,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRVR-05 | Phase 16 | Pending |
 | SRVR-06 | Phase 17 | Complete |
 | SRVR-07 | Phase 17 | Complete |
-| SRVR-08 | Phase 17 | Pending |
-| SRVR-09 | Phase 17 | Pending |
+| SRVR-08 | Phase 17 | Complete |
+| SRVR-09 | Phase 17 | Complete |
 | SRVR-10 | Phase 17 | Pending |
 | SRVR-11 | Phase 17 | Complete |
 | SRVR-12 | Phase 16 | Pending |
