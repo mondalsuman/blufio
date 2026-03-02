@@ -414,8 +414,7 @@ impl ServerHandler for BlufioMcpHandler {
                 serde_json::Value::Number(n) => Some(n.to_string()),
                 _ => None,
             });
-        let _progress_reporter =
-            crate::notifications::ProgressReporter::new(progress_token);
+        let _progress_reporter = crate::notifications::ProgressReporter::new(progress_token);
 
         if _progress_reporter.token().is_some() {
             tracing::debug!(
@@ -1055,13 +1054,11 @@ mod tests {
             "progressToken".to_string(),
             serde_json::Value::String("tok-42".to_string()),
         );
-        let token = meta
-            .get("progressToken")
-            .and_then(|v| match v {
-                serde_json::Value::String(s) => Some(s.clone()),
-                serde_json::Value::Number(n) => Some(n.to_string()),
-                _ => None,
-            });
+        let token = meta.get("progressToken").and_then(|v| match v {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Number(n) => Some(n.to_string()),
+            _ => None,
+        });
         assert_eq!(token, Some("tok-42".to_string()));
     }
 
@@ -1072,13 +1069,11 @@ mod tests {
             "progressToken".to_string(),
             serde_json::Value::Number(serde_json::Number::from(7)),
         );
-        let token = meta
-            .get("progressToken")
-            .and_then(|v| match v {
-                serde_json::Value::String(s) => Some(s.clone()),
-                serde_json::Value::Number(n) => Some(n.to_string()),
-                _ => None,
-            });
+        let token = meta.get("progressToken").and_then(|v| match v {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Number(n) => Some(n.to_string()),
+            _ => None,
+        });
         assert_eq!(token, Some("7".to_string()));
     }
 
