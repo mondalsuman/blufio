@@ -15,4 +15,4 @@ pub mod classifier;
 pub mod router;
 
 pub use classifier::{ClassificationResult, ComplexityTier, QueryClassifier};
-pub use router::{parse_model_override, ModelRouter, RoutingDecision};
+pub use router::{ModelRouter, RoutingDecision, parse_model_override};

@@ -17,14 +17,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 
+use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
 };
-use blufio_core::BlufioError;
 
 use crate::auth::AuthConfig;
 use crate::server::{GatewayState, HealthState, ServerConfig};
@@ -55,7 +55,10 @@ impl std::fmt::Debug for GatewayChannelConfig {
             .field("enabled", &self.enabled)
             .field("host", &self.host)
             .field("port", &self.port)
-            .field("bearer_token", &self.bearer_token.as_ref().map(|_| "[redacted]"))
+            .field(
+                "bearer_token",
+                &self.bearer_token.as_ref().map(|_| "[redacted]"),
+            )
             .field("keypair_public_key", &self.keypair_public_key.is_some())
             .field(
                 "prometheus_render",
@@ -192,24 +195,24 @@ impl ChannelAdapter for GatewayChannel {
         let ws_id = meta.get("ws_id").and_then(|v| v.as_str());
 
         // Try WebSocket sender first (if ws_id present).
-        if let Some(ws_id) = ws_id {
-            if let Some(sender) = self.ws_senders.get(ws_id) {
-                let ws_msg = serde_json::json!({
-                    "type": ws::message_types::MESSAGE_COMPLETE,
-                    "content": msg.content,
-                    "session_id": msg.session_id,
-                });
-                let _ = sender.send(ws_msg.to_string()).await;
-                return Ok(MessageId(request_id.to_string()));
-            }
+        if let Some(ws_id) = ws_id
+            && let Some(sender) = self.ws_senders.get(ws_id)
+        {
+            let ws_msg = serde_json::json!({
+                "type": ws::message_types::MESSAGE_COMPLETE,
+                "content": msg.content,
+                "session_id": msg.session_id,
+            });
+            let _ = sender.send(ws_msg.to_string()).await;
+            return Ok(MessageId(request_id.to_string()));
         }
 
         // Try HTTP response map.
-        if !request_id.is_empty() {
-            if let Some((_, sender)) = self.response_map.remove(request_id) {
-                let _ = sender.send(msg.content);
-                return Ok(MessageId(request_id.to_string()));
-            }
+        if !request_id.is_empty()
+            && let Some((_, sender)) = self.response_map.remove(request_id)
+        {
+            let _ = sender.send(msg.content);
+            return Ok(MessageId(request_id.to_string()));
         }
 
         // No matching handler found.

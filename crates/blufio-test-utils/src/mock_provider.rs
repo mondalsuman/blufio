@@ -14,13 +14,13 @@ use async_trait::async_trait;
 use futures::stream;
 use tokio::sync::Mutex;
 
+use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::provider::ProviderAdapter;
 use blufio_core::types::{
     AdapterType, HealthStatus, ProviderRequest, ProviderResponse, ProviderStreamChunk,
     StreamEventType, TokenUsage,
 };
-use blufio_core::BlufioError;
 
 /// A mock LLM provider that returns pre-configured responses.
 ///
@@ -91,10 +91,7 @@ impl PluginAdapter for MockProvider {
 
 #[async_trait]
 impl ProviderAdapter for MockProvider {
-    async fn complete(
-        &self,
-        request: ProviderRequest,
-    ) -> Result<ProviderResponse, BlufioError> {
+    async fn complete(&self, request: ProviderRequest) -> Result<ProviderResponse, BlufioError> {
         let text = self.next_response().await;
         Ok(ProviderResponse {
             id: format!("mock-resp-{}", uuid::Uuid::new_v4()),
@@ -114,12 +111,7 @@ impl ProviderAdapter for MockProvider {
         &self,
         request: ProviderRequest,
     ) -> Result<
-        Pin<
-            Box<
-                dyn futures_core::Stream<Item = Result<ProviderStreamChunk, BlufioError>>
-                    + Send,
-            >,
-        >,
+        Pin<Box<dyn futures_core::Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>>,
         BlufioError,
     > {
         let text = self.next_response().await;

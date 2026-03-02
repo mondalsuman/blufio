@@ -28,7 +28,7 @@ pub fn install_signal_handler() -> CancellationToken {
 
         #[cfg(unix)]
         {
-            use tokio::signal::unix::{signal, SignalKind};
+            use tokio::signal::unix::{SignalKind, signal};
             let mut sigterm =
                 signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
 
@@ -66,10 +66,7 @@ pub fn install_signal_handler() -> CancellationToken {
 /// [`ToolExecuting`](SessionState::ToolExecuting)) are given time to finish.
 /// When the timeout is reached, each undrained session is logged with its
 /// ID and current state for debugging.
-pub async fn drain_sessions(
-    sessions: &HashMap<String, SessionActor>,
-    timeout: Duration,
-) {
+pub async fn drain_sessions(sessions: &HashMap<String, SessionActor>, timeout: Duration) {
     // Count sessions that are NOT idle and NOT already draining (need draining).
     let active_count = sessions
         .values()

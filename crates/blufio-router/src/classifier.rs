@@ -40,25 +40,68 @@ pub struct ClassificationResult {
 
 /// Simple greeting/farewell patterns (exact match, case-insensitive).
 const SIMPLE_EXACT: &[&str] = &[
-    "hi", "hello", "hey", "thanks", "thank you", "bye", "ok", "okay",
-    "yes", "no", "sure", "good", "great", "cool", "nice", "wow", "lol",
-    "haha", "yep", "nope", "yea", "yeah", "nah",
+    "hi",
+    "hello",
+    "hey",
+    "thanks",
+    "thank you",
+    "bye",
+    "ok",
+    "okay",
+    "yes",
+    "no",
+    "sure",
+    "good",
+    "great",
+    "cool",
+    "nice",
+    "wow",
+    "lol",
+    "haha",
+    "yep",
+    "nope",
+    "yea",
+    "yeah",
+    "nah",
 ];
 
 /// Simple question patterns (contains, case-insensitive).
 const SIMPLE_QUESTIONS: &[&str] = &[
-    "what time", "what day", "what date", "how are you",
-    "what's up", "who are you", "what's your name",
-    "what is the time", "what is the date",
+    "what time",
+    "what day",
+    "what date",
+    "how are you",
+    "what's up",
+    "who are you",
+    "what's your name",
+    "what is the time",
+    "what is the date",
 ];
 
 /// Complex indicator patterns (contains, case-insensitive).
 const COMPLEX_INDICATORS: &[&str] = &[
-    "analyze", "compare", "evaluate", "implement", "design",
-    "architecture", "trade-off", "tradeoff", "pros and cons",
-    "step by step", "explain in detail", "debug", "refactor",
-    "code review", "write a function", "write code", "write a program",
-    "optimize", "algorithm", "strategy", "in depth", "comprehensive",
+    "analyze",
+    "compare",
+    "evaluate",
+    "implement",
+    "design",
+    "architecture",
+    "trade-off",
+    "tradeoff",
+    "pros and cons",
+    "step by step",
+    "explain in detail",
+    "debug",
+    "refactor",
+    "code review",
+    "write a function",
+    "write code",
+    "write a program",
+    "optimize",
+    "algorithm",
+    "strategy",
+    "in depth",
+    "comprehensive",
 ];
 
 /// Heuristic query classifier with zero cost and zero latency.
@@ -181,25 +224,28 @@ impl QueryClassifier {
             .iter()
             .filter(|m| {
                 let lower = m.to_lowercase();
-                COMPLEX_INDICATORS.iter().any(|c| lower.contains(c))
-                    || m.contains("```")
+                COMPLEX_INDICATORS.iter().any(|c| lower.contains(c)) || m.contains("```")
             })
             .count();
 
-        if complex_count >= 2 {
-            1
-        } else {
-            0
-        }
+        if complex_count >= 2 { 1 } else { 0 }
     }
 
     fn score_to_tier(score: i32) -> (ComplexityTier, f32, &'static str) {
         if score <= -2 {
             let confidence = ((-score) as f32 / 5.0).min(1.0);
-            (ComplexityTier::Simple, confidence, "simple query indicators")
+            (
+                ComplexityTier::Simple,
+                confidence,
+                "simple query indicators",
+            )
         } else if score >= 2 {
             let confidence = (score as f32 / 5.0).min(1.0);
-            (ComplexityTier::Complex, confidence, "complex query indicators")
+            (
+                ComplexityTier::Complex,
+                confidence,
+                "complex query indicators",
+            )
         } else {
             let confidence = 1.0 - (score.unsigned_abs() as f32 / 3.0);
             (ComplexityTier::Standard, confidence, "standard complexity")
@@ -314,6 +360,9 @@ mod tests {
     fn high_confidence_on_strong_signals() {
         let c = QueryClassifier::new();
         let result = c.classify("hi", &[]);
-        assert!(result.confidence >= 0.8, "greetings should have high confidence");
+        assert!(
+            result.confidence >= 0.8,
+            "greetings should have high confidence"
+        );
     }
 }

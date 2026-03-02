@@ -10,6 +10,6 @@ pub mod redact;
 pub mod ssrf;
 pub mod tls;
 
-pub use redact::{redact, RedactingWriter};
+pub use redact::{RedactingWriter, redact};
 pub use ssrf::SsrfSafeResolver;
 pub use tls::{build_secure_client, is_localhost, validate_url};

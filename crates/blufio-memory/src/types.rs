@@ -178,8 +178,14 @@ mod tests {
     fn memory_source_variants() {
         assert_eq!(MemorySource::Explicit.as_str(), "explicit");
         assert_eq!(MemorySource::Extracted.as_str(), "extracted");
-        assert_eq!(MemorySource::from_str_value("explicit"), MemorySource::Explicit);
-        assert_eq!(MemorySource::from_str_value("extracted"), MemorySource::Extracted);
+        assert_eq!(
+            MemorySource::from_str_value("explicit"),
+            MemorySource::Explicit
+        );
+        assert_eq!(
+            MemorySource::from_str_value("extracted"),
+            MemorySource::Extracted
+        );
     }
 
     #[test]
@@ -188,8 +194,14 @@ mod tests {
         assert_eq!(MemoryStatus::Superseded.as_str(), "superseded");
         assert_eq!(MemoryStatus::Forgotten.as_str(), "forgotten");
         assert_eq!(MemoryStatus::from_str_value("active"), MemoryStatus::Active);
-        assert_eq!(MemoryStatus::from_str_value("superseded"), MemoryStatus::Superseded);
-        assert_eq!(MemoryStatus::from_str_value("forgotten"), MemoryStatus::Forgotten);
+        assert_eq!(
+            MemoryStatus::from_str_value("superseded"),
+            MemoryStatus::Superseded
+        );
+        assert_eq!(
+            MemoryStatus::from_str_value("forgotten"),
+            MemoryStatus::Forgotten
+        );
     }
 
     #[test]
@@ -217,7 +229,10 @@ mod tests {
         // Normalized vector
         let v: Vec<f32> = vec![0.5773, 0.5773, 0.5773]; // ~1/sqrt(3) each
         let sim = cosine_similarity(&v, &v);
-        assert!((sim - 1.0).abs() < 0.01, "identical normalized vectors should have sim ~1.0, got {sim}");
+        assert!(
+            (sim - 1.0).abs() < 0.01,
+            "identical normalized vectors should have sim ~1.0, got {sim}"
+        );
     }
 
     #[test]
@@ -225,7 +240,10 @@ mod tests {
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![0.0, 1.0, 0.0];
         let sim = cosine_similarity(&a, &b);
-        assert!(sim.abs() < f32::EPSILON, "orthogonal vectors should have sim ~0.0, got {sim}");
+        assert!(
+            sim.abs() < f32::EPSILON,
+            "orthogonal vectors should have sim ~0.0, got {sim}"
+        );
     }
 
     #[test]
@@ -233,6 +251,9 @@ mod tests {
         let a = vec![1.0, 0.0];
         let b = vec![-1.0, 0.0];
         let sim = cosine_similarity(&a, &b);
-        assert!((sim - (-1.0)).abs() < f32::EPSILON, "opposite vectors should have sim ~-1.0, got {sim}");
+        assert!(
+            (sim - (-1.0)).abs() < f32::EPSILON,
+            "opposite vectors should have sim ~-1.0, got {sim}"
+        );
     }
 }

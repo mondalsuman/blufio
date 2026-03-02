@@ -43,20 +43,16 @@ impl AnthropicClient {
         let mut headers = HeaderMap::new();
         headers.insert(
             "x-api-key",
-            HeaderValue::from_str(&api_key).map_err(|e| BlufioError::Config(format!(
-                "invalid API key header value: {e}"
-            )))?,
+            HeaderValue::from_str(&api_key)
+                .map_err(|e| BlufioError::Config(format!("invalid API key header value: {e}")))?,
         );
         headers.insert(
             "anthropic-version",
-            HeaderValue::from_str(&api_version).map_err(|e| BlufioError::Config(format!(
-                "invalid API version header value: {e}"
-            )))?,
+            HeaderValue::from_str(&api_version).map_err(|e| {
+                BlufioError::Config(format!("invalid API version header value: {e}"))
+            })?,
         );
-        headers.insert(
-            "content-type",
-            HeaderValue::from_static("application/json"),
-        );
+        headers.insert("content-type", HeaderValue::from_static("application/json"));
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
@@ -236,10 +232,7 @@ impl AnthropicClient {
 
 /// Returns true for HTTP status codes that indicate transient errors worth retrying.
 fn is_transient_error(status: reqwest::StatusCode) -> bool {
-    matches!(
-        status.as_u16(),
-        429 | 500 | 503 | 529
-    )
+    matches!(status.as_u16(), 429 | 500 | 503 | 529)
 }
 
 #[cfg(test)]

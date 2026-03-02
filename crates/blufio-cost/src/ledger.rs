@@ -77,7 +77,9 @@ impl CostRecord {
             cache_read_tokens: usage.cache_read_tokens,
             cache_creation_tokens: usage.cache_creation_tokens,
             cost_usd,
-            created_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            created_at: chrono::Utc::now()
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string(),
             intended_model: None,
         }
     }
@@ -117,11 +119,12 @@ impl CostLedger {
     /// Creates its own tokio-rusqlite connection to the given path.
     /// The cost_ledger table must already exist (created by storage migrations).
     pub async fn open(path: &str) -> Result<Self, BlufioError> {
-        let conn = tokio_rusqlite::Connection::open(path)
-            .await
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+        let conn =
+            tokio_rusqlite::Connection::open(path)
+                .await
+                .map_err(|e| BlufioError::Storage {
+                    source: Box::new(e),
+                })?;
         Ok(Self::new(conn))
     }
 
@@ -184,13 +187,12 @@ impl CostLedger {
         let date = date.to_string();
         self.conn
             .call(move |conn| {
-                let total: f64 = conn
-                    .query_row(
-                        "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
+                let total: f64 = conn.query_row(
+                    "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
                          WHERE created_at >= ?1 AND created_at < date(?1, '+1 day')",
-                        rusqlite::params![date],
-                        |row| row.get(0),
-                    )?;
+                    rusqlite::params![date],
+                    |row| row.get(0),
+                )?;
                 Ok(total)
             })
             .await
@@ -202,13 +204,12 @@ impl CostLedger {
         let prefix = format!("{year_month}%");
         self.conn
             .call(move |conn| {
-                let total: f64 = conn
-                    .query_row(
-                        "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
+                let total: f64 = conn.query_row(
+                    "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
                          WHERE created_at LIKE ?1",
-                        rusqlite::params![prefix],
-                        |row| row.get(0),
-                    )?;
+                    rusqlite::params![prefix],
+                    |row| row.get(0),
+                )?;
                 Ok(total)
             })
             .await
@@ -220,13 +221,12 @@ impl CostLedger {
         let session_id = session_id.to_string();
         self.conn
             .call(move |conn| {
-                let total: f64 = conn
-                    .query_row(
-                        "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
+                let total: f64 = conn.query_row(
+                    "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
                          WHERE session_id = ?1",
-                        rusqlite::params![session_id],
-                        |row| row.get(0),
-                    )?;
+                    rusqlite::params![session_id],
+                    |row| row.get(0),
+                )?;
                 Ok(total)
             })
             .await
@@ -240,9 +240,7 @@ mod tests {
 
     /// Create an in-memory database with the cost_ledger schema applied.
     async fn test_db() -> tokio_rusqlite::Connection {
-        let conn = tokio_rusqlite::Connection::open_in_memory()
-            .await
-            .unwrap();
+        let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
         conn.call(|conn| -> Result<(), rusqlite::Error> {
             conn.execute_batch(
                 "CREATE TABLE cost_ledger (
@@ -327,10 +325,7 @@ mod tests {
             .unwrap();
 
         let total = ledger.daily_total(&today).await.unwrap();
-        assert!(
-            (total - 2.25).abs() < 1e-10,
-            "expected 2.25, got {total}"
-        );
+        assert!((total - 2.25).abs() < 1e-10, "expected 2.25, got {total}");
     }
 
     #[tokio::test]
@@ -353,10 +348,7 @@ mod tests {
             .unwrap();
 
         let total = ledger.monthly_total(&year_month).await.unwrap();
-        assert!(
-            (total - 5.0).abs() < 1e-10,
-            "expected 5.0, got {total}"
-        );
+        assert!((total - 5.0).abs() < 1e-10, "expected 5.0, got {total}");
     }
 
     #[tokio::test]
@@ -438,7 +430,10 @@ mod tests {
         assert_eq!(rec.cache_read_tokens, 100);
         assert!(!rec.id.is_empty());
         assert!(!rec.created_at.is_empty());
-        assert!(rec.intended_model.is_none(), "intended_model should default to None");
+        assert!(
+            rec.intended_model.is_none(),
+            "intended_model should default to None"
+        );
     }
 
     #[test]

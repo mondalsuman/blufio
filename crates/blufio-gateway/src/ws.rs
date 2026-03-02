@@ -17,8 +17,8 @@
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::Response,
 };
@@ -41,10 +41,7 @@ struct WsIncoming {
 /// WebSocket upgrade handler.
 ///
 /// Upgrades the HTTP connection to WebSocket and spawns a handler task.
-pub async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<GatewayState>,
-) -> Response {
+pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<GatewayState>) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 

@@ -68,9 +68,7 @@ impl Resolve for SsrfSafeResolver {
             let host = format!("{hostname}:0");
             let addrs: Vec<SocketAddr> = tokio::net::lookup_host(&host)
                 .await
-                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-                    Box::new(e)
-                })?
+                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?
                 .collect();
 
             // Filter private IPs.

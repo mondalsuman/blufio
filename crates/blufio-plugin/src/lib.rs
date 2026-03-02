@@ -12,5 +12,5 @@ pub mod manifest;
 pub mod registry;
 
 pub use catalog::{builtin_catalog, search_catalog};
-pub use manifest::{parse_plugin_manifest, PluginManifest};
+pub use manifest::{PluginManifest, parse_plugin_manifest};
 pub use registry::{PluginEntry, PluginFactory, PluginRegistry, PluginStatus};

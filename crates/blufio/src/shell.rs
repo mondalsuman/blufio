@@ -13,22 +13,24 @@ use std::sync::Arc;
 use blufio_anthropic::AnthropicProvider;
 use blufio_config::model::BlufioConfig;
 use blufio_context::ContextEngine;
-use blufio_cost::ledger::{CostRecord, FeatureType};
-use blufio_cost::{pricing, BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
     ContentBlock, InboundMessage, Message, MessageContent, ProviderMessage, ProviderRequest,
     Session, StreamEventType, TokenUsage, ToolUseData,
 };
 use blufio_core::{ProviderAdapter, StorageAdapter};
-use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
+use blufio_cost::ledger::{CostRecord, FeatureType};
+use blufio_cost::{BudgetTracker, CostLedger, pricing};
+use blufio_memory::{
+    HybridRetriever, MemoryExtractor, MemoryProvider, MemoryStore, ModelManager, OnnxEmbedder,
+};
 use blufio_router::ModelRouter;
 use blufio_skill::{SkillProvider, ToolRegistry};
 use blufio_storage::SqliteStorage;
 use colored::Colorize;
 use futures::StreamExt;
-use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
 use tracing::{debug, info, warn};
 
 /// Maximum number of tool_use/tool_result loop iterations per message.
@@ -54,8 +56,7 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
         })?);
 
     // Initialize context engine.
-    let mut context_engine =
-        ContextEngine::new(&config.agent, &config.context).await?;
+    let mut context_engine = ContextEngine::new(&config.agent, &config.context).await?;
 
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]
@@ -85,26 +86,25 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
     // Initialize tool registry with built-in tools.
     let mut tool_registry = ToolRegistry::new();
     blufio_skill::builtin::register_builtins(&mut tool_registry);
-    info!("tool registry initialized with {} built-in tools", tool_registry.len());
+    info!(
+        "tool registry initialized with {} built-in tools",
+        tool_registry.len()
+    );
     let tool_registry = Arc::new(tokio::sync::RwLock::new(tool_registry));
 
     // Register SkillProvider with context engine for progressive tool discovery.
-    let skill_provider = SkillProvider::new(
-        tool_registry.clone(),
-        config.skill.max_skills_in_prompt,
-    );
+    let skill_provider =
+        SkillProvider::new(tool_registry.clone(), config.skill.max_skills_in_prompt);
     context_engine.add_conditional_provider(Box::new(skill_provider));
 
     let context_engine = Arc::new(context_engine);
 
     // Initialize cost ledger.
-    let cost_ledger = Arc::new(
-        CostLedger::open(&config.storage.database_path).await?
-    );
+    let cost_ledger = Arc::new(CostLedger::open(&config.storage.database_path).await?);
 
     // Initialize budget tracker from existing ledger data.
     let budget_tracker = Arc::new(tokio::sync::Mutex::new(
-        BudgetTracker::from_ledger(&config.cost, &cost_ledger).await?
+        BudgetTracker::from_ledger(&config.cost, &cost_ledger).await?,
     ));
 
     // Initialize model router for per-message routing (even in shell mode).
@@ -125,9 +125,8 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
     storage.create_session(&session).await?;
 
     // Set up readline editor.
-    let mut rl = DefaultEditor::new().map_err(|e| {
-        BlufioError::Internal(format!("failed to initialize readline: {e}"))
-    })?;
+    let mut rl = DefaultEditor::new()
+        .map_err(|e| BlufioError::Internal(format!("failed to initialize readline: {e}")))?;
 
     // Print welcome message.
     println!("{}", "blufio shell".bold().green());
@@ -162,7 +161,6 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
                     &session_id,
                     trimmed,
                 )
-
                 .await
                 {
                     match &e {
@@ -193,16 +191,11 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
     // Log session cost summary on exit.
     let session_cost = cost_ledger.session_total(&session_id).await.unwrap_or(0.0);
     if session_cost > 0.0 {
-        println!(
-            "{}",
-            format!("session cost: ${session_cost:.4}").dimmed()
-        );
+        println!("{}", format!("session cost: ${session_cost:.4}").dimmed());
     }
 
     // Clean up: close session.
-    storage
-        .update_session_state(&session_id, "closed")
-        .await?;
+    storage.update_session_state(&session_id, "closed").await?;
     storage.close().await?;
 
     println!("{}", "goodbye".dimmed());
@@ -273,7 +266,11 @@ async fn handle_shell_message(
         let intended = Some(decision.intended_model.clone());
         (model, max_tokens, intended)
     } else {
-        (config.anthropic.default_model.clone(), config.anthropic.max_tokens, None)
+        (
+            config.anthropic.default_model.clone(),
+            config.anthropic.max_tokens,
+            None,
+        )
     };
 
     // Set current query on memory provider for retrieval.
@@ -293,15 +290,9 @@ async fn handle_shell_message(
     };
 
     // Assemble context using the three-zone context engine.
-    let assembled = context_engine.assemble(
-        provider,
-        storage,
-        session_id,
-        &inbound,
-        &model,
-        max_tokens,
-    )
-    .await;
+    let assembled = context_engine
+        .assemble(provider, storage, session_id, &inbound, &model, max_tokens)
+        .await;
 
     // Clear current query on memory provider (regardless of assembly outcome).
     if let Some(mp) = memory_provider {
@@ -312,7 +303,9 @@ async fn handle_shell_message(
 
     // Record compaction costs if compaction was triggered.
     if let Some(ref compaction_usage) = assembled.compaction_usage {
-        let compaction_model = assembled.compaction_model.as_deref()
+        let compaction_model = assembled
+            .compaction_model
+            .as_deref()
             .unwrap_or("claude-haiku-4-5-20250901");
         let model_pricing = pricing::get_pricing(compaction_model);
         let cost_usd = pricing::calculate_cost(compaction_usage, &model_pricing);
@@ -344,7 +337,7 @@ async fn handle_shell_message(
     let mut request = assembled.request;
     {
         let registry = tool_registry.read().await;
-        if registry.len() > 0 {
+        if !registry.is_empty() {
             request.tools = Some(registry.tool_definitions());
         }
     }
@@ -440,8 +433,7 @@ async fn handle_shell_message(
         }
 
         // Check if we have tool_use blocks to execute.
-        let has_tool_use = !tool_uses.is_empty()
-            || stop_reason.as_deref() == Some("tool_use");
+        let has_tool_use = !tool_uses.is_empty() || stop_reason.as_deref() == Some("tool_use");
 
         if !has_tool_use || tool_uses.is_empty() {
             // No tool calls -- we're done.
@@ -486,8 +478,7 @@ async fn handle_shell_message(
         all_messages.push(ProviderMessage {
             role: "assistant".to_string(),
             content: vec![ContentBlock::Text {
-                text: serde_json::to_string(&assistant_content_blocks)
-                    .unwrap_or_default(),
+                text: serde_json::to_string(&assistant_content_blocks).unwrap_or_default(),
             }],
         });
 
@@ -496,10 +487,7 @@ async fn handle_shell_message(
         {
             let registry = tool_registry.read().await;
             for tu in &tool_uses {
-                eprintln!(
-                    "{}",
-                    format!("[tool: {}] executing...", tu.name).dimmed()
-                );
+                eprintln!("{}", format!("[tool: {}] executing...", tu.name).dimmed());
                 let output = if let Some(tool) = registry.get(&tu.name) {
                     match tool.invoke(tu.input.clone()).await {
                         Ok(output) => output,
@@ -528,8 +516,7 @@ async fn handle_shell_message(
         all_messages.push(ProviderMessage {
             role: "user".to_string(),
             content: vec![ContentBlock::Text {
-                text: serde_json::to_string(&tool_result_blocks)
-                    .unwrap_or_default(),
+                text: serde_json::to_string(&tool_result_blocks).unwrap_or_default(),
             }],
         });
 

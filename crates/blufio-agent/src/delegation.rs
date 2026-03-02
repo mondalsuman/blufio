@@ -179,7 +179,7 @@ impl DelegationRouter {
             "delegation".to_string(),
             self.router.clone(),
             agent.config.model.clone(),
-            4096, // default max tokens for specialists
+            4096,  // default max tokens for specialists
             false, // routing disabled for specialists
             300,   // idle timeout (irrelevant for ephemeral)
             tool_registry,
@@ -233,8 +233,7 @@ impl DelegationRouter {
         };
 
         // 8. Create and sign response message
-        let response =
-            AgentMessage::new_response(&signed_req.message, agent_name, &response_text);
+        let response = AgentMessage::new_response(&signed_req.message, agent_name, &response_text);
         let signed_resp = SignedAgentMessage::new(response, &agent.keypair);
 
         // 9. Verify response signature
@@ -381,20 +380,29 @@ mod tests {
 
     #[async_trait]
     impl blufio_core::traits::adapter::PluginAdapter for DelayedMockProvider {
-        fn name(&self) -> &str { "delayed-mock" }
-        fn version(&self) -> semver::Version { semver::Version::new(0, 1, 0) }
+        fn name(&self) -> &str {
+            "delayed-mock"
+        }
+        fn version(&self) -> semver::Version {
+            semver::Version::new(0, 1, 0)
+        }
         fn adapter_type(&self) -> blufio_core::types::AdapterType {
             blufio_core::types::AdapterType::Provider
         }
         async fn health_check(&self) -> Result<blufio_core::types::HealthStatus, BlufioError> {
             Ok(blufio_core::types::HealthStatus::Healthy)
         }
-        async fn shutdown(&self) -> Result<(), BlufioError> { Ok(()) }
+        async fn shutdown(&self) -> Result<(), BlufioError> {
+            Ok(())
+        }
     }
 
     #[async_trait]
     impl ProviderAdapter for DelayedMockProvider {
-        async fn complete(&self, _req: ProviderRequest) -> Result<blufio_core::types::ProviderResponse, BlufioError> {
+        async fn complete(
+            &self,
+            _req: ProviderRequest,
+        ) -> Result<blufio_core::types::ProviderResponse, BlufioError> {
             tokio::time::sleep(self.delay).await;
             Ok(blufio_core::types::ProviderResponse {
                 id: "delayed".to_string(),
@@ -405,27 +413,56 @@ mod tests {
             })
         }
 
-        async fn stream(&self, _req: ProviderRequest) -> Result<Pin<Box<dyn futures_core::Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>>, BlufioError> {
+        async fn stream(
+            &self,
+            _req: ProviderRequest,
+        ) -> Result<
+            Pin<
+                Box<
+                    dyn futures_core::Stream<Item = Result<ProviderStreamChunk, BlufioError>>
+                        + Send,
+                >,
+            >,
+            BlufioError,
+        > {
             tokio::time::sleep(self.delay).await;
             let chunks = vec![
                 Ok(ProviderStreamChunk {
                     event_type: StreamEventType::MessageStart,
-                    text: None, usage: None, error: None, tool_use: None, stop_reason: None,
+                    text: None,
+                    usage: None,
+                    error: None,
+                    tool_use: None,
+                    stop_reason: None,
                 }),
                 Ok(ProviderStreamChunk {
                     event_type: StreamEventType::ContentBlockDelta,
                     text: Some("delayed response".to_string()),
-                    usage: None, error: None, tool_use: None, stop_reason: None,
+                    usage: None,
+                    error: None,
+                    tool_use: None,
+                    stop_reason: None,
                 }),
                 Ok(ProviderStreamChunk {
                     event_type: StreamEventType::MessageDelta,
                     text: None,
-                    usage: Some(TokenUsage { input_tokens: 5, output_tokens: 5, cache_read_tokens: 0, cache_creation_tokens: 0 }),
-                    error: None, tool_use: None, stop_reason: Some("end_turn".to_string()),
+                    usage: Some(TokenUsage {
+                        input_tokens: 5,
+                        output_tokens: 5,
+                        cache_read_tokens: 0,
+                        cache_creation_tokens: 0,
+                    }),
+                    error: None,
+                    tool_use: None,
+                    stop_reason: Some("end_turn".to_string()),
                 }),
                 Ok(ProviderStreamChunk {
                     event_type: StreamEventType::MessageStop,
-                    text: None, usage: None, error: None, tool_use: None, stop_reason: None,
+                    text: None,
+                    usage: None,
+                    error: None,
+                    tool_use: None,
+                    stop_reason: None,
                 }),
             ];
             Ok(Box::pin(futures::stream::iter(chunks)))
@@ -441,7 +478,10 @@ mod tests {
         };
         let storage = blufio_storage::SqliteStorage::new(storage_config);
         storage.initialize().await.unwrap();
-        (Arc::new(storage) as Arc<dyn StorageAdapter + Send + Sync>, temp_dir)
+        (
+            Arc::new(storage) as Arc<dyn StorageAdapter + Send + Sync>,
+            temp_dir,
+        )
     }
 
     async fn make_mock_provider(responses: Vec<String>) -> Arc<dyn ProviderAdapter + Send + Sync> {
@@ -501,7 +541,13 @@ mod tests {
         let agents = make_agent_configs();
 
         let dr = DelegationRouter::new(
-            &agents, provider, storage, cost_ledger, budget_tracker, router_model, 60,
+            &agents,
+            provider,
+            storage,
+            cost_ledger,
+            budget_tracker,
+            router_model,
+            60,
         );
 
         assert_eq!(dr.agent_names().len(), 2);
@@ -518,10 +564,19 @@ mod tests {
         let agents = make_agent_configs();
 
         let dr = DelegationRouter::new(
-            &agents, provider, storage, cost_ledger, budget_tracker, router_model, 60,
+            &agents,
+            provider,
+            storage,
+            cost_ledger,
+            budget_tracker,
+            router_model,
+            60,
         );
 
-        let result = dr.delegate("summarizer", "summarize this", "some text").await.unwrap();
+        let result = dr
+            .delegate("summarizer", "summarize this", "some text")
+            .await
+            .unwrap();
         assert_eq!(result, "specialist result");
     }
 
@@ -535,7 +590,13 @@ mod tests {
         let agents = make_agent_configs();
 
         let dr = DelegationRouter::new(
-            &agents, provider, storage, cost_ledger, budget_tracker, router_model, 60,
+            &agents,
+            provider,
+            storage,
+            cost_ledger,
+            budget_tracker,
+            router_model,
+            60,
         );
 
         let result = dr.delegate("nonexistent", "task", "").await;
@@ -563,7 +624,13 @@ mod tests {
 
         // Very short timeout (100ms)
         let dr = DelegationRouter::new(
-            &agents, provider, storage, cost_ledger, budget_tracker, router_model, 0,
+            &agents,
+            provider,
+            storage,
+            cost_ledger,
+            budget_tracker,
+            router_model,
+            0,
         );
         // Override timeout to 100ms (0 secs rounds to 0, which is instant timeout)
         // Actually use the timeout that was set to 0 seconds
@@ -571,7 +638,10 @@ mod tests {
         let result = dr.delegate("slow", "be slow", "").await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("timed out"), "expected timeout error, got: {err}");
+        assert!(
+            err.contains("timed out"),
+            "expected timeout error, got: {err}"
+        );
     }
 
     #[tokio::test]
@@ -601,7 +671,13 @@ mod tests {
         let agents = make_agent_configs();
 
         let dr = Arc::new(DelegationRouter::new(
-            &agents, provider, storage, cost_ledger, budget_tracker, router_model, 60,
+            &agents,
+            provider,
+            storage,
+            cost_ledger,
+            budget_tracker,
+            router_model,
+            60,
         ));
         let tool = DelegationTool::new(dr);
 
@@ -625,7 +701,13 @@ mod tests {
         let agents = make_agent_configs();
 
         let dr = Arc::new(DelegationRouter::new(
-            &agents, provider, storage, cost_ledger, budget_tracker, router_model, 60,
+            &agents,
+            provider,
+            storage,
+            cost_ledger,
+            budget_tracker,
+            router_model,
+            60,
         ));
         let tool = DelegationTool::new(dr);
 
@@ -650,7 +732,13 @@ mod tests {
         let agents = make_agent_configs();
 
         let dr = Arc::new(DelegationRouter::new(
-            &agents, provider, storage, cost_ledger, budget_tracker, router_model, 60,
+            &agents,
+            provider,
+            storage,
+            cost_ledger,
+            budget_tracker,
+            router_model,
+            60,
         ));
         let tool = DelegationTool::new(dr);
 

@@ -11,15 +11,15 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use tracing::{info, warn};
 
+use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
 };
-use blufio_core::BlufioError;
 
 /// A multiplexer that aggregates multiple channel adapters into a single
 /// `ChannelAdapter` interface.
@@ -61,11 +61,7 @@ impl ChannelMultiplexer {
     ///
     /// Must be called before `connect()`. The channel name is used for
     /// routing outbound messages back to the correct channel.
-    pub fn add_channel(
-        &mut self,
-        name: String,
-        channel: Box<dyn ChannelAdapter + Send + Sync>,
-    ) {
+    pub fn add_channel(&mut self, name: String, channel: Box<dyn ChannelAdapter + Send + Sync>) {
         self.pending_channels.push((name, channel));
     }
 
@@ -181,8 +177,7 @@ impl ChannelAdapter for ChannelMultiplexer {
                             // Tag the message with its source channel.
                             if msg.metadata.is_none() {
                                 msg.metadata = Some(
-                                    serde_json::json!({"source_channel": channel_name})
-                                        .to_string(),
+                                    serde_json::json!({"source_channel": channel_name}).to_string(),
                                 );
                             } else if let Some(ref meta_str) = msg.metadata
                                 && let Ok(mut meta) =
@@ -282,7 +277,9 @@ impl ChannelAdapter for ChannelMultiplexer {
     ) -> Result<(), BlufioError> {
         // Try all channels -- only the correct one will succeed.
         for (_, channel) in self.connected_channels.iter() {
-            let _ = channel.edit_message(chat_id, message_id, text, parse_mode).await;
+            let _ = channel
+                .edit_message(chat_id, message_id, text, parse_mode)
+                .await;
         }
         Ok(())
     }

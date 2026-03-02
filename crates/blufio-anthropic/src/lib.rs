@@ -124,12 +124,18 @@ impl AnthropicProvider {
         };
 
         // Convert tool definitions from serde_json::Value to ToolDefinition structs.
-        let tools = request.tools.as_ref().map(|tool_values| {
-            tool_values
-                .iter()
-                .filter_map(|v| serde_json::from_value::<crate::types::ToolDefinition>(v.clone()).ok())
-                .collect::<Vec<_>>()
-        }).and_then(|v| if v.is_empty() { None } else { Some(v) });
+        let tools = request
+            .tools
+            .as_ref()
+            .map(|tool_values| {
+                tool_values
+                    .iter()
+                    .filter_map(|v| {
+                        serde_json::from_value::<crate::types::ToolDefinition>(v.clone()).ok()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .and_then(|v| if v.is_empty() { None } else { Some(v) });
 
         MessageRequest {
             model: request.model.clone(),
@@ -172,10 +178,7 @@ impl PluginAdapter for AnthropicProvider {
 
 #[async_trait]
 impl ProviderAdapter for AnthropicProvider {
-    async fn complete(
-        &self,
-        request: ProviderRequest,
-    ) -> Result<ProviderResponse, BlufioError> {
+    async fn complete(&self, request: ProviderRequest) -> Result<ProviderResponse, BlufioError> {
         let api_request = self.to_message_request(&request);
         let response = self.client.complete_message(&api_request).await?;
 
@@ -270,8 +273,7 @@ fn map_stream_event_to_chunk_stateful(
                 })),
                 crate::types::SseDelta::InputJsonDelta { partial_json } => {
                     // Accumulate partial JSON for tool_use blocks.
-                    if let Some((_id, _name, json)) = tool_use_blocks.get_mut(&delta.index)
-                    {
+                    if let Some((_id, _name, json)) = tool_use_blocks.get_mut(&delta.index) {
                         json.push_str(&partial_json);
                     }
                     None
@@ -467,8 +469,8 @@ mod tests {
         let result = resolve_api_key(&Some("".into()));
         // Will fail unless ANTHROPIC_API_KEY is set, which is fine for tests.
         // We just verify it doesn't return the empty string.
-        if result.is_ok() {
-            assert!(!result.unwrap().is_empty());
+        if let Ok(key) = result {
+            assert!(!key.is_empty());
         }
     }
 
@@ -476,8 +478,8 @@ mod tests {
     fn resolve_api_key_none_falls_back_to_env() {
         let result = resolve_api_key(&None);
         // Will succeed if env is set, fail otherwise.
-        if result.is_err() {
-            let err = result.unwrap_err().to_string();
+        if let Err(e) = result {
+            let err = e.to_string();
             assert!(err.contains("API key not found"), "got: {err}");
         }
     }
@@ -490,8 +492,7 @@ mod tests {
 
     #[tokio::test]
     async fn system_prompt_inline_overrides_default() {
-        let prompt =
-            load_system_prompt("blufio", &Some("Custom prompt.".into()), &None).await;
+        let prompt = load_system_prompt("blufio", &Some("Custom prompt.".into()), &None).await;
         assert_eq!(prompt, "Custom prompt.");
     }
 
@@ -579,9 +580,7 @@ mod tests {
             system_blocks: None,
             messages: vec![ProviderMessage {
                 role: "user".into(),
-                content: vec![ContentBlock::Text {
-                    text: "Hi".into(),
-                }],
+                content: vec![ContentBlock::Text { text: "Hi".into() }],
             }],
             max_tokens: 2048,
             stream: true,
@@ -767,9 +766,8 @@ mod tests {
         );
 
         // 3. content_block_stop emits the tool_use chunk
-        let stop_event = StreamEvent::ContentBlockStop(crate::types::SseContentBlockStop {
-            index: 1,
-        });
+        let stop_event =
+            StreamEvent::ContentBlockStop(crate::types::SseContentBlockStop { index: 1 });
         let chunk =
             map_stream_event_to_chunk_stateful(stop_event, &mut tool_blocks, &mut stop_reason)
                 .unwrap()

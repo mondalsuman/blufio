@@ -38,16 +38,14 @@ pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
         source: Box::new(e),
     })?;
 
-    let mut dst =
-        Connection::open(backup_path).map_err(|e| BlufioError::Storage {
+    let mut dst = Connection::open(backup_path).map_err(|e| BlufioError::Storage {
+        source: Box::new(e),
+    })?;
+
+    let backup =
+        rusqlite::backup::Backup::new(&src, &mut dst).map_err(|e| BlufioError::Storage {
             source: Box::new(e),
         })?;
-
-    let backup = rusqlite::backup::Backup::new(&src, &mut dst).map_err(|e| {
-        BlufioError::Storage {
-            source: Box::new(e),
-        }
-    })?;
 
     // Copy 100 pages per step, sleep 10ms between steps.
     // This allows the running instance to continue writing.
@@ -58,10 +56,9 @@ pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
         })?;
 
     // Report file size.
-    let metadata =
-        std::fs::metadata(backup_path).map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+    let metadata = std::fs::metadata(backup_path).map_err(|e| BlufioError::Storage {
+        source: Box::new(e),
+    })?;
     let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
     eprintln!("Backup complete: {size_mb:.1} MB written to {backup_path}");
 
@@ -84,13 +81,11 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
     }
 
     // Validate source is a valid SQLite DB.
-    let test_conn = Connection::open_with_flags(
-        restore_from,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    let test_conn =
+        Connection::open_with_flags(restore_from, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| BlufioError::Storage {
+                source: Box::new(e),
+            })?;
 
     // Quick validation: can we query it?
     test_conn
@@ -109,24 +104,19 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
     }
 
     // Perform restore using backup API (reverse direction).
-    let src = Connection::open_with_flags(
-        restore_from,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
-
-    let mut dst =
-        Connection::open(db_path).map_err(|e| BlufioError::Storage {
+    let src = Connection::open_with_flags(restore_from, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| BlufioError::Storage {
             source: Box::new(e),
         })?;
 
-    let backup = rusqlite::backup::Backup::new(&src, &mut dst).map_err(|e| {
-        BlufioError::Storage {
-            source: Box::new(e),
-        }
+    let mut dst = Connection::open(db_path).map_err(|e| BlufioError::Storage {
+        source: Box::new(e),
     })?;
+
+    let backup =
+        rusqlite::backup::Backup::new(&src, &mut dst).map_err(|e| BlufioError::Storage {
+            source: Box::new(e),
+        })?;
 
     backup
         .run_to_completion(100, Duration::from_millis(10), None)
@@ -134,10 +124,9 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
             source: Box::new(e),
         })?;
 
-    let metadata =
-        std::fs::metadata(db_path).map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+    let metadata = std::fs::metadata(db_path).map_err(|e| BlufioError::Storage {
+        source: Box::new(e),
+    })?;
     let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
     eprintln!("Restore complete: {size_mb:.1} MB restored from {restore_from}");
 
@@ -181,11 +170,7 @@ mod tests {
         drop(conn);
 
         // Backup.
-        run_backup(
-            src_path.to_str().unwrap(),
-            backup_path.to_str().unwrap(),
-        )
-        .unwrap();
+        run_backup(src_path.to_str().unwrap(), backup_path.to_str().unwrap()).unwrap();
 
         // Verify backup is a valid SQLite DB with the data.
         let backup_conn = Connection::open(&backup_path).unwrap();
@@ -221,11 +206,7 @@ mod tests {
         drop(conn);
 
         // Restore.
-        run_restore(
-            db_path.to_str().unwrap(),
-            backup_path.to_str().unwrap(),
-        )
-        .unwrap();
+        run_restore(db_path.to_str().unwrap(), backup_path.to_str().unwrap()).unwrap();
 
         // Verify pre-restore backup exists.
         let pre_restore = format!("{}.pre-restore", db_path.to_str().unwrap());
@@ -257,10 +238,7 @@ mod tests {
         // Create a non-SQLite file.
         std::fs::write(&invalid_path, b"this is not a sqlite file").unwrap();
 
-        let result = run_restore(
-            db_path.to_str().unwrap(),
-            invalid_path.to_str().unwrap(),
-        );
+        let result = run_restore(db_path.to_str().unwrap(), invalid_path.to_str().unwrap());
         assert!(result.is_err());
     }
 
@@ -275,11 +253,7 @@ mod tests {
         drop(conn);
 
         // Backup should succeed.
-        run_backup(
-            src_path.to_str().unwrap(),
-            backup_path.to_str().unwrap(),
-        )
-        .unwrap();
+        run_backup(src_path.to_str().unwrap(), backup_path.to_str().unwrap()).unwrap();
 
         // Backup should be openable.
         let backup_conn = Connection::open(&backup_path).unwrap();

@@ -12,14 +12,15 @@ pub mod recording;
 use async_trait::async_trait;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 
+use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::observability::ObservabilityAdapter;
 use blufio_core::types::{AdapterType, HealthStatus, MetricEvent};
-use blufio_core::BlufioError;
 
 pub use recording::{
-    record_latency, record_message, record_tokens, set_active_sessions, set_budget_remaining,
-    set_memory_heap, set_memory_rss, set_memory_resident, set_memory_pressure, record_error,
+    record_error, record_latency, record_message, record_tokens, set_active_sessions,
+    set_budget_remaining, set_memory_heap, set_memory_pressure, set_memory_resident,
+    set_memory_rss,
 };
 
 /// Prometheus metrics adapter.
@@ -36,9 +37,9 @@ impl PrometheusAdapter {
     /// Installs the Prometheus recorder globally. Only one recorder can be
     /// installed per process. Returns an error if a recorder is already installed.
     pub fn new() -> Result<Self, BlufioError> {
-        let handle = PrometheusBuilder::new()
-            .install_recorder()
-            .map_err(|e| BlufioError::Internal(format!("failed to install Prometheus recorder: {e}")))?;
+        let handle = PrometheusBuilder::new().install_recorder().map_err(|e| {
+            BlufioError::Internal(format!("failed to install Prometheus recorder: {e}"))
+        })?;
 
         recording::register_metrics();
 
@@ -141,7 +142,11 @@ mod tests {
             labels: vec![("env".to_string(), "test".to_string())],
         };
         match event {
-            MetricEvent::Counter { name, value, labels } => {
+            MetricEvent::Counter {
+                name,
+                value,
+                labels,
+            } => {
                 assert_eq!(name, "test_counter");
                 assert_eq!(value, 42);
                 assert_eq!(labels.len(), 1);
@@ -154,13 +159,13 @@ mod tests {
     fn metric_event_gauge_creation() {
         let event = MetricEvent::Gauge {
             name: "test_gauge".to_string(),
-            value: 3.14,
+            value: std::f64::consts::PI,
             labels: vec![],
         };
         match event {
             MetricEvent::Gauge { name, value, .. } => {
                 assert_eq!(name, "test_gauge");
-                assert!((value - 3.14).abs() < f64::EPSILON);
+                assert!((value - std::f64::consts::PI).abs() < f64::EPSILON);
             }
             _ => panic!("expected Gauge"),
         }
@@ -174,7 +179,11 @@ mod tests {
             labels: vec![("method".to_string(), "GET".to_string())],
         };
         match event {
-            MetricEvent::Histogram { name, value, labels } => {
+            MetricEvent::Histogram {
+                name,
+                value,
+                labels,
+            } => {
                 assert_eq!(name, "test_histo");
                 assert!((value - 0.5).abs() < f64::EPSILON);
                 assert_eq!(labels.len(), 1);

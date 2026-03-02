@@ -192,7 +192,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let result = scaffold_skill("", tmp.path());
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("must not be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must not be empty")
+        );
     }
 
     #[test]
@@ -200,10 +205,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let result = scaffold_skill("bad name!", tmp.path());
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("invalid characters"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid characters")
+        );
     }
 
     #[test]
@@ -213,10 +220,7 @@ mod tests {
 
         let result = scaffold_skill("dupe", tmp.path());
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("already exists"));
+        assert!(result.unwrap_err().to_string().contains("already exists"));
     }
 
     #[test]
@@ -228,7 +232,10 @@ mod tests {
             std::fs::read_to_string(tmp.path().join("parseable-skill/skill.toml")).unwrap();
         // The generated skill.toml should be parseable by our manifest parser.
         let result = crate::parse_manifest(&toml_content);
-        assert!(result.is_ok(), "Generated skill.toml failed to parse: {result:?}");
+        assert!(
+            result.is_ok(),
+            "Generated skill.toml failed to parse: {result:?}"
+        );
         let manifest = result.unwrap();
         assert_eq!(manifest.name, "parseable-skill");
     }

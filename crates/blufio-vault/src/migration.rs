@@ -141,6 +141,7 @@ mod tests {
     use super::*;
     use blufio_config::model::VaultConfig;
     use secrecy::SecretString;
+    use serial_test::serial;
     use tempfile::tempdir;
 
     fn test_config() -> VaultConfig {
@@ -249,6 +250,7 @@ api_key = "sk-ant-test-key"
     }
 
     #[tokio::test]
+    #[serial]
     async fn vault_startup_check_no_vault_returns_none() {
         let (conn, _dir) = open_test_db().await;
         let vault_config = test_config();
@@ -258,6 +260,7 @@ api_key = "sk-ant-test-key"
     }
 
     #[tokio::test]
+    #[serial]
     async fn vault_startup_check_with_env_var() {
         let (conn, _dir) = open_test_db().await;
         let vault_config = test_config();
@@ -278,6 +281,7 @@ api_key = "sk-ant-test-key"
     }
 
     #[tokio::test]
+    #[serial]
     async fn vault_startup_check_vault_exists_no_passphrase_fails() {
         let (conn, _dir) = open_test_db().await;
         let vault_config = test_config();

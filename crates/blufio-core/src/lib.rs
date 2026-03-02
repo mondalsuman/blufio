@@ -15,9 +15,8 @@ pub mod types;
 pub use error::BlufioError;
 pub use types::{
     AdapterType, ChannelCapabilities, ContentBlock, HealthStatus, InboundMessage, Message,
-    MessageContent, MessageId, OutboundMessage, ProviderMessage, ProviderRequest,
-    ProviderResponse, ProviderStreamChunk, QueueEntry, Session, SessionId, StreamEventType,
-    TokenUsage,
+    MessageContent, MessageId, OutboundMessage, ProviderMessage, ProviderRequest, ProviderResponse,
+    ProviderStreamChunk, QueueEntry, Session, SessionId, StreamEventType, TokenUsage,
 };
 
 // Re-export all adapter traits at crate root.
@@ -78,7 +77,11 @@ mod tests {
             AdapterType::SkillRuntime,
         ];
 
-        assert_eq!(variants.len(), 7, "AdapterType must have exactly 7 variants");
+        assert_eq!(
+            variants.len(),
+            7,
+            "AdapterType must have exactly 7 variants"
+        );
 
         // Verify Display and FromStr round-trip for all variants.
         for variant in &variants {

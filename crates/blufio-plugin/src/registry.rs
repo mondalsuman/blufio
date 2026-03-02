@@ -7,9 +7,9 @@
 //! Each entry contains a manifest, status, and optional factory for creating
 //! adapter instances at runtime.
 
+use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::types::AdapterType;
-use blufio_core::BlufioError;
 use std::collections::HashMap;
 
 use crate::manifest::PluginManifest;
@@ -44,10 +44,7 @@ pub trait PluginFactory: Send + Sync {
     fn adapter_type(&self) -> AdapterType;
 
     /// Create a new adapter instance from the given configuration.
-    fn create(
-        &self,
-        config: &serde_json::Value,
-    ) -> Result<Box<dyn PluginAdapter>, BlufioError>;
+    fn create(&self, config: &serde_json::Value) -> Result<Box<dyn PluginAdapter>, BlufioError>;
 }
 
 /// A single entry in the plugin registry.
@@ -87,11 +84,7 @@ impl PluginRegistry {
     }
 
     /// Register a plugin with default status `Enabled`.
-    pub fn register(
-        &mut self,
-        manifest: PluginManifest,
-        factory: Option<Box<dyn PluginFactory>>,
-    ) {
+    pub fn register(&mut self, manifest: PluginManifest, factory: Option<Box<dyn PluginFactory>>) {
         self.register_with_status(manifest, factory, PluginStatus::Enabled);
     }
 
@@ -122,7 +115,9 @@ impl PluginRegistry {
     pub fn get_enabled(&self, adapter_type: AdapterType) -> Vec<&PluginEntry> {
         self.entries
             .values()
-            .filter(|e| e.status == PluginStatus::Enabled && e.manifest.adapter_type == adapter_type)
+            .filter(|e| {
+                e.status == PluginStatus::Enabled && e.manifest.adapter_type == adapter_type
+            })
             .collect()
     }
 
@@ -138,12 +133,13 @@ impl PluginRegistry {
     /// If `enabled` is true, sets status to `Enabled`.
     /// If `enabled` is false, sets status to `Disabled`.
     pub fn set_enabled(&mut self, name: &str, enabled: bool) -> Result<(), BlufioError> {
-        let entry = self.entries.get_mut(name).ok_or_else(|| {
-            BlufioError::AdapterNotFound {
+        let entry = self
+            .entries
+            .get_mut(name)
+            .ok_or_else(|| BlufioError::AdapterNotFound {
                 adapter_type: "unknown".to_string(),
                 name: name.to_string(),
-            }
-        })?;
+            })?;
         entry.status = if enabled {
             PluginStatus::Enabled
         } else {
@@ -221,13 +217,22 @@ mod tests {
         let mut registry = PluginRegistry::new();
         registry.register(test_manifest("telegram", AdapterType::Channel), None);
 
-        assert_eq!(registry.get("telegram").unwrap().status, PluginStatus::Enabled);
+        assert_eq!(
+            registry.get("telegram").unwrap().status,
+            PluginStatus::Enabled
+        );
 
         registry.set_enabled("telegram", false).unwrap();
-        assert_eq!(registry.get("telegram").unwrap().status, PluginStatus::Disabled);
+        assert_eq!(
+            registry.get("telegram").unwrap().status,
+            PluginStatus::Disabled
+        );
 
         registry.set_enabled("telegram", true).unwrap();
-        assert_eq!(registry.get("telegram").unwrap().status, PluginStatus::Enabled);
+        assert_eq!(
+            registry.get("telegram").unwrap().status,
+            PluginStatus::Enabled
+        );
     }
 
     #[test]

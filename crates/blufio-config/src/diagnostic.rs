@@ -46,10 +46,7 @@ pub enum ConfigError {
 
     /// A configuration value has the wrong type.
     #[error("invalid type for key `{key}`: {detail}")]
-    #[diagnostic(
-        code(blufio::config::invalid_type),
-        help("expected {expected}")
-    )]
+    #[diagnostic(code(blufio::config::invalid_type), help("expected {expected}"))]
     InvalidType {
         /// The key with the wrong type.
         key: String,

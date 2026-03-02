@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::embedder::OnnxEmbedder;
 use crate::store::MemoryStore;
 use crate::types::{
-    cosine_similarity, ExtractionResult, ExtractedFact, Memory, MemorySource, MemoryStatus,
+    ExtractedFact, ExtractionResult, Memory, MemorySource, MemoryStatus, cosine_similarity,
 };
 
 /// Similarity threshold above which a new fact is considered a duplicate.
@@ -156,23 +156,27 @@ impl MemoryExtractor {
                 texts: vec![content.to_string()],
             })
             .await?;
-        let embedding = output.embeddings.into_iter().next().ok_or_else(|| {
-            BlufioError::Internal("Embedding returned no results".to_string())
-        })?;
+        let embedding =
+            output.embeddings.into_iter().next().ok_or_else(|| {
+                BlufioError::Internal("Embedding returned no results".to_string())
+            })?;
 
         // Check for duplicates
         let active_embeddings = self.store.get_active_embeddings().await?;
-        if let Some((dup_id, sim)) = find_most_similar(&embedding, &active_embeddings) {
-            if sim > DEDUP_THRESHOLD {
-                debug!(
-                    "Explicit memory is duplicate of {dup_id} (similarity {sim:.3}), superseding"
-                );
-                // Supersede existing since user is explicitly updating
-                self.store.supersede(&dup_id, &format!("pending-{}", Uuid::new_v4())).await.ok();
-            }
+        if let Some((dup_id, sim)) = find_most_similar(&embedding, &active_embeddings)
+            && sim > DEDUP_THRESHOLD
+        {
+            debug!("Explicit memory is duplicate of {dup_id} (similarity {sim:.3}), superseding");
+            // Supersede existing since user is explicitly updating
+            self.store
+                .supersede(&dup_id, &format!("pending-{}", Uuid::new_v4()))
+                .await
+                .ok();
         }
 
-        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
         let memory = Memory {
             id: Uuid::new_v4().to_string(),
             content: content.to_string(),
@@ -204,9 +208,10 @@ impl MemoryExtractor {
                 texts: vec![fact.content.clone()],
             })
             .await?;
-        let embedding = output.embeddings.into_iter().next().ok_or_else(|| {
-            BlufioError::Internal("Embedding returned no results".to_string())
-        })?;
+        let embedding =
+            output.embeddings.into_iter().next().ok_or_else(|| {
+                BlufioError::Internal("Embedding returned no results".to_string())
+            })?;
 
         // Check for duplicates and contradictions
         if let Some((existing_id, sim)) = find_most_similar(&embedding, active_embeddings) {
@@ -221,7 +226,9 @@ impl MemoryExtractor {
                 let new_id = Uuid::new_v4().to_string();
                 self.store.supersede(&existing_id, &new_id).await?;
 
-                let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+                let now = chrono::Utc::now()
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string();
                 let memory = Memory {
                     id: new_id,
                     content: fact.content.clone(),
@@ -240,7 +247,9 @@ impl MemoryExtractor {
         }
 
         // New unique fact
-        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
         let memory = Memory {
             id: Uuid::new_v4().to_string(),
             content: fact.content.clone(),
@@ -395,15 +404,27 @@ Those are the facts."#;
 
     #[test]
     fn strip_remember_prefix_colon() {
-        assert_eq!(strip_remember_prefix("remember this: my dog is Max"), "my dog is Max");
-        assert_eq!(strip_remember_prefix("remember that: I use vim"), "I use vim");
+        assert_eq!(
+            strip_remember_prefix("remember this: my dog is Max"),
+            "my dog is Max"
+        );
+        assert_eq!(
+            strip_remember_prefix("remember that: I use vim"),
+            "I use vim"
+        );
         assert_eq!(strip_remember_prefix("remember: dark mode"), "dark mode");
     }
 
     #[test]
     fn strip_remember_prefix_no_colon() {
-        assert_eq!(strip_remember_prefix("remember this my dog is Max"), "my dog is Max");
-        assert_eq!(strip_remember_prefix("remember that I use vim"), "I use vim");
+        assert_eq!(
+            strip_remember_prefix("remember this my dog is Max"),
+            "my dog is Max"
+        );
+        assert_eq!(
+            strip_remember_prefix("remember that I use vim"),
+            "I use vim"
+        );
     }
 
     #[test]
@@ -464,9 +485,7 @@ Those are the facts."#;
 
     #[test]
     fn dedup_threshold_higher_than_contradiction() {
-        assert!(
-            DEDUP_THRESHOLD > CONTRADICTION_THRESHOLD,
-            "Dedup threshold should be higher than contradiction threshold"
-        );
+        // Verify the relationship holds at compile time via const assertion
+        const _: () = assert!(DEDUP_THRESHOLD > CONTRADICTION_THRESHOLD);
     }
 }

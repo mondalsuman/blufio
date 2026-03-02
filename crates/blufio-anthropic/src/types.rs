@@ -652,8 +652,14 @@ mod tests {
         }"#;
         let resp: MessageResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.content.len(), 2);
-        assert!(matches!(&resp.content[0], ResponseContentBlock::Text { .. }));
-        assert!(matches!(&resp.content[1], ResponseContentBlock::ToolUse { .. }));
+        assert!(matches!(
+            &resp.content[0],
+            ResponseContentBlock::Text { .. }
+        ));
+        assert!(matches!(
+            &resp.content[1],
+            ResponseContentBlock::ToolUse { .. }
+        ));
         assert_eq!(resp.stop_reason, Some("tool_use".into()));
     }
 }

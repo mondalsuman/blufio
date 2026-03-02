@@ -6,10 +6,10 @@
 //! Handles POST /v1/messages, GET /v1/health, GET /v1/sessions.
 
 use axum::{
+    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
@@ -232,7 +232,10 @@ pub async fn get_public_metrics(State(state): State<GatewayState>) -> Response {
             let body = render_fn();
             (
                 StatusCode::OK,
-                [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+                [(
+                    axum::http::header::CONTENT_TYPE,
+                    "text/plain; version=0.0.4; charset=utf-8",
+                )],
                 body,
             )
                 .into_response()
@@ -247,12 +250,8 @@ pub async fn get_public_metrics(State(state): State<GatewayState>) -> Response {
 ///
 /// TODO: Wire StorageAdapter into GatewayState in Plan 03 integration
 /// to provide actual session data.
-pub async fn get_sessions(
-    State(_state): State<GatewayState>,
-) -> Json<SessionListResponse> {
-    Json(SessionListResponse {
-        sessions: vec![],
-    })
+pub async fn get_sessions(State(_state): State<GatewayState>) -> Json<SessionListResponse> {
+    Json(SessionListResponse { sessions: vec![] })
 }
 
 #[cfg(test)]

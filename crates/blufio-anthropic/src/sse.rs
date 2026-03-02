@@ -54,14 +54,12 @@ pub fn parse_sse_stream(
         match result {
             Ok(event) => {
                 let parsed = match event.event.as_str() {
-                    "message_start" => {
-                        serde_json::from_str::<SseMessageStart>(&event.data)
-                            .map(StreamEvent::MessageStart)
-                            .map_err(|e| BlufioError::Provider {
-                                message: format!("failed to parse message_start: {e}"),
-                                source: Some(Box::new(e)),
-                            })
-                    }
+                    "message_start" => serde_json::from_str::<SseMessageStart>(&event.data)
+                        .map(StreamEvent::MessageStart)
+                        .map_err(|e| BlufioError::Provider {
+                            message: format!("failed to parse message_start: {e}"),
+                            source: Some(Box::new(e)),
+                        }),
                     "content_block_start" => {
                         serde_json::from_str::<SseContentBlockStart>(&event.data)
                             .map(StreamEvent::ContentBlockStart)
@@ -86,24 +84,20 @@ pub fn parse_sse_stream(
                                 source: Some(Box::new(e)),
                             })
                     }
-                    "message_delta" => {
-                        serde_json::from_str::<SseMessageDelta>(&event.data)
-                            .map(StreamEvent::MessageDelta)
-                            .map_err(|e| BlufioError::Provider {
-                                message: format!("failed to parse message_delta: {e}"),
-                                source: Some(Box::new(e)),
-                            })
-                    }
+                    "message_delta" => serde_json::from_str::<SseMessageDelta>(&event.data)
+                        .map(StreamEvent::MessageDelta)
+                        .map_err(|e| BlufioError::Provider {
+                            message: format!("failed to parse message_delta: {e}"),
+                            source: Some(Box::new(e)),
+                        }),
                     "message_stop" => Ok(StreamEvent::MessageStop),
                     "ping" => Ok(StreamEvent::Ping),
-                    "error" => {
-                        serde_json::from_str::<SseError>(&event.data)
-                            .map(StreamEvent::Error)
-                            .map_err(|e| BlufioError::Provider {
-                                message: format!("failed to parse error event: {e}"),
-                                source: Some(Box::new(e)),
-                            })
-                    }
+                    "error" => serde_json::from_str::<SseError>(&event.data)
+                        .map(StreamEvent::Error)
+                        .map_err(|e| BlufioError::Provider {
+                            message: format!("failed to parse error event: {e}"),
+                            source: Some(Box::new(e)),
+                        }),
                     // Unknown event types are silently ignored per Anthropic versioning policy.
                     _ => return None,
                 };

@@ -25,10 +25,7 @@ pub trait ConditionalProvider: Send + Sync {
     /// Returns context messages to inject for the given session.
     ///
     /// Returns an empty vec if no conditional context applies.
-    async fn provide_context(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<ProviderMessage>, BlufioError>;
+    async fn provide_context(&self, session_id: &str) -> Result<Vec<ProviderMessage>, BlufioError>;
 }
 
 #[cfg(test)]

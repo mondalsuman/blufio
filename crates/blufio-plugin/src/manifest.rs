@@ -6,8 +6,8 @@
 //! Plugin manifests describe adapter plugins (Channel, Provider, Storage, etc.)
 //! and are distinct from skill manifests which describe WASM sandbox skills.
 
-use blufio_core::types::AdapterType;
 use blufio_core::BlufioError;
+use blufio_core::types::AdapterType;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -58,8 +58,8 @@ struct PluginSection {
 /// Validates that the adapter_type is a valid `AdapterType` variant,
 /// name is non-empty, and version is non-empty.
 pub fn parse_plugin_manifest(toml_content: &str) -> Result<PluginManifest, BlufioError> {
-    let file: PluginManifestFile =
-        toml::from_str(toml_content).map_err(|e| BlufioError::Config(format!("invalid plugin manifest: {e}")))?;
+    let file: PluginManifestFile = toml::from_str(toml_content)
+        .map_err(|e| BlufioError::Config(format!("invalid plugin manifest: {e}")))?;
 
     let section = file.plugin;
 

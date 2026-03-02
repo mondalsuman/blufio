@@ -145,9 +145,7 @@ impl DynamicZone {
 /// (blufio-context should NOT depend on blufio-agent).
 fn message_content_to_blocks(content: &MessageContent) -> Vec<ContentBlock> {
     match content {
-        MessageContent::Text(text) => vec![ContentBlock::Text {
-            text: text.clone(),
-        }],
+        MessageContent::Text(text) => vec![ContentBlock::Text { text: text.clone() }],
         MessageContent::Image {
             data,
             mime_type,
@@ -161,9 +159,7 @@ fn message_content_to_blocks(content: &MessageContent) -> Vec<ContentBlock> {
                 data: encoded,
             }];
             if let Some(cap) = caption {
-                blocks.push(ContentBlock::Text {
-                    text: cap.clone(),
-                });
+                blocks.push(ContentBlock::Text { text: cap.clone() });
             }
             blocks
         }

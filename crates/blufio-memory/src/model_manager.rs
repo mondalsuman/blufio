@@ -13,8 +13,7 @@ use tokio::sync::OnceCell;
 use tracing::info;
 
 /// URLs for model files on HuggingFace.
-const MODEL_URL: &str =
-    "https://huggingface.co/onnx-community/all-MiniLM-L6-v2-ONNX/resolve/main/onnx/model_quantized.onnx";
+const MODEL_URL: &str = "https://huggingface.co/onnx-community/all-MiniLM-L6-v2-ONNX/resolve/main/onnx/model_quantized.onnx";
 const TOKENIZER_URL: &str =
     "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json";
 
@@ -70,10 +69,7 @@ impl ModelManager {
             .await
             .map_err(|e| BlufioError::Internal(format!("Failed to create model directory: {e}")))?;
 
-        let files = [
-            ("model.onnx", MODEL_URL),
-            ("tokenizer.json", TOKENIZER_URL),
-        ];
+        let files = [("model.onnx", MODEL_URL), ("tokenizer.json", TOKENIZER_URL)];
 
         for (filename, url) in &files {
             let dest = model_dir.join(filename);
@@ -101,9 +97,9 @@ impl ModelManager {
 
 /// Download a file from a URL to a local path.
 async fn download_file(url: &str, dest: &Path) -> Result<usize, BlufioError> {
-    let response = reqwest::get(url).await.map_err(|e| {
-        BlufioError::Internal(format!("Failed to download {url}: {e}"))
-    })?;
+    let response = reqwest::get(url)
+        .await
+        .map_err(|e| BlufioError::Internal(format!("Failed to download {url}: {e}")))?;
 
     if !response.status().is_success() {
         return Err(BlufioError::Internal(format!(
@@ -117,9 +113,9 @@ async fn download_file(url: &str, dest: &Path) -> Result<usize, BlufioError> {
     })?;
 
     let size = bytes.len();
-    tokio::fs::write(dest, &bytes).await.map_err(|e| {
-        BlufioError::Internal(format!("Failed to write {}: {e}", dest.display()))
-    })?;
+    tokio::fs::write(dest, &bytes)
+        .await
+        .map_err(|e| BlufioError::Internal(format!("Failed to write {}: {e}", dest.display())))?;
 
     Ok(size)
 }

@@ -92,7 +92,9 @@ impl TestHarnessBuilder {
 
         // Create context engine with defaults
         let agent_config = AgentConfig {
-            system_prompt: self.system_prompt.or(Some("You are a test assistant.".to_string())),
+            system_prompt: self
+                .system_prompt
+                .or(Some("You are a test assistant.".to_string())),
             ..AgentConfig::default()
         };
         let context_config = ContextConfig::default();
@@ -380,10 +382,7 @@ mod tests {
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         let daily_cost = harness.cost_ledger.daily_total(&today).await.unwrap();
         // Should have at least one cost entry (the message cost)
-        assert!(
-            daily_cost > 0.0,
-            "expected non-zero cost, got {daily_cost}"
-        );
+        assert!(daily_cost > 0.0, "expected non-zero cost, got {daily_cost}");
     }
 
     #[tokio::test]

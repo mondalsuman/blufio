@@ -16,15 +16,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blufio_context::ContextEngine;
-use blufio_cost::ledger::{CostRecord, FeatureType};
-use blufio_cost::pricing;
+use blufio_core::error::BlufioError;
+use blufio_core::types::{InboundMessage, Message, ProviderStreamChunk, TokenUsage, ToolUseData};
+use blufio_core::{ProviderAdapter, StorageAdapter};
 use blufio_cost::BudgetTracker;
 use blufio_cost::CostLedger;
-use blufio_core::error::BlufioError;
-use blufio_core::types::{
-    InboundMessage, Message, ProviderStreamChunk, TokenUsage, ToolUseData,
-};
-use blufio_core::{ProviderAdapter, StorageAdapter};
+use blufio_cost::ledger::{CostRecord, FeatureType};
+use blufio_cost::pricing;
 use blufio_memory::{MemoryExtractor, MemoryProvider};
 use blufio_router::{ModelRouter, RoutingDecision};
 use blufio_skill::{ToolOutput, ToolRegistry};
@@ -240,7 +238,8 @@ impl SessionActor {
         let (model, max_tokens) = if self.routing_enabled {
             // Get recent context for classification momentum.
             let recent_msgs = self.storage.get_messages(&self.session_id, Some(3)).await?;
-            let recent_strings: Vec<String> = recent_msgs.iter().map(|m| m.content.clone()).collect();
+            let recent_strings: Vec<String> =
+                recent_msgs.iter().map(|m| m.content.clone()).collect();
             let recent_refs: Vec<&str> = recent_strings.iter().map(|s| s.as_str()).collect();
 
             // Get budget utilization for downgrade logic.
@@ -285,15 +284,17 @@ impl SessionActor {
         }
 
         // Assemble context using the three-zone context engine.
-        let assembled = self.context_engine.assemble(
-            self.provider.as_ref(),
-            self.storage.as_ref(),
-            &self.session_id,
-            &inbound,
-            &model,
-            max_tokens,
-        )
-        .await;
+        let assembled = self
+            .context_engine
+            .assemble(
+                self.provider.as_ref(),
+                self.storage.as_ref(),
+                &self.session_id,
+                &inbound,
+                &model,
+                max_tokens,
+            )
+            .await;
 
         // Clear current query on memory provider (regardless of assembly outcome).
         if let Some(ref mp) = self.memory_provider {
@@ -314,7 +315,9 @@ impl SessionActor {
         // Compaction is a separate Haiku LLM call that must be recorded with
         // FeatureType::Compaction, not Message.
         if let Some(ref compaction_usage) = assembled.compaction_usage {
-            let compaction_model = assembled.compaction_model.as_deref()
+            let compaction_model = assembled
+                .compaction_model
+                .as_deref()
                 .unwrap_or("claude-haiku-4-5-20250901");
             let model_pricing = pricing::get_pricing(compaction_model);
             let cost_usd = pricing::calculate_cost(compaction_usage, &model_pricing);
@@ -508,8 +511,7 @@ impl SessionActor {
     ///
     /// All failures are logged but never propagated -- memory extraction is non-fatal.
     async fn maybe_trigger_idle_extraction(&self) {
-        let (Some(extractor), Some(last_at)) =
-            (&self.memory_extractor, self.last_message_at)
+        let (Some(extractor), Some(last_at)) = (&self.memory_extractor, self.last_message_at)
         else {
             return;
         };
@@ -555,11 +557,7 @@ impl SessionActor {
             .collect();
 
         match extractor
-            .extract_from_conversation(
-                self.provider.as_ref(),
-                &self.session_id,
-                &provider_messages,
-            )
+            .extract_from_conversation(self.provider.as_ref(), &self.session_id, &provider_messages)
             .await
         {
             Ok(result) => {

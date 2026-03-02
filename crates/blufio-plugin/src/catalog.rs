@@ -72,10 +72,7 @@ pub fn builtin_catalog() -> Vec<PluginManifest> {
             description: "Local ONNX embedding model".to_string(),
             adapter_type: AdapterType::Embedding,
             author: Some("Blufio Contributors".to_string()),
-            capabilities: vec![
-                "offline".to_string(),
-                "semantic_search".to_string(),
-            ],
+            capabilities: vec!["offline".to_string(), "semantic_search".to_string()],
             min_blufio_version: Some("0.1.0".to_string()),
             config_keys: vec![],
         },
@@ -99,10 +96,7 @@ pub fn builtin_catalog() -> Vec<PluginManifest> {
             description: "Ed25519 device keypair authentication".to_string(),
             adapter_type: AdapterType::Auth,
             author: Some("Blufio Contributors".to_string()),
-            capabilities: vec![
-                "bearer_token".to_string(),
-                "signing".to_string(),
-            ],
+            capabilities: vec!["bearer_token".to_string(), "signing".to_string()],
             min_blufio_version: Some("0.1.0".to_string()),
             config_keys: vec![],
         },

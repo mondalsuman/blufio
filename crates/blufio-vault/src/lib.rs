@@ -14,6 +14,6 @@ pub mod migration;
 pub mod prompt;
 pub mod vault;
 
-pub use migration::{migrate_plaintext_secrets, vault_startup_check, MigrationReport};
+pub use migration::{MigrationReport, migrate_plaintext_secrets, vault_startup_check};
 pub use prompt::get_vault_passphrase;
-pub use vault::{mask_secret, Vault};
+pub use vault::{Vault, mask_secret};

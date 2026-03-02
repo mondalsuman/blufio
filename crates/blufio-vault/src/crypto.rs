@@ -7,7 +7,7 @@
 //! CSPRNG. Nonce reuse would be catastrophic for GCM security.
 
 use blufio_core::BlufioError;
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use ring::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::rand::{SecureRandom, SystemRandom};
 
 /// Encrypt plaintext with AES-256-GCM using a random 96-bit nonce.
@@ -41,7 +41,11 @@ pub fn seal(key: &[u8; 32], plaintext: &[u8]) -> Result<(Vec<u8>, [u8; 12]), Blu
 /// `ciphertext` must include the 16-byte authentication tag appended by [`seal`].
 /// Returns the decrypted plaintext, or an error if the key is wrong or data is
 /// tampered.
-pub fn open(key: &[u8; 32], nonce_bytes: &[u8; 12], ciphertext: &[u8]) -> Result<Vec<u8>, BlufioError> {
+pub fn open(
+    key: &[u8; 32],
+    nonce_bytes: &[u8; 12],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, BlufioError> {
     let unbound = UnboundKey::new(&AES_256_GCM, key)
         .map_err(|_| BlufioError::Vault("failed to create AES-256-GCM key".to_string()))?;
     let less_safe = LessSafeKey::new(unbound);
@@ -51,7 +55,11 @@ pub fn open(key: &[u8; 32], nonce_bytes: &[u8; 12], ciphertext: &[u8]) -> Result
     let mut in_out = ciphertext.to_vec();
     let plaintext = less_safe
         .open_in_place(nonce, Aad::empty(), &mut in_out)
-        .map_err(|_| BlufioError::Vault("AES-256-GCM decryption failed -- wrong key or corrupted data".to_string()))?;
+        .map_err(|_| {
+            BlufioError::Vault(
+                "AES-256-GCM decryption failed -- wrong key or corrupted data".to_string(),
+            )
+        })?;
 
     Ok(plaintext.to_vec())
 }

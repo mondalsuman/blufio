@@ -17,7 +17,7 @@ use blufio_core::types::EmbeddingInput;
 
 use crate::embedder::OnnxEmbedder;
 use crate::store::MemoryStore;
-use crate::types::{cosine_similarity, ScoredMemory};
+use crate::types::{ScoredMemory, cosine_similarity};
 
 /// RRF constant per research literature.
 const RRF_K: f32 = 60.0;
@@ -34,11 +34,7 @@ pub struct HybridRetriever {
 
 impl HybridRetriever {
     /// Creates a new hybrid retriever.
-    pub fn new(
-        store: Arc<MemoryStore>,
-        embedder: Arc<OnnxEmbedder>,
-        config: MemoryConfig,
-    ) -> Self {
+    pub fn new(store: Arc<MemoryStore>, embedder: Arc<OnnxEmbedder>, config: MemoryConfig) -> Self {
         Self {
             store,
             embedder,
@@ -57,13 +53,17 @@ impl HybridRetriever {
     /// 7. Returns sorted Vec<ScoredMemory>
     pub async fn retrieve(&self, query: &str) -> Result<Vec<ScoredMemory>, BlufioError> {
         // Step 1: Embed the query
-        let output = self.embedder.embed(EmbeddingInput {
-            texts: vec![query.to_string()],
-        }).await?;
+        let output = self
+            .embedder
+            .embed(EmbeddingInput {
+                texts: vec![query.to_string()],
+            })
+            .await?;
 
-        let query_embedding = output.embeddings.into_iter().next().ok_or_else(|| {
-            BlufioError::Internal("Embedding returned no results".to_string())
-        })?;
+        let query_embedding =
+            output.embeddings.into_iter().next().ok_or_else(|| {
+                BlufioError::Internal("Embedding returned no results".to_string())
+            })?;
 
         // Step 2: Vector search
         let vector_results = self.vector_search(&query_embedding).await?;
@@ -86,24 +86,30 @@ impl HybridRetriever {
         let memories = self.store.get_memories_by_ids(&top_ids).await?;
 
         // Build lookup for RRF scores
-        let score_map: HashMap<&str, f32> =
-            fused.iter().map(|(id, score)| (id.as_str(), *score)).collect();
+        let score_map: HashMap<&str, f32> = fused
+            .iter()
+            .map(|(id, score)| (id.as_str(), *score))
+            .collect();
 
         // Step 6: Apply confidence boost and build ScoredMemory
         let mut scored: Vec<ScoredMemory> = memories
             .into_iter()
-            .filter_map(|memory| {
+            .map(|memory| {
                 let rrf_score = score_map.get(memory.id.as_str()).copied().unwrap_or(0.0);
                 let boosted_score = rrf_score * memory.confidence as f32;
-                Some(ScoredMemory {
+                ScoredMemory {
                     memory,
                     score: boosted_score,
-                })
+                }
             })
             .collect();
 
         // Step 7: Sort by boosted score descending
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(scored)
     }
@@ -183,10 +189,7 @@ mod tests {
         // Document "d1" appears in both lists (rank 0 in each)
         // Document "d2" appears only in vector (rank 1)
         // Document "d3" appears only in bm25 (rank 1)
-        let vector = vec![
-            ("d1".to_string(), 0.9f32),
-            ("d2".to_string(), 0.8f32),
-        ];
+        let vector = vec![("d1".to_string(), 0.9f32), ("d2".to_string(), 0.8f32)];
         let bm25 = vec![
             ("d1".to_string(), -5.0f64), // most relevant
             ("d3".to_string(), -3.0f64),
@@ -242,10 +245,7 @@ mod tests {
 
     #[test]
     fn rrf_fusion_one_empty() {
-        let vector = vec![
-            ("x".to_string(), 0.9f32),
-            ("y".to_string(), 0.7f32),
-        ];
+        let vector = vec![("x".to_string(), 0.9f32), ("y".to_string(), 0.7f32)];
         let bm25: Vec<(String, f64)> = vec![];
 
         let fused = reciprocal_rank_fusion(&vector, &bm25);

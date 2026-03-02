@@ -7,11 +7,11 @@
 //! from session history plus the current inbound message.
 
 use blufio_config::model::AgentConfig;
+use blufio_core::StorageAdapter;
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
     ContentBlock, InboundMessage, MessageContent, ProviderMessage, ProviderRequest,
 };
-use blufio_core::StorageAdapter;
 use tracing::info;
 
 /// Default number of recent messages to include in context.
@@ -108,9 +108,7 @@ pub async fn assemble_context(
 /// Converts a [`MessageContent`] into provider [`ContentBlock`]s.
 fn message_content_to_blocks(content: &MessageContent) -> Vec<ContentBlock> {
     match content {
-        MessageContent::Text(text) => vec![ContentBlock::Text {
-            text: text.clone(),
-        }],
+        MessageContent::Text(text) => vec![ContentBlock::Text { text: text.clone() }],
         MessageContent::Image {
             data,
             mime_type,
@@ -124,9 +122,7 @@ fn message_content_to_blocks(content: &MessageContent) -> Vec<ContentBlock> {
                 data: encoded,
             }];
             if let Some(cap) = caption {
-                blocks.push(ContentBlock::Text {
-                    text: cap.clone(),
-                });
+                blocks.push(ContentBlock::Text { text: cap.clone() });
             }
             blocks
         }
@@ -159,9 +155,9 @@ fn message_content_to_blocks(content: &MessageContent) -> Vec<ContentBlock> {
 pub fn message_content_to_text(content: &MessageContent) -> String {
     match content {
         MessageContent::Text(text) => text.clone(),
-        MessageContent::Image { caption, .. } => caption
-            .clone()
-            .unwrap_or_else(|| "[Image]".to_string()),
+        MessageContent::Image { caption, .. } => {
+            caption.clone().unwrap_or_else(|| "[Image]".to_string())
+        }
         MessageContent::Document { filename, .. } => format!("[Document: {filename}]"),
         MessageContent::Voice { duration_secs, .. } => {
             let d = duration_secs

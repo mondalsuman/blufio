@@ -19,10 +19,7 @@ use crate::types::{ProviderRequest, ProviderResponse, ProviderStreamChunk};
 #[async_trait]
 pub trait ProviderAdapter: PluginAdapter {
     /// Sends a completion request and returns the full response.
-    async fn complete(
-        &self,
-        request: ProviderRequest,
-    ) -> Result<ProviderResponse, BlufioError>;
+    async fn complete(&self, request: ProviderRequest) -> Result<ProviderResponse, BlufioError>;
 
     /// Sends a completion request and returns a stream of response chunks.
     async fn stream(

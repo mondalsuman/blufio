@@ -45,6 +45,7 @@ impl SkillStore {
     /// Installs or updates a skill in the registry.
     ///
     /// Uses INSERT OR REPLACE so re-installing a skill updates its metadata.
+    #[allow(clippy::too_many_arguments)]
     pub async fn install(
         &self,
         name: &str,
@@ -87,10 +88,12 @@ impl SkillStore {
                 Ok(())
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                message: format!("failed to install skill: {e}"),
-                source: None,
-            })
+            .map_err(
+                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
+                    message: format!("failed to install skill: {e}"),
+                    source: None,
+                },
+            )
     }
 
     /// Removes a skill from the registry by name.
@@ -105,10 +108,12 @@ impl SkillStore {
                 Ok(())
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                message: format!("failed to remove skill: {e}"),
-                source: None,
-            })
+            .map_err(
+                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
+                    message: format!("failed to remove skill: {e}"),
+                    source: None,
+                },
+            )
     }
 
     /// Retrieves a single installed skill by name.
@@ -140,10 +145,12 @@ impl SkillStore {
                 Ok(result)
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                message: format!("failed to get skill: {e}"),
-                source: None,
-            })
+            .map_err(
+                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
+                    message: format!("failed to get skill: {e}"),
+                    source: None,
+                },
+            )
     }
 
     /// Lists all installed skills.
@@ -174,10 +181,12 @@ impl SkillStore {
                 Ok(skills)
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                message: format!("failed to list skills: {e}"),
-                source: None,
-            })
+            .map_err(
+                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
+                    message: format!("failed to list skills: {e}"),
+                    source: None,
+                },
+            )
     }
 }
 

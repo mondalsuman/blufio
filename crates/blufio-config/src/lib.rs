@@ -21,7 +21,7 @@ pub mod loader;
 pub mod model;
 pub mod validation;
 
-pub use diagnostic::{render_errors, ConfigError};
+pub use diagnostic::{ConfigError, render_errors};
 pub use loader::{load_config, load_config_from_path, load_config_from_str};
 pub use model::BlufioConfig;
 

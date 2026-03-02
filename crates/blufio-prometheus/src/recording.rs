@@ -20,18 +20,12 @@ pub fn register_metrics() {
         "blufio_budget_remaining_usd",
         "Remaining daily budget in USD"
     );
-    describe_gauge!(
-        "blufio_memory_heap_bytes",
-        "jemalloc allocated heap bytes"
-    );
+    describe_gauge!("blufio_memory_heap_bytes", "jemalloc allocated heap bytes");
     describe_gauge!(
         "blufio_memory_rss_bytes",
         "Process RSS from /proc/self/statm"
     );
-    describe_gauge!(
-        "blufio_memory_resident_bytes",
-        "jemalloc resident bytes"
-    );
+    describe_gauge!("blufio_memory_resident_bytes", "jemalloc resident bytes");
     describe_gauge!(
         "blufio_memory_pressure",
         "Memory pressure indicator (0=normal, 1=warning)"
