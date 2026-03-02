@@ -94,6 +94,13 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
         });
     }
 
+    // Validate MCP auth_token is set when MCP is enabled
+    if config.mcp.enabled && config.mcp.auth_token.is_none() {
+        errors.push(ConfigError::Validation {
+            message: "MCP enabled but mcp.auth_token is not set -- all /mcp endpoints require authentication".to_string(),
+        });
+    }
+
     // Validate no duplicate agent names
     let mut seen_names = HashSet::new();
     for agent in &config.agents {
@@ -233,6 +240,38 @@ enabled = true
         let config = BlufioConfig::default();
         assert!(!config.delegation.enabled);
         assert_eq!(config.delegation.timeout_secs, 60);
+    }
+
+    #[test]
+    fn mcp_enabled_without_auth_token_fails_validation() {
+        let mut config = BlufioConfig::default();
+        config.mcp.enabled = true;
+        config.mcp.auth_token = None;
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("mcp.auth_token"))
+        ));
+    }
+
+    #[test]
+    fn mcp_enabled_with_auth_token_passes_validation() {
+        let config = BlufioConfig {
+            mcp: crate::model::McpConfig {
+                enabled: true,
+                auth_token: Some("mcp-secret".to_string()),
+                ..Default::default()
+            },
+            ..BlufioConfig::default()
+        };
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn mcp_disabled_without_auth_token_passes_validation() {
+        let mut config = BlufioConfig::default();
+        config.mcp.enabled = false;
+        config.mcp.auth_token = None;
+        assert!(validate_config(&config).is_ok());
     }
 
     #[test]

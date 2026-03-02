@@ -13,8 +13,10 @@
 //! handling. However, **no rmcp types appear in the public API**.
 //! All public types are Blufio-owned, defined in [`types`].
 
+pub mod auth;
 pub mod bridge;
 pub mod handler;
+pub mod transport;
 pub mod types;
 
 // Re-export public types for convenience.

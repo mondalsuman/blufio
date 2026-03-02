@@ -333,6 +333,8 @@ mod tests {
             servers: Vec::new(),
             export_tools: Vec::new(),
             tool_timeout_secs: 60,
+            auth_token: None,
+            cors_origins: Vec::new(),
         }
     }
 
