@@ -16,35 +16,71 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blufio_config::model::McpConfig;
+use blufio_core::StorageAdapter;
+use blufio_memory::MemoryStore;
 use blufio_skill::tool::ToolRegistry;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, Content, Implementation, InitializeResult,
-    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo, ToolsCapability,
+    ListResourceTemplatesResult, ListResourcesResult, ListToolsResult, PaginatedRequestParams,
+    RawResource, RawResourceTemplate, ReadResourceRequestParams, ReadResourceResult,
+    ResourceContents, ResourcesCapability, ServerCapabilities, ServerInfo, ToolsCapability,
 };
+use rmcp::model::AnnotateAble;
 use rmcp::service::{RequestContext, RoleServer};
 use tokio::sync::RwLock;
 
 use crate::bridge;
+use crate::resources;
 
 /// MCP server handler that bridges Blufio's tool system to MCP.
 ///
 /// Created with a shared [`ToolRegistry`] and configuration from [`McpConfig`].
 /// Implements rmcp's [`ServerHandler`] trait to handle MCP protocol messages.
+///
+/// Optionally holds references to [`MemoryStore`] and [`StorageAdapter`]
+/// for exposing memory and session data as MCP resources.
 pub struct BlufioMcpHandler {
     tool_registry: Arc<RwLock<ToolRegistry>>,
     export_tools: Vec<String>,
     timeout_secs: u64,
+    memory_store: Option<Arc<MemoryStore>>,
+    storage: Option<Arc<dyn StorageAdapter + Send + Sync>>,
 }
 
 impl BlufioMcpHandler {
     /// Creates a new handler with the given tool registry and MCP configuration.
+    ///
+    /// Resources are not available until [`with_resources`](Self::with_resources)
+    /// is called. This allows stdio mode to skip resource wiring.
     pub fn new(tool_registry: Arc<RwLock<ToolRegistry>>, config: &McpConfig) -> Self {
         Self {
             tool_registry,
             export_tools: config.export_tools.clone(),
             timeout_secs: config.tool_timeout_secs,
+            memory_store: None,
+            storage: None,
         }
+    }
+
+    /// Attaches data stores for MCP resource access.
+    ///
+    /// When `memory_store` is `Some`, memory resources (`blufio://memory/...`)
+    /// are available. When `storage` is `Some`, session resources
+    /// (`blufio://sessions/...`) are available.
+    pub fn with_resources(
+        mut self,
+        memory_store: Option<Arc<MemoryStore>>,
+        storage: Option<Arc<dyn StorageAdapter + Send + Sync>>,
+    ) -> Self {
+        self.memory_store = memory_store;
+        self.storage = storage;
+        self
+    }
+
+    /// Returns true if any resource backends are configured.
+    fn has_resources(&self) -> bool {
+        self.memory_store.is_some() || self.storage.is_some()
     }
 
     /// Returns true if the named tool is allowed for export via MCP.
@@ -64,10 +100,17 @@ impl BlufioMcpHandler {
 
 impl ServerHandler for BlufioMcpHandler {
     fn get_info(&self) -> ServerInfo {
+        let resources_capability = if self.has_resources() {
+            Some(ResourcesCapability::default())
+        } else {
+            None
+        };
+
         InitializeResult {
             protocol_version: Default::default(),
             capabilities: ServerCapabilities {
                 tools: Some(ToolsCapability::default()),
+                resources: resources_capability,
                 ..Default::default()
             },
             server_info: Implementation {
@@ -80,6 +123,155 @@ impl ServerHandler for BlufioMcpHandler {
             },
             instructions: None,
         }
+    }
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, rmcp::ErrorData> {
+        let mut items = Vec::new();
+
+        // Static resource: blufio://sessions (when storage is available).
+        if self.storage.is_some() {
+            items.push(
+                RawResource {
+                    uri: "blufio://sessions".to_string(),
+                    name: "sessions".to_string(),
+                    title: Some("Session List".to_string()),
+                    description: Some("List of all conversation sessions".to_string()),
+                    mime_type: Some("application/json".to_string()),
+                    size: None,
+                    icons: None,
+                    meta: None,
+                }
+                .no_annotation(),
+            );
+        }
+
+        Ok(ListResourcesResult {
+            resources: items,
+            next_cursor: None,
+            meta: None,
+        })
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourceTemplatesResult, rmcp::ErrorData> {
+        let mut templates = Vec::new();
+
+        // Memory resource templates (when memory store is available).
+        if self.memory_store.is_some() {
+            templates.push(
+                RawResourceTemplate {
+                    uri_template: "blufio://memory/{id}".to_string(),
+                    name: "memory-by-id".to_string(),
+                    title: Some("Memory by ID".to_string()),
+                    description: Some("Retrieve a specific memory fact by its ID".to_string()),
+                    mime_type: Some("application/json".to_string()),
+                    icons: None,
+                }
+                .no_annotation(),
+            );
+            templates.push(
+                RawResourceTemplate {
+                    uri_template: "blufio://memory/search?q={query}&limit={limit}".to_string(),
+                    name: "memory-search".to_string(),
+                    title: Some("Memory Search".to_string()),
+                    description: Some(
+                        "Search memories using full-text search (limit defaults to 10)"
+                            .to_string(),
+                    ),
+                    mime_type: Some("application/json".to_string()),
+                    icons: None,
+                }
+                .no_annotation(),
+            );
+        }
+
+        // Session resource templates (when storage is available).
+        if self.storage.is_some() {
+            templates.push(
+                RawResourceTemplate {
+                    uri_template: "blufio://sessions/{id}".to_string(),
+                    name: "session-history".to_string(),
+                    title: Some("Session History".to_string()),
+                    description: Some(
+                        "Message history for a specific conversation session".to_string(),
+                    ),
+                    mime_type: Some("application/json".to_string()),
+                    icons: None,
+                }
+                .no_annotation(),
+            );
+        }
+
+        Ok(ListResourceTemplatesResult {
+            resource_templates: templates,
+            next_cursor: None,
+            meta: None,
+        })
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResult, rmcp::ErrorData> {
+        let parsed = resources::parse_resource_uri(&request.uri).map_err(|e| {
+            rmcp::ErrorData::invalid_params(format!("invalid resource URI: {e}"), None)
+        })?;
+
+        let json_value = match parsed {
+            resources::ResourceRequest::MemoryById(id) => {
+                let store = self.memory_store.as_ref().ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("memory resources not available", None)
+                })?;
+                resources::read_memory_by_id(store, &id)
+                    .await
+                    .map_err(|e| rmcp::ErrorData::internal_error(e, None))?
+            }
+            resources::ResourceRequest::MemorySearch { query, limit } => {
+                let store = self.memory_store.as_ref().ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("memory resources not available", None)
+                })?;
+                resources::read_memory_search(store, &query, limit)
+                    .await
+                    .map_err(|e| rmcp::ErrorData::internal_error(e, None))?
+            }
+            resources::ResourceRequest::SessionList => {
+                let storage = self.storage.as_ref().ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("session resources not available", None)
+                })?;
+                resources::read_session_list(storage.as_ref())
+                    .await
+                    .map_err(|e| rmcp::ErrorData::internal_error(e, None))?
+            }
+            resources::ResourceRequest::SessionHistory(session_id) => {
+                let storage = self.storage.as_ref().ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("session resources not available", None)
+                })?;
+                resources::read_session_history(storage.as_ref(), &session_id)
+                    .await
+                    .map_err(|e| rmcp::ErrorData::internal_error(e, None))?
+            }
+        };
+
+        let json_string = serde_json::to_string(&json_value).map_err(|e| {
+            rmcp::ErrorData::internal_error(format!("JSON serialization error: {e}"), None)
+        })?;
+
+        Ok(ReadResourceResult {
+            contents: vec![ResourceContents::TextResourceContents {
+                uri: request.uri,
+                mime_type: Some("application/json".to_string()),
+                text: json_string,
+                meta: None,
+            }],
+        })
     }
 
     async fn list_tools(
@@ -626,6 +818,91 @@ mod tests {
         let schema = serde_json::json!({"type": "object"});
         let input = serde_json::json!({});
         assert!(validate_input(&schema, &input).is_ok());
+    }
+
+    // ── get_info resource capability tests ───────────────────────────
+
+    #[tokio::test]
+    async fn get_info_without_resources_has_no_resources_capability() {
+        let config = default_config();
+        let handler = make_handler(&config).await;
+        let info = handler.get_info();
+        assert!(info.capabilities.resources.is_none());
+    }
+
+    #[tokio::test]
+    async fn get_info_with_resources_advertises_resources_capability() {
+        let config = default_config();
+        let handler = make_handler(&config).await;
+        // Attach a mock storage (no memory store).
+        let handler = handler.with_resources(None, Some(Arc::new(MockStorageAdapter)));
+        let info = handler.get_info();
+        assert!(info.capabilities.resources.is_some());
+        // tools capability still present
+        assert!(info.capabilities.tools.is_some());
+    }
+
+    // ── Minimal mock storage for handler tests ────────────────────
+
+    struct MockStorageAdapter;
+
+    #[async_trait]
+    impl blufio_core::traits::adapter::PluginAdapter for MockStorageAdapter {
+        fn name(&self) -> &str {
+            "mock"
+        }
+        fn version(&self) -> semver::Version {
+            semver::Version::new(0, 1, 0)
+        }
+        fn adapter_type(&self) -> blufio_core::types::AdapterType {
+            blufio_core::types::AdapterType::Storage
+        }
+        async fn health_check(&self) -> Result<blufio_core::types::HealthStatus, blufio_core::BlufioError> {
+            Ok(blufio_core::types::HealthStatus::Healthy)
+        }
+        async fn shutdown(&self) -> Result<(), blufio_core::BlufioError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl blufio_core::StorageAdapter for MockStorageAdapter {
+        async fn initialize(&self) -> Result<(), blufio_core::BlufioError> {
+            Ok(())
+        }
+        async fn close(&self) -> Result<(), blufio_core::BlufioError> {
+            Ok(())
+        }
+        async fn create_session(&self, _session: &blufio_core::types::Session) -> Result<(), blufio_core::BlufioError> {
+            Ok(())
+        }
+        async fn get_session(&self, _id: &str) -> Result<Option<blufio_core::types::Session>, blufio_core::BlufioError> {
+            Ok(None)
+        }
+        async fn list_sessions(&self, _state: Option<&str>) -> Result<Vec<blufio_core::types::Session>, blufio_core::BlufioError> {
+            Ok(vec![])
+        }
+        async fn update_session_state(&self, _id: &str, _state: &str) -> Result<(), blufio_core::BlufioError> {
+            Ok(())
+        }
+        async fn insert_message(&self, _message: &blufio_core::types::Message) -> Result<(), blufio_core::BlufioError> {
+            Ok(())
+        }
+        async fn get_messages(&self, _session_id: &str, _limit: Option<i64>) -> Result<Vec<blufio_core::types::Message>, blufio_core::BlufioError> {
+            Ok(vec![])
+        }
+        async fn enqueue(&self, _queue_name: &str, _payload: &str) -> Result<i64, blufio_core::BlufioError> {
+            Ok(0)
+        }
+        async fn dequeue(&self, _queue_name: &str) -> Result<Option<blufio_core::types::QueueEntry>, blufio_core::BlufioError> {
+            Ok(None)
+        }
+        async fn ack(&self, _id: i64) -> Result<(), blufio_core::BlufioError> {
+            Ok(())
+        }
+        async fn fail(&self, _id: i64) -> Result<(), blufio_core::BlufioError> {
+            Ok(())
+        }
     }
 
     // ── Helper to call call_tool without RequestContext ──────────────

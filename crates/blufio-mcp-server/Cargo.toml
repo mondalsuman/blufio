@@ -11,6 +11,7 @@ description = "MCP server implementation for the Blufio agent framework"
 [dependencies]
 blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
+blufio-memory = { path = "../blufio-memory" }
 blufio-skill = { path = "../blufio-skill" }
 rmcp = { workspace = true, features = ["server", "macros", "transport-io", "transport-streamable-http-server"] }
 schemars.workspace = true
@@ -24,7 +25,10 @@ async-trait.workspace = true
 axum.workspace = true
 tower-http = { workspace = true, features = ["cors"] }
 http = "1"
+percent-encoding = "2"
 
 [dev-dependencies]
+semver.workspace = true
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+tokio-rusqlite = { workspace = true }
 tower = "0.5"

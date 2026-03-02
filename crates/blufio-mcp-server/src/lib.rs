@@ -16,6 +16,7 @@
 pub mod auth;
 pub mod bridge;
 pub mod handler;
+pub mod resources;
 pub mod transport;
 pub mod types;
 
