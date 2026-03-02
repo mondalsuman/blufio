@@ -33,6 +33,7 @@ use rmcp::service::{RequestContext, RoleServer};
 use tokio::sync::RwLock;
 
 use crate::bridge;
+use crate::notifications;
 use crate::prompts;
 use crate::resources;
 
@@ -49,6 +50,8 @@ pub struct BlufioMcpHandler {
     timeout_secs: u64,
     memory_store: Option<Arc<MemoryStore>>,
     storage: Option<Arc<dyn StorageAdapter + Send + Sync>>,
+    #[allow(dead_code)]
+    tools_changed_rx: Option<notifications::ToolsChangedReceiver>,
 }
 
 impl BlufioMcpHandler {
@@ -63,6 +66,7 @@ impl BlufioMcpHandler {
             timeout_secs: config.tool_timeout_secs,
             memory_store: None,
             storage: None,
+            tools_changed_rx: None,
         }
     }
 
@@ -78,6 +82,19 @@ impl BlufioMcpHandler {
     ) -> Self {
         self.memory_store = memory_store;
         self.storage = storage;
+        self
+    }
+
+    /// Attaches a tools-changed notification receiver.
+    ///
+    /// When the receiver signals a change, the handler can forward a
+    /// `notifications/tools/list_changed` notification to connected
+    /// MCP clients (wiring depends on rmcp session API availability).
+    pub fn with_notifications(
+        mut self,
+        rx: notifications::ToolsChangedReceiver,
+    ) -> Self {
+        self.tools_changed_rx = Some(rx);
         self
     }
 
