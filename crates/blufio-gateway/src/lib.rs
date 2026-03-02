@@ -196,22 +196,24 @@ impl ChannelAdapter for GatewayChannel {
 
         // Try WebSocket sender first (if ws_id present).
         if let Some(ws_id) = ws_id
-            && let Some(sender) = self.ws_senders.get(ws_id) {
-                let ws_msg = serde_json::json!({
-                    "type": ws::message_types::MESSAGE_COMPLETE,
-                    "content": msg.content,
-                    "session_id": msg.session_id,
-                });
-                let _ = sender.send(ws_msg.to_string()).await;
-                return Ok(MessageId(request_id.to_string()));
-            }
+            && let Some(sender) = self.ws_senders.get(ws_id)
+        {
+            let ws_msg = serde_json::json!({
+                "type": ws::message_types::MESSAGE_COMPLETE,
+                "content": msg.content,
+                "session_id": msg.session_id,
+            });
+            let _ = sender.send(ws_msg.to_string()).await;
+            return Ok(MessageId(request_id.to_string()));
+        }
 
         // Try HTTP response map.
         if !request_id.is_empty()
-            && let Some((_, sender)) = self.response_map.remove(request_id) {
-                let _ = sender.send(msg.content);
-                return Ok(MessageId(request_id.to_string()));
-            }
+            && let Some((_, sender)) = self.response_map.remove(request_id)
+        {
+            let _ = sender.send(msg.content);
+            return Ok(MessageId(request_id.to_string()));
+        }
 
         // No matching handler found.
         tracing::warn!(

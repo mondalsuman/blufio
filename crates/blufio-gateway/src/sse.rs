@@ -68,9 +68,9 @@ pub async fn stream_messages(
 
     let events: Vec<Result<Event, std::convert::Infallible>> = if send_result.is_err() {
         // Channel closed, return error event.
-        vec![Ok(Event::default().event("error").data(
-            r#"{"error": "agent loop not accepting messages"}"#,
-        ))]
+        vec![Ok(Event::default()
+            .event("error")
+            .data(r#"{"error": "agent loop not accepting messages"}"#))]
     } else {
         // Wait for response.
         match tokio::time::timeout(std::time::Duration::from_secs(120), rx).await {
