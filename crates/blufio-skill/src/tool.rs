@@ -43,6 +43,30 @@ pub trait Tool: Send + Sync {
 
     /// Invokes the tool with the given JSON input and returns the output.
     async fn invoke(&self, input: serde_json::Value) -> Result<ToolOutput, BlufioError>;
+
+    /// Indicates this tool only reads data and has no side effects.
+    /// Default: false (assumes tools may have side effects).
+    fn is_read_only(&self) -> bool {
+        false
+    }
+
+    /// Indicates this tool may perform destructive/irreversible operations.
+    /// Default: false (optimistic -- tools should override if destructive).
+    fn is_destructive(&self) -> bool {
+        false
+    }
+
+    /// Indicates calling this tool multiple times with the same input produces the same result.
+    /// Default: false (conservative -- tools should override if idempotent).
+    fn is_idempotent(&self) -> bool {
+        false
+    }
+
+    /// Indicates this tool interacts with external systems outside Blufio's control.
+    /// Default: true (most tools interact with external systems).
+    fn is_open_world(&self) -> bool {
+        true
+    }
 }
 
 /// Regex for valid flat tool names: letter followed by letters/digits/underscores.
@@ -598,6 +622,62 @@ mod tests {
         assert_eq!(defs.len(), 1);
         // The definition name should be the namespaced key, not the tool's own name.
         assert_eq!(defs[0]["name"], "github__echo");
+    }
+
+    // ── Annotation default tests ──────────────────────────────────
+
+    #[test]
+    fn echo_tool_has_default_annotations() {
+        let tool = EchoTool;
+        assert!(!tool.is_read_only(), "default is_read_only should be false");
+        assert!(!tool.is_destructive(), "default is_destructive should be false");
+        assert!(!tool.is_idempotent(), "default is_idempotent should be false");
+        assert!(tool.is_open_world(), "default is_open_world should be true");
+    }
+
+    #[test]
+    fn add_tool_has_default_annotations() {
+        let tool = AddTool;
+        assert!(!tool.is_read_only());
+        assert!(!tool.is_destructive());
+        assert!(!tool.is_idempotent());
+        assert!(tool.is_open_world());
+    }
+
+    #[test]
+    fn custom_tool_can_override_annotations() {
+        struct ReadOnlyTool;
+
+        #[async_trait]
+        impl Tool for ReadOnlyTool {
+            fn name(&self) -> &str {
+                "readonly"
+            }
+            fn description(&self) -> &str {
+                "A read-only tool"
+            }
+            fn parameters_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            async fn invoke(&self, _: serde_json::Value) -> Result<ToolOutput, BlufioError> {
+                unreachable!()
+            }
+            fn is_read_only(&self) -> bool {
+                true
+            }
+            fn is_idempotent(&self) -> bool {
+                true
+            }
+            fn is_open_world(&self) -> bool {
+                false
+            }
+        }
+
+        let tool = ReadOnlyTool;
+        assert!(tool.is_read_only(), "overridden is_read_only should be true");
+        assert!(!tool.is_destructive(), "default is_destructive should be false");
+        assert!(tool.is_idempotent(), "overridden is_idempotent should be true");
+        assert!(!tool.is_open_world(), "overridden is_open_world should be false");
     }
 
     #[test]
