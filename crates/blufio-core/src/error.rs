@@ -66,7 +66,38 @@ pub enum BlufioError {
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
+    /// MCP protocol and connection errors.
+    #[error("mcp error: {message}")]
+    Mcp {
+        message: String,
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+
     /// Internal or unexpected errors.
     #[error("internal error: {0}")]
     Internal(String),
+}
+
+#[cfg(test)]
+mod mcp_error_tests {
+    use super::*;
+
+    #[test]
+    fn mcp_error_formats_correctly() {
+        let err = BlufioError::Mcp {
+            message: "connection refused".to_string(),
+            source: None,
+        };
+        assert_eq!(err.to_string(), "mcp error: connection refused");
+    }
+
+    #[test]
+    fn mcp_error_with_source() {
+        let source = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
+        let err = BlufioError::Mcp {
+            message: "connection failed".to_string(),
+            source: Some(Box::new(source)),
+        };
+        assert!(err.to_string().contains("connection failed"));
+    }
 }

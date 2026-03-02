@@ -87,6 +87,10 @@ pub struct BlufioConfig {
     /// Multi-agent delegation settings.
     #[serde(default)]
     pub delegation: DelegationConfig,
+
+    /// MCP (Model Context Protocol) settings.
+    #[serde(default)]
+    pub mcp: McpConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -847,4 +851,126 @@ impl Default for DelegationConfig {
 
 fn default_delegation_timeout() -> u64 {
     60
+}
+
+/// MCP (Model Context Protocol) configuration.
+///
+/// Controls MCP server and client functionality. When disabled (default),
+/// no MCP endpoints are exposed and no external MCP connections are made.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpConfig {
+    /// Enable MCP functionality (server and client).
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// External MCP server configurations for the client.
+    #[serde(default)]
+    pub servers: Vec<McpServerEntry>,
+
+    /// Tools to export via MCP server. Empty means use safe defaults.
+    /// The "bash" tool is never exported regardless of this list.
+    #[serde(default)]
+    pub export_tools: Vec<String>,
+}
+
+/// Configuration entry for an external MCP server.
+///
+/// Each entry represents a connection to an external MCP server that
+/// Blufio can discover and invoke tools from.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpServerEntry {
+    /// Unique name for this MCP server (used as namespace prefix).
+    pub name: String,
+
+    /// Transport type: "http" or "stdio".
+    pub transport: String,
+
+    /// URL for HTTP transport connections.
+    #[serde(default)]
+    pub url: Option<String>,
+
+    /// Command for stdio transport.
+    #[serde(default)]
+    pub command: Option<String>,
+
+    /// Command arguments for stdio transport.
+    #[serde(default)]
+    pub args: Vec<String>,
+
+    /// Optional bearer token for HTTP authentication.
+    #[serde(default)]
+    pub auth_token: Option<String>,
+}
+
+#[cfg(test)]
+mod mcp_config_tests {
+    use super::*;
+
+    #[test]
+    fn empty_toml_defaults_mcp_disabled() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(!config.mcp.enabled);
+        assert!(config.mcp.servers.is_empty());
+        assert!(config.mcp.export_tools.is_empty());
+    }
+
+    #[test]
+    fn mcp_section_parses_correctly() {
+        let toml_str = r#"
+[mcp]
+enabled = true
+export_tools = ["http", "file"]
+
+[[mcp.servers]]
+name = "github"
+transport = "http"
+url = "https://mcp.github.com"
+auth_token = "ghp_xxx"
+
+[[mcp.servers]]
+name = "local"
+transport = "stdio"
+command = "npx"
+args = ["-y", "mcp-server"]
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.mcp.enabled);
+        assert_eq!(config.mcp.servers.len(), 2);
+        assert_eq!(config.mcp.servers[0].name, "github");
+        assert_eq!(config.mcp.servers[0].transport, "http");
+        assert_eq!(
+            config.mcp.servers[0].url.as_deref(),
+            Some("https://mcp.github.com")
+        );
+        assert_eq!(config.mcp.servers[1].name, "local");
+        assert_eq!(config.mcp.servers[1].transport, "stdio");
+        assert_eq!(config.mcp.servers[1].command.as_deref(), Some("npx"));
+        assert_eq!(config.mcp.servers[1].args, vec!["-y", "mcp-server"]);
+        assert_eq!(config.mcp.export_tools, vec!["http", "file"]);
+    }
+
+    #[test]
+    fn mcp_section_rejects_unknown_fields() {
+        let toml_str = r#"
+[mcp]
+enabled = true
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn mcp_server_entry_rejects_unknown_fields() {
+        let toml_str = r#"
+[[mcp.servers]]
+name = "test"
+transport = "http"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
 }
