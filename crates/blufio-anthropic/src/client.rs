@@ -7,9 +7,12 @@
 //! authentication, streaming SSE responses, and transient error retry.
 
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
+use blufio_config::model::SecurityConfig;
 use blufio_core::BlufioError;
+use blufio_security::SsrfSafeResolver;
 use futures::Stream;
 use reqwest::header::{HeaderMap, HeaderValue};
 use tracing::{debug, warn};
@@ -39,7 +42,15 @@ impl AnthropicClient {
     /// * `api_key` - Anthropic API key for authentication
     /// * `api_version` - API version string (e.g., "2023-06-01")
     /// * `model` - Default model identifier
-    pub fn new(api_key: String, api_version: String, model: String) -> Result<Self, BlufioError> {
+    /// * `security_config` - Optional security config for TLS 1.2+ enforcement and SSRF protection.
+    ///   When `Some`, enables `min_tls_version(TLS_1_2)` and `SsrfSafeResolver`.
+    ///   When `None` (tests), uses a plain reqwest client.
+    pub fn new(
+        api_key: String,
+        api_version: String,
+        model: String,
+        security_config: Option<&SecurityConfig>,
+    ) -> Result<Self, BlufioError> {
         let mut headers = HeaderMap::new();
         headers.insert(
             "x-api-key",
@@ -54,14 +65,24 @@ impl AnthropicClient {
         );
         headers.insert("content-type", HeaderValue::from_static("application/json"));
 
-        let client = reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .default_headers(headers)
-            .timeout(Duration::from_secs(300))
-            .build()
-            .map_err(|e| BlufioError::Provider {
-                message: format!("failed to build HTTP client: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .timeout(Duration::from_secs(300));
+
+        // Apply security hardening when config is provided:
+        // - TLS 1.2+ minimum for all connections (SEC-09)
+        // - SSRF-safe DNS resolver that blocks private IP ranges (SEC-09)
+        if let Some(sec) = security_config {
+            let resolver = SsrfSafeResolver::new(sec.allowed_private_ips.clone());
+            builder = builder
+                .min_tls_version(reqwest::tls::Version::TLS_1_2)
+                .dns_resolver(Arc::new(resolver));
+        }
+
+        let client = builder.build().map_err(|e| BlufioError::Provider {
+            message: format!("failed to build HTTP client: {e}"),
+            source: Some(Box::new(e)),
+        })?;
 
         Ok(Self {
             client,
@@ -246,6 +267,7 @@ mod tests {
             "test-api-key".into(),
             "2023-06-01".into(),
             "claude-sonnet-4-20250514".into(),
+            None,
         )
         .unwrap()
         .with_base_url(base_url.to_string())

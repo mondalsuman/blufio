@@ -76,8 +76,9 @@ fn initialize_plugin_registry(config: &BlufioConfig) -> PluginRegistry {
 /// ChannelMultiplexer for multi-channel support, and enters the main
 /// agent loop. Supports graceful shutdown via signal handlers.
 pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
-    // Initialize tracing subscriber.
-    init_tracing(&config.agent.log_level);
+    // Initialize tracing subscriber with secret redaction (SEC-08).
+    // Returns a handle to populate vault secrets later (after vault unlock).
+    let vault_values = init_tracing(&config.agent.log_level);
 
     info!("starting blufio serve");
 
@@ -107,6 +108,35 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 );
                 return Err(e);
             }
+        }
+    }
+
+    // Register known config secrets for log redaction (SEC-08).
+    // Regex patterns catch sk-ant-* and Telegram tokens automatically;
+    // this exact-match registration catches non-pattern-matching secrets
+    // such as custom bearer tokens.
+    {
+        if let Some(ref key) = config.anthropic.api_key {
+            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                &vault_values,
+                key.clone(),
+            );
+        }
+        if let Some(ref token) = config.telegram.bot_token {
+            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                &vault_values,
+                token.clone(),
+            );
+        }
+        if let Some(ref token) = config.gateway.bearer_token {
+            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                &vault_values,
+                token.clone(),
+            );
+        }
+        let secret_count = vault_values.read().map(|v| v.len()).unwrap_or(0);
+        if secret_count > 0 {
+            info!(count = secret_count, "secrets registered for log redaction");
         }
     }
 
@@ -185,6 +215,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             );
             e
         })?;
+        info!("anthropic provider initialized with TLS 1.2+ enforcement and SSRF protection");
         Arc::new(p)
     };
 
@@ -447,6 +478,27 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     )
     .await?;
 
+    // Log integration status summary.
+    {
+        let security_status = "OK (TLS 1.2+ / SSRF protection)";
+        let redaction_status = "OK (RedactingWriter active)";
+        #[cfg(feature = "prometheus")]
+        let metrics_status = if _prometheus_adapter.is_some() {
+            "OK"
+        } else {
+            "WARN (disabled)"
+        };
+        #[cfg(not(feature = "prometheus"))]
+        let metrics_status = "WARN (not compiled)";
+
+        info!(
+            security = security_status,
+            redaction = redaction_status,
+            metrics = metrics_status,
+            "integration status"
+        );
+    }
+
     agent_loop.run(cancel).await?;
 
     info!("blufio serve shutdown complete");
@@ -612,9 +664,45 @@ fn read_rss_bytes() -> Option<u64> {
     }
 }
 
-/// Initializes the tracing subscriber with the given log level.
-fn init_tracing(log_level: &str) {
+/// A `MakeWriter` implementation that creates `RedactingWriter` instances.
+///
+/// Used by tracing-subscriber to ensure all log output passes through
+/// secret redaction before reaching stderr. Redacts:
+/// - Anthropic API keys (`sk-ant-*` pattern)
+/// - Telegram bot tokens
+/// - Vault-stored secret values (dynamically updated via `Arc<RwLock>`)
+struct RedactingMakeWriter {
+    vault_values: std::sync::Arc<std::sync::RwLock<Vec<String>>>,
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for RedactingMakeWriter {
+    type Writer = blufio_security::RedactingWriter<std::io::Stderr>;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        blufio_security::RedactingWriter::new(std::io::stderr(), self.vault_values.clone())
+    }
+}
+
+/// Initializes the tracing subscriber with secret redaction.
+///
+/// Returns a shared handle to the vault values list. The caller
+/// populates this after vault unlock so that dynamically-loaded
+/// secrets are redacted in subsequent log output.
+///
+/// Regex patterns catch `sk-ant-*`, generic `sk-*`, Bearer tokens, and
+/// Telegram bot tokens automatically. The vault values handle catches
+/// non-pattern-matching secrets loaded from the credential vault.
+///
+/// # Panics
+/// Panics if a tracing subscriber is already installed.
+fn init_tracing(log_level: &str) -> std::sync::Arc<std::sync::RwLock<Vec<String>>> {
     use tracing_subscriber::EnvFilter;
+
+    let vault_values = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
+
+    let redacting_writer = RedactingMakeWriter {
+        vault_values: vault_values.clone(),
+    };
 
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(format!("blufio={log_level},warn")));
@@ -623,5 +711,8 @@ fn init_tracing(log_level: &str) {
         .with_env_filter(filter)
         .with_target(true)
         .with_thread_names(false)
+        .with_writer(redacting_writer)
         .init();
+
+    vault_values
 }

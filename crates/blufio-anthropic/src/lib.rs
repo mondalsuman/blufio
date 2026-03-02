@@ -65,6 +65,7 @@ impl AnthropicProvider {
             api_key,
             config.anthropic.api_version.clone(),
             config.anthropic.default_model.clone(),
+            Some(&config.security),
         )?;
 
         info!(
@@ -569,6 +570,7 @@ mod tests {
             "test-key".into(),
             "2023-06-01".into(),
             "claude-sonnet-4-20250514".into(),
+            None,
         )
         .unwrap();
 
@@ -607,6 +609,7 @@ mod tests {
             "test-key".into(),
             "2023-06-01".into(),
             "claude-sonnet-4-20250514".into(),
+            None,
         )
         .unwrap();
 
@@ -635,6 +638,7 @@ mod tests {
             "test-key".into(),
             "2023-06-01".into(),
             "claude-sonnet-4-20250514".into(),
+            None,
         )
         .unwrap();
 
@@ -819,6 +823,7 @@ mod tests {
             "test-key".into(),
             "2023-06-01".into(),
             "claude-sonnet-4-20250514".into(),
+            None,
         )
         .unwrap();
         let provider = AnthropicProvider::with_client(client, "test".into());

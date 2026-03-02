@@ -337,6 +337,14 @@ impl SessionActor {
                 tracker.record_cost(cost_usd);
             }
 
+            // Record Prometheus token metrics for compaction.
+            #[cfg(feature = "prometheus")]
+            blufio_prometheus::record_tokens(
+                compaction_model,
+                compaction_usage.input_tokens,
+                compaction_usage.output_tokens,
+            );
+
             info!(
                 session_id = %self.session_id,
                 model = %compaction_model,
@@ -406,6 +414,18 @@ impl SessionActor {
             {
                 let mut tracker = self.budget_tracker.lock().await;
                 tracker.record_cost(cost_usd);
+
+                // Record Prometheus token and budget metrics.
+                #[cfg(feature = "prometheus")]
+                {
+                    blufio_prometheus::record_tokens(
+                        &model_for_cost,
+                        usage.input_tokens,
+                        usage.output_tokens,
+                    );
+                    let remaining = tracker.remaining_daily_budget();
+                    blufio_prometheus::set_budget_remaining(remaining);
+                }
             }
 
             info!(
@@ -589,6 +609,14 @@ impl SessionActor {
                     } else {
                         let mut tracker = self.budget_tracker.lock().await;
                         tracker.record_cost(cost_usd);
+
+                        // Record Prometheus token metrics for extraction.
+                        #[cfg(feature = "prometheus")]
+                        blufio_prometheus::record_tokens(
+                            extraction_model,
+                            usage.input_tokens,
+                            usage.output_tokens,
+                        );
 
                         debug!(
                             session_id = %self.session_id,
