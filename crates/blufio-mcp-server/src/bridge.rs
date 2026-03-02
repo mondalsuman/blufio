@@ -24,9 +24,7 @@ use blufio_skill::tool::{Tool as BlufioTool, ToolRegistry};
 pub fn filtered_tool_names(registry: &ToolRegistry, export_tools: &[String]) -> Vec<String> {
     // Warn if bash is in the explicit allowlist.
     if export_tools.iter().any(|t| t == "bash") {
-        tracing::warn!(
-            "'bash' in mcp.export_tools is ignored (security: never exported via MCP)"
-        );
+        tracing::warn!("'bash' in mcp.export_tools is ignored (security: never exported via MCP)");
     }
 
     let all_tools: Vec<(&str, &str)> = registry.list();
@@ -42,9 +40,7 @@ pub fn filtered_tool_names(registry: &ToolRegistry, export_tools: &[String]) -> 
         // Export only explicitly listed tools (minus bash).
         all_tools
             .into_iter()
-            .filter(|(name, _)| {
-                *name != "bash" && export_tools.iter().any(|e| e == name)
-            })
+            .filter(|(name, _)| *name != "bash" && export_tools.iter().any(|e| e == name))
             .map(|(name, _)| name.to_string())
             .collect()
     }
@@ -82,11 +78,22 @@ pub fn to_mcp_tool(name: &str, tool: &dyn BlufioTool) -> rmcp::model::Tool {
         }
     };
 
-    rmcp::model::Tool::new(
+    let mut mcp_tool = rmcp::model::Tool::new(
         name.to_string(),
         tool.description().to_string(),
         Arc::new(json_object),
-    )
+    );
+
+    // Add tool annotations (SRVR-11).
+    mcp_tool.annotations = Some(rmcp::model::ToolAnnotations {
+        read_only_hint: Some(tool.is_read_only()),
+        destructive_hint: Some(tool.is_destructive()),
+        idempotent_hint: Some(tool.is_idempotent()),
+        open_world_hint: Some(tool.is_open_world()),
+        ..Default::default()
+    });
+
+    mcp_tool
 }
 
 #[cfg(test)]
@@ -249,10 +256,7 @@ mod tests {
         let tool = HttpTool;
         let mcp_tool = to_mcp_tool("http", &tool);
         assert_eq!(mcp_tool.name.as_ref(), "http");
-        assert_eq!(
-            mcp_tool.description.as_deref(),
-            Some("Make HTTP requests")
-        );
+        assert_eq!(mcp_tool.description.as_deref(), Some("Make HTTP requests"));
     }
 
     #[test]
@@ -262,10 +266,7 @@ mod tests {
 
         // The input_schema should contain the schema fields.
         let schema = &*mcp_tool.input_schema;
-        assert_eq!(
-            schema.get("type").and_then(|v| v.as_str()),
-            Some("object")
-        );
+        assert_eq!(schema.get("type").and_then(|v| v.as_str()), Some("object"));
 
         let properties = schema.get("properties").expect("should have properties");
         assert!(properties.get("url").is_some());
@@ -295,10 +296,7 @@ mod tests {
             fn parameters_schema(&self) -> serde_json::Value {
                 serde_json::json!({"type": "object"})
             }
-            async fn invoke(
-                &self,
-                _input: serde_json::Value,
-            ) -> Result<ToolOutput, BlufioError> {
+            async fn invoke(&self, _input: serde_json::Value) -> Result<ToolOutput, BlufioError> {
                 unreachable!()
             }
         }
@@ -307,10 +305,7 @@ mod tests {
         let mcp_tool = to_mcp_tool("minimal", &tool);
         assert_eq!(mcp_tool.name.as_ref(), "minimal");
         let schema = &*mcp_tool.input_schema;
-        assert_eq!(
-            schema.get("type").and_then(|v| v.as_str()),
-            Some("object")
-        );
+        assert_eq!(schema.get("type").and_then(|v| v.as_str()), Some("object"));
     }
 
     #[test]
@@ -319,5 +314,88 @@ mod tests {
         let tool = HttpTool;
         let mcp_tool = to_mcp_tool("github__http", &tool);
         assert_eq!(mcp_tool.name.as_ref(), "github__http");
+    }
+
+    // ── to_mcp_tool annotation tests ──────────────────────────────
+
+    #[test]
+    fn to_mcp_tool_includes_default_annotations() {
+        let tool = HttpTool;
+        let mcp_tool = to_mcp_tool("http", &tool);
+        let annotations = mcp_tool.annotations.expect("should have annotations");
+        assert_eq!(annotations.read_only_hint, Some(false));
+        assert_eq!(annotations.destructive_hint, Some(false));
+        assert_eq!(annotations.idempotent_hint, Some(false));
+        assert_eq!(annotations.open_world_hint, Some(true));
+    }
+
+    #[test]
+    fn to_mcp_tool_with_read_only_tool_has_read_only_hint_true() {
+        struct ReadOnlyQueryTool;
+
+        #[async_trait]
+        impl BlufioTool for ReadOnlyQueryTool {
+            fn name(&self) -> &str {
+                "query"
+            }
+            fn description(&self) -> &str {
+                "Query data"
+            }
+            fn parameters_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            async fn invoke(&self, _: serde_json::Value) -> Result<ToolOutput, BlufioError> {
+                unreachable!()
+            }
+            fn is_read_only(&self) -> bool {
+                true
+            }
+            fn is_idempotent(&self) -> bool {
+                true
+            }
+        }
+
+        let tool = ReadOnlyQueryTool;
+        let mcp_tool = to_mcp_tool("query", &tool);
+        let annotations = mcp_tool.annotations.expect("should have annotations");
+        assert_eq!(annotations.read_only_hint, Some(true));
+        assert_eq!(annotations.destructive_hint, Some(false));
+        assert_eq!(annotations.idempotent_hint, Some(true));
+        assert_eq!(annotations.open_world_hint, Some(true));
+    }
+
+    #[test]
+    fn to_mcp_tool_with_destructive_tool_has_destructive_hint_true() {
+        struct DestructiveTool;
+
+        #[async_trait]
+        impl BlufioTool for DestructiveTool {
+            fn name(&self) -> &str {
+                "destroy"
+            }
+            fn description(&self) -> &str {
+                "Destroy things"
+            }
+            fn parameters_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            async fn invoke(&self, _: serde_json::Value) -> Result<ToolOutput, BlufioError> {
+                unreachable!()
+            }
+            fn is_destructive(&self) -> bool {
+                true
+            }
+            fn is_open_world(&self) -> bool {
+                false
+            }
+        }
+
+        let tool = DestructiveTool;
+        let mcp_tool = to_mcp_tool("destroy", &tool);
+        let annotations = mcp_tool.annotations.expect("should have annotations");
+        assert_eq!(annotations.read_only_hint, Some(false));
+        assert_eq!(annotations.destructive_hint, Some(true));
+        assert_eq!(annotations.idempotent_hint, Some(false));
+        assert_eq!(annotations.open_world_hint, Some(false));
     }
 }
