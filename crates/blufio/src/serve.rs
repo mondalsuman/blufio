@@ -217,11 +217,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             }
         }
 
-        let (manager, result) = blufio_mcp_client::McpClientManager::connect_all(
-            &config.mcp.servers,
-            &tool_registry,
-        )
-        .await;
+        let (manager, result) =
+            blufio_mcp_client::McpClientManager::connect_all(&config.mcp.servers, &tool_registry)
+                .await;
 
         if result.connected > 0 {
             info!(

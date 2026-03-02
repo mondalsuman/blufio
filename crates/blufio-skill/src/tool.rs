@@ -281,6 +281,15 @@ impl ToolRegistry {
     pub fn is_empty(&self) -> bool {
         self.tools.is_empty()
     }
+
+    /// Removes a tool by name. Returns `true` if the tool was found and removed.
+    ///
+    /// This is used to remove external MCP tools when a server becomes
+    /// degraded or a rug-pull is detected (CLNT-06, CLNT-07).
+    pub fn unregister(&mut self, name: &str) -> bool {
+        self.builtin_names.remove(name);
+        self.tools.remove(name).is_some()
+    }
 }
 
 impl Default for ToolRegistry {
@@ -709,5 +718,51 @@ mod tests {
         assert_eq!(defs.len(), 2);
         assert_eq!(defs[0]["name"], "echo");
         assert_eq!(defs[1]["name"], "github__add");
+    }
+
+    // ── Unregister tests ─────────────────────────────────────────────
+
+    #[test]
+    fn unregister_removes_existing_tool() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Arc::new(EchoTool)).unwrap();
+        assert!(registry.get("echo").is_some());
+
+        let removed = registry.unregister("echo");
+        assert!(removed);
+        assert!(registry.get("echo").is_none());
+        assert_eq!(registry.len(), 0);
+    }
+
+    #[test]
+    fn unregister_returns_false_for_missing_tool() {
+        let mut registry = ToolRegistry::new();
+        let removed = registry.unregister("nonexistent");
+        assert!(!removed);
+    }
+
+    #[test]
+    fn unregister_namespaced_tool() {
+        let mut registry = ToolRegistry::new();
+        registry
+            .register_namespaced("github", Arc::new(EchoTool))
+            .unwrap();
+        assert!(registry.get("github__echo").is_some());
+
+        let removed = registry.unregister("github__echo");
+        assert!(removed);
+        assert!(registry.get("github__echo").is_none());
+    }
+
+    #[test]
+    fn unregister_builtin_clears_builtin_set() {
+        let mut registry = ToolRegistry::new();
+        registry.register_builtin(Arc::new(EchoTool)).unwrap();
+
+        let removed = registry.unregister("echo");
+        assert!(removed);
+        // After unregistering, re-registration with same name should work.
+        registry.register(Arc::new(EchoTool)).unwrap();
+        assert!(registry.get("echo").is_some());
     }
 }

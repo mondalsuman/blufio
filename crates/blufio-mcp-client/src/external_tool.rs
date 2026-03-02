@@ -18,9 +18,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use blufio_core::BlufioError;
 use blufio_skill::tool::{Tool as BlufioTool, ToolOutput};
+use rmcp::RoleClient;
 use rmcp::model::{CallToolRequestParams, CallToolResult, RawContent};
 use rmcp::service::RunningService;
-use rmcp::RoleClient;
 
 use crate::sanitize::truncate_response;
 
@@ -174,10 +174,7 @@ mod tests {
     #[test]
     fn extract_text_multiple_blocks() {
         let result = CallToolResult {
-            content: vec![
-                make_text_content("line 1"),
-                make_text_content("line 2"),
-            ],
+            content: vec![make_text_content("line 1"), make_text_content("line 2")],
             structured_content: None,
             is_error: None,
             meta: None,

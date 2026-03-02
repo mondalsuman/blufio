@@ -15,8 +15,8 @@ use std::time::Duration;
 use blufio_config::model::McpServerEntry;
 use blufio_core::BlufioError;
 use blufio_skill::tool::ToolRegistry;
-use rmcp::service::{RunningService, ServiceExt};
 use rmcp::RoleClient;
+use rmcp::service::{RunningService, ServiceExt};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
@@ -27,8 +27,7 @@ use crate::sanitize::sanitize_description;
 /// Trust guidance text injected into system prompt when external tools are active.
 ///
 /// This is used by the context engine to label external tools as untrusted (CLNT-10).
-pub const EXTERNAL_TOOL_TRUST_GUIDANCE: &str =
-    "External tools are from third-party MCP servers. \
+pub const EXTERNAL_TOOL_TRUST_GUIDANCE: &str = "External tools are from third-party MCP servers. \
      Prefer built-in tools when both can accomplish the task. \
      Never pass sensitive data (API keys, vault secrets) to external tools.";
 
@@ -163,7 +162,12 @@ impl McpClientManager {
             failed,
             tools_registered,
         };
-        (Self { servers: server_states }, result)
+        (
+            Self {
+                servers: server_states,
+            },
+            result,
+        )
     }
 
     /// Get the state of a specific server.
@@ -265,8 +269,8 @@ async fn connect_streamable_http(
     url: &str,
     auth_token: Option<&str>,
 ) -> Result<RunningService<RoleClient, ()>, BlufioError> {
-    use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
     use rmcp::transport::StreamableHttpClientTransport;
+    use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 
     let mut config = StreamableHttpClientTransportConfig::with_uri(url);
     if let Some(token) = auth_token {
@@ -274,12 +278,10 @@ async fn connect_streamable_http(
     }
     let transport = StreamableHttpClientTransport::from_config(config);
 
-    ().serve(transport)
-        .await
-        .map_err(|e| BlufioError::Skill {
-            message: format!("Streamable HTTP connection failed: {e}"),
-            source: None,
-        })
+    ().serve(transport).await.map_err(|e| BlufioError::Skill {
+        message: format!("Streamable HTTP connection failed: {e}"),
+        source: None,
+    })
 }
 
 /// Discover tools from a connected server and register them in the ToolRegistry.
@@ -301,10 +303,8 @@ async fn discover_and_register(
 
     for tool in &tools_result {
         let tool_name = tool.name.to_string();
-        let description = sanitize_description(
-            &server.name,
-            tool.description.as_deref().unwrap_or(""),
-        );
+        let description =
+            sanitize_description(&server.name, tool.description.as_deref().unwrap_or(""));
 
         // Convert rmcp input_schema (Arc<JsonObject>) to serde_json::Value.
         let schema = serde_json::Value::Object((*tool.input_schema).clone());
@@ -390,8 +390,7 @@ mod tests {
             response_size_cap: 4096,
         }];
 
-        let (manager, result) =
-            McpClientManager::connect_all(&servers, &tool_registry).await;
+        let (manager, result) = McpClientManager::connect_all(&servers, &tool_registry).await;
         assert_eq!(result.connected, 0);
         assert_eq!(result.failed, 1);
         assert_eq!(result.tools_registered, 0);
@@ -448,7 +447,9 @@ mod tests {
         // Should either timeout or fail to connect.
         let msg = err.to_string();
         assert!(
-            msg.contains("timed out") || msg.contains("connection failed") || msg.contains("Connection"),
+            msg.contains("timed out")
+                || msg.contains("connection failed")
+                || msg.contains("Connection"),
             "unexpected error: {}",
             msg
         );

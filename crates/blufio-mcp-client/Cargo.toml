@@ -21,6 +21,9 @@ async-trait.workspace = true
 ring = { workspace = true }
 regex = { workspace = true }
 hex = "0.4"
+tokio-rusqlite = { workspace = true }
+rusqlite = { workspace = true }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
