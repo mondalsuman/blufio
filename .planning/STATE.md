@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-03-02T12:00:00.000Z"
+milestone_name: MVP
+status: shipped
+last_updated: "2026-03-02T15:35:00.000Z"
 progress:
   total_phases: 14
   completed_phases: 14
@@ -15,112 +15,39 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-01)
+See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 14 complete -- all 3 cross-phase integration points wired. All gap closure phases done.
+**Current focus:** v1.0 MVP shipped. Planning next milestone.
 
 ## Current Position
 
-Phase: 14 of 14 (Wire Cross-Phase Integration) -- complete
-Plan: 3 of 3 in Phase 14 (all plans executed)
-Status: Phase 14 complete -- secure TLS client, secret redaction, and Prometheus metrics wired into runtime
-Last activity: 2026-03-02 -- Phase 14 execution (gap closure)
+Milestone: v1.0 MVP — SHIPPED 2026-03-02
+Phases: 14/14 complete, 43/43 plans executed
+Requirements: 70/70 satisfied and verified
+Tag: v1.0
 
-Progress: [██████████] 100% (43/43 plans documented)
-
-## Performance Metrics
-
-**Velocity:**
-- Total plans completed: 13
-- Average duration: ~18min
-- Total execution time: ~3.8 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1 | 2/2 | 23min | 12min |
-| 2 | 2/2 | 75min | 38min |
-| 3 | 3/3 | 45min | 15min |
-| 4 | 3/3 | 30min | 10min |
-| 5 | 3/3 | ~60min | ~20min |
-
-**Recent Trend:**
-- Last 5 plans: 04-02 (13min), 04-03 (11min), 05-01 (25min), 05-02 (15min), 05-03 (15min)
-- Trend: Phase 5 plans moderate complexity due to ort API issues in 05-01; 05-02 and 05-03 smooth
-
-*Updated after each plan completion*
-| Phase 03 P01 | 5min | 2 tasks | 13 files |
-| Phase 03 P02 | 3min | 2 tasks | 6 files |
-| Phase 03 P04 | 2min | 1 task | 1 file |
+Progress: [██████████] 100%
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [01-01]: Used async-trait for all adapter traits (not native async fn in trait) for dyn dispatch compatibility
-- [01-01]: Concrete BlufioError return type on all traits instead of associated error types
-- [01-01]: No tokio dependency in blufio-core -- async-trait only needs std types
-- [01-01]: Ignored RUSTSEC-2024-0436 (paste) -- transitive via tikv-jemalloc-ctl, no alternative
-- [01-02]: Used Env::map() NOT Env::split() for env var mapping to avoid underscore ambiguity
-- [01-02]: Jaro-Winkler threshold 0.75 for fuzzy matching (catches more typos than 0.8)
-- [01-02]: Made CLI command optional for cleaner startup config-only validation
-- [02-01]: Used rusqlite 0.37 + tokio-rusqlite 0.7 (not 0.33 + 0.6 from plan)
-- [02-01]: Moved Session/Message/QueueEntry model types to blufio-core (avoid circular dep)
-- [02-02]: Used Zeroizing<[u8; 32]> for master key instead of SecretBox
-- [02-02]: BLUFIO_VAULT_KEY env var excluded from config loader via Figment Env::ignore()
-- [02-02]: Vault created lazily on first set-secret call
-- [03-01]: teloxide 0.17 (not 0.13 from research) -- API changed significantly
-- [03-01]: eventsource-stream 0.2 for SSE parsing with reqwest byte streams
-- [03-02]: Mock teloxide Message construction via serde_json::from_value (API-compatible)
-- [03-02]: MarkdownV2 with plain text fallback on parse errors for send and edit operations
-- [03-02]: SPLIT_THRESHOLD at 3800 chars to leave margin for escaping overhead below 4096
-- [03-02]: Empty allowed_users list rejects all (secure default)
-- [03-02]: chat_id stored in InboundMessage metadata JSON for response routing
-- [03-03]: Session key = channel:sender_id, with storage fallback for crash recovery
-- [03-03]: tracing-subscriber with EnvFilter for configurable log levels
-- [Roadmap]: 10 phases derived from 70 requirements following PRD dependency order
-- [Roadmap]: Research recommends building Anthropic client directly in Phase 3, extracting provider trait
-- [04-01]: Used blufio_config::model::CostConfig import path (not re-exported from crate root)
-- [04-01]: Pricing uses substring matching with Sonnet fallback for unknown models
-- [04-01]: BudgetTracker is not thread-safe by design -- matches single-threaded agent loop
-- [04-02]: system_blocks as serde_json::Value on ProviderRequest keeps core types provider-agnostic
-- [04-02]: Compaction token usage propagated via DynamicResult/AssembledContext for explicit cost recording
-- [04-02]: Duplicated message_content_to_blocks in blufio-context to avoid circular dep with blufio-agent
-- [04-02]: CacheControlMarker::ephemeral() auto-applied on all Anthropic requests for prompt caching
-- [Phase 04-03]: CostLedger::open(path) for standalone DB connections in serve/shell
-- [Phase 04-03]: BudgetExhausted sends user-facing message via channel, not logged as error
-- [Phase 05-01]: ndarray 0.17 required for ort 2.0.0-rc.11 compatibility (0.16 breaks TensorArrayData)
-- [Phase 05-01]: ort features: std, ndarray, download-binaries, copy-dylibs, tls-native all required
-- [Phase 05-01]: storage_err helper function to avoid tokio_rusqlite type inference issues in store.rs
-- [Phase 05-02]: EmbeddingAdapter trait import required in scope for embed() method calls
-- [Phase 05-03]: MemoryProvider derives Clone (cheap Arc internals) instead of Arc wrapping to avoid orphan rules
-- [Phase 05-03]: MemoryStore opens separate SQLite connection to same DB to avoid contention
-- [Phase 05-03]: Idle extraction uses check-on-next-message pattern (not background timer)
-- [Phase 07-04]: Used Handle::current().block_on() for HTTP in WASM host functions instead of reqwest::blocking
-- [Phase 07-04]: HTTP response body stored in result_json for pragmatic WASM memory management
-- [Phase 07-04]: Domain validation uses exact match or subdomain match pattern
-- [Phase 07-04]: Path validation uses starts_with prefix check against manifest-declared paths
-- [03-04]: 100ms poll interval for drain_sessions -- fast exit with negligible CPU overhead
-- [03-04]: Both Idle and Draining states treated as 'done' in drain polling loop
-- [03-04]: Per-session diagnostic logging on timeout for production shutdown debugging
+All decisions logged in PROJECT.md Key Decisions table. Full v1.0 decision history archived in milestones/v1.0-phases/.
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-- [Research]: ort 2.0 is release candidate (rc.11), not stable -- monitor for breaking changes
-- [Research]: WASM Component Model still evolving -- verify wasmtime 40.x security features during Phase 7 planning
-- [Research]: Embedding model (ONNX) performance on musl static builds not validated -- test end-to-end
+- ort 2.0 is release candidate (rc.11), not stable — monitor for breaking changes
+- WASM Component Model still evolving — verify wasmtime updates
+- Embedding model (ONNX) performance on musl static builds not validated — test end-to-end
+- 10 tech debt items documented in MILESTONES.md
 
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed Phase 14 (wire-cross-phase-integration) -- all 3 plans executed
-Resume file: .planning/phases/14-wire-cross-phase-integration/14-VERIFICATION.md
+Stopped at: v1.0 milestone completion
+Next action: `/gsd:new-milestone` to start v1.1
