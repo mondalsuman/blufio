@@ -18,7 +18,7 @@ telegram = ["dep:blufio-telegram"]
 anthropic = ["dep:blufio-anthropic"]
 sqlite = ["dep:blufio-storage"]
 onnx = []
-prometheus = ["dep:blufio-prometheus"]
+prometheus = ["dep:blufio-prometheus", "blufio-agent/prometheus"]
 keypair = ["dep:blufio-auth-keypair"]
 gateway = ["dep:blufio-gateway"]
 

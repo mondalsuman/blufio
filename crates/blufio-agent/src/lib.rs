@@ -127,10 +127,17 @@ impl AgentLoop {
                         Ok(inbound) => {
                             if let Err(e) = self.handle_inbound(inbound).await {
                                 error!(error = %e, "failed to handle inbound message");
+                                #[cfg(feature = "prometheus")]
+                                {
+                                    let error_type = classify_error_type(&e);
+                                    blufio_prometheus::record_error(error_type);
+                                }
                             }
                         }
                         Err(e) => {
                             error!(error = %e, "channel receive error");
+                            #[cfg(feature = "prometheus")]
+                            blufio_prometheus::record_error("channel");
                             // If the channel is closed, break out of the loop.
                             if e.to_string().contains("closed") {
                                 break;
@@ -189,6 +196,10 @@ impl AgentLoop {
             "handling inbound message"
         );
 
+        // Record inbound message metric.
+        #[cfg(feature = "prometheus")]
+        blufio_prometheus::record_message(&channel_name);
+
         // Resolve or create session.
         let session_id = self
             .resolve_or_create_session(&sender_id, &channel_name)
@@ -208,6 +219,9 @@ impl AgentLoop {
         let actor = self.sessions.get_mut(&session_id).ok_or_else(|| {
             BlufioError::Internal(format!("session actor not found for {session_id}"))
         })?;
+
+        // Capture start time for latency tracking.
+        let _llm_start = std::time::Instant::now();
 
         // Handle message: persist user message, check budget, assemble context, get stream.
         let stream_result = actor.handle_message(inbound).await;
@@ -252,6 +266,13 @@ impl AgentLoop {
         // Tool loop: consume stream, check for tool_use, execute, re-call LLM.
         for iteration in 0..=max_iterations {
             let (text, stream_usage, tool_uses, stop_reason) = consume_stream(&mut stream).await;
+
+            // Record end-to-end latency on first stream consumption.
+            #[cfg(feature = "prometheus")]
+            if iteration == 0 {
+                let latency = _llm_start.elapsed().as_secs_f64();
+                blufio_prometheus::record_latency(latency);
+            }
 
             full_response.push_str(&text);
             if let Some(u) = stream_usage {
@@ -586,6 +607,8 @@ impl AgentLoop {
                 );
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
+                #[cfg(feature = "prometheus")]
+                blufio_prometheus::set_active_sessions(self.sessions.len() as f64);
                 return Ok(session_id);
             }
         }
@@ -631,6 +654,8 @@ impl AgentLoop {
             self.tool_registry.clone(),
         );
         self.sessions.insert(session_key, actor);
+        #[cfg(feature = "prometheus")]
+        blufio_prometheus::set_active_sessions(self.sessions.len() as f64);
 
         Ok(session_id)
     }
@@ -696,6 +721,23 @@ fn extract_chat_id_from_metadata(metadata: &Option<String>) -> Option<String> {
             .ok()
             .and_then(|v| v.get("chat_id").and_then(|c| c.as_str()).map(String::from))
     })
+}
+
+/// Classify a [`BlufioError`] into a Prometheus-compatible error type label.
+///
+/// Used for the `blufio_errors_total` counter's `type` label.
+#[cfg(feature = "prometheus")]
+fn classify_error_type(error: &BlufioError) -> &'static str {
+    match error {
+        BlufioError::Provider { .. } => "provider",
+        BlufioError::Security(_) => "security",
+        BlufioError::Storage { .. } => "storage",
+        BlufioError::Channel { .. } => "channel",
+        BlufioError::Skill { .. } => "skill",
+        BlufioError::BudgetExhausted { .. } => "budget",
+        BlufioError::Timeout { .. } => "timeout",
+        _ => "agent",
+    }
 }
 
 #[cfg(test)]

@@ -27,6 +27,11 @@ uuid.workspace = true
 chrono.workspace = true
 serde_json = "1"
 base64 = "0.22"
+blufio-prometheus = { path = "../blufio-prometheus", optional = true }
+
+[features]
+default = []
+prometheus = ["dep:blufio-prometheus"]
 
 [dev-dependencies]
 blufio-test-utils = { path = "../blufio-test-utils" }

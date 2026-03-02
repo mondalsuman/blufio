@@ -153,6 +153,17 @@ impl BudgetTracker {
         self.monthly_total_usd
     }
 
+    /// Returns the remaining daily budget in USD.
+    ///
+    /// If no daily cap is configured, returns `f64::INFINITY`.
+    /// Prometheus uses this for the `blufio_budget_remaining_usd` gauge.
+    pub fn remaining_daily_budget(&self) -> f64 {
+        match self.daily_cap {
+            Some(cap) => (cap - self.daily_total_usd).max(0.0),
+            None => f64::INFINITY,
+        }
+    }
+
     /// Returns the higher of daily or monthly budget utilization as a fraction (0.0-1.0+).
     ///
     /// The model router uses this to apply budget-aware downgrades:

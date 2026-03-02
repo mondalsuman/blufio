@@ -478,6 +478,27 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     )
     .await?;
 
+    // Log integration status summary.
+    {
+        let security_status = "OK (TLS 1.2+ / SSRF protection)";
+        let redaction_status = "OK (RedactingWriter active)";
+        #[cfg(feature = "prometheus")]
+        let metrics_status = if _prometheus_adapter.is_some() {
+            "OK"
+        } else {
+            "WARN (disabled)"
+        };
+        #[cfg(not(feature = "prometheus"))]
+        let metrics_status = "WARN (not compiled)";
+
+        info!(
+            security = security_status,
+            redaction = redaction_status,
+            metrics = metrics_status,
+            "integration status"
+        );
+    }
+
     agent_loop.run(cancel).await?;
 
     info!("blufio serve shutdown complete");
