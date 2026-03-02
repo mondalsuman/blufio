@@ -50,6 +50,13 @@ pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Resul
     results.push(check_llm_connectivity(config).await);
     results.push(check_health_endpoint(config).await);
 
+    // MCP server checks (if configured)
+    #[cfg(feature = "mcp-client")]
+    {
+        let mcp_results = check_mcp_servers(config).await;
+        results.extend(mcp_results);
+    }
+
     // Deep checks (only with --deep)
     if deep {
         results.push(check_db_integrity(&config.storage.database_path).await);
@@ -313,6 +320,55 @@ async fn check_health_endpoint(config: &BlufioConfig) -> CheckResult {
     }
 }
 
+/// Check connectivity to configured MCP servers (CLNT-13).
+///
+/// Each configured server is checked independently. A failing server
+/// does not prevent other checks from running.
+#[cfg(feature = "mcp-client")]
+async fn check_mcp_servers(config: &BlufioConfig) -> Vec<CheckResult> {
+    let mut results = Vec::new();
+
+    if config.mcp.servers.is_empty() {
+        return results;
+    }
+
+    for server in &config.mcp.servers {
+        let start = Instant::now();
+        let check_name = format!("mcp:{}", server.name);
+
+        let diag = blufio_mcp_client::diagnose_server(server).await;
+
+        match (diag.tool_count, diag.error) {
+            (Some(count), _) => {
+                results.push(CheckResult {
+                    name: check_name,
+                    status: CheckStatus::Pass,
+                    message: format!("{} tools via {}", count, diag.transport),
+                    duration: start.elapsed(),
+                });
+            }
+            (_, Some(error)) => {
+                results.push(CheckResult {
+                    name: check_name,
+                    status: CheckStatus::Fail,
+                    message: error,
+                    duration: start.elapsed(),
+                });
+            }
+            (None, None) => {
+                results.push(CheckResult {
+                    name: check_name,
+                    status: CheckStatus::Warn,
+                    message: "unknown status".to_string(),
+                    duration: start.elapsed(),
+                });
+            }
+        }
+    }
+
+    results
+}
+
 /// Deep check: SQLite integrity check.
 async fn check_db_integrity(db_path: &str) -> CheckResult {
     let start = Instant::now();
@@ -488,6 +544,37 @@ mod tests {
     async fn check_db_integrity_missing_warns() {
         let result = check_db_integrity("/tmp/nonexistent-blufio-test-xyz.db").await;
         assert_eq!(result.status, CheckStatus::Warn);
+    }
+
+    #[cfg(feature = "mcp-client")]
+    #[tokio::test]
+    async fn check_mcp_servers_empty_config_returns_empty() {
+        let config = BlufioConfig::default();
+        let results = check_mcp_servers(&config).await;
+        assert!(results.is_empty());
+    }
+
+    #[cfg(feature = "mcp-client")]
+    #[tokio::test]
+    async fn check_mcp_servers_unreachable_returns_fail() {
+        use blufio_config::model::McpServerEntry;
+
+        let mut config = BlufioConfig::default();
+        config.mcp.servers.push(McpServerEntry {
+            name: "test-server".to_string(),
+            transport: "http".to_string(),
+            url: Some("http://127.0.0.1:19998/nonexistent".to_string()),
+            command: None,
+            args: vec![],
+            auth_token: None,
+            connect_timeout_secs: 2,
+            response_size_cap: 4096,
+        });
+
+        let results = check_mcp_servers(&config).await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "mcp:test-server");
+        assert_eq!(results[0].status, CheckStatus::Fail);
     }
 
     #[tokio::test]

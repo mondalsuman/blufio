@@ -20,4 +20,4 @@ pub mod pin;
 pub mod pin_store;
 pub mod sanitize;
 
-pub use manager::McpClientManager;
+pub use manager::{DiagnosticResult, McpClientManager, diagnose_server};

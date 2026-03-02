@@ -342,6 +342,71 @@ async fn discover_and_register(
     Ok(registered_names)
 }
 
+/// Result of a diagnostic MCP server check (used by `blufio doctor`).
+pub struct DiagnosticResult {
+    /// Server name.
+    pub server_name: String,
+    /// Transport type.
+    pub transport: String,
+    /// Number of tools discovered (if connection succeeded).
+    pub tool_count: Option<usize>,
+    /// Error message (if connection failed).
+    pub error: Option<String>,
+}
+
+/// Run a diagnostic check on a single MCP server.
+///
+/// Attempts to connect, list tools, and cleanly disconnect.
+/// Used by `blufio doctor` for health checking without registering tools.
+pub async fn diagnose_server(server: &McpServerEntry) -> DiagnosticResult {
+    let base = DiagnosticResult {
+        server_name: server.name.clone(),
+        transport: server.transport.clone(),
+        tool_count: None,
+        error: None,
+    };
+
+    let timeout = Duration::from_secs(server.connect_timeout_secs);
+
+    let session = match tokio::time::timeout(timeout, connect_server(server)).await {
+        Ok(Ok(session)) => session,
+        Ok(Err(e)) => {
+            return DiagnosticResult {
+                error: Some(format!("connection failed: {e}")),
+                ..base
+            };
+        }
+        Err(_) => {
+            return DiagnosticResult {
+                error: Some(format!(
+                    "connection timed out after {}s",
+                    server.connect_timeout_secs
+                )),
+                ..base
+            };
+        }
+    };
+
+    // List tools to verify full connectivity.
+    let tool_count = match session.list_all_tools().await {
+        Ok(tools) => tools.len(),
+        Err(e) => {
+            return DiagnosticResult {
+                error: Some(format!("tools/list failed: {e}")),
+                ..base
+            };
+        }
+    };
+
+    // Clean disconnect.
+    let _ = session.cancel().await;
+
+    DiagnosticResult {
+        tool_count: Some(tool_count),
+        ..base
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
