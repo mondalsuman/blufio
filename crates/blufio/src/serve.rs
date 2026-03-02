@@ -167,26 +167,27 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]
-    let (memory_provider, memory_extractor) = if config.memory.enabled {
+    let (memory_provider, memory_extractor, memory_store) = if config.memory.enabled {
         match initialize_memory(&config, &mut context_engine).await {
-            Ok((mp, me)) => (Some(mp), Some(me)),
+            Ok((mp, me, ms)) => (Some(mp), Some(me), Some(ms)),
             Err(e) => {
                 warn!(error = %e, "memory system initialization failed, continuing without memory");
-                (None, None)
+                (None, None, None)
             }
         }
     } else {
         info!("memory system disabled by configuration");
-        (None, None)
+        (None, None, None)
     };
 
     #[cfg(not(feature = "onnx"))]
-    let (memory_provider, memory_extractor): (
+    let (memory_provider, memory_extractor, memory_store): (
         Option<MemoryProvider>,
         Option<Arc<MemoryExtractor>>,
+        Option<Arc<MemoryStore>>,
     ) = {
         info!("memory system disabled (onnx feature not enabled)");
-        (None, None)
+        (None, None, None)
     };
 
     // Initialize tool registry with built-in tools.
@@ -261,6 +262,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     }
 
+    // Install signal handler early so the cancellation token is available
+    // for MCP HTTP transport and gateway startup.
+    let cancel = shutdown::install_signal_handler();
+
     // Build Prometheus render function for gateway /metrics endpoint.
     #[cfg(feature = "prometheus")]
     let prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>> =
@@ -306,6 +311,43 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 prometheus_render: prometheus_render.clone(),
             };
             let gateway = GatewayChannel::new(gateway_config);
+
+            // Wire MCP HTTP transport onto the gateway (if enabled).
+            #[cfg(feature = "mcp-server")]
+            if config.mcp.enabled {
+                // SEC: Validate auth_token is set (defense in depth -- validation.rs also checks).
+                let mcp_auth_token = config.mcp.auth_token.clone().ok_or_else(|| {
+                    BlufioError::Security("MCP enabled but mcp.auth_token is not set".to_string())
+                })?;
+
+                // Redact MCP auth token in logs.
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    mcp_auth_token.clone(),
+                );
+
+                let mcp_cancel = cancel.child_token();
+                let mcp_config = blufio_mcp_server::transport::mcp_service_config(mcp_cancel);
+                let mcp_handler =
+                    blufio_mcp_server::BlufioMcpHandler::new(tool_registry.clone(), &config.mcp)
+                        .with_resources(
+                            memory_store.clone(),
+                            Some(storage.clone()
+                                as Arc<dyn blufio_core::StorageAdapter + Send + Sync>),
+                        );
+                let mcp_router = blufio_mcp_server::transport::build_mcp_router(
+                    mcp_handler,
+                    mcp_config,
+                    &config.mcp.cors_origins,
+                    mcp_auth_token,
+                );
+                gateway.set_mcp_router(mcp_router).await;
+                info!(
+                    memory_resources = memory_store.is_some(),
+                    "MCP HTTP transport enabled at /mcp with resource access",
+                );
+            }
+
             mux.add_channel("gateway".to_string(), Box::new(gateway));
             info!(
                 host = config.gateway.host.as_str(),
@@ -404,9 +446,6 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         info!("heartbeat system disabled");
         None
     };
-
-    // Install signal handler.
-    let cancel = shutdown::install_signal_handler();
 
     // Spawn memory monitor background task.
     {
@@ -530,12 +569,13 @@ async fn mark_stale_sessions(storage: &dyn StorageAdapter) -> Result<(), BlufioE
 /// Initializes the memory system: downloads model, creates embedder, store,
 /// retriever, provider, and extractor. Registers the provider with ContextEngine.
 ///
-/// Returns (MemoryProvider, MemoryExtractor) on success.
+/// Returns (MemoryProvider, MemoryExtractor, MemoryStore) on success.
+/// The MemoryStore Arc is returned so the MCP server can expose memory resources.
 #[allow(dead_code)]
 async fn initialize_memory(
     config: &BlufioConfig,
     context_engine: &mut ContextEngine,
-) -> Result<(MemoryProvider, Arc<MemoryExtractor>), BlufioError> {
+) -> Result<(MemoryProvider, Arc<MemoryExtractor>, Arc<MemoryStore>), BlufioError> {
     // Determine data directory (parent of the database path).
     let db_path = PathBuf::from(&config.storage.database_path);
     let data_dir = db_path
@@ -573,13 +613,13 @@ async fn initialize_memory(
 
     // Create memory extractor.
     let extractor = Arc::new(MemoryExtractor::new(
-        memory_store,
+        memory_store.clone(),
         embedder,
         config.memory.extraction_model.clone(),
     ));
 
     info!("memory system initialized");
-    Ok((memory_provider, extractor))
+    Ok((memory_provider, extractor, memory_store))
 }
 
 /// Background task that monitors memory usage via jemalloc stats and

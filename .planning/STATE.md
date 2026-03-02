@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: MCP Integration
-status: ready_to_plan
-last_updated: "2026-03-02T21:00:00.000Z"
+status: executing
+last_updated: "2026-03-02T19:56:00.000Z"
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 3
+  total_plans: 11
+  completed_plans: 10
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.1 MCP Integration -- Phase 16: MCP Server stdio
+**Current focus:** v1.1 MCP Integration -- Phase 17: MCP Server HTTP + Resources
 
 ## Current Position
 
-Phase: 16 of 19 (MCP Server stdio)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-02 -- Phase 15 MCP Foundation completed (4/4 plans)
+Phase: 17 of 19 (MCP Server HTTP + Resources)
+Plan: 4 of 4 in current phase (PHASE COMPLETE)
+Status: Phase 17 Complete
+Last activity: 2026-03-02 -- Plan 17-04 Prompts + Notifications completed
 
-Progress: [#####################.........] 15/19 phases (v1.0 complete, v1.1 Phase 15 done)
+Progress: [#########################.....] 17/19 phases (v1.0 complete, v1.1 Phases 15-17 done)
 
 ## Performance Metrics
 
@@ -38,7 +38,9 @@ Progress: [#####################.........] 15/19 phases (v1.0 complete, v1.1 Pha
 
 **v1.1:**
 - Phase 15: 4 plans completed
-- Total plans completed: 4
+- Phase 16: 3 plans completed
+- Phase 17: 4 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files; 17-03, 17min, 2 tasks, 6 files; 17-04, 15min, 2 tasks, 4 files)
+- Total plans completed: 11
 
 ## Accumulated Context
 
@@ -57,6 +59,24 @@ v1.1 decisions so far:
 - register_namespaced() skips on collision (returns Ok) rather than erroring -- graceful degradation
 - list() and tool_definitions() use registry key for namespaced tools, not tool.name()
 - Triple underscore (server___tool) accepted as valid namespace format
+- to_mcp_tool() takes separate name parameter to support namespace-prefixed tool names
+- jsonschema 0.28 for input validation (not latest 0.44, matches plan spec)
+- serve_stdio() wraps rmcp in blufio-mcp-server, keeping rmcp out of public API
+- RedactingMakeWriter duplicated in mcp_server.rs (independent from serve.rs)
+- Default tool annotations: read_only=false, destructive=false, idempotent=false, open_world=true
+- All annotation hints always populated with explicit Some(bool) for MCP clients
+- StreamableHttpService factory closure pattern with Arc<handler> cloning per session
+- MCP router nested at /mcp before permissive CorsLayer (restricted CORS on MCP routes)
+- GatewayChannel.set_mcp_router() for pre-connect MCP injection (avoids Router in Clone config)
+- Signal handler moved earlier in serve.rs for MCP CancellationToken availability
+- blufio:// URI scheme for MCP resource addressing (memory/{id}, memory/search, sessions, sessions/{id})
+- with_resources() builder pattern: stdio mode skips resources, HTTP mode injects MemoryStore + StorageAdapter
+- Memory resources exclude embedding vectors (explicit field selection, not serde derive)
+- initialize_memory returns 3-tuple to expose Arc<MemoryStore> for MCP resource sharing
+- Blufio-owned prompt types (PromptDef, PromptArgDef, PromptMessageDef) mapped to rmcp types only in handler.rs
+- System messages use PromptMessageRole::Assistant (MCP spec has no system role)
+- tokio::sync::watch with u64 generation counter for tools-changed notification coalescing
+- ProgressReporter logs via tracing until WASM tools support progress callbacks
 
 ### Pending Todos
 
@@ -71,5 +91,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Phase 15 MCP Foundation completed
-Next action: Plan Phase 16 (MCP Server stdio)
+Stopped at: Completed 17-04-PLAN.md (Prompts + Notifications) -- Phase 17 complete
+Next action: Begin Phase 18 (MCP Client)

@@ -857,7 +857,7 @@ fn default_delegation_timeout() -> u64 {
 ///
 /// Controls MCP server and client functionality. When disabled (default),
 /// no MCP endpoints are exposed and no external MCP connections are made.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct McpConfig {
     /// Enable MCP functionality (server and client).
@@ -872,6 +872,40 @@ pub struct McpConfig {
     /// The "bash" tool is never exported regardless of this list.
     #[serde(default)]
     pub export_tools: Vec<String>,
+
+    /// Timeout in seconds for individual tool invocations via MCP.
+    /// Prevents hung WASM skills from blocking the connection.
+    #[serde(default = "default_tool_timeout_secs")]
+    pub tool_timeout_secs: u64,
+
+    /// Bearer token for MCP HTTP transport authentication.
+    /// Required when `enabled = true` (validated at startup).
+    /// Distinct from the gateway's `bearer_token` for security isolation.
+    #[serde(default)]
+    pub auth_token: Option<String>,
+
+    /// Allowed CORS origins for MCP HTTP endpoints.
+    /// Empty list = reject all cross-origin requests (secure by default).
+    /// Only applies to /mcp routes; existing gateway routes are unaffected.
+    #[serde(default)]
+    pub cors_origins: Vec<String>,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            servers: Vec::new(),
+            export_tools: Vec::new(),
+            tool_timeout_secs: default_tool_timeout_secs(),
+            auth_token: None,
+            cors_origins: Vec::new(),
+        }
+    }
+}
+
+fn default_tool_timeout_secs() -> u64 {
+    60
 }
 
 /// Configuration entry for an external MCP server.
@@ -972,5 +1006,36 @@ unknown_field = "bad"
 "#;
         let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn mcp_auth_token_parses_correctly() {
+        let toml_str = r#"
+[mcp]
+enabled = true
+auth_token = "mcp-secret"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.mcp.auth_token.as_deref(), Some("mcp-secret"));
+    }
+
+    #[test]
+    fn mcp_cors_origins_parses_correctly() {
+        let toml_str = r#"
+[mcp]
+enabled = true
+cors_origins = ["https://app.example.com", "https://other.example.com"]
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.mcp.cors_origins.len(), 2);
+        assert_eq!(config.mcp.cors_origins[0], "https://app.example.com");
+        assert_eq!(config.mcp.cors_origins[1], "https://other.example.com");
+    }
+
+    #[test]
+    fn mcp_defaults_auth_token_none_cors_origins_empty() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.mcp.auth_token.is_none());
+        assert!(config.mcp.cors_origins.is_empty());
     }
 }

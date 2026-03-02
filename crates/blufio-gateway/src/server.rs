@@ -63,7 +63,16 @@ pub struct ServerConfig {
 /// - GET /v1/sessions (with auth)
 /// - GET /v1/health (with auth)
 /// - GET /ws (auth via query params, not middleware)
-pub async fn start_server(config: &ServerConfig, state: GatewayState) -> Result<(), BlufioError> {
+/// - /mcp/* (MCP Streamable HTTP, if `mcp_router` is Some)
+///
+/// When an MCP router is provided, it is nested at `/mcp` with its own
+/// restricted CORS and auth layers (applied internally by the MCP router).
+/// The permissive CORS layer only applies to non-MCP routes.
+pub async fn start_server(
+    config: &ServerConfig,
+    state: GatewayState,
+    mcp_router: Option<Router>,
+) -> Result<(), BlufioError> {
     let auth_state = state.auth.clone();
 
     // Unauthenticated public routes (health + metrics for systemd and Prometheus).
@@ -88,11 +97,21 @@ pub async fn start_server(config: &ServerConfig, state: GatewayState) -> Result<
         .route("/ws", get(ws::ws_handler))
         .with_state(state);
 
-    let app = Router::new()
+    let mut app = Router::new()
         .merge(public_routes)
         .merge(api_routes)
-        .merge(ws_routes)
-        .layer(CorsLayer::permissive());
+        .merge(ws_routes);
+
+    // Mount MCP Streamable HTTP routes at /mcp (if enabled).
+    // The MCP router includes its own restricted CORS and auth layers,
+    // so it must be nested BEFORE the permissive CORS layer.
+    if let Some(mcp) = mcp_router {
+        app = app.nest("/mcp", mcp);
+    }
+
+    // Permissive CORS for non-MCP routes.
+    // NOTE: The MCP router already has its own restricted CORS layer applied internally.
+    let app = app.layer(CorsLayer::permissive());
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener =

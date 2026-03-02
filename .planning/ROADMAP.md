@@ -34,8 +34,8 @@
 **Phase Numbering:** Integer phases (15, 16, 17, 18, 19). Decimal phases (e.g. 16.1) reserved for urgent insertions.
 
 - [x] **Phase 15: MCP Foundation** - Config structs, workspace crates, dependency integration, namespace enforcement, abstraction boundary
-- [ ] **Phase 16: MCP Server stdio** - ServerHandler, tools/list, tools/call, stdio transport, Claude Desktop connectivity
-- [ ] **Phase 17: MCP Server HTTP + Resources** - Streamable HTTP transport, auth, resources, prompts, notifications, CORS
+- [x] **Phase 16: MCP Server stdio** - ServerHandler, tools/list, tools/call, stdio transport, Claude Desktop connectivity
+- [x] **Phase 17: MCP Server HTTP + Resources** - Streamable HTTP transport, auth, resources, prompts, notifications, CORS (completed 2026-03-02)
 - [ ] **Phase 18: MCP Client** - External MCP server connections, tool discovery, security hardening, agent integration
 - [ ] **Phase 19: Integration Testing + Tech Debt** - E2E tests, cross-contamination, Prometheus metrics, connection limits, v1.0 debt
 
@@ -63,7 +63,7 @@
   3. Invalid tool inputs return JSON-RPC -32602 error with a human-readable message
   4. Only tools on the explicit export allowlist are visible to MCP clients (bash is never exposed)
   5. All process output goes to stderr in stdio mode -- no stdout corruption of the JSON-RPC stream
-**Plans**: TBD
+**Plans**: 3/3 completed (2026-03-02)
 
 ### Phase 17: MCP Server HTTP + Resources
 **Goal**: Remote clients can access Blufio via Streamable HTTP at /mcp, and MCP clients can browse memory and session history as resources
@@ -122,11 +122,11 @@
 | 13. Sync Traceability & Documentation | v1.0 | 1/1 | Complete | 2026-03-02 |
 | 14. Wire Cross-Phase Integration | v1.0 | 3/3 | Complete | 2026-03-02 |
 | 15. MCP Foundation | v1.1 | 4/4 | Complete | 2026-03-02 |
-| 16. MCP Server stdio | v1.1 | 0/TBD | Not started | - |
-| 17. MCP Server HTTP + Resources | v1.1 | 0/TBD | Not started | - |
+| 16. MCP Server stdio | v1.1 | 3/3 | Complete | 2026-03-02 |
+| 17. MCP Server HTTP + Resources | 4/4 | Complete   | 2026-03-02 | - |
 | 18. MCP Client | v1.1 | 0/TBD | Not started | - |
 | 19. Integration Testing + Tech Debt | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-02 (Phase 15 completed)*
+*Last updated: 2026-03-02 (Phase 16 completed)*

@@ -23,17 +23,17 @@ Requirements for MCP Integration milestone. Each maps to roadmap phases.
 - [ ] **SRVR-03**: `blufio mcp-server` CLI subcommand for stdio-only mode (no agent loop)
 - [ ] **SRVR-04**: Capability negotiation (initialize/initialized handshake) with MCP spec 2025-11-25
 - [ ] **SRVR-05**: Tool input validation against inputSchema with JSON-RPC -32602 errors
-- [ ] **SRVR-06**: Streamable HTTP transport mounted on existing gateway at /mcp
-- [ ] **SRVR-07**: MCP-specific auth middleware for HTTP transport (bearer token)
-- [ ] **SRVR-08**: Memory exposed as MCP resources (blufio://memory/{id}, search template)
-- [ ] **SRVR-09**: Session history exposed as read-only MCP resources
-- [ ] **SRVR-10**: Prompt templates via prompts/list and prompts/get
-- [ ] **SRVR-11**: Tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
+- [x] **SRVR-06**: Streamable HTTP transport mounted on existing gateway at /mcp
+- [x] **SRVR-07**: MCP-specific auth middleware for HTTP transport (bearer token)
+- [x] **SRVR-08**: Memory exposed as MCP resources (blufio://memory/{id}, search template)
+- [x] **SRVR-09**: Session history exposed as read-only MCP resources
+- [x] **SRVR-10**: Prompt templates via prompts/list and prompts/get
+- [x] **SRVR-11**: Tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
 - [ ] **SRVR-12**: Explicit MCP tool export allowlist (bash permanently excluded, default empty)
-- [ ] **SRVR-13**: notifications/tools/list_changed emitted on skill install or discovery changes
-- [ ] **SRVR-14**: Progress notifications for long-running WASM tools
+- [x] **SRVR-13**: notifications/tools/list_changed emitted on skill install or discovery changes
+- [x] **SRVR-14**: Progress notifications for long-running WASM tools
 - [ ] **SRVR-15**: All logging redirected to stderr in stdio mode with clippy::print_stdout lint
-- [ ] **SRVR-16**: CORS restricted to configured origins on MCP HTTP endpoints
+- [x] **SRVR-16**: CORS restricted to configured origins on MCP HTTP endpoints
 
 ### MCP Client
 
@@ -114,17 +114,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRVR-03 | Phase 16 | Pending |
 | SRVR-04 | Phase 16 | Pending |
 | SRVR-05 | Phase 16 | Pending |
-| SRVR-06 | Phase 17 | Pending |
-| SRVR-07 | Phase 17 | Pending |
-| SRVR-08 | Phase 17 | Pending |
-| SRVR-09 | Phase 17 | Pending |
-| SRVR-10 | Phase 17 | Pending |
-| SRVR-11 | Phase 17 | Pending |
+| SRVR-06 | Phase 17 | Complete |
+| SRVR-07 | Phase 17 | Complete |
+| SRVR-08 | Phase 17 | Complete |
+| SRVR-09 | Phase 17 | Complete |
+| SRVR-10 | Phase 17 | Complete |
+| SRVR-11 | Phase 17 | Complete |
 | SRVR-12 | Phase 16 | Pending |
-| SRVR-13 | Phase 17 | Pending |
-| SRVR-14 | Phase 17 | Pending |
+| SRVR-13 | Phase 17 | Complete |
+| SRVR-14 | Phase 17 | Complete |
 | SRVR-15 | Phase 16 | Pending |
-| SRVR-16 | Phase 17 | Pending |
+| SRVR-16 | Phase 17 | Complete |
 | CLNT-01 | Phase 18 | Pending |
 | CLNT-02 | Phase 18 | Pending |
 | CLNT-03 | Phase 18 | Pending |
