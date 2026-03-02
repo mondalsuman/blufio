@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Fix Critical Integration Bugs** - Fix 4 cross-phase integration bugs found by milestone audit (Gap Closure)
 - [x] **Phase 12: Verify Unverified Phases** - Create VERIFICATION.md for phases 2, 5, 6, 8, 9 and fix missing/empty SUMMARYs (Gap Closure) (completed 2026-03-01)
 - [x] **Phase 13: Sync Traceability & Documentation** - Sync REQUIREMENTS.md and ROADMAP.md with verified state (Gap Closure) (completed 2026-03-02)
-- [ ] **Phase 14: Wire Cross-Phase Integration** - Wire security defaults and business metrics into runtime code paths (Gap Closure)
+- [x] **Phase 14: Wire Cross-Phase Integration** - Wire security defaults and business metrics into runtime code paths (Gap Closure) (completed 2026-03-02)
 
 ## Phase Details
 
@@ -247,7 +247,9 @@ Plans:
   3. Prometheus counters for messages, errors, tokens, and active sessions are incremented at runtime — visible on `/metrics` endpoint
 
 Plans:
-- (to be planned)
+- [x] 14-01-PLAN.md -- Wire secure TLS client with SSRF protection into AnthropicClient
+- [x] 14-02-PLAN.md -- Wire RedactingWriter into tracing subscriber for secret redaction
+- [x] 14-03-PLAN.md -- Wire Prometheus business metric call sites in agent code
 
 ## Progress
 
@@ -270,4 +272,4 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 | 11. Fix Critical Integration Bugs | 4/4 | Complete | 2026-03-01 |
 | 12. Verify Unverified Phases | 5/5 | Complete | 2026-03-01 |
 | 13. Sync Traceability & Documentation | 1/1 | Complete   | 2026-03-02 |
-| 14. Wire Cross-Phase Integration | 0/0 | Pending | — |
+| 14. Wire Cross-Phase Integration | 3/3 | Complete | 2026-03-02 |
