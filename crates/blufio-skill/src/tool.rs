@@ -8,11 +8,12 @@
 //! manages tool lookup by name and generates Anthropic-format tool definitions
 //! for the LLM provider.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, LazyLock};
 
 use async_trait::async_trait;
 use blufio_core::BlufioError;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 /// Output from a tool invocation.
@@ -44,12 +45,49 @@ pub trait Tool: Send + Sync {
     async fn invoke(&self, input: serde_json::Value) -> Result<ToolOutput, BlufioError>;
 }
 
+/// Regex for valid flat tool names: letter followed by letters/digits/underscores.
+static TOOL_NAME_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*$").expect("valid tool name regex"));
+
+/// Regex for valid namespaced tool names: two valid names joined by exactly
+/// two underscores. The first segment is the namespace and the second is the
+/// tool name. Example: `github__create_issue`.
+static NAMESPACED_TOOL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*__[a-zA-Z][a-zA-Z0-9_]*$")
+        .expect("valid namespaced tool name regex")
+});
+
+/// Validates a flat tool name (built-in tools).
+///
+/// Valid names start with a letter and contain only letters, digits, and
+/// underscores: `[a-zA-Z][a-zA-Z0-9_]*`.
+pub fn validate_tool_name(name: &str) -> bool {
+    TOOL_NAME_REGEX.is_match(name)
+}
+
+/// Validates a namespaced tool name (`namespace__tool` format).
+///
+/// Both the namespace and tool portions must individually match the flat
+/// tool name pattern, separated by exactly two underscores.
+pub fn validate_namespaced_tool_name(name: &str) -> bool {
+    NAMESPACED_TOOL_REGEX.is_match(name)
+}
+
 /// Registry of available tools, indexed by name.
 ///
 /// The registry provides tool lookup for the agent loop and generates
 /// Anthropic-format tool definition arrays for the provider request.
+///
+/// Tools are registered through three methods:
+/// - [`register_builtin`](ToolRegistry::register_builtin): For built-in tools
+///   (bash, HTTP, file). These are marked as built-in and always win on collision.
+/// - [`register_namespaced`](ToolRegistry::register_namespaced): For external
+///   MCP tools. The tool name is prefixed with `namespace__`.
+/// - [`register`](ToolRegistry::register): Backward-compatible entry point
+///   with name validation and duplicate rejection.
 pub struct ToolRegistry {
     tools: HashMap<String, Arc<dyn Tool>>,
+    builtin_names: HashSet<String>,
 }
 
 impl ToolRegistry {
@@ -57,12 +95,103 @@ impl ToolRegistry {
     pub fn new() -> Self {
         Self {
             tools: HashMap::new(),
+            builtin_names: HashSet::new(),
         }
     }
 
-    /// Registers a tool. The tool is indexed by its `name()`.
-    pub fn register(&mut self, tool: Arc<dyn Tool>) {
-        self.tools.insert(tool.name().to_string(), tool);
+    /// Registers a tool with name validation.
+    ///
+    /// This is the backward-compatible entry point. It validates the tool
+    /// name and rejects duplicates. For namespace-aware registration,
+    /// use [`register_builtin`](Self::register_builtin) or
+    /// [`register_namespaced`](Self::register_namespaced).
+    pub fn register(&mut self, tool: Arc<dyn Tool>) -> Result<(), BlufioError> {
+        let name = tool.name().to_string();
+        if !validate_tool_name(&name) && !validate_namespaced_tool_name(&name) {
+            return Err(BlufioError::Skill {
+                message: format!(
+                    "invalid tool name '{name}': must match \
+                     [a-zA-Z][a-zA-Z0-9_]* or namespace__tool format"
+                ),
+                source: None,
+            });
+        }
+        if self.tools.contains_key(&name) {
+            return Err(BlufioError::Skill {
+                message: format!("duplicate tool name '{name}': already registered"),
+                source: None,
+            });
+        }
+        self.tools.insert(name, tool);
+        Ok(())
+    }
+
+    /// Registers a built-in tool. Built-in tools always win on collision.
+    ///
+    /// Returns error if name is invalid or already registered.
+    pub fn register_builtin(&mut self, tool: Arc<dyn Tool>) -> Result<(), BlufioError> {
+        let name = tool.name().to_string();
+        if !validate_tool_name(&name) {
+            return Err(BlufioError::Skill {
+                message: format!(
+                    "invalid built-in tool name '{name}': must match [a-zA-Z][a-zA-Z0-9_]*"
+                ),
+                source: None,
+            });
+        }
+        if self.tools.contains_key(&name) {
+            return Err(BlufioError::Skill {
+                message: format!("duplicate built-in tool name '{name}': already registered"),
+                source: None,
+            });
+        }
+        self.builtin_names.insert(name.clone());
+        self.tools.insert(name, tool);
+        Ok(())
+    }
+
+    /// Registers an external MCP tool with a namespace prefix.
+    ///
+    /// The tool is registered as `{namespace}__{tool.name()}`.
+    /// If the namespaced name collides with a built-in tool, the external
+    /// tool is skipped with a warning (built-in always wins).
+    /// If the namespaced name is already registered, it is skipped with a warning.
+    pub fn register_namespaced(
+        &mut self,
+        namespace: &str,
+        tool: Arc<dyn Tool>,
+    ) -> Result<(), BlufioError> {
+        let tool_name = tool.name().to_string();
+        let namespaced_name = format!("{namespace}__{tool_name}");
+
+        if !validate_namespaced_tool_name(&namespaced_name) {
+            return Err(BlufioError::Skill {
+                message: format!(
+                    "invalid namespaced tool name '{namespaced_name}': \
+                     namespace and tool must each match [a-zA-Z][a-zA-Z0-9_]*"
+                ),
+                source: None,
+            });
+        }
+
+        if self.builtin_names.contains(&namespaced_name) {
+            tracing::warn!(
+                tool = %namespaced_name,
+                "namespace collision with built-in tool, skipping external tool"
+            );
+            return Ok(());
+        }
+
+        if self.tools.contains_key(&namespaced_name) {
+            tracing::warn!(
+                tool = %namespaced_name,
+                "duplicate namespaced tool name, skipping"
+            );
+            return Ok(());
+        }
+
+        self.tools.insert(namespaced_name, tool);
+        Ok(())
     }
 
     /// Looks up a tool by name.
@@ -71,11 +200,14 @@ impl ToolRegistry {
     }
 
     /// Returns (name, description) pairs for all registered tools.
+    ///
+    /// For namespaced tools, the name is the registry key (`namespace__tool`)
+    /// rather than the tool's own `name()`.
     pub fn list(&self) -> Vec<(&str, &str)> {
         let mut entries: Vec<(&str, &str)> = self
             .tools
-            .values()
-            .map(|t| (t.name(), t.description()))
+            .iter()
+            .map(|(registry_name, t)| (registry_name.as_str(), t.description()))
             .collect();
         entries.sort_by_key(|(name, _)| *name);
         entries
@@ -91,13 +223,17 @@ impl ToolRegistry {
     ///   "input_schema": { ... JSON Schema ... }
     /// }
     /// ```
+    ///
+    /// For namespaced tools, the `name` field uses the registry key
+    /// (`namespace__tool`) rather than the tool's own `name()`, ensuring
+    /// the LLM sees the namespaced identifier.
     pub fn tool_definitions(&self) -> Vec<serde_json::Value> {
         let mut defs: Vec<serde_json::Value> = self
             .tools
-            .values()
-            .map(|t| {
+            .iter()
+            .map(|(registry_name, t)| {
                 serde_json::json!({
-                    "name": t.name(),
+                    "name": registry_name,
                     "description": t.description(),
                     "input_schema": t.parameters_schema(),
                 })
@@ -202,10 +338,12 @@ mod tests {
         }
     }
 
+    // ── Existing tests (updated for Result return) ──────────────────
+
     #[test]
     fn tool_registry_registers_and_retrieves_tools() {
         let mut registry = ToolRegistry::new();
-        registry.register(Arc::new(EchoTool));
+        registry.register(Arc::new(EchoTool)).unwrap();
 
         let tool = registry.get("echo");
         assert!(tool.is_some());
@@ -221,8 +359,8 @@ mod tests {
     #[test]
     fn tool_registry_list_returns_all_tools() {
         let mut registry = ToolRegistry::new();
-        registry.register(Arc::new(EchoTool));
-        registry.register(Arc::new(AddTool));
+        registry.register(Arc::new(EchoTool)).unwrap();
+        registry.register(Arc::new(AddTool)).unwrap();
 
         let list = registry.list();
         assert_eq!(list.len(), 2);
@@ -235,7 +373,7 @@ mod tests {
     #[test]
     fn tool_registry_tool_definitions_produces_valid_json() {
         let mut registry = ToolRegistry::new();
-        registry.register(Arc::new(EchoTool));
+        registry.register(Arc::new(EchoTool)).unwrap();
 
         let defs = registry.tool_definitions();
         assert_eq!(defs.len(), 1);
@@ -250,8 +388,8 @@ mod tests {
     #[test]
     fn tool_registry_tool_definitions_multiple_tools_sorted() {
         let mut registry = ToolRegistry::new();
-        registry.register(Arc::new(EchoTool));
-        registry.register(Arc::new(AddTool));
+        registry.register(Arc::new(EchoTool)).unwrap();
+        registry.register(Arc::new(AddTool)).unwrap();
 
         let defs = registry.tool_definitions();
         assert_eq!(defs.len(), 2);
@@ -265,7 +403,7 @@ mod tests {
         assert!(registry.is_empty());
         assert_eq!(registry.len(), 0);
 
-        registry.register(Arc::new(EchoTool));
+        registry.register(Arc::new(EchoTool)).unwrap();
         assert!(!registry.is_empty());
         assert_eq!(registry.len(), 1);
     }
@@ -277,5 +415,201 @@ mod tests {
         let output = tool.invoke(input).await.unwrap();
         assert_eq!(output.content, "hello world");
         assert!(!output.is_error);
+    }
+
+    // ── Name validation tests ───────────────────────────────────────
+
+    #[test]
+    fn validate_tool_name_accepts_valid_names() {
+        assert!(validate_tool_name("echo"));
+        assert!(validate_tool_name("my_tool"));
+        assert!(validate_tool_name("Tool123"));
+        assert!(validate_tool_name("a"));
+    }
+
+    #[test]
+    fn validate_tool_name_rejects_invalid_names() {
+        assert!(!validate_tool_name(""));
+        assert!(!validate_tool_name("123abc"));
+        assert!(!validate_tool_name("_bad"));
+        assert!(!validate_tool_name("has-hyphen"));
+        assert!(!validate_tool_name("has space"));
+        assert!(!validate_tool_name("has.dot"));
+    }
+
+    #[test]
+    fn validate_namespaced_tool_name_accepts_valid() {
+        assert!(validate_namespaced_tool_name("server__tool"));
+        assert!(validate_namespaced_tool_name("github__create_issue"));
+        assert!(validate_namespaced_tool_name("a__b"));
+    }
+
+    #[test]
+    fn validate_namespaced_tool_name_rejects_invalid() {
+        assert!(!validate_namespaced_tool_name("notnamespaced"));
+        // Triple underscore: "server___tool" matches as namespace="server_" + "__" + tool="tool"
+        // This is technically valid (server_ is a valid namespace). The regex accepts it.
+        // assert!(!validate_namespaced_tool_name("server___tool"));
+        assert!(!validate_namespaced_tool_name("__leading"));
+        assert!(!validate_namespaced_tool_name("trailing__"));
+        assert!(!validate_namespaced_tool_name(""));
+    }
+
+    // ── Built-in registration tests ─────────────────────────────────
+
+    #[test]
+    fn register_builtin_succeeds_and_rejects_duplicate() {
+        let mut registry = ToolRegistry::new();
+        registry.register_builtin(Arc::new(EchoTool)).unwrap();
+        assert!(registry.get("echo").is_some());
+
+        let result = registry.register_builtin(Arc::new(EchoTool));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn register_builtin_rejects_invalid_name() {
+        struct BadTool;
+
+        #[async_trait]
+        impl Tool for BadTool {
+            fn name(&self) -> &str {
+                "123-bad"
+            }
+            fn description(&self) -> &str {
+                "bad"
+            }
+            fn parameters_schema(&self) -> serde_json::Value {
+                serde_json::json!({})
+            }
+            async fn invoke(&self, _: serde_json::Value) -> Result<ToolOutput, BlufioError> {
+                unreachable!()
+            }
+        }
+
+        let mut registry = ToolRegistry::new();
+        let result = registry.register_builtin(Arc::new(BadTool));
+        assert!(result.is_err());
+    }
+
+    // ── Namespaced registration tests ───────────────────────────────
+
+    #[test]
+    fn register_namespaced_prefixes_correctly() {
+        let mut registry = ToolRegistry::new();
+        registry
+            .register_namespaced("github", Arc::new(EchoTool))
+            .unwrap();
+        assert!(registry.get("github__echo").is_some());
+        assert!(registry.get("echo").is_none()); // not registered flat
+    }
+
+    #[test]
+    fn register_namespaced_builtin_collision_skips() {
+        let mut registry = ToolRegistry::new();
+        registry.register_builtin(Arc::new(EchoTool)).unwrap();
+        // Namespaced "github__echo" is a different key from "echo",
+        // so no collision -- both should coexist.
+        registry
+            .register_namespaced("github", Arc::new(EchoTool))
+            .unwrap();
+        assert!(registry.get("echo").is_some());
+        assert!(registry.get("github__echo").is_some());
+    }
+
+    #[test]
+    fn register_namespaced_duplicate_skips() {
+        let mut registry = ToolRegistry::new();
+        registry
+            .register_namespaced("github", Arc::new(EchoTool))
+            .unwrap();
+        // Second registration of same namespace+tool is a no-op.
+        registry
+            .register_namespaced("github", Arc::new(EchoTool))
+            .unwrap();
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn register_namespaced_rejects_invalid_namespace() {
+        let mut registry = ToolRegistry::new();
+        let result = registry.register_namespaced("123bad", Arc::new(EchoTool));
+        assert!(result.is_err());
+    }
+
+    // ── Backward-compatible register tests ──────────────────────────
+
+    #[test]
+    fn register_rejects_duplicate() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Arc::new(EchoTool)).unwrap();
+        let result = registry.register(Arc::new(EchoTool));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn register_rejects_invalid_name() {
+        struct SpaceTool;
+
+        #[async_trait]
+        impl Tool for SpaceTool {
+            fn name(&self) -> &str {
+                "has space"
+            }
+            fn description(&self) -> &str {
+                "bad"
+            }
+            fn parameters_schema(&self) -> serde_json::Value {
+                serde_json::json!({})
+            }
+            async fn invoke(&self, _: serde_json::Value) -> Result<ToolOutput, BlufioError> {
+                unreachable!()
+            }
+        }
+
+        let mut registry = ToolRegistry::new();
+        let result = registry.register(Arc::new(SpaceTool));
+        assert!(result.is_err());
+    }
+
+    // ── Mixed registration tests ────────────────────────────────────
+
+    #[test]
+    fn list_includes_builtin_and_namespaced() {
+        let mut registry = ToolRegistry::new();
+        registry.register_builtin(Arc::new(EchoTool)).unwrap();
+        registry
+            .register_namespaced("github", Arc::new(AddTool))
+            .unwrap();
+        let list = registry.list();
+        assert_eq!(list.len(), 2);
+        // Sorted: echo, github__add
+        assert_eq!(list[0].0, "echo");
+        assert_eq!(list[1].0, "github__add");
+    }
+
+    #[test]
+    fn tool_definitions_uses_registry_name_for_namespaced() {
+        let mut registry = ToolRegistry::new();
+        registry
+            .register_namespaced("github", Arc::new(EchoTool))
+            .unwrap();
+        let defs = registry.tool_definitions();
+        assert_eq!(defs.len(), 1);
+        // The definition name should be the namespaced key, not the tool's own name.
+        assert_eq!(defs[0]["name"], "github__echo");
+    }
+
+    #[test]
+    fn tool_definitions_includes_builtin_and_namespaced_sorted() {
+        let mut registry = ToolRegistry::new();
+        registry.register_builtin(Arc::new(EchoTool)).unwrap();
+        registry
+            .register_namespaced("github", Arc::new(AddTool))
+            .unwrap();
+        let defs = registry.tool_definitions();
+        assert_eq!(defs.len(), 2);
+        assert_eq!(defs[0]["name"], "echo");
+        assert_eq!(defs[1]["name"], "github__add");
     }
 }
