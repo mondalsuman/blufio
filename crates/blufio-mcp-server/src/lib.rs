@@ -14,7 +14,9 @@
 //! All public types are Blufio-owned, defined in [`types`].
 
 pub mod bridge;
+pub mod handler;
 pub mod types;
 
 // Re-export public types for convenience.
+pub use handler::BlufioMcpHandler;
 pub use types::McpSessionId;
