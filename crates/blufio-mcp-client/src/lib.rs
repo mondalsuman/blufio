@@ -12,3 +12,6 @@
 //! The `rmcp` crate is used freely within this crate for protocol
 //! handling. However, **no rmcp types appear in the public API**.
 //! All public types are Blufio-owned.
+
+pub mod pin;
+pub mod sanitize;
