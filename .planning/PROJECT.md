@@ -38,7 +38,25 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Active
 
-(None — define in next milestone via `/gsd:new-milestone`)
+<!-- v1.1 MCP Integration -->
+
+- [ ] MCP server exposing Blufio tools/skills/memory as MCP resources
+- [ ] MCP server transports: stdio, SSE, Streamable HTTP
+- [ ] MCP client plugin adapter consuming external MCP servers
+- [ ] MCP client configuration via TOML (per-server connection config)
+- [ ] Agent discovers and invokes external MCP tools in conversation
+- [ ] Critical v1.0 tech debt resolution (GET /v1/sessions, systemd file)
+
+## Current Milestone: v1.1 MCP Integration
+
+**Goal:** Make Blufio a full MCP citizen — expose its capabilities as an MCP server and consume external MCP tools as a client, with all three transports (stdio, SSE, Streamable HTTP).
+
+**Target features:**
+- MCP server: expose tools/skills/memory to Claude Desktop, AI apps, programmatic clients
+- MCP client: plugin-based adapter, operators configure MCP server connections via TOML
+- Critical tech debt: fix most impactful v1.0 items (GET /v1/sessions stub, systemd file)
+
+**Done =** Operator can (1) point Claude Desktop at Blufio via stdio and use skills/memory, (2) configure external MCP servers in TOML, (3) agent uses external MCP tools in conversation.
 
 ### Out of Scope
 
@@ -115,4 +133,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Ed25519 for agent signing | Lightweight, fast, well-audited. ed25519-dalek mature crate. | ✓ Good — sign/verify on DeviceKeypair, delegation works |
 
 ---
-*Last updated: 2026-03-02 after v1.0 milestone*
+*Last updated: 2026-03-02 after v1.1 milestone start*
