@@ -13,5 +13,9 @@
 //! handling. However, **no rmcp types appear in the public API**.
 //! All public types are Blufio-owned.
 
+pub mod external_tool;
+pub mod manager;
 pub mod pin;
 pub mod sanitize;
+
+pub use manager::McpClientManager;
