@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: MCP Integration
 status: ready_to_plan
-last_updated: "2026-03-02T21:00:00.000Z"
+last_updated: "2026-03-02T23:00:00.000Z"
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 7
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.1 MCP Integration -- Phase 16: MCP Server stdio
+**Current focus:** v1.1 MCP Integration -- Phase 17: MCP Server HTTP + Resources
 
 ## Current Position
 
-Phase: 16 of 19 (MCP Server stdio)
+Phase: 17 of 19 (MCP Server HTTP + Resources)
 Plan: 0 of TBD in current phase
 Status: Ready to plan
-Last activity: 2026-03-02 -- Phase 15 MCP Foundation completed (4/4 plans)
+Last activity: 2026-03-02 -- Phase 16 MCP Server stdio completed (3/3 plans)
 
-Progress: [#####################.........] 15/19 phases (v1.0 complete, v1.1 Phase 15 done)
+Progress: [########################......] 16/19 phases (v1.0 complete, v1.1 Phases 15-16 done)
 
 ## Performance Metrics
 
@@ -38,7 +38,8 @@ Progress: [#####################.........] 15/19 phases (v1.0 complete, v1.1 Pha
 
 **v1.1:**
 - Phase 15: 4 plans completed
-- Total plans completed: 4
+- Phase 16: 3 plans completed
+- Total plans completed: 7
 
 ## Accumulated Context
 
@@ -57,6 +58,10 @@ v1.1 decisions so far:
 - register_namespaced() skips on collision (returns Ok) rather than erroring -- graceful degradation
 - list() and tool_definitions() use registry key for namespaced tools, not tool.name()
 - Triple underscore (server___tool) accepted as valid namespace format
+- to_mcp_tool() takes separate name parameter to support namespace-prefixed tool names
+- jsonschema 0.28 for input validation (not latest 0.44, matches plan spec)
+- serve_stdio() wraps rmcp in blufio-mcp-server, keeping rmcp out of public API
+- RedactingMakeWriter duplicated in mcp_server.rs (independent from serve.rs)
 
 ### Pending Todos
 
@@ -71,5 +76,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Phase 15 MCP Foundation completed
-Next action: Plan Phase 16 (MCP Server stdio)
+Stopped at: Phase 16 MCP Server stdio completed
+Next action: Plan Phase 17 (MCP Server HTTP + Resources)
