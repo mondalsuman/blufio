@@ -81,6 +81,9 @@ pub struct GatewayChannel {
     response_map: Arc<DashMap<String, tokio::sync::oneshot::Sender<String>>>,
     ws_senders: Arc<DashMap<String, mpsc::Sender<String>>>,
     server_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// Optional MCP HTTP router to mount at /mcp on the gateway.
+    /// Set via [`set_mcp_router`] before calling `connect()`.
+    mcp_router: Mutex<Option<axum::Router>>,
 }
 
 impl GatewayChannel {
@@ -94,7 +97,17 @@ impl GatewayChannel {
             response_map: Arc::new(DashMap::new()),
             ws_senders: Arc::new(DashMap::new()),
             server_handle: Mutex::new(None),
+            mcp_router: Mutex::new(None),
         }
+    }
+
+    /// Sets the MCP HTTP router to mount at `/mcp` on the gateway.
+    ///
+    /// Must be called before `connect()`. The router should include its
+    /// own auth and CORS layers (applied by `blufio_mcp_server::transport`).
+    pub async fn set_mcp_router(&self, router: axum::Router) {
+        let mut mcp = self.mcp_router.lock().await;
+        *mcp = Some(router);
     }
 }
 
@@ -164,8 +177,11 @@ impl ChannelAdapter for GatewayChannel {
             },
         };
 
+        // Take the MCP router (if set) to pass to the server.
+        let mcp_router = self.mcp_router.lock().await.take();
+
         let handle = tokio::spawn(async move {
-            if let Err(e) = server::start_server(&server_config, state).await {
+            if let Err(e) = server::start_server(&server_config, state, mcp_router).await {
                 tracing::error!("gateway server error: {e}");
             }
         });

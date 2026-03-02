@@ -261,6 +261,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     }
 
+    // Install signal handler early so the cancellation token is available
+    // for MCP HTTP transport and gateway startup.
+    let cancel = shutdown::install_signal_handler();
+
     // Build Prometheus render function for gateway /metrics endpoint.
     #[cfg(feature = "prometheus")]
     let prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>> =
@@ -306,6 +310,40 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 prometheus_render: prometheus_render.clone(),
             };
             let gateway = GatewayChannel::new(gateway_config);
+
+            // Wire MCP HTTP transport onto the gateway (if enabled).
+            #[cfg(feature = "mcp-server")]
+            if config.mcp.enabled {
+                // SEC: Validate auth_token is set (defense in depth -- validation.rs also checks).
+                let mcp_auth_token = config.mcp.auth_token.clone().ok_or_else(|| {
+                    BlufioError::Security(
+                        "MCP enabled but mcp.auth_token is not set".to_string(),
+                    )
+                })?;
+
+                // Redact MCP auth token in logs.
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    mcp_auth_token.clone(),
+                );
+
+                let mcp_cancel = cancel.child_token();
+                let mcp_config =
+                    blufio_mcp_server::transport::mcp_service_config(mcp_cancel);
+                let mcp_handler = blufio_mcp_server::BlufioMcpHandler::new(
+                    tool_registry.clone(),
+                    &config.mcp,
+                );
+                let mcp_router = blufio_mcp_server::transport::build_mcp_router(
+                    mcp_handler,
+                    mcp_config,
+                    &config.mcp.cors_origins,
+                    mcp_auth_token,
+                );
+                gateway.set_mcp_router(mcp_router).await;
+                info!("MCP HTTP transport enabled at /mcp");
+            }
+
             mux.add_channel("gateway".to_string(), Box::new(gateway));
             info!(
                 host = config.gateway.host.as_str(),
@@ -404,9 +442,6 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         info!("heartbeat system disabled");
         None
     };
-
-    // Install signal handler.
-    let cancel = shutdown::install_signal_handler();
 
     // Spawn memory monitor background task.
     {
