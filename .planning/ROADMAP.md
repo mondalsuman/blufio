@@ -33,7 +33,7 @@
 
 **Phase Numbering:** Integer phases (15, 16, 17, 18, 19). Decimal phases (e.g. 16.1) reserved for urgent insertions.
 
-- [ ] **Phase 15: MCP Foundation** - Config structs, workspace crates, dependency integration, namespace enforcement, abstraction boundary
+- [x] **Phase 15: MCP Foundation** - Config structs, workspace crates, dependency integration, namespace enforcement, abstraction boundary
 - [ ] **Phase 16: MCP Server stdio** - ServerHandler, tools/list, tools/call, stdio transport, Claude Desktop connectivity
 - [ ] **Phase 17: MCP Server HTTP + Resources** - Streamable HTTP transport, auth, resources, prompts, notifications, CORS
 - [ ] **Phase 18: MCP Client** - External MCP server connections, tool discovery, security hardening, agent integration
@@ -51,7 +51,7 @@
   3. ToolRegistry rejects duplicate tool names across namespaces and built-in tools always win priority
   4. MCP session IDs and Blufio session IDs are distinct types that cannot be accidentally conflated
   5. No rmcp types appear in any public API outside blufio-mcp-server and blufio-mcp-client
-**Plans**: TBD
+**Plans**: 4/4 completed (2026-03-02)
 
 ### Phase 16: MCP Server stdio
 **Goal**: Operator can point Claude Desktop at Blufio via stdio and invoke skills as MCP tools
@@ -121,7 +121,7 @@
 | 12. Verify Unverified Phases | v1.0 | 5/5 | Complete | 2026-03-01 |
 | 13. Sync Traceability & Documentation | v1.0 | 1/1 | Complete | 2026-03-02 |
 | 14. Wire Cross-Phase Integration | v1.0 | 3/3 | Complete | 2026-03-02 |
-| 15. MCP Foundation | v1.1 | 0/TBD | Not started | - |
+| 15. MCP Foundation | v1.1 | 4/4 | Complete | 2026-03-02 |
 | 16. MCP Server stdio | v1.1 | 0/TBD | Not started | - |
 | 17. MCP Server HTTP + Resources | v1.1 | 0/TBD | Not started | - |
 | 18. MCP Client | v1.1 | 0/TBD | Not started | - |
@@ -129,4 +129,4 @@
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-02*
+*Last updated: 2026-03-02 (Phase 15 completed)*
