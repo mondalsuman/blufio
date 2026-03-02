@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Context Engine & Cost Tracking** - Three-zone context assembly, prompt caching, cost ledger, budget caps (completed 2026-03-01)
 - [x] **Phase 5: Memory & Embeddings** - ONNX embedding model, semantic memory, hybrid search
 - [x] **Phase 6: Model Routing & Smart Heartbeats** - Query complexity classification, Haiku/Sonnet/Opus routing
-- [ ] **Phase 7: WASM Skill Sandbox** - wasmtime sandbox, capability manifests, built-in tools, skill registry
+- [x] **Phase 7: WASM Skill Sandbox** - wasmtime sandbox, capability manifests, built-in tools, skill registry
 - [x] **Phase 8: Plugin System & Gateway** - Plugin host, plugin CLI, HTTP/WebSocket gateway
 - [x] **Phase 9: Production Hardening** - systemd, daemon mode, memory bounds, Prometheus, diagnostics, operations
 - [x] **Phase 10: Multi-Agent & Final Integration** - Multi-agent routing, Ed25519 signing, end-to-end validation (completed 2026-03-01)
@@ -70,15 +70,13 @@ Plans:
   3. Conversations persist across restarts -- rebooting the agent and sending a follow-up message continues the prior conversation
   4. `blufio serve` starts the agent with zero-config defaults (Telegram + Anthropic + SQLite) and `blufio shell` provides an interactive REPL for testing
   5. Sending SIGTERM triggers graceful shutdown -- active sessions drain before exit, no messages are lost
-**Plans**: 3 plans
-
 **Plans**: 4 plans
 
 Plans:
 - [x] 03-01-PLAN.md -- Core types extension + Anthropic provider with SSE streaming (Wave 1)
 - [x] 03-02-PLAN.md -- Telegram channel adapter with MarkdownV2, media, streaming, long polling (Wave 2)
 - [x] 03-03-PLAN.md -- Agent loop, session FSM, context assembly, graceful shutdown, serve + shell CLI (Wave 3)
-- [ ] 03-04-PLAN.md -- Gap closure: replace drain_sessions() stub with poll-based session state monitoring (Wave 1)
+- [x] 03-04-PLAN.md -- Gap closure: replace drain_sessions() stub with poll-based session state monitoring (Wave 1)
 
 ### Phase 4: Context Engine & Cost Tracking
 **Goal**: The agent assembles prompts intelligently using three-zone context (static/conditional/dynamic) with Anthropic prompt cache alignment, tracks every token spent across all features, and enforces budget caps with kill switches
@@ -93,9 +91,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Cost ledger crate (blufio-cost): pricing table, SQLite cost ledger, in-memory budget tracker with daily/monthly caps, extended core types (TokenUsage cache fields, BudgetExhausted error), V2 migration
-- [ ] 04-02-PLAN.md -- Context engine crate (blufio-context): three-zone assembly (static/conditional/dynamic), Anthropic cache-aligned system blocks, conversation compaction via Haiku, ConditionalProvider trait stub, ContextConfig
-- [ ] 04-03-PLAN.md -- Integration wiring: SessionActor uses ContextEngine + budget gate + cost recording, serve/shell commands initialize all new components with restart recovery
+- [x] 04-01-PLAN.md -- Cost ledger crate (blufio-cost): pricing table, SQLite cost ledger, in-memory budget tracker with daily/monthly caps, extended core types (TokenUsage cache fields, BudgetExhausted error), V2 migration
+- [x] 04-02-PLAN.md -- Context engine crate (blufio-context): three-zone assembly (static/conditional/dynamic), Anthropic cache-aligned system blocks, conversation compaction via Haiku, ConditionalProvider trait stub, ContextConfig
+- [x] 04-03-PLAN.md -- Integration wiring: SessionActor uses ContextEngine + budget gate + cost recording, serve/shell commands initialize all new components with restart recovery
 
 ### Phase 5: Memory & Embeddings
 **Goal**: The agent remembers long-term facts across conversations using local embedding inference and hybrid search, loading only relevant memories into the context window per-turn
@@ -143,7 +141,7 @@ Plans:
 - [x] 07-01-PLAN.md -- Tool calling foundation: blufio-skill crate with Tool trait + ToolRegistry, BashTool + HttpTool + FileTool built-ins, Anthropic tool_use/tool_result types + SSE parsing (Wave 1)
 - [x] 07-02-PLAN.md -- WASM sandbox + skill registry: SkillManifest parser, wasmtime WasmSkillRuntime with fuel/memory/epoch, capability-gated host functions, SkillStore, scaffold generator, SkillConfig, V5 migration (Wave 1)
 - [x] 07-03-PLAN.md -- Agent integration: SkillProvider (ConditionalProvider), session FSM tool_use loop, blufio skill CLI, serve.rs/shell.rs wiring (Wave 2)
-- [ ] 07-04-PLAN.md -- Gap closure: wire ToolRegistry into shell.rs, implement real WASM host functions with traps for denied capabilities (Wave 1)
+- [x] 07-04-PLAN.md -- Gap closure: wire ToolRegistry into shell.rs, implement real WASM host functions with traps for denied capabilities (Wave 1)
 
 ### Phase 8: Plugin System & Gateway
 **Goal**: The plugin host loads adapter plugins implementing the seven adapter traits (Channel, Provider, Storage, Embedding, Observability, Auth, SkillRuntime), a CLI manages the plugin lifecycle, and an HTTP/WebSocket gateway enables API access alongside channel messaging
@@ -185,10 +183,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. A primary agent can delegate a sub-task to a specialized agent via session-based routing, receive the result, and incorporate it into its response -- with Ed25519 signed messages preventing impersonation
   2. The complete Blufio binary with all default plugins passes end-to-end smoke tests covering: Telegram messaging, persistent conversations, context assembly, memory recall, model routing, skill execution, plugin loading, cost tracking, and Prometheus metrics export
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 10-01: TBD
+- [x] 10-01-PLAN.md -- Ed25519 sign/verify on DeviceKeypair, AgentMessage types, agent specialization config (Wave 1)
+- [x] 10-02-PLAN.md -- Test utility crate (blufio-test-utils) with MockProvider, MockChannel, TestHarness (Wave 1)
+- [x] 10-03-PLAN.md -- Multi-agent delegation (DelegationRouter + DelegationTool), serve.rs wiring, E2E integration tests (Wave 2)
 
 ### Phase 11: Fix Critical Integration Bugs
 **Goal**: Fix 4 cross-phase integration bugs identified by the v1.0 milestone audit — tool content block serialization, vault startup wiring, keypair auth gateway wiring, and model router bypass in tool follow-up
@@ -212,8 +212,14 @@ Plans:
 **Depends on**: Phase 11
 **Requirements**: PERS-01, PERS-02, PERS-03, PERS-04, PERS-05, SEC-01, SEC-04, SEC-08, SEC-09, SEC-10, MEM-01, MEM-02, MEM-03, MEM-05, LLM-06, PLUG-01, PLUG-02, PLUG-03, PLUG-04, INFRA-05, CORE-04, CORE-07, CORE-08, COST-04, CLI-02, CLI-03, CLI-04, CLI-07, CLI-08, CORE-06
 **Gap Closure:** Closes 33 unsatisfied/partial requirement gaps from v1.0 audit
+**Plans**: 5 plans
 
 Plans:
+- [x] 12-01-PLAN.md -- Verify Phase 2 (Persistence & Security Vault): 10 requirements, 5 success criteria (Wave 1)
+- [x] 12-02-PLAN.md -- Verify Phase 5 (Memory & Embeddings): 4 requirements, retroactive SUMMARYs (Wave 1)
+- [x] 12-03-PLAN.md -- Verify Phase 6 (Model Routing & Smart Heartbeats): LLM-06, retroactive SUMMARYs (Wave 1)
+- [x] 12-04-PLAN.md -- Verify Phase 8 (Plugin System & Gateway): 5 requirements, 4 success criteria (Wave 1)
+- [x] 12-05-PLAN.md -- Verify Phase 9 (Production Hardening): 10 requirements, 5 success criteria (Wave 1)
 
 ### Phase 13: Sync Traceability & Documentation
 **Goal**: Synchronize REQUIREMENTS.md traceability table and ROADMAP.md progress table with the verified state of all requirements — update statuses, checkboxes, and coverage counts to reflect actual completion
@@ -239,14 +245,14 @@ Note: Phases 5, 6, and 7 all depend on Phase 4 and could potentially execute in 
 |-------|----------------|--------|-----------|
 | 1. Project Foundation & Workspace | 2/2 | Complete | 2026-02-28 |
 | 2. Persistence & Security Vault | 2/2 | Complete | 2026-02-28 |
-| 3. Agent Loop & Telegram | 3/3 | Complete | 2026-03-01 |
-| 4. Context Engine & Cost Tracking | 1/3 | Complete    | 2026-03-01 |
+| 3. Agent Loop & Telegram | 4/4 | Complete | 2026-03-01 |
+| 4. Context Engine & Cost Tracking | 3/3 | Complete | 2026-03-01 |
 | 5. Memory & Embeddings | 3/3 | Complete | 2026-03-01 |
 | 6. Model Routing & Smart Heartbeats | 3/3 | Complete | 2026-03-01 |
-| 7. WASM Skill Sandbox | 3/4 | Gap closure planned | - |
+| 7. WASM Skill Sandbox | 4/4 | Complete | 2026-03-01 |
 | 8. Plugin System & Gateway | 3/3 | Complete | 2026-03-01 |
 | 9. Production Hardening | 3/3 | Complete | 2026-03-01 |
 | 10. Multi-Agent & Final Integration | 3/3 | Complete    | 2026-03-01 |
 | 11. Fix Critical Integration Bugs | 4/4 | Complete | 2026-03-01 |
-| 12. Verify Unverified Phases | 0/0 | Complete    | 2026-03-01 |
-| 13. Sync Traceability & Documentation | 0/1 | Gap closure | - |
+| 12. Verify Unverified Phases | 5/5 | Complete | 2026-03-01 |
+| 13. Sync Traceability & Documentation | 1/1 | Gap closure | - |
