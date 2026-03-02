@@ -857,7 +857,7 @@ fn default_delegation_timeout() -> u64 {
 ///
 /// Controls MCP server and client functionality. When disabled (default),
 /// no MCP endpoints are exposed and no external MCP connections are made.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct McpConfig {
     /// Enable MCP functionality (server and client).
@@ -872,6 +872,26 @@ pub struct McpConfig {
     /// The "bash" tool is never exported regardless of this list.
     #[serde(default)]
     pub export_tools: Vec<String>,
+
+    /// Timeout in seconds for individual tool invocations via MCP.
+    /// Prevents hung WASM skills from blocking the connection.
+    #[serde(default = "default_tool_timeout_secs")]
+    pub tool_timeout_secs: u64,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            servers: Vec::new(),
+            export_tools: Vec::new(),
+            tool_timeout_secs: default_tool_timeout_secs(),
+        }
+    }
+}
+
+fn default_tool_timeout_secs() -> u64 {
+    60
 }
 
 /// Configuration entry for an external MCP server.
