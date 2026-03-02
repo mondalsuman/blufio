@@ -13,7 +13,7 @@ name = "blufio"
 path = "src/main.rs"
 
 [features]
-default = ["telegram", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway"]
+default = ["telegram", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client"]
 telegram = ["dep:blufio-telegram"]
 anthropic = ["dep:blufio-anthropic"]
 sqlite = ["dep:blufio-storage"]
@@ -21,6 +21,8 @@ onnx = []
 prometheus = ["dep:blufio-prometheus", "blufio-agent/prometheus"]
 keypair = ["dep:blufio-auth-keypair"]
 gateway = ["dep:blufio-gateway"]
+mcp-server = ["dep:blufio-mcp-server"]
+mcp-client = ["dep:blufio-mcp-client"]
 
 [dependencies]
 blufio-core = { path = "../blufio-core" }
@@ -42,6 +44,8 @@ blufio-memory = { path = "../blufio-memory" }
 blufio-gateway = { path = "../blufio-gateway", optional = true }
 blufio-prometheus = { path = "../blufio-prometheus", optional = true }
 blufio-auth-keypair = { path = "../blufio-auth-keypair", optional = true }
+blufio-mcp-server = { path = "../blufio-mcp-server", optional = true }
+blufio-mcp-client = { path = "../blufio-mcp-client", optional = true }
 
 tokio-rusqlite.workspace = true
 clap.workspace = true
