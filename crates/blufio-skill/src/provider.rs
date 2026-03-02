@@ -126,7 +126,9 @@ mod tests {
     fn make_registry(tools: Vec<(&str, &str)>) -> Arc<RwLock<ToolRegistry>> {
         let mut registry = ToolRegistry::new();
         for (name, desc) in tools {
-            registry.register(Arc::new(DummyTool::new(name, desc))).unwrap();
+            registry
+                .register(Arc::new(DummyTool::new(name, desc)))
+                .unwrap();
         }
         Arc::new(RwLock::new(registry))
     }

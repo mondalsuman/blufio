@@ -46,9 +46,8 @@ pub trait Tool: Send + Sync {
 }
 
 /// Regex for valid flat tool names: letter followed by letters/digits/underscores.
-static TOOL_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*$").expect("valid tool name regex")
-});
+static TOOL_NAME_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*$").expect("valid tool name regex"));
 
 /// Regex for valid namespaced tool names: two valid names joined by exactly
 /// two underscores. The first segment is the namespace and the second is the
@@ -483,10 +482,7 @@ mod tests {
             fn parameters_schema(&self) -> serde_json::Value {
                 serde_json::json!({})
             }
-            async fn invoke(
-                &self,
-                _: serde_json::Value,
-            ) -> Result<ToolOutput, BlufioError> {
+            async fn invoke(&self, _: serde_json::Value) -> Result<ToolOutput, BlufioError> {
                 unreachable!()
             }
         }
@@ -566,10 +562,7 @@ mod tests {
             fn parameters_schema(&self) -> serde_json::Value {
                 serde_json::json!({})
             }
-            async fn invoke(
-                &self,
-                _: serde_json::Value,
-            ) -> Result<ToolOutput, BlufioError> {
+            async fn invoke(&self, _: serde_json::Value) -> Result<ToolOutput, BlufioError> {
                 unreachable!()
             }
         }
