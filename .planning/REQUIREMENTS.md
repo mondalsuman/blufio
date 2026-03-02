@@ -103,27 +103,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 15 | Pending |
-| FOUND-02 | Phase 15 | Pending |
-| FOUND-03 | Phase 15 | Pending |
-| FOUND-04 | Phase 15 | Pending |
-| FOUND-05 | Phase 15 | Pending |
-| FOUND-06 | Phase 15 | Pending |
-| SRVR-01 | Phase 16 | Pending |
-| SRVR-02 | Phase 16 | Pending |
-| SRVR-03 | Phase 16 | Pending |
-| SRVR-04 | Phase 16 | Pending |
-| SRVR-05 | Phase 16 | Pending |
+| FOUND-01 | Phase 15 (verify: Phase 20) | Pending |
+| FOUND-02 | Phase 15 (verify: Phase 20) | Pending |
+| FOUND-03 | Phase 15 (verify: Phase 20) | Pending |
+| FOUND-04 | Phase 15 (verify: Phase 20) | Pending |
+| FOUND-05 | Phase 15 (verify: Phase 20) | Pending |
+| FOUND-06 | Phase 15 (verify: Phase 20) | Pending |
+| SRVR-01 | Phase 16 (verify: Phase 20) | Pending |
+| SRVR-02 | Phase 16 (verify: Phase 20) | Pending |
+| SRVR-03 | Phase 16 (verify: Phase 20) | Pending |
+| SRVR-04 | Phase 16 (verify: Phase 20) | Pending |
+| SRVR-05 | Phase 16 (verify: Phase 20) | Pending |
 | SRVR-06 | Phase 17 | Complete |
 | SRVR-07 | Phase 17 | Complete |
 | SRVR-08 | Phase 17 | Complete |
 | SRVR-09 | Phase 17 | Complete |
 | SRVR-10 | Phase 17 | Complete |
 | SRVR-11 | Phase 17 | Complete |
-| SRVR-12 | Phase 16 | Pending |
+| SRVR-12 | Phase 16 (verify: Phase 20) | Pending |
 | SRVR-13 | Phase 17 | Complete |
 | SRVR-14 | Phase 17 | Complete |
-| SRVR-15 | Phase 16 | Pending |
+| SRVR-15 | Phase 16 (verify: Phase 20) | Pending |
 | SRVR-16 | Phase 17 | Complete |
 | CLNT-01 | Phase 18 | Pending |
 | CLNT-02 | Phase 18 | Pending |
