@@ -266,6 +266,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // for MCP HTTP transport and gateway startup.
     let cancel = shutdown::install_signal_handler();
 
+    // Declare holder for MCP tools-changed sender so it lives until run_serve returns.
+    #[cfg(feature = "mcp-server")]
+    let mut _tools_changed_tx: Option<blufio_mcp_server::notifications::ToolsChangedSender> = None;
+
     // Build Prometheus render function for gateway /metrics endpoint.
     #[cfg(feature = "prometheus")]
     let prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>> =
@@ -326,6 +330,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                     mcp_auth_token.clone(),
                 );
 
+                // Create tools-changed notification channel.
+                let (tools_changed_tx, tools_changed_rx) =
+                    blufio_mcp_server::notifications::tools_changed_channel();
+
                 let mcp_cancel = cancel.child_token();
                 let mcp_config = blufio_mcp_server::transport::mcp_service_config(mcp_cancel);
                 let mcp_handler =
@@ -334,7 +342,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                             memory_store.clone(),
                             Some(storage.clone()
                                 as Arc<dyn blufio_core::StorageAdapter + Send + Sync>),
-                        );
+                        )
+                        .with_notifications(tools_changed_rx);
                 let mcp_router = blufio_mcp_server::transport::build_mcp_router(
                     mcp_handler,
                     mcp_config,
@@ -342,8 +351,15 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                     mcp_auth_token,
                 );
                 gateway.set_mcp_router(mcp_router).await;
+
+                // Hold the sender alive for the lifetime of run_serve.
+                // No code currently calls notify() -- that will happen when
+                // skill install events are wired in a future phase.
+                _tools_changed_tx = Some(tools_changed_tx);
+
                 info!(
                     memory_resources = memory_store.is_some(),
+                    notifications = true,
                     "MCP HTTP transport enabled at /mcp with resource access",
                 );
             }
