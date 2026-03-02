@@ -103,60 +103,60 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | — | Pending |
-| FOUND-02 | — | Pending |
-| FOUND-03 | — | Pending |
-| FOUND-04 | — | Pending |
-| FOUND-05 | — | Pending |
-| FOUND-06 | — | Pending |
-| SRVR-01 | — | Pending |
-| SRVR-02 | — | Pending |
-| SRVR-03 | — | Pending |
-| SRVR-04 | — | Pending |
-| SRVR-05 | — | Pending |
-| SRVR-06 | — | Pending |
-| SRVR-07 | — | Pending |
-| SRVR-08 | — | Pending |
-| SRVR-09 | — | Pending |
-| SRVR-10 | — | Pending |
-| SRVR-11 | — | Pending |
-| SRVR-12 | — | Pending |
-| SRVR-13 | — | Pending |
-| SRVR-14 | — | Pending |
-| SRVR-15 | — | Pending |
-| SRVR-16 | — | Pending |
-| CLNT-01 | — | Pending |
-| CLNT-02 | — | Pending |
-| CLNT-03 | — | Pending |
-| CLNT-04 | — | Pending |
-| CLNT-05 | — | Pending |
-| CLNT-06 | — | Pending |
-| CLNT-07 | — | Pending |
-| CLNT-08 | — | Pending |
-| CLNT-09 | — | Pending |
-| CLNT-10 | — | Pending |
-| CLNT-11 | — | Pending |
-| CLNT-12 | — | Pending |
-| CLNT-13 | — | Pending |
-| CLNT-14 | — | Pending |
-| INTG-01 | — | Pending |
-| INTG-02 | — | Pending |
-| INTG-03 | — | Pending |
-| INTG-04 | — | Pending |
-| INTG-05 | — | Pending |
-| DEBT-01 | — | Pending |
-| DEBT-02 | — | Pending |
-| DEBT-03 | — | Pending |
-| DEBT-04 | — | Pending |
-| DEBT-05 | — | Pending |
-| DEBT-06 | — | Pending |
-| DEBT-07 | — | Pending |
+| FOUND-01 | Phase 15 | Pending |
+| FOUND-02 | Phase 15 | Pending |
+| FOUND-03 | Phase 15 | Pending |
+| FOUND-04 | Phase 15 | Pending |
+| FOUND-05 | Phase 15 | Pending |
+| FOUND-06 | Phase 15 | Pending |
+| SRVR-01 | Phase 16 | Pending |
+| SRVR-02 | Phase 16 | Pending |
+| SRVR-03 | Phase 16 | Pending |
+| SRVR-04 | Phase 16 | Pending |
+| SRVR-05 | Phase 16 | Pending |
+| SRVR-06 | Phase 17 | Pending |
+| SRVR-07 | Phase 17 | Pending |
+| SRVR-08 | Phase 17 | Pending |
+| SRVR-09 | Phase 17 | Pending |
+| SRVR-10 | Phase 17 | Pending |
+| SRVR-11 | Phase 17 | Pending |
+| SRVR-12 | Phase 16 | Pending |
+| SRVR-13 | Phase 17 | Pending |
+| SRVR-14 | Phase 17 | Pending |
+| SRVR-15 | Phase 16 | Pending |
+| SRVR-16 | Phase 17 | Pending |
+| CLNT-01 | Phase 18 | Pending |
+| CLNT-02 | Phase 18 | Pending |
+| CLNT-03 | Phase 18 | Pending |
+| CLNT-04 | Phase 18 | Pending |
+| CLNT-05 | Phase 18 | Pending |
+| CLNT-06 | Phase 18 | Pending |
+| CLNT-07 | Phase 18 | Pending |
+| CLNT-08 | Phase 18 | Pending |
+| CLNT-09 | Phase 18 | Pending |
+| CLNT-10 | Phase 18 | Pending |
+| CLNT-11 | Phase 18 | Pending |
+| CLNT-12 | Phase 18 | Pending |
+| CLNT-13 | Phase 18 | Pending |
+| CLNT-14 | Phase 18 | Pending |
+| INTG-01 | Phase 19 | Pending |
+| INTG-02 | Phase 19 | Pending |
+| INTG-03 | Phase 19 | Pending |
+| INTG-04 | Phase 19 | Pending |
+| INTG-05 | Phase 19 | Pending |
+| DEBT-01 | Phase 19 | Pending |
+| DEBT-02 | Phase 19 | Pending |
+| DEBT-03 | Phase 19 | Pending |
+| DEBT-04 | Phase 19 | Pending |
+| DEBT-05 | Phase 19 | Pending |
+| DEBT-06 | Phase 19 | Pending |
+| DEBT-07 | Phase 19 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 48 total
-- Mapped to phases: 0
-- Unmapped: 48
+- Mapped to phases: 48
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after initial definition*
+*Last updated: 2026-03-02 after roadmap creation*
