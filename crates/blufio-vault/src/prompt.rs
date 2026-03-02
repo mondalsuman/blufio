@@ -30,7 +30,9 @@ pub fn get_vault_passphrase() -> Result<SecretString, BlufioError> {
         let passphrase = rpassword::read_password()
             .map_err(|e| BlufioError::Vault(format!("failed to read passphrase: {e}")))?;
         if passphrase.is_empty() {
-            return Err(BlufioError::Vault("empty passphrase not allowed".to_string()));
+            return Err(BlufioError::Vault(
+                "empty passphrase not allowed".to_string(),
+            ));
         }
         return Ok(SecretString::from(passphrase));
     }
@@ -65,7 +67,9 @@ pub fn get_vault_passphrase_with_confirm() -> Result<SecretString, BlufioError> 
             return Err(BlufioError::Vault("passphrases do not match".to_string()));
         }
         if pass1.is_empty() {
-            return Err(BlufioError::Vault("empty passphrase not allowed".to_string()));
+            return Err(BlufioError::Vault(
+                "empty passphrase not allowed".to_string(),
+            ));
         }
         return Ok(SecretString::from(pass1));
     }

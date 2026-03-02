@@ -10,13 +10,13 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use ndarray::Array2;
-use ort::session::builder::GraphOptimizationLevel;
 use ort::session::Session;
+use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
 
 use blufio_core::error::BlufioError;
-use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::EmbeddingAdapter;
+use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::types::{AdapterType, EmbeddingInput, EmbeddingOutput, HealthStatus};
 
 /// Embedding dimensions for all-MiniLM-L6-v2.
@@ -57,7 +57,9 @@ impl OnnxEmbedder {
         })?;
 
         let session = Session::builder()
-            .map_err(|e| BlufioError::Internal(format!("Failed to create ONNX session builder: {e}")))?
+            .map_err(|e| {
+                BlufioError::Internal(format!("Failed to create ONNX session builder: {e}"))
+            })?
             .with_optimization_level(GraphOptimizationLevel::Level3)
             .map_err(|e| BlufioError::Internal(format!("Failed to set optimization level: {e}")))?
             .with_intra_threads(1)
@@ -89,20 +91,15 @@ impl OnnxEmbedder {
             .iter()
             .map(|&m| m as i64)
             .collect();
-        let token_type_ids: Vec<i64> = encoding
-            .get_type_ids()
-            .iter()
-            .map(|&t| t as i64)
-            .collect();
+        let token_type_ids: Vec<i64> = encoding.get_type_ids().iter().map(|&t| t as i64).collect();
 
         let seq_len = input_ids.len();
 
-        let input_ids_array =
-            Array2::from_shape_vec((1, seq_len), input_ids).map_err(|e| {
-                BlufioError::Internal(format!("Failed to create input_ids tensor: {e}"))
-            })?;
-        let attention_mask_array =
-            Array2::from_shape_vec((1, seq_len), attention_mask.clone()).map_err(|e| {
+        let input_ids_array = Array2::from_shape_vec((1, seq_len), input_ids).map_err(|e| {
+            BlufioError::Internal(format!("Failed to create input_ids tensor: {e}"))
+        })?;
+        let attention_mask_array = Array2::from_shape_vec((1, seq_len), attention_mask.clone())
+            .map_err(|e| {
                 BlufioError::Internal(format!("Failed to create attention_mask tensor: {e}"))
             })?;
         let token_type_ids_array =
@@ -110,14 +107,14 @@ impl OnnxEmbedder {
                 BlufioError::Internal(format!("Failed to create token_type_ids tensor: {e}"))
             })?;
 
-        let mut session = self.session.lock().map_err(|e| {
-            BlufioError::Internal(format!("Failed to lock ONNX session: {e}"))
-        })?;
+        let mut session = self
+            .session
+            .lock()
+            .map_err(|e| BlufioError::Internal(format!("Failed to lock ONNX session: {e}")))?;
 
-        let input_ids_tensor =
-            TensorRef::from_array_view(&input_ids_array).map_err(|e| {
-                BlufioError::Internal(format!("Failed to create input_ids TensorRef: {e}"))
-            })?;
+        let input_ids_tensor = TensorRef::from_array_view(&input_ids_array).map_err(|e| {
+            BlufioError::Internal(format!("Failed to create input_ids TensorRef: {e}"))
+        })?;
         let attention_mask_tensor =
             TensorRef::from_array_view(&attention_mask_array).map_err(|e| {
                 BlufioError::Internal(format!("Failed to create attention_mask TensorRef: {e}"))
@@ -207,7 +204,9 @@ impl PluginAdapter for OnnxEmbedder {
         // Try to lock the session to verify it's alive
         match self.session.lock() {
             Ok(_) => Ok(HealthStatus::Healthy),
-            Err(e) => Ok(HealthStatus::Unhealthy(format!("Session lock poisoned: {e}"))),
+            Err(e) => Ok(HealthStatus::Unhealthy(format!(
+                "Session lock poisoned: {e}"
+            ))),
         }
     }
 

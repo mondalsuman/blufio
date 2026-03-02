@@ -104,28 +104,27 @@ impl WasmSkillRuntime {
     /// An epoch ticker background task increments the engine epoch every second,
     /// causing the skill to trap if it exceeds its timeout.
     pub async fn invoke(&self, invocation: SkillInvocation) -> Result<SkillResult, BlufioError> {
-        let manifest = self
-            .manifests
-            .get(&invocation.skill_name)
-            .ok_or_else(|| BlufioError::Skill {
-                message: format!("skill '{}' not loaded", invocation.skill_name),
-                source: None,
-            })?;
+        let manifest =
+            self.manifests
+                .get(&invocation.skill_name)
+                .ok_or_else(|| BlufioError::Skill {
+                    message: format!("skill '{}' not loaded", invocation.skill_name),
+                    source: None,
+                })?;
 
-        let module = self
-            .modules
-            .get(&invocation.skill_name)
-            .ok_or_else(|| BlufioError::Skill {
-                message: format!("module for skill '{}' not found", invocation.skill_name),
-                source: None,
-            })?;
+        let module =
+            self.modules
+                .get(&invocation.skill_name)
+                .ok_or_else(|| BlufioError::Skill {
+                    message: format!("module for skill '{}' not found", invocation.skill_name),
+                    source: None,
+                })?;
 
-        let input_json = serde_json::to_string(&invocation.input).map_err(|e| {
-            BlufioError::Skill {
+        let input_json =
+            serde_json::to_string(&invocation.input).map_err(|e| BlufioError::Skill {
                 message: format!("failed to serialize skill input: {e}"),
                 source: Some(Box::new(e)),
-            }
-        })?;
+            })?;
 
         // Create fresh Store with skill state.
         let state = SkillState {
@@ -137,12 +136,12 @@ impl WasmSkillRuntime {
         let mut store = Store::new(&self.engine, state);
 
         // Set fuel limit.
-        store.set_fuel(manifest.resources.fuel).map_err(|e| {
-            BlufioError::Skill {
+        store
+            .set_fuel(manifest.resources.fuel)
+            .map_err(|e| BlufioError::Skill {
                 message: format!("failed to set fuel: {e}"),
                 source: None,
-            }
-        })?;
+            })?;
 
         // Configure epoch deadline for wall-clock timeout.
         store.epoch_deadline_trap();
@@ -216,9 +215,7 @@ impl WasmSkillRuntime {
                         "Skill '{skill_name}' exceeded wall-clock timeout ({timeout}s): {error_msg}"
                     )
                 } else if error_msg.contains("capability not permitted") {
-                    format!(
-                        "Skill '{skill_name}' capability denied: {error_msg}"
-                    )
+                    format!("Skill '{skill_name}' capability denied: {error_msg}")
                 } else {
                     format!("Skill '{skill_name}' execution error: {error_msg}")
                 };
@@ -278,7 +275,10 @@ fn define_host_functions(
                         _ => "INFO",
                     };
                     debug!(skill_log = %msg, level = level_str, "skill log");
-                    caller.data_mut().output.push(format!("[{level_str}] {msg}"));
+                    caller
+                        .data_mut()
+                        .output
+                        .push(format!("[{level_str}] {msg}"));
                 }
             },
         )
@@ -290,9 +290,7 @@ fn define_host_functions(
         .func_wrap(
             "blufio",
             "get_input_len",
-            |caller: Caller<'_, SkillState>| -> i32 {
-                caller.data().input_json.len() as i32
-            },
+            |caller: Caller<'_, SkillState>| -> i32 { caller.data().input_json.len() as i32 },
         )
         .map_err(linker_err)?;
 
@@ -354,37 +352,42 @@ fn define_host_functions(
                   -> Result<i32, wasmtime::Error> {
                 if !has_network {
                     warn!("skill attempted http_request without network capability");
-                    return Err(anyhow!("capability not permitted: skill lacks network permission").into());
+                    return Err(anyhow!(
+                        "capability not permitted: skill lacks network permission"
+                    ));
                 }
 
                 let memory = match caller.get_export("memory") {
                     Some(wasmtime::Extern::Memory(mem)) => mem,
-                    _ => return Err(anyhow!("WASM module has no exported memory").into()),
+                    _ => return Err(anyhow!("WASM module has no exported memory")),
                 };
 
                 let url = match read_string_from_memory(&memory, &caller, url_ptr, url_len) {
                     Some(u) => u,
-                    None => return Err(anyhow!("failed to read URL from WASM memory").into()),
+                    None => return Err(anyhow!("failed to read URL from WASM memory")),
                 };
 
                 // Validate URL domain against the manifest's allowed domains.
-                let parsed_url = reqwest::Url::parse(&url)
-                    .map_err(|e| anyhow!("invalid URL '{url}': {e}"))?;
+                let parsed_url =
+                    reqwest::Url::parse(&url).map_err(|e| anyhow!("invalid URL '{url}': {e}"))?;
 
                 if let Some(domain) = parsed_url.host_str() {
-                    if !allowed_domains.iter().any(|d| domain == d || domain.ends_with(&format!(".{d}"))) {
+                    if !allowed_domains
+                        .iter()
+                        .any(|d| domain == d || domain.ends_with(&format!(".{d}")))
+                    {
                         return Err(anyhow!(
                             "capability not permitted: domain '{domain}' not in allowed list {:?}",
                             allowed_domains
-                        ).into());
+                        ));
                     }
                 } else {
-                    return Err(anyhow!("URL has no host: {url}").into());
+                    return Err(anyhow!("URL has no host: {url}"));
                 }
 
                 // SSRF prevention: block private/internal IPs.
                 if let Err(e) = blufio_security::ssrf::validate_url_host(&url) {
-                    return Err(anyhow!("SSRF blocked: {e}").into());
+                    return Err(anyhow!("SSRF blocked: {e}"));
                 }
 
                 // Make the HTTP request using the tokio runtime handle.
@@ -398,9 +401,7 @@ fn define_host_functions(
                 match response {
                     Ok(resp) => {
                         let status = resp.status().as_u16() as i32;
-                        let body = handle.block_on(async {
-                            resp.text().await.unwrap_or_default()
-                        });
+                        let body = handle.block_on(async { resp.text().await.unwrap_or_default() });
 
                         // Store the response body in result_json for the skill to access.
                         caller.data_mut().result_json = Some(body);
@@ -409,7 +410,7 @@ fn define_host_functions(
                     }
                     Err(e) => {
                         warn!(url = %url, error = %e, "WASM http_request failed");
-                        Err(anyhow!("HTTP request failed: {e}").into())
+                        Err(anyhow!("HTTP request failed: {e}"))
                     }
                 }
             },
@@ -443,17 +444,19 @@ fn define_host_functions(
                   -> Result<i32, wasmtime::Error> {
                 if !has_fs_read {
                     warn!("skill attempted read_file without filesystem read capability");
-                    return Err(anyhow!("capability not permitted: skill lacks filesystem read permission").into());
+                    return Err(anyhow!(
+                        "capability not permitted: skill lacks filesystem read permission"
+                    ));
                 }
 
                 let memory = match caller.get_export("memory") {
                     Some(wasmtime::Extern::Memory(mem)) => mem,
-                    _ => return Err(anyhow!("WASM module has no exported memory").into()),
+                    _ => return Err(anyhow!("WASM module has no exported memory")),
                 };
 
                 let path = match read_string_from_memory(&memory, &caller, path_ptr, path_len) {
                     Some(p) => p,
-                    None => return Err(anyhow!("failed to read path from WASM memory").into()),
+                    None => return Err(anyhow!("failed to read path from WASM memory")),
                 };
 
                 // Validate that the path starts with one of the manifest's read paths.
@@ -461,8 +464,9 @@ fn define_host_functions(
                 if !path_allowed {
                     return Err(anyhow!(
                         "capability not permitted: path '{}' not within allowed read paths {:?}",
-                        path, read_paths
-                    ).into());
+                        path,
+                        read_paths
+                    ));
                 }
 
                 // Read the file.
@@ -473,9 +477,7 @@ fn define_host_functions(
                         info!(path = %path, len = len, "WASM read_file completed");
                         Ok(len)
                     }
-                    Err(e) => {
-                        Err(anyhow!("read_file failed for '{}': {}", path, e).into())
-                    }
+                    Err(e) => Err(anyhow!("read_file failed for '{}': {}", path, e)),
                 }
             },
         )
@@ -508,22 +510,24 @@ fn define_host_functions(
                   -> Result<i32, wasmtime::Error> {
                 if !has_fs_write {
                     warn!("skill attempted write_file without filesystem write capability");
-                    return Err(anyhow!("capability not permitted: skill lacks filesystem write permission").into());
+                    return Err(anyhow!(
+                        "capability not permitted: skill lacks filesystem write permission"
+                    ));
                 }
 
                 let memory = match caller.get_export("memory") {
                     Some(wasmtime::Extern::Memory(mem)) => mem,
-                    _ => return Err(anyhow!("WASM module has no exported memory").into()),
+                    _ => return Err(anyhow!("WASM module has no exported memory")),
                 };
 
                 let path = match read_string_from_memory(&memory, &caller, path_ptr, path_len) {
                     Some(p) => p,
-                    None => return Err(anyhow!("failed to read path from WASM memory").into()),
+                    None => return Err(anyhow!("failed to read path from WASM memory")),
                 };
 
                 let data = match read_string_from_memory(&memory, &caller, data_ptr, data_len) {
                     Some(d) => d,
-                    None => return Err(anyhow!("failed to read data from WASM memory").into()),
+                    None => return Err(anyhow!("failed to read data from WASM memory")),
                 };
 
                 // Validate that the path starts with one of the manifest's write paths.
@@ -531,8 +535,9 @@ fn define_host_functions(
                 if !path_allowed {
                     return Err(anyhow!(
                         "capability not permitted: path '{}' not within allowed write paths {:?}",
-                        path, write_paths
-                    ).into());
+                        path,
+                        write_paths
+                    ));
                 }
 
                 // Write the file.
@@ -541,9 +546,7 @@ fn define_host_functions(
                         info!(path = %path, len = data.len(), "WASM write_file completed");
                         Ok(0)
                     }
-                    Err(e) => {
-                        Err(anyhow!("write_file failed for '{}': {}", path, e).into())
-                    }
+                    Err(e) => Err(anyhow!("write_file failed for '{}': {}", path, e)),
                 }
             },
         )
@@ -634,7 +637,7 @@ fn linker_err(e: anyhow::Error) -> BlufioError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blufio_core::types::{NetworkCapability, SkillCapabilities, SkillResources};
+    use blufio_core::types::{NetworkCapability, SkillResources};
 
     #[test]
     fn sandbox_runtime_creates_successfully() {
@@ -878,7 +881,11 @@ mod tests {
             input: serde_json::json!({}),
         };
         let result = runtime.invoke(invocation).await.unwrap();
-        assert!(result.is_error, "Expected error result, got: {}", result.content);
+        assert!(
+            result.is_error,
+            "Expected error result, got: {}",
+            result.content
+        );
         assert!(
             result.content.contains("capability not permitted"),
             "Expected 'capability not permitted' in error, got: {}",
@@ -920,7 +927,11 @@ mod tests {
             input: serde_json::json!({}),
         };
         let result = runtime.invoke(invocation).await.unwrap();
-        assert!(result.is_error, "Expected error result, got: {}", result.content);
+        assert!(
+            result.is_error,
+            "Expected error result, got: {}",
+            result.content
+        );
         assert!(
             result.content.contains("capability not permitted"),
             "Expected 'capability not permitted' in error, got: {}",
@@ -964,7 +975,11 @@ mod tests {
             input: serde_json::json!({}),
         };
         let result = runtime.invoke(invocation).await.unwrap();
-        assert!(result.is_error, "Expected error result, got: {}", result.content);
+        assert!(
+            result.is_error,
+            "Expected error result, got: {}",
+            result.content
+        );
         assert!(
             result.content.contains("capability not permitted"),
             "Expected 'capability not permitted' in error, got: {}",
@@ -1191,9 +1206,14 @@ mod tests {
             input: serde_json::json!({}),
         };
         let result = runtime.invoke(invocation).await.unwrap();
-        assert!(result.is_error, "Expected error result, got: {}", result.content);
         assert!(
-            result.content.contains("capability not permitted") || result.content.contains("not in allowed list"),
+            result.is_error,
+            "Expected error result, got: {}",
+            result.content
+        );
+        assert!(
+            result.content.contains("capability not permitted")
+                || result.content.contains("not in allowed list"),
             "Expected domain validation error, got: {}",
             result.content
         );

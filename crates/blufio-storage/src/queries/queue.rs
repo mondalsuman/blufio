@@ -10,11 +10,7 @@ use crate::database::Database;
 use crate::models::QueueEntry;
 
 /// Enqueue a new item. Returns the auto-generated queue entry ID.
-pub async fn enqueue(
-    db: &Database,
-    queue_name: &str,
-    payload: &str,
-) -> Result<i64, BlufioError> {
+pub async fn enqueue(db: &Database, queue_name: &str, payload: &str) -> Result<i64, BlufioError> {
     let queue_name = queue_name.to_string();
     let payload = payload.to_string();
     db.connection()

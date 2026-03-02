@@ -39,9 +39,8 @@ pub fn build_secure_client(config: &SecurityConfig) -> Result<reqwest::Client, B
 ///
 /// Call this before making requests to enforce TLS policy.
 pub fn validate_url(url: &str) -> Result<(), BlufioError> {
-    let parsed = url::Url::parse(url).map_err(|e| {
-        BlufioError::Security(format!("invalid URL: {e}"))
-    })?;
+    let parsed =
+        url::Url::parse(url).map_err(|e| BlufioError::Security(format!("invalid URL: {e}")))?;
 
     let host = parsed.host_str().unwrap_or("");
 
@@ -63,10 +62,7 @@ pub fn validate_url(url: &str) -> Result<(), BlufioError> {
 
 /// Check if an address refers to localhost.
 pub fn is_localhost(addr: &str) -> bool {
-    matches!(
-        addr,
-        "127.0.0.1" | "::1" | "localhost" | "[::1]"
-    ) || addr.starts_with("127.")
+    matches!(addr, "127.0.0.1" | "::1" | "localhost" | "[::1]") || addr.starts_with("127.")
 }
 
 #[cfg(test)]

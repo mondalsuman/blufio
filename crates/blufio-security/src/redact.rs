@@ -152,7 +152,8 @@ mod tests {
 
     #[test]
     fn redacts_multiple_patterns_in_one_string() {
-        let input = "key1=sk-ant-api03-abcdefghijklmnopqrstuvwxyz token=Bearer eyJhbGciOiJIUzI1NiIsInR5c";
+        let input =
+            "key1=sk-ant-api03-abcdefghijklmnopqrstuvwxyz token=Bearer eyJhbGciOiJIUzI1NiIsInR5c";
         let result = redact(input, &[]);
         // Both should be redacted.
         assert!(!result.contains("sk-ant-api03"));

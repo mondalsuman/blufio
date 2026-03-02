@@ -119,11 +119,9 @@ async fn test_budget_enforcement_blocks_when_exhausted() {
     // Subsequent messages may trigger budget exhaustion
     let mut budget_hit = false;
     for i in 2..=5 {
-        let result = harness
-            .send_message(&format!("message {i}"))
-            .await;
-        if result.is_err() {
-            let err = result.unwrap_err().to_string();
+        let result = harness.send_message(&format!("message {i}")).await;
+        if let Err(e) = result {
+            let err = e.to_string();
             if err.contains("budget") || err.contains("Budget") {
                 budget_hit = true;
                 break;
@@ -148,7 +146,10 @@ async fn test_ed25519_sign_verify_roundtrip() {
     assert_eq!(request.message_type, AgentMessageType::Request);
 
     let signed_req = SignedAgentMessage::new(request, &primary_kp);
-    assert!(signed_req.verify(&primary_kp).is_ok(), "should verify with correct keypair");
+    assert!(
+        signed_req.verify(&primary_kp).is_ok(),
+        "should verify with correct keypair"
+    );
 }
 
 #[tokio::test]
@@ -251,7 +252,13 @@ async fn test_delegation_router_delegates_to_specialist() {
     }];
 
     let delegation_router = DelegationRouter::new(
-        &agents, provider, storage, cost_ledger, budget_tracker, router, 60,
+        &agents,
+        provider,
+        storage,
+        cost_ledger,
+        budget_tracker,
+        router,
+        60,
     );
 
     let result = delegation_router

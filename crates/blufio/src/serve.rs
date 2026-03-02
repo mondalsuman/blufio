@@ -12,13 +12,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use blufio_agent::{AgentLoop, ChannelMultiplexer, DelegationRouter, DelegationTool, HeartbeatRunner};
 use blufio_agent::shutdown;
+use blufio_agent::{
+    AgentLoop, ChannelMultiplexer, DelegationRouter, DelegationTool, HeartbeatRunner,
+};
 use blufio_config::model::BlufioConfig;
 use blufio_context::ContextEngine;
-use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::{ChannelAdapter, StorageAdapter};
+use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_plugin::{PluginRegistry, PluginStatus, builtin_catalog};
 use blufio_router::ModelRouter;
 use blufio_skill::{SkillProvider, ToolRegistry};
@@ -36,7 +38,9 @@ use blufio_telegram::TelegramChannel;
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
-use blufio_memory::{MemoryExtractor, MemoryProvider, MemoryStore, HybridRetriever, OnnxEmbedder, ModelManager};
+use blufio_memory::{
+    HybridRetriever, MemoryExtractor, MemoryProvider, MemoryStore, ModelManager, OnnxEmbedder,
+};
 
 /// Initializes the plugin registry with the built-in catalog.
 ///
@@ -62,10 +66,7 @@ fn initialize_plugin_registry(config: &BlufioConfig) -> PluginRegistry {
         registry.register_with_status(manifest, None, status);
     }
 
-    info!(
-        count = registry.len(),
-        "plugin registry initialized"
-    );
+    info!(count = registry.len(), "plugin registry initialized");
     registry
 }
 
@@ -88,7 +89,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     {
         let vault_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
             .await
-            .map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
+            .map_err(|e| BlufioError::Storage {
+                source: Box::new(e),
+            })?;
         match blufio_vault::vault_startup_check(vault_conn, &config.vault).await {
             Ok(Some(_vault)) => {
                 info!("vault unlocked -- secrets available");
@@ -122,18 +125,15 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     mark_stale_sessions(storage.as_ref()).await?;
 
     // Initialize cost ledger (opens its own connection to the same DB).
-    let cost_ledger = Arc::new(
-        CostLedger::open(&config.storage.database_path).await?
-    );
+    let cost_ledger = Arc::new(CostLedger::open(&config.storage.database_path).await?);
 
     // Initialize budget tracker from existing ledger data (restart recovery).
     let budget_tracker = Arc::new(tokio::sync::Mutex::new(
-        BudgetTracker::from_ledger(&config.cost, &cost_ledger).await?
+        BudgetTracker::from_ledger(&config.cost, &cost_ledger).await?,
     ));
 
     // Initialize context engine.
-    let mut context_engine =
-        ContextEngine::new(&config.agent, &config.context).await?;
+    let mut context_engine = ContextEngine::new(&config.agent, &config.context).await?;
 
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]
@@ -151,7 +151,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     };
 
     #[cfg(not(feature = "onnx"))]
-    let (memory_provider, memory_extractor): (Option<MemoryProvider>, Option<Arc<MemoryExtractor>>) = {
+    let (memory_provider, memory_extractor): (
+        Option<MemoryProvider>,
+        Option<Arc<MemoryExtractor>>,
+    ) = {
         info!("memory system disabled (onnx feature not enabled)");
         (None, None)
     };
@@ -159,14 +162,15 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Initialize tool registry with built-in tools.
     let mut tool_registry = ToolRegistry::new();
     blufio_skill::builtin::register_builtins(&mut tool_registry);
-    info!("tool registry initialized with {} built-in tools", tool_registry.len());
+    info!(
+        "tool registry initialized with {} built-in tools",
+        tool_registry.len()
+    );
     let tool_registry = Arc::new(tokio::sync::RwLock::new(tool_registry));
 
     // Register SkillProvider with context engine for progressive tool discovery.
-    let skill_provider = SkillProvider::new(
-        tool_registry.clone(),
-        config.skill.max_skills_in_prompt,
-    );
+    let skill_provider =
+        SkillProvider::new(tool_registry.clone(), config.skill.max_skills_in_prompt);
     context_engine.add_conditional_provider(Box::new(skill_provider));
 
     let context_engine = Arc::new(context_engine);
@@ -304,7 +308,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     let router = Arc::new(ModelRouter::new(config.routing.clone()));
     if config.routing.enabled {
         if let Some(ref forced) = config.routing.force_model {
-            info!(model = forced.as_str(), "model routing enabled with forced model");
+            info!(
+                model = forced.as_str(),
+                "model routing enabled with forced model"
+            );
         } else {
             info!(
                 simple = config.routing.simple_model.as_str(),
@@ -389,9 +396,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         let interval_secs = config.heartbeat.interval_secs;
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                std::time::Duration::from_secs(interval_secs),
-            );
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
             // Skip the first immediate tick.
             interval.tick().await;
 
@@ -452,9 +457,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 ///
 /// This handles the case where the process was previously killed without
 /// graceful shutdown, leaving sessions in an active state.
-async fn mark_stale_sessions(
-    storage: &dyn StorageAdapter,
-) -> Result<(), BlufioError> {
+async fn mark_stale_sessions(storage: &dyn StorageAdapter) -> Result<(), BlufioError> {
     let active_sessions = storage.list_sessions(Some("active")).await?;
     if !active_sessions.is_empty() {
         info!(

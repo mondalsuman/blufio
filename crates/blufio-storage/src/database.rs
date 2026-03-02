@@ -44,11 +44,12 @@ impl Database {
         }
 
         info!(path = %path, "opening database");
-        let conn = tokio_rusqlite::Connection::open(path)
-            .await
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+        let conn =
+            tokio_rusqlite::Connection::open(path)
+                .await
+                .map_err(|e| BlufioError::Storage {
+                    source: Box::new(e),
+                })?;
 
         // Apply PRAGMAs on the background thread.
         conn.call(|conn| {
@@ -164,18 +165,17 @@ mod tests {
 
         let (sync, fk, timeout, cache_size, temp_store): (i64, i64, i64, i64, i64) = db
             .connection()
-            .call(|conn| -> Result<(i64, i64, i64, i64, i64), rusqlite::Error> {
-                let sync: i64 =
-                    conn.query_row("PRAGMA synchronous;", [], |row| row.get(0))?;
-                let fk: i64 = conn.query_row("PRAGMA foreign_keys;", [], |row| row.get(0))?;
-                let timeout: i64 =
-                    conn.query_row("PRAGMA busy_timeout;", [], |row| row.get(0))?;
-                let cache: i64 =
-                    conn.query_row("PRAGMA cache_size;", [], |row| row.get(0))?;
-                let temp: i64 =
-                    conn.query_row("PRAGMA temp_store;", [], |row| row.get(0))?;
-                Ok((sync, fk, timeout, cache, temp))
-            })
+            .call(
+                |conn| -> Result<(i64, i64, i64, i64, i64), rusqlite::Error> {
+                    let sync: i64 = conn.query_row("PRAGMA synchronous;", [], |row| row.get(0))?;
+                    let fk: i64 = conn.query_row("PRAGMA foreign_keys;", [], |row| row.get(0))?;
+                    let timeout: i64 =
+                        conn.query_row("PRAGMA busy_timeout;", [], |row| row.get(0))?;
+                    let cache: i64 = conn.query_row("PRAGMA cache_size;", [], |row| row.get(0))?;
+                    let temp: i64 = conn.query_row("PRAGMA temp_store;", [], |row| row.get(0))?;
+                    Ok((sync, fk, timeout, cache, temp))
+                },
+            )
             .await
             .unwrap();
 
@@ -197,9 +197,8 @@ mod tests {
         let tables: Vec<String> = db
             .connection()
             .call(|conn| -> Result<Vec<String>, rusqlite::Error> {
-                let mut stmt = conn.prepare(
-                    "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;",
-                )?;
+                let mut stmt = conn
+                    .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")?;
                 let rows = stmt.query_map([], |row| row.get(0))?;
                 let mut names = Vec::new();
                 for row in rows {
@@ -245,7 +244,10 @@ mod tests {
         // or be empty.
         if wal_path.exists() {
             let wal_size = std::fs::metadata(&wal_path).unwrap().len();
-            assert_eq!(wal_size, 0, "WAL file should be empty after TRUNCATE checkpoint");
+            assert_eq!(
+                wal_size, 0,
+                "WAL file should be empty after TRUNCATE checkpoint"
+            );
         }
     }
 }

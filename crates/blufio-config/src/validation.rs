@@ -99,10 +99,7 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
     for agent in &config.agents {
         if !seen_names.insert(&agent.name) {
             errors.push(ConfigError::Validation {
-                message: format!(
-                    "duplicate agent name `{}` in [[agents]] array",
-                    agent.name
-                ),
+                message: format!("duplicate agent name `{}` in [[agents]] array", agent.name),
             });
         }
     }
@@ -241,21 +238,23 @@ enabled = true
     #[test]
     fn duplicate_agent_names_fails_validation() {
         use crate::model::AgentSpecConfig;
-        let mut config = BlufioConfig::default();
-        config.agents = vec![
-            AgentSpecConfig {
-                name: "summarizer".to_string(),
-                system_prompt: "prompt1".to_string(),
-                model: "claude-sonnet-4-20250514".to_string(),
-                allowed_skills: vec![],
-            },
-            AgentSpecConfig {
-                name: "summarizer".to_string(),
-                system_prompt: "prompt2".to_string(),
-                model: "claude-sonnet-4-20250514".to_string(),
-                allowed_skills: vec![],
-            },
-        ];
+        let config = BlufioConfig {
+            agents: vec![
+                AgentSpecConfig {
+                    name: "summarizer".to_string(),
+                    system_prompt: "prompt1".to_string(),
+                    model: "claude-sonnet-4-20250514".to_string(),
+                    allowed_skills: vec![],
+                },
+                AgentSpecConfig {
+                    name: "summarizer".to_string(),
+                    system_prompt: "prompt2".to_string(),
+                    model: "claude-sonnet-4-20250514".to_string(),
+                    allowed_skills: vec![],
+                },
+            ],
+            ..BlufioConfig::default()
+        };
         let errors = validate_config(&config).unwrap_err();
         assert!(errors.iter().any(
             |e| matches!(e, ConfigError::Validation { message } if message.contains("duplicate agent name"))

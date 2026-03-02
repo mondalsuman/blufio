@@ -12,12 +12,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::{Mutex, Notify};
 
+use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
 };
-use blufio_core::BlufioError;
 
 /// A mock messaging channel for testing.
 ///
@@ -231,13 +231,10 @@ mod tests {
         });
 
         // receive() should block until the message is injected
-        let received = tokio::time::timeout(
-            tokio::time::Duration::from_secs(2),
-            channel.receive(),
-        )
-        .await
-        .expect("receive timed out")
-        .unwrap();
+        let received = tokio::time::timeout(tokio::time::Duration::from_secs(2), channel.receive())
+            .await
+            .expect("receive timed out")
+            .unwrap();
 
         match &received.content {
             MessageContent::Text(t) => assert_eq!(t, "delayed"),

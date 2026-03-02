@@ -129,49 +129,41 @@ impl ChannelAdapter for TelegramChannel {
         info!("starting Telegram long polling");
 
         let handle = tokio::spawn(async move {
-            let handler = Update::filter_message().endpoint(
-                move |bot: Bot, msg: Message| {
-                    let tx = tx.clone();
-                    let allowed = allowed_users.clone();
-                    async move {
-                        // Filter: DMs only
-                        if !handler::is_dm(&msg) {
-                            debug!(chat_id = msg.chat.id.0, "ignoring non-DM message");
-                            return respond(());
-                        }
-
-                        // Filter: authorized users only
-                        if !handler::is_authorized(&msg, &allowed) {
-                            debug!(
-                                chat_id = msg.chat.id.0,
-                                "ignoring unauthorized user"
-                            );
-                            return respond(());
-                        }
-
-                        // Extract content
-                        match handler::extract_content(&bot, &msg).await {
-                            Ok(Some(content)) => {
-                                let inbound = handler::to_inbound_message(&msg, content);
-                                if tx.send(inbound).await.is_err() {
-                                    warn!("inbound channel closed, dropping message");
-                                }
-                            }
-                            Ok(None) => {
-                                debug!(
-                                    msg_id = msg.id.0,
-                                    "ignoring unsupported message type"
-                                );
-                            }
-                            Err(e) => {
-                                error!(error = %e, "failed to extract message content");
-                            }
-                        }
-
-                        respond(())
+            let handler = Update::filter_message().endpoint(move |bot: Bot, msg: Message| {
+                let tx = tx.clone();
+                let allowed = allowed_users.clone();
+                async move {
+                    // Filter: DMs only
+                    if !handler::is_dm(&msg) {
+                        debug!(chat_id = msg.chat.id.0, "ignoring non-DM message");
+                        return respond(());
                     }
-                },
-            );
+
+                    // Filter: authorized users only
+                    if !handler::is_authorized(&msg, &allowed) {
+                        debug!(chat_id = msg.chat.id.0, "ignoring unauthorized user");
+                        return respond(());
+                    }
+
+                    // Extract content
+                    match handler::extract_content(&bot, &msg).await {
+                        Ok(Some(content)) => {
+                            let inbound = handler::to_inbound_message(&msg, content);
+                            if tx.send(inbound).await.is_err() {
+                                warn!("inbound channel closed, dropping message");
+                            }
+                        }
+                        Ok(None) => {
+                            debug!(msg_id = msg.id.0, "ignoring unsupported message type");
+                        }
+                        Err(e) => {
+                            error!(error = %e, "failed to extract message content");
+                        }
+                    }
+
+                    respond(())
+                }
+            });
 
             Dispatcher::builder(bot, handler)
                 .default_handler(|_| async {}) // Silently ignore non-message updates
@@ -188,8 +180,7 @@ impl ChannelAdapter for TelegramChannel {
         let chat_id = extract_chat_id(&msg)?;
         let escaped = markdown::format_for_telegram(&msg.content);
 
-        let result = if msg.parse_mode.as_deref() == Some("MarkdownV2")
-            || msg.parse_mode.is_none()
+        let result = if msg.parse_mode.as_deref() == Some("MarkdownV2") || msg.parse_mode.is_none()
         {
             // Try MarkdownV2 first, fall back to plain text
             match self
@@ -256,9 +247,7 @@ impl ChannelAdapter for TelegramChannel {
 
         let escaped = markdown::format_for_telegram(text);
 
-        let use_markdown = parse_mode
-            .map(|p| p == "MarkdownV2")
-            .unwrap_or(true);
+        let use_markdown = parse_mode.map(|p| p == "MarkdownV2").unwrap_or(true);
 
         if use_markdown {
             let result = self
@@ -331,20 +320,23 @@ fn extract_chat_id(msg: &OutboundMessage) -> Result<ChatId, BlufioError> {
         && let Ok(meta) = serde_json::from_str::<serde_json::Value>(metadata)
         && let Some(chat_id_str) = meta.get("chat_id").and_then(|v| v.as_str())
     {
-        let id = chat_id_str.parse::<i64>().map_err(|e| BlufioError::Channel {
-            message: format!("invalid chat_id in metadata: {e}"),
-            source: None,
-        })?;
+        let id = chat_id_str
+            .parse::<i64>()
+            .map_err(|e| BlufioError::Channel {
+                message: format!("invalid chat_id in metadata: {e}"),
+                source: None,
+            })?;
         return Ok(ChatId(id));
     }
 
     // Fallback: try channel field as chat ID
-    msg.channel.parse::<i64>().map(ChatId).map_err(|_| {
-        BlufioError::Channel {
+    msg.channel
+        .parse::<i64>()
+        .map(ChatId)
+        .map_err(|_| BlufioError::Channel {
             message: "no valid chat_id in message metadata or channel field".into(),
             source: None,
-        }
-    })
+        })
 }
 
 #[cfg(test)]

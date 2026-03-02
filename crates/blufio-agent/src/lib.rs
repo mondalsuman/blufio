@@ -26,20 +26,20 @@ use std::time::Duration;
 
 use blufio_config::model::BlufioConfig;
 use blufio_context::ContextEngine;
-use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_core::error::BlufioError;
 use blufio_core::types::{
     ContentBlock, InboundMessage, OutboundMessage, ProviderMessage, ProviderRequest,
     ProviderStreamChunk, Session, StreamEventType, TokenUsage, ToolUseData,
 };
 use blufio_core::{ChannelAdapter, ProviderAdapter, StorageAdapter};
+use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_memory::{MemoryExtractor, MemoryProvider};
 use blufio_router::ModelRouter;
 use blufio_skill::ToolRegistry;
 
 pub use channel_mux::ChannelMultiplexer;
-pub use heartbeat::HeartbeatRunner;
 use futures::{Stream, StreamExt};
+pub use heartbeat::HeartbeatRunner;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
@@ -288,8 +288,7 @@ impl AgentLoop {
             }
 
             // Check if we have tool_use blocks to execute.
-            let has_tool_use = !tool_uses.is_empty()
-                || stop_reason.as_deref() == Some("tool_use");
+            let has_tool_use = !tool_uses.is_empty() || stop_reason.as_deref() == Some("tool_use");
 
             if !has_tool_use || tool_uses.is_empty() {
                 // No tool calls -- we're done with this message.
@@ -429,7 +428,10 @@ impl AgentLoop {
                         model = %self.config.anthropic.default_model,
                         "tool follow-up using default model (no routing decision)"
                     );
-                    (self.config.anthropic.default_model.clone(), self.config.anthropic.max_tokens)
+                    (
+                        self.config.anthropic.default_model.clone(),
+                        self.config.anthropic.max_tokens,
+                    )
                 }
             };
 
@@ -470,13 +472,17 @@ impl AgentLoop {
             if let Some(decision) = actor.last_routing_decision()
                 && decision.downgraded
             {
-                let short_name = blufio_router::ModelRouter::short_model_name(&decision.actual_model);
+                let short_name =
+                    blufio_router::ModelRouter::short_model_name(&decision.actual_model);
                 let note = format!(
                     "_(Using {} -- budget at {:.0}%)_\n\n",
                     short_name,
                     // Approximate from reason string -- just show the note
                     // without re-querying budget since decision.reason has the info
-                    decision.reason.split("budget at ").last()
+                    decision
+                        .reason
+                        .split("budget at ")
+                        .last()
                         .and_then(|s| s.strip_suffix(')'))
                         .unwrap_or("high")
                 );
@@ -516,7 +522,9 @@ impl AgentLoop {
         let actor = self.sessions.get_mut(&session_id).ok_or_else(|| {
             BlufioError::Internal(format!("session actor not found for {session_id}"))
         })?;
-        actor.persist_response(&full_response, usage.clone()).await?;
+        actor
+            .persist_response(&full_response, usage.clone())
+            .await?;
 
         if let Some(u) = &usage {
             info!(
@@ -553,9 +561,7 @@ impl AgentLoop {
         // Check storage for existing active session.
         let active_sessions = self.storage.list_sessions(Some("active")).await?;
         for session in &active_sessions {
-            if session.channel == channel
-                && session.user_id.as_deref() == Some(sender_id)
-            {
+            if session.channel == channel && session.user_id.as_deref() == Some(sender_id) {
                 debug!(
                     session_id = session.id.as_str(),
                     "resuming existing session"
@@ -643,38 +649,36 @@ async fn consume_stream(
 
     while let Some(chunk_result) = stream.next().await {
         match chunk_result {
-            Ok(chunk) => {
-                match chunk.event_type {
-                    StreamEventType::ContentBlockDelta => {
-                        if let Some(t) = &chunk.text {
-                            text.push_str(t);
-                        }
+            Ok(chunk) => match chunk.event_type {
+                StreamEventType::ContentBlockDelta => {
+                    if let Some(t) = &chunk.text {
+                        text.push_str(t);
                     }
-                    StreamEventType::ContentBlockStop => {
-                        if let Some(tu) = chunk.tool_use {
-                            tool_uses.push(tu);
-                        }
-                    }
-                    StreamEventType::MessageStart | StreamEventType::MessageDelta => {
-                        if let Some(u) = chunk.usage {
-                            usage = Some(u);
-                        }
-                        if let Some(sr) = &chunk.stop_reason {
-                            stop_reason = Some(sr.clone());
-                        }
-                    }
-                    StreamEventType::MessageStop => {
-                        break;
-                    }
-                    StreamEventType::Error => {
-                        if let Some(err) = &chunk.error {
-                            error!(error = err.as_str(), "LLM stream error");
-                        }
-                        break;
-                    }
-                    _ => {}
                 }
-            }
+                StreamEventType::ContentBlockStop => {
+                    if let Some(tu) = chunk.tool_use {
+                        tool_uses.push(tu);
+                    }
+                }
+                StreamEventType::MessageStart | StreamEventType::MessageDelta => {
+                    if let Some(u) = chunk.usage {
+                        usage = Some(u);
+                    }
+                    if let Some(sr) = &chunk.stop_reason {
+                        stop_reason = Some(sr.clone());
+                    }
+                }
+                StreamEventType::MessageStop => {
+                    break;
+                }
+                StreamEventType::Error => {
+                    if let Some(err) = &chunk.error {
+                        error!(error = err.as_str(), "LLM stream error");
+                    }
+                    break;
+                }
+                _ => {}
+            },
             Err(e) => {
                 error!(error = %e, "stream chunk error");
                 break;

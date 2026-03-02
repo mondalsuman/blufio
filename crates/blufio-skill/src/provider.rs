@@ -83,8 +83,8 @@ impl ConditionalProvider for SkillProvider {
 mod tests {
     use super::*;
 
-    use crate::tool::Tool;
     use crate::ToolOutput;
+    use crate::tool::Tool;
 
     /// A minimal test tool for provider tests.
     struct DummyTool {

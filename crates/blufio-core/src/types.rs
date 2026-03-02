@@ -26,9 +26,7 @@ pub enum HealthStatus {
 }
 
 /// Identifies the type of adapter in the plugin registry.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Display, EnumString, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display, EnumString, Serialize, Deserialize)]
 pub enum AdapterType {
     Channel,
     Provider,

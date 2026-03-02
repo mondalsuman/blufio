@@ -255,10 +255,7 @@ mod tests {
         tracker.record_cost(8.5);
         let util = tracker.budget_utilization();
         // Daily: 8.5/10 = 0.85, Monthly: 8.5/100 = 0.085 -> max = 0.85
-        assert!(
-            (util - 0.85).abs() < 1e-10,
-            "expected 0.85, got {util}"
-        );
+        assert!((util - 0.85).abs() < 1e-10, "expected 0.85, got {util}");
     }
 
     #[test]
@@ -268,10 +265,7 @@ mod tests {
         tracker.record_cost(25.0);
         let util = tracker.budget_utilization();
         // No daily cap -> 0.0, Monthly: 25/50 = 0.5 -> max = 0.5
-        assert!(
-            (util - 0.5).abs() < 1e-10,
-            "expected 0.5, got {util}"
-        );
+        assert!((util - 0.5).abs() < 1e-10, "expected 0.5, got {util}");
     }
 
     #[test]
@@ -280,10 +274,7 @@ mod tests {
         let mut tracker = BudgetTracker::new(&config);
         tracker.record_cost(999_999.0);
         let util = tracker.budget_utilization();
-        assert!(
-            util.abs() < 1e-10,
-            "expected 0.0 with no caps, got {util}"
-        );
+        assert!(util.abs() < 1e-10, "expected 0.0 with no caps, got {util}");
     }
 
     #[test]
@@ -293,18 +284,13 @@ mod tests {
         tracker.record_cost(12.0);
         let util = tracker.budget_utilization();
         // 12/10 = 1.2 (over 100%)
-        assert!(
-            (util - 1.2).abs() < 1e-10,
-            "expected 1.2, got {util}"
-        );
+        assert!((util - 1.2).abs() < 1e-10, "expected 1.2, got {util}");
     }
 
     #[tokio::test]
     async fn from_ledger_initializes_totals() {
         // Create in-memory DB with cost_ledger table
-        let conn = tokio_rusqlite::Connection::open_in_memory()
-            .await
-            .unwrap();
+        let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
         conn.call(|conn| -> Result<(), rusqlite::Error> {
             conn.execute_batch(
                 "CREATE TABLE cost_ledger (

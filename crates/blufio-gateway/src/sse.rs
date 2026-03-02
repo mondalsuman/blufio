@@ -68,9 +68,9 @@ pub async fn stream_messages(
 
     let events: Vec<Result<Event, std::convert::Infallible>> = if send_result.is_err() {
         // Channel closed, return error event.
-        vec![Ok(Event::default()
-            .event("error")
-            .data(r#"{"error": "agent loop not accepting messages"}"#.to_string()))]
+        vec![Ok(Event::default().event("error").data(
+            r#"{"error": "agent loop not accepting messages"}"#,
+        ))]
     } else {
         // Wait for response.
         match tokio::time::timeout(std::time::Duration::from_secs(120), rx).await {
@@ -84,9 +84,7 @@ pub async fn stream_messages(
                 });
 
                 vec![
-                    Ok(Event::default()
-                        .event("text_delta")
-                        .data(delta.to_string())),
+                    Ok(Event::default().event("text_delta").data(delta.to_string())),
                     Ok(Event::default()
                         .event("message_stop")
                         .data(stop.to_string())),
@@ -95,13 +93,13 @@ pub async fn stream_messages(
             Ok(Err(_)) => {
                 vec![Ok(Event::default()
                     .event("error")
-                    .data(r#"{"error": "response channel closed"}"#.to_string()))]
+                    .data(r#"{"error": "response channel closed"}"#))]
             }
             Err(_) => {
                 state.response_map.remove(&request_id);
                 vec![Ok(Event::default()
                     .event("error")
-                    .data(r#"{"error": "response timeout (120s)"}"#.to_string()))]
+                    .data(r#"{"error": "response timeout (120s)"}"#))]
             }
         }
     };

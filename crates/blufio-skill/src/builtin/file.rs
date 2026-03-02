@@ -51,12 +51,10 @@ impl Tool for FileTool {
     }
 
     async fn invoke(&self, input: serde_json::Value) -> Result<ToolOutput, BlufioError> {
-        let action = input["action"]
-            .as_str()
-            .ok_or_else(|| BlufioError::Skill {
-                message: "missing required 'action' parameter".to_string(),
-                source: None,
-            })?;
+        let action = input["action"].as_str().ok_or_else(|| BlufioError::Skill {
+            message: "missing required 'action' parameter".to_string(),
+            source: None,
+        })?;
 
         let path = input["path"].as_str().ok_or_else(|| BlufioError::Skill {
             message: "missing required 'path' parameter".to_string(),
@@ -91,14 +89,13 @@ impl Tool for FileTool {
                 })
             }
             "write" => {
-                let content =
-                    input["content"]
-                        .as_str()
-                        .ok_or_else(|| BlufioError::Skill {
-                            message: "missing required 'content' parameter for write action"
-                                .to_string(),
-                            source: None,
-                        })?;
+                let content = input["content"]
+                    .as_str()
+                    .ok_or_else(|| BlufioError::Skill {
+                        message: "missing required 'content' parameter for write action"
+                            .to_string(),
+                        source: None,
+                    })?;
 
                 tokio::fs::write(path, content)
                     .await
@@ -113,9 +110,7 @@ impl Tool for FileTool {
                 })
             }
             other => Ok(ToolOutput {
-                content: format!(
-                    "Unknown action '{other}'. Supported actions: 'read', 'write'."
-                ),
+                content: format!("Unknown action '{other}'. Supported actions: 'read', 'write'."),
                 is_error: true,
             }),
         }

@@ -18,14 +18,12 @@ use std::sync::Arc;
 
 use blufio_config::model::{CostConfig, HeartbeatConfig};
 use blufio_core::error::BlufioError;
-use blufio_core::types::{
-    ContentBlock, ProviderMessage, ProviderRequest, TokenUsage,
-};
+use blufio_core::types::{ContentBlock, ProviderMessage, ProviderRequest, TokenUsage};
 use blufio_core::{ProviderAdapter, StorageAdapter};
+use blufio_cost::CostLedger;
 use blufio_cost::budget::BudgetTracker;
 use blufio_cost::ledger::{CostRecord, FeatureType};
 use blufio_cost::pricing;
-use blufio_cost::CostLedger;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
@@ -161,8 +159,7 @@ impl HeartbeatRunner {
 
         // 6. Check if response is actionable
         let content = response.content.trim().to_string();
-        let has_content = !content.is_empty()
-            && !content.starts_with(NO_HEARTBEAT_SENTINEL);
+        let has_content = !content.is_empty() && !content.starts_with(NO_HEARTBEAT_SENTINEL);
 
         if has_content {
             // Store as pending for on_next_message delivery
@@ -298,7 +295,10 @@ mod tests {
     fn state_hash_changes_with_message_count() {
         let hash1 = HeartbeatRunner::compute_state_hash(0, "2026-03-01");
         let hash2 = HeartbeatRunner::compute_state_hash(5, "2026-03-01");
-        assert_ne!(hash1, hash2, "hash should change when message count changes");
+        assert_ne!(
+            hash1, hash2,
+            "hash should change when message count changes"
+        );
     }
 
     #[test]
@@ -319,7 +319,10 @@ mod tests {
     fn no_heartbeat_sentinel_detection() {
         let content = "NO_HEARTBEAT";
         let has_content = !content.is_empty() && !content.starts_with(NO_HEARTBEAT_SENTINEL);
-        assert!(!has_content, "NO_HEARTBEAT should be detected as no content");
+        assert!(
+            !has_content,
+            "NO_HEARTBEAT should be detected as no content"
+        );
     }
 
     #[test]
@@ -371,7 +374,10 @@ mod tests {
 
         // Record costs up to budget
         tracker.record_cost(10.0);
-        assert!(tracker.check_budget().is_err(), "should fail at budget limit");
+        assert!(
+            tracker.check_budget().is_err(),
+            "should fail at budget limit"
+        );
     }
 
     #[test]

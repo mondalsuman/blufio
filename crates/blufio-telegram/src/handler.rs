@@ -91,10 +91,7 @@ pub async fn extract_content(
     }
 
     // Unsupported message type
-    debug!(
-        msg_id = msg.id.0,
-        "ignoring unsupported message type"
-    );
+    debug!(msg_id = msg.id.0, "ignoring unsupported message type");
     Ok(None)
 }
 

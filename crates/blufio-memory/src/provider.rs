@@ -75,10 +75,7 @@ impl ConditionalProvider for MemoryProvider {
     /// Returns a single ProviderMessage with role "user" containing
     /// a "## Relevant Memories" header and bullet-pointed facts.
     /// Returns empty Vec when no memories exceed the threshold.
-    async fn provide_context(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<ProviderMessage>, BlufioError> {
+    async fn provide_context(&self, session_id: &str) -> Result<Vec<ProviderMessage>, BlufioError> {
         let query = self.get_current_query(session_id).await;
         if query.is_empty() {
             return Ok(vec![]);
@@ -101,7 +98,6 @@ impl ConditionalProvider for MemoryProvider {
         }])
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -163,14 +159,13 @@ mod tests {
     #[tokio::test]
     async fn query_lifecycle() {
         // Test the query set/get/clear lifecycle without a real retriever
-        let queries: Arc<RwLock<HashMap<String, String>>> =
-            Arc::new(RwLock::new(HashMap::new()));
+        let queries: Arc<RwLock<HashMap<String, String>>> = Arc::new(RwLock::new(HashMap::new()));
 
         // Set
-        queries
-            .write()
-            .await
-            .insert("session-1".to_string(), "What is my dog's name?".to_string());
+        queries.write().await.insert(
+            "session-1".to_string(),
+            "What is my dog's name?".to_string(),
+        );
 
         // Get
         let query = queries
@@ -194,8 +189,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_query_returns_empty() {
-        let queries: Arc<RwLock<HashMap<String, String>>> =
-            Arc::new(RwLock::new(HashMap::new()));
+        let queries: Arc<RwLock<HashMap<String, String>>> = Arc::new(RwLock::new(HashMap::new()));
 
         let query = queries
             .read()

@@ -52,11 +52,7 @@ fn format_uptime(secs: u64) -> String {
 /// Connects to the health endpoint on the gateway and displays agent state.
 /// If `--json` is passed, outputs structured JSON for scripting.
 /// If `--plain` is passed or stdout is not a TTY, disables colors.
-pub async fn run_status(
-    config: &BlufioConfig,
-    json: bool,
-    plain: bool,
-) -> Result<(), BlufioError> {
+pub async fn run_status(config: &BlufioConfig, json: bool, plain: bool) -> Result<(), BlufioError> {
     let host = &config.gateway.host;
     let port = config.daemon.health_port;
     let url = format!("http://{host}:{port}/health");
@@ -87,8 +83,7 @@ pub async fn run_status(
                 };
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&status_resp)
-                        .unwrap_or_else(|_| "{}".to_string())
+                    serde_json::to_string_pretty(&status_resp).unwrap_or_else(|_| "{}".to_string())
                 );
             } else {
                 let use_color = !plain && std::io::stdout().is_terminal();
@@ -107,8 +102,7 @@ pub async fn run_status(
                 };
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&status_resp)
-                        .unwrap_or_else(|_| "{}".to_string())
+                    serde_json::to_string_pretty(&status_resp).unwrap_or_else(|_| "{}".to_string())
                 );
             } else {
                 let use_color = !plain && std::io::stdout().is_terminal();

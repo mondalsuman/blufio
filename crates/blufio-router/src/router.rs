@@ -92,11 +92,8 @@ impl ModelRouter {
         let intended = self.model_for_tier(classification.tier);
 
         // 4. Apply budget downgrade
-        let (actual, downgraded) = self.apply_budget_downgrade(
-            classification.tier,
-            &intended,
-            budget_utilization,
-        );
+        let (actual, downgraded) =
+            self.apply_budget_downgrade(classification.tier, &intended, budget_utilization);
 
         let max_tokens = self.max_tokens_for_model(&actual);
 
@@ -324,8 +321,17 @@ mod tests {
 
     #[test]
     fn short_model_name_extraction() {
-        assert_eq!(ModelRouter::short_model_name("claude-opus-4-20250514"), "Opus");
-        assert_eq!(ModelRouter::short_model_name("claude-haiku-4-5-20250901"), "Haiku");
-        assert_eq!(ModelRouter::short_model_name("claude-sonnet-4-20250514"), "Sonnet");
+        assert_eq!(
+            ModelRouter::short_model_name("claude-opus-4-20250514"),
+            "Opus"
+        );
+        assert_eq!(
+            ModelRouter::short_model_name("claude-haiku-4-5-20250901"),
+            "Haiku"
+        );
+        assert_eq!(
+            ModelRouter::short_model_name("claude-sonnet-4-20250514"),
+            "Sonnet"
+        );
     }
 }

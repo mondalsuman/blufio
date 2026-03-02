@@ -82,11 +82,7 @@ impl DeviceKeypair {
     ///
     /// Returns `Ok(())` if the signature is valid, or `BlufioError::Security`
     /// if verification fails.
-    pub fn verify_strict(
-        &self,
-        message: &[u8],
-        signature: &Signature,
-    ) -> Result<(), BlufioError> {
+    pub fn verify_strict(&self, message: &[u8], signature: &Signature) -> Result<(), BlufioError> {
         self.verifying_key
             .verify_strict(message, signature)
             .map_err(|e| {
@@ -98,16 +94,10 @@ impl DeviceKeypair {
     ///
     /// Less strict than `verify_strict` -- permits weak public keys.
     /// Prefer `verify_strict` for inter-agent message verification.
-    pub fn verify(
-        &self,
-        message: &[u8],
-        signature: &Signature,
-    ) -> Result<(), BlufioError> {
-        self.verifying_key
-            .verify(message, signature)
-            .map_err(|e| {
-                BlufioError::Security(format!("Ed25519 signature verification failed: {e}"))
-            })
+    pub fn verify(&self, message: &[u8], signature: &Signature) -> Result<(), BlufioError> {
+        self.verifying_key.verify(message, signature).map_err(|e| {
+            BlufioError::Security(format!("Ed25519 signature verification failed: {e}"))
+        })
     }
 }
 

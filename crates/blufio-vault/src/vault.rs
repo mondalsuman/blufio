@@ -158,9 +158,8 @@ impl Vault {
             .map_err(map_tr_err)?;
 
         // Parse KDF params.
-        let kdf_params: serde_json::Value =
-            serde_json::from_slice(&meta.kdf_params_bytes)
-                .map_err(|e| BlufioError::Vault(format!("corrupted KDF params: {e}")))?;
+        let kdf_params: serde_json::Value = serde_json::from_slice(&meta.kdf_params_bytes)
+            .map_err(|e| BlufioError::Vault(format!("corrupted KDF params: {e}")))?;
 
         let memory_cost = kdf_params["memory_cost"]
             .as_u64()
@@ -235,27 +234,25 @@ impl Vault {
     }
 
     /// Retrieve and decrypt a secret from the vault.
-    pub async fn retrieve_secret(
-        &self,
-        name: &str,
-    ) -> Result<Option<SecretString>, BlufioError> {
+    pub async fn retrieve_secret(&self, name: &str) -> Result<Option<SecretString>, BlufioError> {
         let name = name.to_string();
         type CipherNonce = (Vec<u8>, Vec<u8>);
         let entry = self
             .conn
-            .call(move |conn| -> Result<Option<CipherNonce>, rusqlite::Error> {
-                let mut stmt = conn.prepare(
-                    "SELECT ciphertext, nonce FROM vault_entries WHERE name = ?1",
-                )?;
-                let result = stmt.query_row(params![name], |row| {
-                    Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?))
-                });
-                match result {
-                    Ok(entry) => Ok(Some(entry)),
-                    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-                    Err(e) => Err(e),
-                }
-            })
+            .call(
+                move |conn| -> Result<Option<CipherNonce>, rusqlite::Error> {
+                    let mut stmt = conn
+                        .prepare("SELECT ciphertext, nonce FROM vault_entries WHERE name = ?1")?;
+                    let result = stmt.query_row(params![name], |row| {
+                        Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?))
+                    });
+                    match result {
+                        Ok(entry) => Ok(Some(entry)),
+                        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                        Err(e) => Err(e),
+                    }
+                },
+            )
             .await
             .map_err(map_tr_err)?;
 
@@ -265,8 +262,9 @@ impl Vault {
                     BlufioError::Vault("corrupted nonce in vault entry".to_string())
                 })?;
                 let plaintext = crypto::open(&self.master_key, &nonce, &ciphertext)?;
-                let value = String::from_utf8(plaintext)
-                    .map_err(|e| BlufioError::Vault(format!("decrypted value is not valid UTF-8: {e}")))?;
+                let value = String::from_utf8(plaintext).map_err(|e| {
+                    BlufioError::Vault(format!("decrypted value is not valid UTF-8: {e}"))
+                })?;
                 Ok(Some(SecretString::from(value)))
             }
             None => Ok(None),
@@ -521,7 +519,10 @@ mod tests {
             .await
             .unwrap();
         vault
-            .store_secret("telegram.bot_token", "123456789:ABCdefGHIjklMNOpqrSTUVwxyz12345")
+            .store_secret(
+                "telegram.bot_token",
+                "123456789:ABCdefGHIjklMNOpqrSTUVwxyz12345",
+            )
             .await
             .unwrap();
 

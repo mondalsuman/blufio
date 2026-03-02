@@ -89,7 +89,6 @@ pub struct BlufioConfig {
     pub delegation: DelegationConfig,
 }
 
-
 /// Agent identity and behavior configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -152,7 +151,6 @@ pub struct TelegramConfig {
     #[serde(default)]
     pub allowed_users: Vec<String>,
 }
-
 
 /// Anthropic API configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]

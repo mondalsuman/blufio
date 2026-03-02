@@ -11,8 +11,8 @@
 use std::path::Path;
 
 use figment::{
-    providers::{Env, Format, Serialized, Toml},
     Figment,
+    providers::{Env, Format, Serialized, Toml},
 };
 
 use crate::model::BlufioConfig;

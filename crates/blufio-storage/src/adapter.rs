@@ -9,9 +9,7 @@ use tracing::debug;
 
 use blufio_config::model::StorageConfig;
 use blufio_core::types::{Message, QueueEntry, Session};
-use blufio_core::{
-    AdapterType, BlufioError, HealthStatus, PluginAdapter, StorageAdapter,
-};
+use blufio_core::{AdapterType, BlufioError, HealthStatus, PluginAdapter, StorageAdapter};
 
 use crate::database::Database;
 use crate::queries;
@@ -92,11 +90,9 @@ impl StorageAdapter for SqliteStorage {
     async fn initialize(&self) -> Result<(), BlufioError> {
         let path = self.config.database_path.clone();
         let db = Database::open(&path).await?;
-        self.db
-            .set(db)
-            .map_err(|_| BlufioError::Storage {
-                source: "storage already initialized".into(),
-            })?;
+        self.db.set(db).map_err(|_| BlufioError::Storage {
+            source: "storage already initialized".into(),
+        })?;
         debug!(path = %self.config.database_path, "SQLite storage initialized");
         Ok(())
     }
@@ -228,7 +224,10 @@ mod tests {
         let storage = SqliteStorage::new(make_config(db_path.to_str().unwrap()));
 
         let result = storage.health_check().await;
-        assert!(result.is_err(), "health_check should fail before initialize");
+        assert!(
+            result.is_err(),
+            "health_check should fail before initialize"
+        );
     }
 
     #[tokio::test]
@@ -290,7 +289,11 @@ mod tests {
             .update_session_state("sess-adapter-1", "closed")
             .await
             .unwrap();
-        let updated = storage.get_session("sess-adapter-1").await.unwrap().unwrap();
+        let updated = storage
+            .get_session("sess-adapter-1")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.state, "closed");
 
         // List sessions.

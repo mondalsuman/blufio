@@ -15,10 +15,10 @@ pub use message::{AgentMessage, AgentMessageType, SignedAgentMessage};
 
 use async_trait::async_trait;
 
+use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::auth::AuthAdapter;
 use blufio_core::types::{AdapterType, AuthIdentity, AuthToken, HealthStatus};
-use blufio_core::BlufioError;
 
 /// Keypair-based authentication adapter.
 ///
@@ -71,9 +71,7 @@ impl AuthAdapter for KeypairAuthAdapter {
                 label: Some("device-keypair".to_string()),
             })
         } else {
-            Err(BlufioError::Security(
-                "invalid bearer token".to_string(),
-            ))
+            Err(BlufioError::Security("invalid bearer token".to_string()))
         }
     }
 }
@@ -88,12 +86,7 @@ mod tests {
         let token = kp.public_hex();
         let adapter = KeypairAuthAdapter::new(kp);
 
-        let identity = adapter
-            .authenticate(AuthToken {
-                token,
-            })
-            .await
-            .unwrap();
+        let identity = adapter.authenticate(AuthToken { token }).await.unwrap();
 
         assert!(!identity.id.is_empty());
         assert_eq!(identity.label.as_deref(), Some("device-keypair"));

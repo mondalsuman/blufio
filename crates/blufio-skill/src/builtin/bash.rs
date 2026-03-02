@@ -61,9 +61,7 @@ impl Tool for BashTool {
         let is_error = !output.status.success();
         let content = if is_error {
             let exit_code = output.status.code().unwrap_or(-1);
-            format!(
-                "Exit code: {exit_code}\nstdout:\n{stdout}\nstderr:\n{stderr}"
-            )
+            format!("Exit code: {exit_code}\nstdout:\n{stdout}\nstderr:\n{stderr}")
         } else if stderr.is_empty() {
             stdout.to_string()
         } else {

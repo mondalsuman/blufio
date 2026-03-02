@@ -6,7 +6,7 @@
 use blufio_core::error::BlufioError;
 use tokio_rusqlite::Connection;
 
-use crate::types::{blob_to_vec, vec_to_blob, Memory, MemorySource, MemoryStatus};
+use crate::types::{Memory, MemorySource, MemoryStatus, blob_to_vec, vec_to_blob};
 
 /// Helper to convert tokio_rusqlite errors into BlufioError::Storage.
 fn storage_err(e: tokio_rusqlite::Error) -> BlufioError {
@@ -98,9 +98,8 @@ impl MemoryStore {
     pub async fn get_active_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>, BlufioError> {
         self.conn
             .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT id, embedding FROM memories WHERE status = 'active'",
-                )?;
+                let mut stmt =
+                    conn.prepare("SELECT id, embedding FROM memories WHERE status = 'active'")?;
                 let results = stmt
                     .query_map([], |row| {
                         let id: String = row.get(0)?;
@@ -174,10 +173,7 @@ impl MemoryStore {
     }
 
     /// Get memories by IDs (batch retrieval after hybrid search).
-    pub async fn get_memories_by_ids(
-        &self,
-        ids: &[String],
-    ) -> Result<Vec<Memory>, BlufioError> {
+    pub async fn get_memories_by_ids(&self, ids: &[String]) -> Result<Vec<Memory>, BlufioError> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
@@ -453,9 +449,18 @@ mod tests {
         let conn = setup_test_db().await;
         let store = MemoryStore::new(conn);
 
-        store.save(&make_test_memory("mem-1", "Fact 1")).await.unwrap();
-        store.save(&make_test_memory("mem-2", "Fact 2")).await.unwrap();
-        store.save(&make_test_memory("mem-3", "Fact 3")).await.unwrap();
+        store
+            .save(&make_test_memory("mem-1", "Fact 1"))
+            .await
+            .unwrap();
+        store
+            .save(&make_test_memory("mem-2", "Fact 2"))
+            .await
+            .unwrap();
+        store
+            .save(&make_test_memory("mem-3", "Fact 3"))
+            .await
+            .unwrap();
 
         let ids = vec!["mem-1".to_string(), "mem-3".to_string()];
         let memories = store.get_memories_by_ids(&ids).await.unwrap();

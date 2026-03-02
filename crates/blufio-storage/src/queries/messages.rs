@@ -142,9 +142,7 @@ mod tests {
         insert_message(&db, &m2).await.unwrap();
         insert_message(&db, &m3).await.unwrap();
 
-        let messages = get_messages_for_session(&db, "sess-1", None)
-            .await
-            .unwrap();
+        let messages = get_messages_for_session(&db, "sess-1", None).await.unwrap();
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].id, "m1");
         assert_eq!(messages[1].id, "m2");
@@ -182,9 +180,7 @@ mod tests {
     #[tokio::test]
     async fn get_messages_empty_session() {
         let (db, _dir) = setup_db_with_session().await;
-        let messages = get_messages_for_session(&db, "sess-1", None)
-            .await
-            .unwrap();
+        let messages = get_messages_for_session(&db, "sess-1", None).await.unwrap();
         assert!(messages.is_empty());
         db.close().await.unwrap();
     }

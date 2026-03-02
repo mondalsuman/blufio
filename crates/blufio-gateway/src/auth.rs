@@ -64,11 +64,10 @@ pub async fn auth_middleware(
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "));
 
-        if let Some(token) = auth_header {
-            if token == expected_token {
+        if let Some(token) = auth_header
+            && token == expected_token {
                 return Ok(next.run(request).await);
             }
-        }
     }
 
     // Priority 2: Check keypair signature (slow path — crypto verification).
@@ -89,13 +88,11 @@ pub async fn auth_middleware(
                 let age = chrono::Utc::now().signed_duration_since(request_time);
                 if age.num_seconds().abs() <= 60 {
                     // Verify signature over timestamp bytes.
-                    if let Ok(sig_bytes) = hex::decode(sig_hex) {
-                        if sig_bytes.len() == 64 {
-                            let sig_array: [u8; 64] = sig_bytes
-                                .try_into()
-                                .expect("length checked above");
-                            let signature =
-                                ed25519_dalek::Signature::from_bytes(&sig_array);
+                    if let Ok(sig_bytes) = hex::decode(sig_hex)
+                        && sig_bytes.len() == 64 {
+                            let sig_array: [u8; 64] =
+                                sig_bytes.try_into().expect("length checked above");
+                            let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
                             use ed25519_dalek::Verifier;
                             if public_key
                                 .verify(timestamp_str.as_bytes(), &signature)
@@ -104,7 +101,6 @@ pub async fn auth_middleware(
                                 return Ok(next.run(request).await);
                             }
                         }
-                    }
                 } else {
                     tracing::debug!(
                         age_secs = age.num_seconds(),

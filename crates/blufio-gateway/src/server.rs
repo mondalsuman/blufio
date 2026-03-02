@@ -8,17 +8,16 @@
 use std::sync::Arc;
 
 use axum::{
-    middleware as axum_middleware,
+    Router, middleware as axum_middleware,
     routing::{get, post},
-    Router,
 };
-use blufio_core::types::InboundMessage;
 use blufio_core::BlufioError;
+use blufio_core::types::InboundMessage;
 use dashmap::DashMap;
 use tokio::sync::{mpsc, oneshot};
 use tower_http::cors::CorsLayer;
 
-use crate::auth::{auth_middleware, AuthConfig};
+use crate::auth::{AuthConfig, auth_middleware};
 use crate::handlers;
 use crate::ws;
 
@@ -64,10 +63,7 @@ pub struct ServerConfig {
 /// - GET /v1/sessions (with auth)
 /// - GET /v1/health (with auth)
 /// - GET /ws (auth via query params, not middleware)
-pub async fn start_server(
-    config: &ServerConfig,
-    state: GatewayState,
-) -> Result<(), BlufioError> {
+pub async fn start_server(config: &ServerConfig, state: GatewayState) -> Result<(), BlufioError> {
     let auth_state = state.auth.clone();
 
     // Unauthenticated public routes (health + metrics for systemd and Prometheus).
@@ -99,12 +95,13 @@ pub async fn start_server(
         .layer(CorsLayer::permissive());
 
     let addr = format!("{}:{}", config.host, config.port);
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .map_err(|e| BlufioError::Channel {
-            message: format!("failed to bind gateway to {addr}: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+    let listener =
+        tokio::net::TcpListener::bind(&addr)
+            .await
+            .map_err(|e| BlufioError::Channel {
+                message: format!("failed to bind gateway to {addr}: {e}"),
+                source: Some(Box::new(e)),
+            })?;
 
     tracing::info!("Gateway server listening on {addr}");
 

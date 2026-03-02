@@ -121,11 +121,7 @@ pub async fn list_sessions(
 }
 
 /// Update a session's state and updated_at timestamp.
-pub async fn update_session_state(
-    db: &Database,
-    id: &str,
-    state: &str,
-) -> Result<(), BlufioError> {
+pub async fn update_session_state(db: &Database, id: &str, state: &str) -> Result<(), BlufioError> {
     let id = id.to_string();
     let state = state.to_string();
     db.connection()

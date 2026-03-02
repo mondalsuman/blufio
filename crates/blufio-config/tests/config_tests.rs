@@ -3,7 +3,7 @@
 
 //! Integration tests for the Blufio configuration system.
 
-use blufio_config::diagnostic::{suggest_key, ConfigError};
+use blufio_config::diagnostic::{ConfigError, suggest_key};
 use blufio_config::model::BlufioConfig;
 use blufio_config::{load_and_validate_str, load_config_from_str};
 
@@ -125,8 +125,8 @@ fn missing_optional_sections_use_defaults() {
 fn env_var_overrides_agent_name() {
     // We test this via the Figment builder directly to control env vars in test
     use figment::{
-        providers::{Format, Serialized, Toml},
         Figment,
+        providers::{Format, Serialized, Toml},
     };
 
     let toml_content = r#"
@@ -149,7 +149,7 @@ name = "from-toml"
 /// (NOT telegram.bot.token -- this is the critical Pitfall 5 from research).
 #[test]
 fn env_var_overrides_telegram_bot_token() {
-    use figment::{providers::Serialized, Figment};
+    use figment::{Figment, providers::Serialized};
 
     let config: BlufioConfig = Figment::new()
         .merge(Serialized::defaults(BlufioConfig::default()))
@@ -187,8 +187,8 @@ fn serialized_defaults_are_sensible() {
 #[test]
 fn missing_config_files_silently_skipped() {
     use figment::{
-        providers::{Format, Serialized, Toml},
         Figment,
+        providers::{Format, Serialized, Toml},
     };
 
     let config: BlufioConfig = Figment::new()
@@ -383,10 +383,7 @@ fn config_error_renders_with_miette() {
     handler
         .render_report(&mut buf, &error)
         .expect("should render without error");
-    assert!(
-        !buf.is_empty(),
-        "rendered report should not be empty"
-    );
+    assert!(!buf.is_empty(), "rendered report should not be empty");
     assert!(
         buf.contains("naem"),
         "rendered report should mention the key"
@@ -424,5 +421,8 @@ daily_budget_usd = -5.0
     let has_validation_error = errors.iter().any(|e| {
         matches!(e, ConfigError::Validation { message } if message.contains("daily_budget_usd"))
     });
-    assert!(has_validation_error, "should have validation error for negative budget");
+    assert!(
+        has_validation_error,
+        "should have validation error for negative budget"
+    );
 }

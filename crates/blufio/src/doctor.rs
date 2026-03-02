@@ -40,11 +40,7 @@ pub struct CheckResult {
 ///
 /// Runs quick diagnostic checks. With `--deep`, runs additional intensive checks.
 /// With `--plain`, disables colored output.
-pub async fn run_doctor(
-    config: &BlufioConfig,
-    deep: bool,
-    plain: bool,
-) -> Result<(), BlufioError> {
+pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Result<(), BlufioError> {
     let use_color = !plain && std::io::stdout().is_terminal();
     let mut results = Vec::new();
 
@@ -217,8 +213,8 @@ async fn check_database(db_path: &str) -> CheckResult {
 async fn check_llm_connectivity(config: &BlufioConfig) -> CheckResult {
     let start = Instant::now();
 
-    let has_api_key = config.anthropic.api_key.is_some()
-        || std::env::var("ANTHROPIC_API_KEY").is_ok();
+    let has_api_key =
+        config.anthropic.api_key.is_some() || std::env::var("ANTHROPIC_API_KEY").is_ok();
 
     if !has_api_key {
         return CheckResult {
@@ -391,9 +387,7 @@ async fn check_disk_space(db_path: &str) -> CheckResult {
             // On most platforms we can't easily get free disk space from std.
             // Report the DB file size as a heuristic.
             if path.exists() {
-                let size = std::fs::metadata(path)
-                    .map(|m| m.len())
-                    .unwrap_or(0);
+                let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
                 let size_mb = size as f64 / (1024.0 * 1024.0);
                 CheckResult {
                     name: "Disk space".to_string(),
@@ -500,8 +494,6 @@ mod tests {
     async fn check_memory_baseline_passes() {
         let result = check_memory_baseline().await;
         // On non-MSVC it should pass; on MSVC it warns.
-        assert!(
-            result.status == CheckStatus::Pass || result.status == CheckStatus::Warn
-        );
+        assert!(result.status == CheckStatus::Pass || result.status == CheckStatus::Warn);
     }
 }

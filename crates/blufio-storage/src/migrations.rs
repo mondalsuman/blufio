@@ -17,10 +17,10 @@ mod embedded {
 ///
 /// Refinery tracks applied migrations in its own `refinery_schema_history` table.
 pub fn run_migrations(conn: &mut rusqlite::Connection) -> Result<(), BlufioError> {
-    embedded::migrations::runner().run(conn).map_err(|e| {
-        BlufioError::Storage {
+    embedded::migrations::runner()
+        .run(conn)
+        .map_err(|e| BlufioError::Storage {
             source: Box::new(e),
-        }
-    })?;
+        })?;
     Ok(())
 }

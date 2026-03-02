@@ -86,7 +86,9 @@ impl Tool for HttpTool {
         let scheme = parsed_url.scheme();
         if scheme != "http" && scheme != "https" {
             return Ok(ToolOutput {
-                content: format!("URL scheme '{scheme}' not allowed. Only http and https are supported."),
+                content: format!(
+                    "URL scheme '{scheme}' not allowed. Only http and https are supported."
+                ),
                 is_error: true,
             });
         }
@@ -123,10 +125,13 @@ impl Tool for HttpTool {
             request_builder = request_builder.body(body.to_string());
         }
 
-        let response = request_builder.send().await.map_err(|e| BlufioError::Skill {
-            message: format!("HTTP request failed: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|e| BlufioError::Skill {
+                message: format!("HTTP request failed: {e}"),
+                source: Some(Box::new(e)),
+            })?;
 
         let status = response.status();
         let body = response.text().await.map_err(|e| BlufioError::Skill {

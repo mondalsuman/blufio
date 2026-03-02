@@ -155,10 +155,7 @@ async fn main() {
     // Load and validate configuration at startup
     let config = match blufio_config::load_and_validate() {
         Ok(config) => {
-            eprintln!(
-                "blufio: config loaded (agent.name={})",
-                config.agent.name
-            );
+            eprintln!("blufio: config loaded (agent.name={})", config.agent.name);
             config
         }
         Err(errors) => {
@@ -223,17 +220,15 @@ async fn main() {
                     std::process::exit(1);
                 }
             }
-            Some(ConfigCommands::Validate) => {
-                match blufio_config::load_and_validate() {
-                    Ok(_) => {
-                        println!("Configuration is valid.");
-                    }
-                    Err(errors) => {
-                        blufio_config::render_errors(&errors);
-                        std::process::exit(1);
-                    }
+            Some(ConfigCommands::Validate) => match blufio_config::load_and_validate() {
+                Ok(_) => {
+                    println!("Configuration is valid.");
                 }
-            }
+                Err(errors) => {
+                    blufio_config::render_errors(&errors);
+                    std::process::exit(1);
+                }
+            },
             None => {
                 println!("blufio config: use --help for available config commands");
             }
@@ -381,7 +376,10 @@ async fn handle_skill_command(
             if skills.is_empty() {
                 println!("No skills installed.");
             } else {
-                println!("{:<20} {:<10} {:<12} DESCRIPTION", "NAME", "VERSION", "STATUS");
+                println!(
+                    "{:<20} {:<10} {:<12} DESCRIPTION",
+                    "NAME", "VERSION", "STATUS"
+                );
                 println!("{}", "-".repeat(70));
                 for skill in &skills {
                     println!(
@@ -392,7 +390,10 @@ async fn handle_skill_command(
             }
             Ok(())
         }
-        SkillCommands::Install { wasm_path, manifest_path } => {
+        SkillCommands::Install {
+            wasm_path,
+            manifest_path,
+        } => {
             // Read and parse the manifest.
             let manifest_content = std::fs::read_to_string(&manifest_path).map_err(|e| {
                 blufio_core::BlufioError::Skill {
@@ -411,8 +412,8 @@ async fn handle_skill_command(
             }
 
             // Serialize capabilities to JSON for storage.
-            let capabilities_json = serde_json::to_string(&manifest.capabilities)
-                .unwrap_or_else(|_| "{}".to_string());
+            let capabilities_json =
+                serde_json::to_string(&manifest.capabilities).unwrap_or_else(|_| "{}".to_string());
 
             // Open DB and store the skill.
             let conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
@@ -434,7 +435,10 @@ async fn handle_skill_command(
                 )
                 .await?;
 
-            eprintln!("Skill '{}' v{} installed successfully.", manifest.name, manifest.version);
+            eprintln!(
+                "Skill '{}' v{} installed successfully.",
+                manifest.name, manifest.version
+            );
 
             // Print capabilities summary.
             if manifest.capabilities.network.is_some() {
@@ -486,9 +490,10 @@ fn handle_plugin_command(
                     Some(true) => blufio_plugin::PluginStatus::Enabled,
                     None => {
                         // Check if required config keys are present.
-                        let all_configured = manifest.config_keys.iter().all(|key| {
-                            is_config_key_present(config, key)
-                        });
+                        let all_configured = manifest
+                            .config_keys
+                            .iter()
+                            .all(|key| is_config_key_present(config, key));
                         if all_configured || manifest.config_keys.is_empty() {
                             blufio_plugin::PluginStatus::Enabled
                         } else {
@@ -500,10 +505,7 @@ fn handle_plugin_command(
                 registry.register_with_status(manifest, None, status);
             }
 
-            println!(
-                "{:<18} {:<15} {:<16} DESCRIPTION",
-                "NAME", "TYPE", "STATUS"
-            );
+            println!("{:<18} {:<15} {:<16} DESCRIPTION", "NAME", "TYPE", "STATUS");
             println!("{}", "-".repeat(75));
             for entry in registry.list_all() {
                 println!(
@@ -521,10 +523,7 @@ fn handle_plugin_command(
             if results.is_empty() {
                 println!("No plugins found matching '{query}'.");
             } else {
-                println!(
-                    "{:<18} {:<15} DESCRIPTION",
-                    "NAME", "TYPE"
-                );
+                println!("{:<18} {:<15} DESCRIPTION", "NAME", "TYPE");
                 println!("{}", "-".repeat(65));
                 for manifest in &results {
                     println!(
@@ -584,10 +583,7 @@ fn handle_plugin_command(
 /// Check if a config key is present (non-empty) in the loaded config.
 ///
 /// Supports dotted key paths like "telegram.bot_token" and "anthropic.api_key".
-fn is_config_key_present(
-    config: &blufio_config::model::BlufioConfig,
-    key: &str,
-) -> bool {
+fn is_config_key_present(config: &blufio_config::model::BlufioConfig, key: &str) -> bool {
     match key {
         "telegram.bot_token" => config.telegram.bot_token.is_some(),
         "anthropic.api_key" => config.anthropic.api_key.is_some(),
@@ -649,8 +645,7 @@ mod tests {
     #[test]
     fn binary_loads_config_defaults() {
         // Verify config loads with defaults (no config file needed)
-        let config = blufio_config::load_and_validate()
-            .expect("default config should be valid");
+        let config = blufio_config::load_and_validate().expect("default config should be valid");
         assert_eq!(config.agent.name, "blufio");
     }
 
@@ -717,10 +712,9 @@ mod tests {
         let db = open_db(&config).await.unwrap();
         let conn = db.connection().clone();
         let passphrase = secrecy::SecretString::from("test-cli-pass".to_string());
-        let vault =
-            blufio_vault::Vault::create(conn, &passphrase, &config.vault)
-                .await
-                .unwrap();
+        let vault = blufio_vault::Vault::create(conn, &passphrase, &config.vault)
+            .await
+            .unwrap();
 
         // Store a secret directly.
         vault
@@ -932,10 +926,11 @@ mod tests {
         ]);
         match cli.command {
             Some(Commands::Skill {
-                action: SkillCommands::Install {
-                    wasm_path,
-                    manifest_path,
-                },
+                action:
+                    SkillCommands::Install {
+                        wasm_path,
+                        manifest_path,
+                    },
             }) => {
                 assert_eq!(wasm_path, "path/to/skill.wasm");
                 assert_eq!(manifest_path, "path/to/skill.toml");
@@ -1135,10 +1130,9 @@ plugins = { telegram = true, prometheus = false }
         let db = open_db(&config).await.unwrap();
         let conn = db.connection().clone();
         let passphrase = secrecy::SecretString::from("test-overwrite".to_string());
-        let vault =
-            blufio_vault::Vault::create(conn, &passphrase, &config.vault)
-                .await
-                .unwrap();
+        let vault = blufio_vault::Vault::create(conn, &passphrase, &config.vault)
+            .await
+            .unwrap();
 
         // Store initial value.
         vault
@@ -1147,10 +1141,7 @@ plugins = { telegram = true, prometheus = false }
             .unwrap();
 
         // Overwrite with new value.
-        vault
-            .store_secret("my.key", "updated-value")
-            .await
-            .unwrap();
+        vault.store_secret("my.key", "updated-value").await.unwrap();
 
         // Verify the updated value.
         let retrieved = vault.retrieve_secret("my.key").await.unwrap().unwrap();
