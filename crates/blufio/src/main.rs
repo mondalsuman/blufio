@@ -14,6 +14,8 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 mod backup;
 mod doctor;
+#[cfg(feature = "mcp-server")]
+mod mcp_server;
 mod serve;
 mod shell;
 mod status;
@@ -78,6 +80,9 @@ enum Commands {
         #[command(subcommand)]
         action: PluginCommands,
     },
+    /// Start the MCP server on stdio (for Claude Desktop integration).
+    #[command(name = "mcp-server")]
+    McpServer,
 }
 
 /// Config management subcommands.
@@ -242,6 +247,20 @@ async fn main() {
         Some(Commands::Plugin { action }) => {
             if let Err(e) = handle_plugin_command(&config, action) {
                 eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::McpServer) => {
+            #[cfg(feature = "mcp-server")]
+            {
+                if let Err(e) = mcp_server::run_mcp_server(config).await {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+            #[cfg(not(feature = "mcp-server"))]
+            {
+                eprintln!("error: blufio was compiled without mcp-server feature");
                 std::process::exit(1);
             }
         }
@@ -1023,6 +1042,15 @@ mod tests {
                 action: PluginCommands::Update,
             }) => {}
             _ => panic!("expected Plugin Update command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_mcp_server() {
+        let cli = Cli::parse_from(["blufio", "mcp-server"]);
+        match cli.command {
+            Some(Commands::McpServer) => {}
+            _ => panic!("expected McpServer command"),
         }
     }
 
