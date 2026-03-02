@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-02)
-- **v1.1 MCP Integration** — Phases 15-19 (in progress)
+- **v1.1 MCP Integration** — Phases 15-20 (in progress)
 
 ## Phases
 
@@ -38,6 +38,7 @@
 - [x] **Phase 17: MCP Server HTTP + Resources** - Streamable HTTP transport, auth, resources, prompts, notifications, CORS (completed 2026-03-02)
 - [ ] **Phase 18: MCP Client** - External MCP server connections, tool discovery, security hardening, agent integration
 - [ ] **Phase 19: Integration Testing + Tech Debt** - E2E tests, cross-contamination, Prometheus metrics, connection limits, v1.0 debt
+- [ ] **Phase 20: Verify Phase 15 & 16 Completeness** - Create VERIFICATION.md for unverified phases, update REQUIREMENTS.md checkboxes, fix SUMMARY inconsistencies
 
 ## Phase Details
 
@@ -101,9 +102,21 @@
   5. `blufio doctor` reports MCP server health for all configured external servers
 **Plans**: TBD
 
+### Phase 20: Verify Phase 15 & 16 Completeness
+**Goal**: Formally verify Phase 15 and Phase 16 implementations, create missing VERIFICATION.md files, update REQUIREMENTS.md checkboxes, and fix SUMMARY frontmatter inconsistencies
+**Depends on**: Phase 17 (completed)
+**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05, FOUND-06, SRVR-01, SRVR-02, SRVR-03, SRVR-04, SRVR-05, SRVR-12, SRVR-15
+**Gap Closure:** Closes 13 partial gaps from v1.1 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. VERIFICATION.md exists for Phase 15 with pass/fail for each of Phase 15's success criteria
+  2. VERIFICATION.md exists for Phase 16 with pass/fail for each of Phase 16's success criteria
+  3. REQUIREMENTS.md checkboxes updated for all 13 requirements (FOUND-01–06, SRVR-01–05, SRVR-12, SRVR-15)
+  4. Phase 16 SUMMARY frontmatter key normalized to `requirements_completed`
+**Plans**: TBD
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order: 15 -> 15.x -> 16 -> 16.x -> 17 -> 17.x -> 18 -> 18.x -> 19
+**Execution Order:** Phases execute in numeric order: 15 -> 15.x -> 16 -> 16.x -> 17 -> 17.x -> 18 -> 18.x -> 19 -> 20
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -123,10 +136,11 @@
 | 14. Wire Cross-Phase Integration | v1.0 | 3/3 | Complete | 2026-03-02 |
 | 15. MCP Foundation | v1.1 | 4/4 | Complete | 2026-03-02 |
 | 16. MCP Server stdio | v1.1 | 3/3 | Complete | 2026-03-02 |
-| 17. MCP Server HTTP + Resources | 4/4 | Complete   | 2026-03-02 | - |
+| 17. MCP Server HTTP + Resources | 5/5 | Complete    | 2026-03-02 | - |
 | 18. MCP Client | v1.1 | 0/TBD | Not started | - |
 | 19. Integration Testing + Tech Debt | v1.1 | 0/TBD | Not started | - |
+| 20. Verify Phase 15 & 16 Completeness | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-02 (Phase 16 completed)*
+*Last updated: 2026-03-02 (gap closure Phase 20 added)*

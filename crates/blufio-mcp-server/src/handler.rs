@@ -404,6 +404,26 @@ impl ServerHandler for BlufioMcpHandler {
             ));
         }
 
+        // Extract progress_token from request meta (if present) for progress reporting.
+        let progress_token = request
+            .meta
+            .as_ref()
+            .and_then(|m| m.get("progressToken"))
+            .and_then(|v| match v {
+                serde_json::Value::String(s) => Some(s.clone()),
+                serde_json::Value::Number(n) => Some(n.to_string()),
+                _ => None,
+            });
+        let _progress_reporter = crate::notifications::ProgressReporter::new(progress_token);
+
+        if _progress_reporter.token().is_some() {
+            tracing::debug!(
+                tool = tool_name,
+                progress_token = ?_progress_reporter.token(),
+                "progress reporter created for tool invocation"
+            );
+        }
+
         // 2. Look up the tool in the registry.
         let registry = self.tool_registry.read().await;
         let tool = registry.get(tool_name).ok_or_else(|| {
@@ -1023,6 +1043,52 @@ mod tests {
         async fn fail(&self, _id: i64) -> Result<(), blufio_core::BlufioError> {
             Ok(())
         }
+    }
+
+    // ── progress_token extraction tests ──────────────────────────────
+
+    #[test]
+    fn extract_progress_token_from_meta() {
+        let mut meta = serde_json::Map::new();
+        meta.insert(
+            "progressToken".to_string(),
+            serde_json::Value::String("tok-42".to_string()),
+        );
+        let token = meta.get("progressToken").and_then(|v| match v {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Number(n) => Some(n.to_string()),
+            _ => None,
+        });
+        assert_eq!(token, Some("tok-42".to_string()));
+    }
+
+    #[test]
+    fn extract_progress_token_number_from_meta() {
+        let mut meta = serde_json::Map::new();
+        meta.insert(
+            "progressToken".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(7)),
+        );
+        let token = meta.get("progressToken").and_then(|v| match v {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Number(n) => Some(n.to_string()),
+            _ => None,
+        });
+        assert_eq!(token, Some("7".to_string()));
+    }
+
+    #[test]
+    fn extract_progress_token_missing_meta() {
+        let meta: Option<serde_json::Map<String, serde_json::Value>> = None;
+        let token = meta
+            .as_ref()
+            .and_then(|m| m.get("progressToken"))
+            .and_then(|v| match v {
+                serde_json::Value::String(s) => Some(s.clone()),
+                serde_json::Value::Number(n) => Some(n.to_string()),
+                _ => None,
+            });
+        assert_eq!(token, None);
     }
 
     // ── Helper to call call_tool without RequestContext ──────────────

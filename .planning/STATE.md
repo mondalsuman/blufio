@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: MCP Integration
-status: executing
-last_updated: "2026-03-02T19:56:00.000Z"
+status: unknown
+last_updated: "2026-03-02T21:45:10.683Z"
 progress:
-  total_phases: 5
+  total_phases: 3
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 10
+  total_plans: 12
+  completed_plans: 12
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 17 of 19 (MCP Server HTTP + Resources)
-Plan: 4 of 4 in current phase (PHASE COMPLETE)
+Plan: 5 of 5 in current phase (PHASE COMPLETE)
 Status: Phase 17 Complete
-Last activity: 2026-03-02 -- Plan 17-04 Prompts + Notifications completed
+Last activity: 2026-03-02 -- Plan 17-05 Gap Closure completed
 
 Progress: [#########################.....] 17/19 phases (v1.0 complete, v1.1 Phases 15-17 done)
 
@@ -39,8 +39,8 @@ Progress: [#########################.....] 17/19 phases (v1.0 complete, v1.1 Pha
 **v1.1:**
 - Phase 15: 4 plans completed
 - Phase 16: 3 plans completed
-- Phase 17: 4 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files; 17-03, 17min, 2 tasks, 6 files; 17-04, 15min, 2 tasks, 4 files)
-- Total plans completed: 11
+- Phase 17: 5 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files; 17-03, 17min, 2 tasks, 6 files; 17-04, 15min, 2 tasks, 4 files; 17-05, 5min, 1 task, 2 files)
+- Total plans completed: 12
 
 ## Accumulated Context
 
@@ -77,6 +77,9 @@ v1.1 decisions so far:
 - System messages use PromptMessageRole::Assistant (MCP spec has no system role)
 - tokio::sync::watch with u64 generation counter for tools-changed notification coalescing
 - ProgressReporter logs via tracing until WASM tools support progress callbacks
+- ToolsChangedSender held via Option<> with underscore prefix in serve.rs (no callers yet)
+- ProgressReporter created with underscore prefix in call_tool (BlufioTool::invoke lacks progress callback)
+- progressToken extraction handles both String and Number value types per MCP spec
 
 ### Pending Todos
 
@@ -91,5 +94,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 17-04-PLAN.md (Prompts + Notifications) -- Phase 17 complete
+Stopped at: Completed 17-05-PLAN.md (Gap Closure: notification wiring + progress reporter) -- Phase 17 fully complete
 Next action: Begin Phase 18 (MCP Client)
