@@ -28,7 +28,7 @@ Requirements for MCP Integration milestone. Each maps to roadmap phases.
 - [ ] **SRVR-08**: Memory exposed as MCP resources (blufio://memory/{id}, search template)
 - [ ] **SRVR-09**: Session history exposed as read-only MCP resources
 - [ ] **SRVR-10**: Prompt templates via prompts/list and prompts/get
-- [ ] **SRVR-11**: Tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
+- [x] **SRVR-11**: Tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
 - [ ] **SRVR-12**: Explicit MCP tool export allowlist (bash permanently excluded, default empty)
 - [ ] **SRVR-13**: notifications/tools/list_changed emitted on skill install or discovery changes
 - [ ] **SRVR-14**: Progress notifications for long-running WASM tools
@@ -119,7 +119,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRVR-08 | Phase 17 | Pending |
 | SRVR-09 | Phase 17 | Pending |
 | SRVR-10 | Phase 17 | Pending |
-| SRVR-11 | Phase 17 | Pending |
+| SRVR-11 | Phase 17 | Complete |
 | SRVR-12 | Phase 16 | Pending |
 | SRVR-13 | Phase 17 | Pending |
 | SRVR-14 | Phase 17 | Pending |

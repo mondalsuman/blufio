@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: MCP Integration
-status: ready_to_plan
-last_updated: "2026-03-02T23:00:00.000Z"
+status: executing
+last_updated: "2026-03-02T19:38:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 11
+  completed_plans: 8
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 17 of 19 (MCP Server HTTP + Resources)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-02 -- Phase 16 MCP Server stdio completed (3/3 plans)
+Plan: 2 of 4 in current phase
+Status: Executing
+Last activity: 2026-03-02 -- Plan 17-02 Tool Annotations completed
 
-Progress: [########################......] 16/19 phases (v1.0 complete, v1.1 Phases 15-16 done)
+Progress: [########################......] 16/19 phases (v1.0 complete, v1.1 Phases 15-16 done, Phase 17 in progress)
 
 ## Performance Metrics
 
@@ -39,7 +39,8 @@ Progress: [########################......] 16/19 phases (v1.0 complete, v1.1 Pha
 **v1.1:**
 - Phase 15: 4 plans completed
 - Phase 16: 3 plans completed
-- Total plans completed: 7
+- Phase 17: 1 plan completed (17-02, 15min, 2 tasks, 2 files)
+- Total plans completed: 8
 
 ## Accumulated Context
 
@@ -62,6 +63,8 @@ v1.1 decisions so far:
 - jsonschema 0.28 for input validation (not latest 0.44, matches plan spec)
 - serve_stdio() wraps rmcp in blufio-mcp-server, keeping rmcp out of public API
 - RedactingMakeWriter duplicated in mcp_server.rs (independent from serve.rs)
+- Default tool annotations: read_only=false, destructive=false, idempotent=false, open_world=true
+- All annotation hints always populated with explicit Some(bool) for MCP clients
 
 ### Pending Todos
 
@@ -76,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Phase 16 MCP Server stdio completed
-Next action: Plan Phase 17 (MCP Server HTTP + Resources)
+Stopped at: Completed 17-02-PLAN.md (Tool Annotations)
+Next action: Execute 17-03-PLAN.md
