@@ -21,16 +21,19 @@ use blufio_memory::MemoryStore;
 use blufio_skill::tool::ToolRegistry;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Content, Implementation, InitializeResult,
-    ListResourceTemplatesResult, ListResourcesResult, ListToolsResult, PaginatedRequestParams,
-    RawResource, RawResourceTemplate, ReadResourceRequestParams, ReadResourceResult,
-    ResourceContents, ResourcesCapability, ServerCapabilities, ServerInfo, ToolsCapability,
+    CallToolRequestParams, CallToolResult, Content, GetPromptRequestParams, GetPromptResult,
+    Implementation, InitializeResult, ListPromptsResult, ListResourceTemplatesResult,
+    ListResourcesResult, ListToolsResult, PaginatedRequestParams, Prompt, PromptArgument,
+    PromptMessage, PromptMessageRole, PromptsCapability, RawResource, RawResourceTemplate,
+    ReadResourceRequestParams, ReadResourceResult, ResourceContents, ResourcesCapability,
+    ServerCapabilities, ServerInfo, ToolsCapability,
 };
 use rmcp::model::AnnotateAble;
 use rmcp::service::{RequestContext, RoleServer};
 use tokio::sync::RwLock;
 
 use crate::bridge;
+use crate::prompts;
 use crate::resources;
 
 /// MCP server handler that bridges Blufio's tool system to MCP.
@@ -111,6 +114,7 @@ impl ServerHandler for BlufioMcpHandler {
             capabilities: ServerCapabilities {
                 tools: Some(ToolsCapability::default()),
                 resources: resources_capability,
+                prompts: Some(PromptsCapability::default()),
                 ..Default::default()
             },
             server_info: Implementation {
@@ -123,6 +127,80 @@ impl ServerHandler for BlufioMcpHandler {
             },
             instructions: None,
         }
+    }
+
+    async fn list_prompts(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListPromptsResult, rmcp::ErrorData> {
+        let defs = prompts::list_prompt_definitions();
+        let prompt_list = defs
+            .into_iter()
+            .map(|d| Prompt {
+                name: d.name,
+                title: None,
+                description: Some(d.description),
+                arguments: Some(
+                    d.arguments
+                        .into_iter()
+                        .map(|a| PromptArgument {
+                            name: a.name,
+                            title: None,
+                            description: Some(a.description),
+                            required: Some(a.required),
+                        })
+                        .collect(),
+                ),
+                icons: None,
+                meta: None,
+            })
+            .collect();
+
+        Ok(ListPromptsResult {
+            prompts: prompt_list,
+            next_cursor: None,
+            meta: None,
+        })
+    }
+
+    async fn get_prompt(
+        &self,
+        request: GetPromptRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<GetPromptResult, rmcp::ErrorData> {
+        // Convert JsonObject arguments to HashMap<String, String>.
+        let args: std::collections::HashMap<String, String> = request
+            .arguments
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, v)| {
+                let val = match v {
+                    serde_json::Value::String(s) => s,
+                    other => other.to_string(),
+                };
+                (k, val)
+            })
+            .collect();
+
+        let messages = prompts::get_prompt_messages(&request.name, &args)
+            .map_err(|e| rmcp::ErrorData::invalid_params(e, None))?;
+
+        let prompt_messages = messages
+            .into_iter()
+            .map(|m| {
+                let role = match m.role.as_str() {
+                    "assistant" => PromptMessageRole::Assistant,
+                    _ => PromptMessageRole::User,
+                };
+                PromptMessage::new_text(role, m.content)
+            })
+            .collect();
+
+        Ok(GetPromptResult {
+            description: None,
+            messages: prompt_messages,
+        })
     }
 
     async fn list_resources(
@@ -586,7 +664,7 @@ mod tests {
         let info = handler.get_info();
         assert!(info.capabilities.tools.is_some());
         assert!(info.capabilities.resources.is_none());
-        assert!(info.capabilities.prompts.is_none());
+        assert!(info.capabilities.prompts.is_some());
     }
 
     #[tokio::test]

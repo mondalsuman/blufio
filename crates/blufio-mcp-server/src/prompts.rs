@@ -38,17 +38,106 @@ pub struct PromptMessageDef {
 
 /// Returns the list of available prompt definitions.
 pub fn list_prompt_definitions() -> Vec<PromptDef> {
-    todo!("implement prompt definitions")
+    vec![
+        PromptDef {
+            name: "summarize-conversation".to_string(),
+            description: "Summarize a conversation session".to_string(),
+            arguments: vec![PromptArgDef {
+                name: "session_id".to_string(),
+                description: "Session ID to summarize".to_string(),
+                required: true,
+            }],
+        },
+        PromptDef {
+            name: "search-memory".to_string(),
+            description: "Search long-term memory".to_string(),
+            arguments: vec![PromptArgDef {
+                name: "query".to_string(),
+                description: "Search query".to_string(),
+                required: true,
+            }],
+        },
+        PromptDef {
+            name: "explain-skill".to_string(),
+            description: "Explain a Blufio skill".to_string(),
+            arguments: vec![PromptArgDef {
+                name: "skill_name".to_string(),
+                description: "Name of the skill to explain".to_string(),
+                required: true,
+            }],
+        },
+    ]
 }
 
 /// Generates prompt messages for the given prompt name and arguments.
 ///
 /// Returns an error if the prompt name is unknown or required arguments are missing.
 pub fn get_prompt_messages(
-    _name: &str,
-    _arguments: &HashMap<String, String>,
+    name: &str,
+    arguments: &HashMap<String, String>,
 ) -> Result<Vec<PromptMessageDef>, String> {
-    todo!("implement prompt message generation")
+    match name {
+        "summarize-conversation" => {
+            let session_id = require_arg(arguments, "session_id")?;
+            Ok(vec![
+                PromptMessageDef {
+                    role: "assistant".to_string(),
+                    content: "You are a helpful assistant that summarizes conversations concisely."
+                        .to_string(),
+                },
+                PromptMessageDef {
+                    role: "user".to_string(),
+                    content: format!(
+                        "Summarize the conversation from session {session_id}. \
+                         Focus on key decisions, questions answered, and action items."
+                    ),
+                },
+            ])
+        }
+        "search-memory" => {
+            let query = require_arg(arguments, "query")?;
+            Ok(vec![
+                PromptMessageDef {
+                    role: "assistant".to_string(),
+                    content: "You are a memory search assistant. Help the user find relevant \
+                              information from their long-term memory."
+                        .to_string(),
+                },
+                PromptMessageDef {
+                    role: "user".to_string(),
+                    content: format!("Search my memory for information about: {query}"),
+                },
+            ])
+        }
+        "explain-skill" => {
+            let skill_name = require_arg(arguments, "skill_name")?;
+            Ok(vec![
+                PromptMessageDef {
+                    role: "assistant".to_string(),
+                    content: "You are a Blufio skill documentation assistant.".to_string(),
+                },
+                PromptMessageDef {
+                    role: "user".to_string(),
+                    content: format!(
+                        "Explain what the '{skill_name}' skill does, what parameters it accepts, \
+                         and give an example of how to use it."
+                    ),
+                },
+            ])
+        }
+        _ => Err(format!("unknown prompt: {name}")),
+    }
+}
+
+/// Extracts a required argument, returning an error if missing.
+fn require_arg<'a>(
+    arguments: &'a HashMap<String, String>,
+    name: &str,
+) -> Result<&'a str, String> {
+    arguments
+        .get(name)
+        .map(|s| s.as_str())
+        .ok_or_else(|| format!("Missing required argument: {name}"))
 }
 
 #[cfg(test)]
