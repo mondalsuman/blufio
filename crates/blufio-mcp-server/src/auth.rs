@@ -66,9 +66,7 @@ mod tests {
 
     #[test]
     fn extract_bearer_token_missing_header() {
-        let request = Request::builder()
-            .body(axum::body::Body::empty())
-            .unwrap();
+        let request = Request::builder().body(axum::body::Body::empty()).unwrap();
         assert_eq!(extract_bearer_token(&request), None);
     }
 
@@ -164,12 +162,7 @@ mod tests {
             ));
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri("/test").body(Body::empty()).unwrap())
             .await
             .unwrap();
 

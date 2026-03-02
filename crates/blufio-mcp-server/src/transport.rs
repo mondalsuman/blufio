@@ -13,11 +13,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{Router, middleware};
-use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use http::Method;
+use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService,
-    session::local::LocalSessionManager,
+    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -49,10 +48,8 @@ pub fn build_mcp_cors(cors_origins: &[String]) -> CorsLayer {
         // Reject all cross-origin requests by not allowing any origin.
         layer.allow_origin(AllowOrigin::list(std::iter::empty::<http::HeaderValue>()))
     } else {
-        let origins: Vec<http::HeaderValue> = cors_origins
-            .iter()
-            .filter_map(|o| o.parse().ok())
-            .collect();
+        let origins: Vec<http::HeaderValue> =
+            cors_origins.iter().filter_map(|o| o.parse().ok()).collect();
         layer.allow_origin(AllowOrigin::list(origins))
     }
 }

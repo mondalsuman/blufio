@@ -20,6 +20,7 @@ use blufio_core::StorageAdapter;
 use blufio_memory::MemoryStore;
 use blufio_skill::tool::ToolRegistry;
 use rmcp::handler::server::ServerHandler;
+use rmcp::model::AnnotateAble;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, Content, GetPromptRequestParams, GetPromptResult,
     Implementation, InitializeResult, ListPromptsResult, ListResourceTemplatesResult,
@@ -28,7 +29,6 @@ use rmcp::model::{
     ReadResourceRequestParams, ReadResourceResult, ResourceContents, ResourcesCapability,
     ServerCapabilities, ServerInfo, ToolsCapability,
 };
-use rmcp::model::AnnotateAble;
 use rmcp::service::{RequestContext, RoleServer};
 use tokio::sync::RwLock;
 
@@ -90,10 +90,7 @@ impl BlufioMcpHandler {
     /// When the receiver signals a change, the handler can forward a
     /// `notifications/tools/list_changed` notification to connected
     /// MCP clients (wiring depends on rmcp session API availability).
-    pub fn with_notifications(
-        mut self,
-        rx: notifications::ToolsChangedReceiver,
-    ) -> Self {
+    pub fn with_notifications(mut self, rx: notifications::ToolsChangedReceiver) -> Self {
         self.tools_changed_rx = Some(rx);
         self
     }
@@ -277,8 +274,7 @@ impl ServerHandler for BlufioMcpHandler {
                     name: "memory-search".to_string(),
                     title: Some("Memory Search".to_string()),
                     description: Some(
-                        "Search memories using full-text search (limit defaults to 10)"
-                            .to_string(),
+                        "Search memories using full-text search (limit defaults to 10)".to_string(),
                     ),
                     mime_type: Some("application/json".to_string()),
                     icons: None,
@@ -952,7 +948,9 @@ mod tests {
         fn adapter_type(&self) -> blufio_core::types::AdapterType {
             blufio_core::types::AdapterType::Storage
         }
-        async fn health_check(&self) -> Result<blufio_core::types::HealthStatus, blufio_core::BlufioError> {
+        async fn health_check(
+            &self,
+        ) -> Result<blufio_core::types::HealthStatus, blufio_core::BlufioError> {
             Ok(blufio_core::types::HealthStatus::Healthy)
         }
         async fn shutdown(&self) -> Result<(), blufio_core::BlufioError> {
@@ -968,28 +966,55 @@ mod tests {
         async fn close(&self) -> Result<(), blufio_core::BlufioError> {
             Ok(())
         }
-        async fn create_session(&self, _session: &blufio_core::types::Session) -> Result<(), blufio_core::BlufioError> {
+        async fn create_session(
+            &self,
+            _session: &blufio_core::types::Session,
+        ) -> Result<(), blufio_core::BlufioError> {
             Ok(())
         }
-        async fn get_session(&self, _id: &str) -> Result<Option<blufio_core::types::Session>, blufio_core::BlufioError> {
+        async fn get_session(
+            &self,
+            _id: &str,
+        ) -> Result<Option<blufio_core::types::Session>, blufio_core::BlufioError> {
             Ok(None)
         }
-        async fn list_sessions(&self, _state: Option<&str>) -> Result<Vec<blufio_core::types::Session>, blufio_core::BlufioError> {
+        async fn list_sessions(
+            &self,
+            _state: Option<&str>,
+        ) -> Result<Vec<blufio_core::types::Session>, blufio_core::BlufioError> {
             Ok(vec![])
         }
-        async fn update_session_state(&self, _id: &str, _state: &str) -> Result<(), blufio_core::BlufioError> {
+        async fn update_session_state(
+            &self,
+            _id: &str,
+            _state: &str,
+        ) -> Result<(), blufio_core::BlufioError> {
             Ok(())
         }
-        async fn insert_message(&self, _message: &blufio_core::types::Message) -> Result<(), blufio_core::BlufioError> {
+        async fn insert_message(
+            &self,
+            _message: &blufio_core::types::Message,
+        ) -> Result<(), blufio_core::BlufioError> {
             Ok(())
         }
-        async fn get_messages(&self, _session_id: &str, _limit: Option<i64>) -> Result<Vec<blufio_core::types::Message>, blufio_core::BlufioError> {
+        async fn get_messages(
+            &self,
+            _session_id: &str,
+            _limit: Option<i64>,
+        ) -> Result<Vec<blufio_core::types::Message>, blufio_core::BlufioError> {
             Ok(vec![])
         }
-        async fn enqueue(&self, _queue_name: &str, _payload: &str) -> Result<i64, blufio_core::BlufioError> {
+        async fn enqueue(
+            &self,
+            _queue_name: &str,
+            _payload: &str,
+        ) -> Result<i64, blufio_core::BlufioError> {
             Ok(0)
         }
-        async fn dequeue(&self, _queue_name: &str) -> Result<Option<blufio_core::types::QueueEntry>, blufio_core::BlufioError> {
+        async fn dequeue(
+            &self,
+            _queue_name: &str,
+        ) -> Result<Option<blufio_core::types::QueueEntry>, blufio_core::BlufioError> {
             Ok(None)
         }
         async fn ack(&self, _id: i64) -> Result<(), blufio_core::BlufioError> {

@@ -630,8 +630,14 @@ mod tests {
     fn echo_tool_has_default_annotations() {
         let tool = EchoTool;
         assert!(!tool.is_read_only(), "default is_read_only should be false");
-        assert!(!tool.is_destructive(), "default is_destructive should be false");
-        assert!(!tool.is_idempotent(), "default is_idempotent should be false");
+        assert!(
+            !tool.is_destructive(),
+            "default is_destructive should be false"
+        );
+        assert!(
+            !tool.is_idempotent(),
+            "default is_idempotent should be false"
+        );
         assert!(tool.is_open_world(), "default is_open_world should be true");
     }
 
@@ -674,10 +680,22 @@ mod tests {
         }
 
         let tool = ReadOnlyTool;
-        assert!(tool.is_read_only(), "overridden is_read_only should be true");
-        assert!(!tool.is_destructive(), "default is_destructive should be false");
-        assert!(tool.is_idempotent(), "overridden is_idempotent should be true");
-        assert!(!tool.is_open_world(), "overridden is_open_world should be false");
+        assert!(
+            tool.is_read_only(),
+            "overridden is_read_only should be true"
+        );
+        assert!(
+            !tool.is_destructive(),
+            "default is_destructive should be false"
+        );
+        assert!(
+            tool.is_idempotent(),
+            "overridden is_idempotent should be true"
+        );
+        assert!(
+            !tool.is_open_world(),
+            "overridden is_open_world should be false"
+        );
     }
 
     #[test]

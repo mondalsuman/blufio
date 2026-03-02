@@ -103,10 +103,7 @@ pub fn parse_resource_uri(uri: &str) -> Result<ResourceRequest, String> {
 /// The embedding vector is explicitly excluded from the output.
 /// Returns fields: id, content, source, confidence, status, session_id,
 /// created_at, updated_at.
-pub async fn read_memory_by_id(
-    store: &MemoryStore,
-    id: &str,
-) -> Result<serde_json::Value, String> {
+pub async fn read_memory_by_id(store: &MemoryStore, id: &str) -> Result<serde_json::Value, String> {
     let memory = store
         .get_by_id(id)
         .await
@@ -162,9 +159,7 @@ pub async fn read_memory_search(
 /// List all sessions and return summaries as JSON.
 ///
 /// Returns an array of objects with: id, channel, created_at.
-pub async fn read_session_list(
-    storage: &dyn StorageAdapter,
-) -> Result<serde_json::Value, String> {
+pub async fn read_session_list(storage: &dyn StorageAdapter) -> Result<serde_json::Value, String> {
     let sessions = storage
         .list_sessions(None)
         .await
@@ -226,10 +221,7 @@ mod tests {
     #[test]
     fn parse_memory_by_id_with_hyphens() {
         let req = parse_resource_uri("blufio://memory/mem-abc-123").unwrap();
-        assert_eq!(
-            req,
-            ResourceRequest::MemoryById("mem-abc-123".to_string())
-        );
+        assert_eq!(req, ResourceRequest::MemoryById("mem-abc-123".to_string()));
     }
 
     #[test]
@@ -291,10 +283,7 @@ mod tests {
     #[test]
     fn parse_session_history() {
         let req = parse_resource_uri("blufio://sessions/sess-1").unwrap();
-        assert_eq!(
-            req,
-            ResourceRequest::SessionHistory("sess-1".to_string())
-        );
+        assert_eq!(req, ResourceRequest::SessionHistory("sess-1".to_string()));
     }
 
     #[test]
@@ -421,7 +410,10 @@ mod tests {
         let conn = setup_memory_db().await;
         let store = MemoryStore::new(conn);
         store
-            .save(&make_test_memory("mem-1", "The golden retriever is named Max"))
+            .save(&make_test_memory(
+                "mem-1",
+                "The golden retriever is named Max",
+            ))
             .await
             .unwrap();
         store
@@ -547,17 +539,10 @@ mod tests {
         async fn get_session(&self, id: &str) -> Result<Option<Session>, BlufioError> {
             Ok(self.sessions.iter().find(|s| s.id == id).cloned())
         }
-        async fn list_sessions(
-            &self,
-            _state: Option<&str>,
-        ) -> Result<Vec<Session>, BlufioError> {
+        async fn list_sessions(&self, _state: Option<&str>) -> Result<Vec<Session>, BlufioError> {
             Ok(self.sessions.clone())
         }
-        async fn update_session_state(
-            &self,
-            _id: &str,
-            _state: &str,
-        ) -> Result<(), BlufioError> {
+        async fn update_session_state(&self, _id: &str, _state: &str) -> Result<(), BlufioError> {
             Ok(())
         }
         async fn insert_message(&self, _message: &Message) -> Result<(), BlufioError> {

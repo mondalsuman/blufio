@@ -130,10 +130,7 @@ pub fn get_prompt_messages(
 }
 
 /// Extracts a required argument, returning an error if missing.
-fn require_arg<'a>(
-    arguments: &'a HashMap<String, String>,
-    name: &str,
-) -> Result<&'a str, String> {
+fn require_arg<'a>(arguments: &'a HashMap<String, String>, name: &str) -> Result<&'a str, String> {
     arguments
         .get(name)
         .map(|s| s.as_str())

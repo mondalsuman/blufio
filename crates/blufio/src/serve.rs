@@ -317,9 +317,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             if config.mcp.enabled {
                 // SEC: Validate auth_token is set (defense in depth -- validation.rs also checks).
                 let mcp_auth_token = config.mcp.auth_token.clone().ok_or_else(|| {
-                    BlufioError::Security(
-                        "MCP enabled but mcp.auth_token is not set".to_string(),
-                    )
+                    BlufioError::Security("MCP enabled but mcp.auth_token is not set".to_string())
                 })?;
 
                 // Redact MCP auth token in logs.
@@ -329,16 +327,14 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 );
 
                 let mcp_cancel = cancel.child_token();
-                let mcp_config =
-                    blufio_mcp_server::transport::mcp_service_config(mcp_cancel);
-                let mcp_handler = blufio_mcp_server::BlufioMcpHandler::new(
-                    tool_registry.clone(),
-                    &config.mcp,
-                )
-                .with_resources(
-                    memory_store.clone(),
-                    Some(storage.clone() as Arc<dyn blufio_core::StorageAdapter + Send + Sync>),
-                );
+                let mcp_config = blufio_mcp_server::transport::mcp_service_config(mcp_cancel);
+                let mcp_handler =
+                    blufio_mcp_server::BlufioMcpHandler::new(tool_registry.clone(), &config.mcp)
+                        .with_resources(
+                            memory_store.clone(),
+                            Some(storage.clone()
+                                as Arc<dyn blufio_core::StorageAdapter + Send + Sync>),
+                        );
                 let mcp_router = blufio_mcp_server::transport::build_mcp_router(
                     mcp_handler,
                     mcp_config,
