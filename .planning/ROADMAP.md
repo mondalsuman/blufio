@@ -35,7 +35,7 @@
 
 - [x] **Phase 15: MCP Foundation** - Config structs, workspace crates, dependency integration, namespace enforcement, abstraction boundary
 - [x] **Phase 16: MCP Server stdio** - ServerHandler, tools/list, tools/call, stdio transport, Claude Desktop connectivity
-- [ ] **Phase 17: MCP Server HTTP + Resources** - Streamable HTTP transport, auth, resources, prompts, notifications, CORS
+- [x] **Phase 17: MCP Server HTTP + Resources** - Streamable HTTP transport, auth, resources, prompts, notifications, CORS (completed 2026-03-02)
 - [ ] **Phase 18: MCP Client** - External MCP server connections, tool discovery, security hardening, agent integration
 - [ ] **Phase 19: Integration Testing + Tech Debt** - E2E tests, cross-contamination, Prometheus metrics, connection limits, v1.0 debt
 
@@ -123,7 +123,7 @@
 | 14. Wire Cross-Phase Integration | v1.0 | 3/3 | Complete | 2026-03-02 |
 | 15. MCP Foundation | v1.1 | 4/4 | Complete | 2026-03-02 |
 | 16. MCP Server stdio | v1.1 | 3/3 | Complete | 2026-03-02 |
-| 17. MCP Server HTTP + Resources | 3/4 | In Progress|  | - |
+| 17. MCP Server HTTP + Resources | 4/4 | Complete   | 2026-03-02 | - |
 | 18. MCP Client | v1.1 | 0/TBD | Not started | - |
 | 19. Integration Testing + Tech Debt | v1.1 | 0/TBD | Not started | - |
 
