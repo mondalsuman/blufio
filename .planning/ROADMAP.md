@@ -36,7 +36,7 @@
 - [x] **Phase 15: MCP Foundation** - Config structs, workspace crates, dependency integration, namespace enforcement, abstraction boundary
 - [x] **Phase 16: MCP Server stdio** - ServerHandler, tools/list, tools/call, stdio transport, Claude Desktop connectivity
 - [x] **Phase 17: MCP Server HTTP + Resources** - Streamable HTTP transport, auth, resources, prompts, notifications, CORS (completed 2026-03-02)
-- [ ] **Phase 18: MCP Client** - External MCP server connections, tool discovery, security hardening, agent integration
+- [x] **Phase 18: MCP Client** - External MCP server connections, tool discovery, security hardening, agent integration (completed 2026-03-03)
 - [ ] **Phase 19: Integration Testing + Tech Debt** - E2E tests, cross-contamination, Prometheus metrics, connection limits, v1.0 debt
 - [ ] **Phase 20: Verify Phase 15 & 16 Completeness** - Create VERIFICATION.md for unverified phases, update REQUIREMENTS.md checkboxes, fix SUMMARY inconsistencies
 
@@ -88,7 +88,7 @@
   3. Config entries with `command:` (stdio transport) are rejected with a clear error message
   4. Tool definitions are SHA-256 hash-pinned at discovery; schema mutations disable the tool and alert the operator
   5. External tool descriptions are sanitized (instruction patterns stripped, 200-char cap) and labeled as a separate trust zone in prompt context
-**Plans**: TBD
+**Plans**: 4/4 completed (2026-03-03)
 
 ### Phase 19: Integration Testing + Tech Debt
 **Goal**: End-to-end MCP workflows are verified across server and client, Prometheus observability covers MCP, and critical v1.0 tech debt is resolved
@@ -137,7 +137,7 @@
 | 15. MCP Foundation | v1.1 | 4/4 | Complete | 2026-03-02 |
 | 16. MCP Server stdio | v1.1 | 3/3 | Complete | 2026-03-02 |
 | 17. MCP Server HTTP + Resources | 5/5 | Complete    | 2026-03-02 | - |
-| 18. MCP Client | v1.1 | 0/TBD | Not started | - |
+| 18. MCP Client | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 19. Integration Testing + Tech Debt | v1.1 | 0/TBD | Not started | - |
 | 20. Verify Phase 15 & 16 Completeness | v1.1 | 0/TBD | Not started | - |
 
