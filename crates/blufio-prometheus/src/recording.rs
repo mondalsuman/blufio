@@ -34,6 +34,24 @@ pub fn register_metrics() {
         "blufio_response_latency_seconds",
         "LLM response latency in seconds"
     );
+
+    // MCP metrics (INTG-04)
+    describe_counter!(
+        "blufio_mcp_connections_total",
+        "Total MCP connections by transport"
+    );
+    describe_gauge!(
+        "blufio_mcp_active_connections",
+        "Currently active MCP connections"
+    );
+    describe_histogram!(
+        "blufio_mcp_tool_response_size_bytes",
+        "MCP tool response sizes in bytes"
+    );
+    describe_gauge!(
+        "blufio_mcp_context_utilization_ratio",
+        "Context window utilization ratio"
+    );
 }
 
 /// Record a processed message.
@@ -87,4 +105,27 @@ pub fn set_memory_pressure(pressure: f64) {
 /// Record an error by type.
 pub fn record_error(error_type: &str) {
     metrics::counter!("blufio_errors_total", "type" => error_type.to_string()).increment(1);
+}
+
+// ---- MCP metrics (INTG-04) ----
+
+/// Record an MCP connection by transport type.
+pub fn record_mcp_connection(transport: &str) {
+    metrics::counter!("blufio_mcp_connections_total", "transport" => transport.to_string())
+        .increment(1);
+}
+
+/// Set the number of currently active MCP connections.
+pub fn set_mcp_active_connections(count: f64) {
+    metrics::gauge!("blufio_mcp_active_connections").set(count);
+}
+
+/// Record an MCP tool response size in bytes.
+pub fn record_mcp_tool_response_size(bytes: f64) {
+    metrics::histogram!("blufio_mcp_tool_response_size_bytes").record(bytes);
+}
+
+/// Set the context window utilization ratio (0.0 to 1.0).
+pub fn set_mcp_context_utilization(ratio: f64) {
+    metrics::gauge!("blufio_mcp_context_utilization_ratio").set(ratio);
 }

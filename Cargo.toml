@@ -53,6 +53,7 @@ wasmtime = "40"
 wasmtime-wasi = "40"
 axum = { version = "0.8", features = ["ws"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
+tower = { version = "0.5", features = ["limit"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 dashmap = "6"
 metrics = "0.24"

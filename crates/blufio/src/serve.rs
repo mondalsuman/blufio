@@ -351,6 +351,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 bearer_token: config.gateway.bearer_token.clone(),
                 keypair_public_key,
                 prometheus_render: prometheus_render.clone(),
+                mcp_max_connections: config.mcp.max_connections,
             };
             let gateway = GatewayChannel::new(gateway_config);
 

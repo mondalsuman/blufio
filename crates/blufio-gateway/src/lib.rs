@@ -47,6 +47,8 @@ pub struct GatewayChannelConfig {
     pub keypair_public_key: Option<ed25519_dalek::VerifyingKey>,
     /// Optional Prometheus metrics render function for /metrics endpoint.
     pub prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>>,
+    /// Maximum concurrent MCP connections (INTG-05). Default: 10.
+    pub mcp_max_connections: usize,
 }
 
 impl std::fmt::Debug for GatewayChannelConfig {
@@ -179,9 +181,10 @@ impl ChannelAdapter for GatewayChannel {
 
         // Take the MCP router (if set) to pass to the server.
         let mcp_router = self.mcp_router.lock().await.take();
+        let mcp_max_connections = self.config.mcp_max_connections;
 
         let handle = tokio::spawn(async move {
-            if let Err(e) = server::start_server(&server_config, state, mcp_router).await {
+            if let Err(e) = server::start_server(&server_config, state, mcp_router, mcp_max_connections).await {
                 tracing::error!("gateway server error: {e}");
             }
         });
@@ -272,6 +275,7 @@ mod tests {
             bearer_token: None,
             keypair_public_key: None,
             prometheus_render: None,
+            mcp_max_connections: 10,
         }
     }
 
