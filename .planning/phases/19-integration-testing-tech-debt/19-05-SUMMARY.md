@@ -2,7 +2,7 @@
 phase: 19-integration-testing-tech-debt
 plan: 05
 status: completed
-requirements: [DEBT-04, DEBT-05, DEBT-06, DEBT-07]
+requirements_completed: [DEBT-04, DEBT-05, DEBT-06, DEBT-07]
 commit: 4b2db1d
 ---
 
