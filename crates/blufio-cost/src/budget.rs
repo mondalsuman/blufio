@@ -315,7 +315,8 @@ mod tests {
                     cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
                     cost_usd REAL NOT NULL DEFAULT 0.0,
                     created_at TEXT NOT NULL,
-                    intended_model TEXT
+                    intended_model TEXT,
+                    server_name TEXT
                 );",
             )?;
             Ok(())
@@ -339,6 +340,7 @@ mod tests {
             cost_usd: 3.50,
             created_at: format!("{today}T12:00:00.000Z"),
             intended_model: None,
+            server_name: None,
         };
         ledger.record(&record).await.unwrap();
 
