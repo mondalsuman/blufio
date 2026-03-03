@@ -77,6 +77,10 @@ pub enum BlufioError {
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
+    /// Self-update errors (version check, download, swap, rollback).
+    #[error("update error: {0}")]
+    Update(String),
+
     /// Internal or unexpected errors.
     #[error("internal error: {0}")]
     Internal(String),

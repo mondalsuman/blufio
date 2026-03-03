@@ -67,6 +67,9 @@ reqwest = { workspace = true }
 rusqlite = { workspace = true, features = ["backup"] }
 ring.workspace = true
 hex.workspace = true
+self-replace = { workspace = true }
+tempfile = { workspace = true }
+semver.workspace = true
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { workspace = true }
