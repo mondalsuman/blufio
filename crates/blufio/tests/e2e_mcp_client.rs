@@ -35,7 +35,7 @@ async fn test_mcp_client_unreachable_server_graceful() {
         trusted: false,
     };
 
-    let (_manager, result) = McpClientManager::connect_all(&[entry], &registry).await;
+    let (_manager, result) = McpClientManager::connect_all(&[entry], &registry, None).await;
 
     // Connection should fail but not crash.
     assert_eq!(result.connected, 0, "should have 0 connected servers");
@@ -77,7 +77,7 @@ async fn test_mcp_client_multiple_unreachable_servers_graceful() {
         },
     ];
 
-    let (_manager, result) = McpClientManager::connect_all(&entries, &registry).await;
+    let (_manager, result) = McpClientManager::connect_all(&entries, &registry, None).await;
 
     assert_eq!(result.connected, 0);
     assert_eq!(result.failed, 2, "both servers should fail independently");
@@ -89,7 +89,7 @@ async fn test_mcp_client_empty_server_list() {
     // Connecting with no servers should succeed with empty results.
     let registry = Arc::new(RwLock::new(ToolRegistry::new()));
 
-    let (_manager, result) = McpClientManager::connect_all(&[], &registry).await;
+    let (_manager, result) = McpClientManager::connect_all(&[], &registry, None).await;
 
     assert_eq!(result.connected, 0);
     assert_eq!(result.failed, 0);
@@ -113,7 +113,7 @@ async fn test_mcp_client_invalid_transport_graceful() {
         trusted: false,
     };
 
-    let (_manager, result) = McpClientManager::connect_all(&[entry], &registry).await;
+    let (_manager, result) = McpClientManager::connect_all(&[entry], &registry, None).await;
 
     assert_eq!(result.connected, 0);
     assert_eq!(result.failed, 1);
@@ -136,7 +136,7 @@ async fn test_mcp_client_server_state_tracking() {
         trusted: false,
     };
 
-    let (manager, _result) = McpClientManager::connect_all(&[entry], &registry).await;
+    let (manager, _result) = McpClientManager::connect_all(&[entry], &registry, None).await;
 
     // Server should be tracked as disconnected.
     assert!(

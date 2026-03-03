@@ -639,6 +639,7 @@ mod tests {
             auth_token: None,
             cors_origins: Vec::new(),
             max_connections: 10,
+            health_check_interval_secs: 60,
         }
     }
 
