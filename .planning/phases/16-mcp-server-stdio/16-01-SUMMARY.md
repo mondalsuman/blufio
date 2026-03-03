@@ -7,7 +7,7 @@ files_modified:
   - crates/blufio-mcp-server/src/bridge.rs
   - crates/blufio-mcp-server/src/lib.rs
   - crates/blufio-config/src/model.rs
-requirements_covered: [SRVR-12]
+requirements_completed: [SRVR-12]
 ---
 
 ## Summary

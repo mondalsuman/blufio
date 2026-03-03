@@ -8,7 +8,7 @@ files_modified:
   - crates/blufio-mcp-server/src/lib.rs
   - crates/blufio-mcp-server/Cargo.toml
   - Cargo.toml
-requirements_covered: [SRVR-01, SRVR-02, SRVR-04, SRVR-05]
+requirements_completed: [SRVR-01, SRVR-02, SRVR-04, SRVR-05]
 ---
 
 ## Summary
