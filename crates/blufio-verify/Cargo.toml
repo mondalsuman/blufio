@@ -1,0 +1,15 @@
+[package]
+name = "blufio-verify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Minisign signature verification for Blufio releases"
+
+[dependencies]
+minisign-verify.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -35,6 +35,7 @@ blufio-router = { path = "../blufio-router" }
 blufio-skill = { path = "../blufio-skill" }
 blufio-plugin = { path = "../blufio-plugin" }
 blufio-security = { path = "../blufio-security" }
+blufio-verify = { path = "../blufio-verify" }
 
 # Optional adapter crates (controlled by feature flags).
 blufio-storage = { path = "../blufio-storage", optional = true }

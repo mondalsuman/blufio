@@ -49,7 +49,7 @@
 - [x] **Phase 23: Backup Integrity Verification** - PRAGMA integrity_check after backup and restore with corruption handling (completed 2026-03-03)
 - [x] **Phase 24: sd_notify Integration** - systemd Type=notify readiness, watchdog pings, and status reporting (completed 2026-03-03)
 - [x] **Phase 25: SQLCipher Database Encryption** - Encryption at rest with centralized key management and migration CLI (completed 2026-03-03)
-- [ ] **Phase 26: Minisign Signature Verification** - Ed25519 binary signature verification with embedded public key
+- [x] **Phase 26: Minisign Signature Verification** - Ed25519 binary signature verification with embedded public key (completed 2026-03-03)
 - [ ] **Phase 27: Self-Update with Rollback** - Version check, download, verify, atomic swap, health check, rollback
 
 ## Phase Details
@@ -144,7 +144,7 @@ Phases execute in numeric order: 23 -> 24 -> 25 -> 26 -> 27
 | 23. Backup Integrity Verification | 1/1 | Complete    | 2026-03-03 | - |
 | 24. sd_notify Integration | 2/2 | Complete    | 2026-03-03 | - |
 | 25. SQLCipher Database Encryption | v1.2 | 4/4 | Complete | 2026-03-03 |
-| 26. Minisign Signature Verification | v1.2 | 0/0 | Not started | - |
+| 26. Minisign Signature Verification | 2/2 | Complete   | 2026-03-03 | - |
 | 27. Self-Update with Rollback | v1.2 | 0/0 | Not started | - |
 
 ---

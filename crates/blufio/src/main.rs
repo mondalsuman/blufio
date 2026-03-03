@@ -20,6 +20,7 @@ mod mcp_server;
 mod serve;
 mod shell;
 mod status;
+mod verify;
 
 use clap::{Parser, Subcommand};
 
@@ -88,6 +89,14 @@ enum Commands {
     Db {
         #[command(subcommand)]
         action: DbCommands,
+    },
+    /// Verify a file's Minisign signature.
+    Verify {
+        /// Path to the file to verify.
+        file: String,
+        /// Path to the .minisig signature file (auto-detected if omitted).
+        #[arg(long)]
+        signature: Option<String>,
     },
 }
 
@@ -280,6 +289,12 @@ async fn main() {
                 encrypt::run_keygen();
             }
         },
+        Some(Commands::Verify { file, signature }) => {
+            if let Err(e) = verify::run_verify(&file, signature.as_deref()) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
         Some(Commands::McpServer) => {
             #[cfg(feature = "mcp-server")]
             {
@@ -1069,6 +1084,36 @@ mod tests {
         match cli.command {
             Some(Commands::McpServer) => {}
             _ => panic!("expected McpServer command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_verify() {
+        let cli = Cli::parse_from(["blufio", "verify", "myfile.bin"]);
+        match cli.command {
+            Some(Commands::Verify { file, signature }) => {
+                assert_eq!(file, "myfile.bin");
+                assert!(signature.is_none());
+            }
+            _ => panic!("expected Verify command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_verify_with_signature() {
+        let cli = Cli::parse_from([
+            "blufio",
+            "verify",
+            "myfile.bin",
+            "--signature",
+            "custom.minisig",
+        ]);
+        match cli.command {
+            Some(Commands::Verify { file, signature }) => {
+                assert_eq!(file, "myfile.bin");
+                assert_eq!(signature.as_deref(), Some("custom.minisig"));
+            }
+            _ => panic!("expected Verify command with --signature"),
         }
     }
 

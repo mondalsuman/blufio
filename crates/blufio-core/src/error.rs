@@ -55,6 +55,10 @@ pub enum BlufioError {
     #[error("security violation: {0}")]
     Security(String),
 
+    /// Signature verification errors (file not found, invalid signature, verification failed).
+    #[error("signature error: {0}")]
+    Signature(String),
+
     /// Budget cap has been reached (daily or monthly).
     #[error("budget exhausted: {message}")]
     BudgetExhausted { message: String },
@@ -99,5 +103,21 @@ mod mcp_error_tests {
             source: Some(Box::new(source)),
         };
         assert!(err.to_string().contains("connection failed"));
+    }
+}
+
+#[cfg(test)]
+mod signature_error_tests {
+    use super::*;
+
+    #[test]
+    fn signature_error_formats_correctly() {
+        let err = BlufioError::Signature(
+            "verification failed for 'blufio': content mismatch".to_string(),
+        );
+        assert_eq!(
+            err.to_string(),
+            "signature error: verification failed for 'blufio': content mismatch"
+        );
     }
 }
