@@ -67,7 +67,7 @@ Each task was committed atomically:
 1. **Task 1: Add health_check_interval_secs config and enhance health monitor** - `ec7a551` (feat)
 2. **Task 2: Wire HealthTracker and PinStore instantiation into serve.rs** - `97cae69` (feat, from 21-01 parallel execution)
 
-**Plan metadata:** (pending)
+**Plan metadata:** `fe34160` (docs: complete plan)
 
 ## Files Created/Modified
 - `crates/blufio-mcp-client/src/health.rs` - Enhanced spawn_health_monitor with real ping checks via rmcp ClientRequest::PingRequest
