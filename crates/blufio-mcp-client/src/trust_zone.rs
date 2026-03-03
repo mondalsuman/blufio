@@ -39,10 +39,7 @@ impl TrustZoneProvider {
     ///
     /// - `registry`: Shared tool registry (same one SkillProvider uses).
     /// - `trusted_servers`: Server names marked as `trusted = true` in config.
-    pub fn new(
-        registry: Arc<RwLock<ToolRegistry>>,
-        trusted_servers: HashSet<String>,
-    ) -> Self {
+    pub fn new(registry: Arc<RwLock<ToolRegistry>>, trusted_servers: HashSet<String>) -> Self {
         Self {
             registry,
             trusted_servers,
@@ -105,8 +102,8 @@ mod tests {
     use super::*;
 
     use blufio_core::error::BlufioError;
-    use blufio_skill::tool::Tool;
     use blufio_skill::ToolOutput;
+    use blufio_skill::tool::Tool;
 
     /// A minimal test tool for trust zone provider tests.
     struct DummyTool {

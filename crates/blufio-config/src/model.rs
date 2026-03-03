@@ -1142,7 +1142,10 @@ transport = "http"
 url = "https://example.com/mcp"
 "#;
         let config: BlufioConfig = toml::from_str(toml_str).unwrap();
-        assert!(!config.mcp.servers[0].trusted, "trusted should default to false");
+        assert!(
+            !config.mcp.servers[0].trusted,
+            "trusted should default to false"
+        );
     }
 
     #[test]
@@ -1155,6 +1158,9 @@ url = "https://internal.example.com/mcp"
 trusted = true
 "#;
         let config: BlufioConfig = toml::from_str(toml_str).unwrap();
-        assert!(config.mcp.servers[0].trusted, "trusted should be true when set");
+        assert!(
+            config.mcp.servers[0].trusted,
+            "trusted should be true when set"
+        );
     }
 }

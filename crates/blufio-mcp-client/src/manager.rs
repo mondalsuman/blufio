@@ -335,7 +335,10 @@ async fn discover_and_register(
         // Verify tool schema hash against stored pins (CLNT-07).
         let pin_hash = compute_tool_pin(&tool_name, tool.description.as_deref(), &schema);
         if let Some(store) = pin_store {
-            match store.verify_or_store(&server.name, &tool_name, &pin_hash).await {
+            match store
+                .verify_or_store(&server.name, &tool_name, &pin_hash)
+                .await
+            {
                 Ok(PinVerification::FirstSeen) => {
                     debug!(server = %server.name, tool = %tool_name, "tool pin stored (first discovery)");
                 }

@@ -272,10 +272,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 .map(|s| s.name.clone())
                 .collect();
             let trusted_servers_count = trusted_servers.len();
-            let trust_zone_provider = blufio_mcp_client::TrustZoneProvider::new(
-                tool_registry.clone(),
-                trusted_servers,
-            );
+            let trust_zone_provider =
+                blufio_mcp_client::TrustZoneProvider::new(tool_registry.clone(), trusted_servers);
             context_engine.add_conditional_provider(Box::new(trust_zone_provider));
             info!(
                 trusted_servers = trusted_servers_count,
