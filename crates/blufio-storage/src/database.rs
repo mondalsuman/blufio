@@ -426,12 +426,12 @@ mod tests {
     /// Safety: env var mutations are guarded by #[serial] -- only one test
     /// touches env vars at a time.
     unsafe fn set_key(val: &str) {
-        std::env::set_var("BLUFIO_DB_KEY", val);
+        unsafe { std::env::set_var("BLUFIO_DB_KEY", val) };
     }
 
     /// Safety: see `set_key`.
     unsafe fn remove_key() {
-        std::env::remove_var("BLUFIO_DB_KEY");
+        unsafe { std::env::remove_var("BLUFIO_DB_KEY") };
     }
 
     #[tokio::test]
