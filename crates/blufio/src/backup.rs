@@ -129,8 +129,14 @@ pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
 
 /// Restore the database from a backup file.
 ///
-/// Creates a safety backup of the current DB before overwriting.
-/// Validates that the source is a valid SQLite database.
+/// Performs a full safety flow:
+/// 1. **Pre-check:** Verify backup file integrity before any modification
+/// 2. **Safety backup:** Create `.pre-restore` copy of existing DB (if any)
+/// 3. **Restore:** Copy backup data to the target DB via Backup API
+/// 4. **Post-check:** Verify restored database integrity
+/// 5. **Rollback:** On post-check failure, restore from `.pre-restore` copy
+///
+/// The `.pre-restore` file is kept after successful restore as a safety net.
 pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError> {
     let src_path = Path::new(restore_from);
     if !src_path.exists() {
@@ -142,25 +148,19 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
         });
     }
 
-    // Validate source is a valid SQLite DB.
-    let test_conn =
-        Connection::open_with_flags(restore_from, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+    // Pre-check: verify backup file integrity before attempting restore.
+    if let Err(e) = run_integrity_check(src_path) {
+        eprintln!("Restore FAILED: backup file {e}.");
+        eprintln!("Run 'blufio doctor' for full database diagnostics.");
+        return Err(e);
+    }
 
-    // Quick validation: can we query it?
-    test_conn
-        .execute_batch("SELECT 1")
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
-    drop(test_conn);
+    // Declare pre_restore_path at function scope for use in rollback.
+    let dst_path = Path::new(db_path);
+    let pre_restore_path = format!("{db_path}.pre-restore");
 
     // Create safety backup of current DB (if it exists).
-    let dst_path = Path::new(db_path);
     if dst_path.exists() {
-        let pre_restore_path = format!("{db_path}.pre-restore");
         eprintln!("Creating safety backup: {pre_restore_path}");
         run_backup(db_path, &pre_restore_path)?;
     }
@@ -186,11 +186,36 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
             source: Box::new(e),
         })?;
 
+    // Drop connections before post-check to release file locks.
+    drop(backup);
+    drop(src);
+    drop(dst);
+
+    // Post-check: verify restored database integrity.
+    if let Err(e) = run_integrity_check(dst_path) {
+        // Rollback: delete the corrupt restored DB.
+        let _ = std::fs::remove_file(db_path);
+
+        // Restore from .pre-restore if it exists.
+        if Path::new(&pre_restore_path).exists() {
+            std::fs::copy(&pre_restore_path, db_path).map_err(|copy_err| {
+                BlufioError::Storage {
+                    source: Box::new(copy_err),
+                }
+            })?;
+            eprintln!("Restore FAILED: {e}. Database rolled back to pre-restore state.");
+        } else {
+            eprintln!("Restore FAILED: {e}. Corrupt database removed.");
+        }
+        eprintln!("Run 'blufio doctor' for full database diagnostics.");
+        return Err(e);
+    }
+
     let metadata = std::fs::metadata(db_path).map_err(|e| BlufioError::Storage {
         source: Box::new(e),
     })?;
     let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
-    eprintln!("Restore complete: {size_mb:.1} MB restored from {restore_from}");
+    eprintln!("Restore complete: {size_mb:.1} MB, integrity: ok");
 
     Ok(())
 }
@@ -353,6 +378,136 @@ mod tests {
 
         // Integrity check should pass on empty DB.
         assert!(run_integrity_check(&db_path).is_ok());
+    }
+
+    #[test]
+    fn test_restore_pre_check_catches_corrupt_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("target.db");
+        let corrupt_backup = dir.path().join("corrupt_backup.db");
+
+        // Create a valid DB, then corrupt it to simulate a corrupt backup file.
+        let conn = Connection::open(&corrupt_backup).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);",
+        )
+        .unwrap();
+        for i in 0..100 {
+            conn.execute(
+                "INSERT INTO test VALUES (?1, ?2)",
+                rusqlite::params![i, format!("data-{i}-padding-to-make-rows-longer-for-page-fill")],
+            )
+            .unwrap();
+        }
+        drop(conn);
+
+        // Corrupt the "backup" file.
+        let mut data = std::fs::read(&corrupt_backup).unwrap();
+        assert!(data.len() > 4096);
+        for i in 4096..4196 {
+            data[i] = 0xFF;
+        }
+        std::fs::write(&corrupt_backup, &data).unwrap();
+
+        // Attempt restore -- should fail during pre-check.
+        let result = run_restore(
+            db_path.to_str().unwrap(),
+            corrupt_backup.to_str().unwrap(),
+        );
+        assert!(result.is_err(), "Expected restore to fail on corrupt backup");
+
+        // Verify no .pre-restore was created (nothing was modified).
+        let pre_restore = format!("{}.pre-restore", db_path.to_str().unwrap());
+        assert!(
+            !Path::new(&pre_restore).exists(),
+            "No .pre-restore should exist when pre-check fails"
+        );
+    }
+
+    #[test]
+    fn test_restore_first_time_no_pre_restore() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("new_target.db");
+        let backup_path = dir.path().join("backup.db");
+
+        // Create a valid backup file.
+        let conn = Connection::open(&backup_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);
+             INSERT INTO test VALUES (1, 'hello');",
+        )
+        .unwrap();
+        drop(conn);
+
+        // Restore to a path where no DB exists (first-time restore).
+        assert!(!db_path.exists(), "Target DB should not exist yet");
+        run_restore(db_path.to_str().unwrap(), backup_path.to_str().unwrap()).unwrap();
+
+        // Verify restore succeeded.
+        let conn = Connection::open(&db_path).unwrap();
+        let val: String = conn
+            .query_row("SELECT value FROM test WHERE id = 1", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(val, "hello");
+        drop(conn);
+
+        // Verify no .pre-restore file was created.
+        let pre_restore = format!("{}.pre-restore", db_path.to_str().unwrap());
+        assert!(
+            !Path::new(&pre_restore).exists(),
+            "No .pre-restore should exist for first-time restore"
+        );
+    }
+
+    #[test]
+    fn test_restore_keeps_pre_restore_after_success() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("current.db");
+        let backup_path = dir.path().join("backup.db");
+
+        // Create current DB with original data.
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE original (id INTEGER PRIMARY KEY);
+             INSERT INTO original VALUES (1);",
+        )
+        .unwrap();
+        drop(conn);
+
+        // Create backup DB with new data.
+        let conn = Connection::open(&backup_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE restored (id INTEGER PRIMARY KEY);
+             INSERT INTO restored VALUES (42);",
+        )
+        .unwrap();
+        drop(conn);
+
+        // Restore over existing DB.
+        run_restore(db_path.to_str().unwrap(), backup_path.to_str().unwrap()).unwrap();
+
+        // Verify .pre-restore still exists after successful restore.
+        let pre_restore = format!("{}.pre-restore", db_path.to_str().unwrap());
+        assert!(
+            Path::new(&pre_restore).exists(),
+            ".pre-restore should be kept after successful restore"
+        );
+
+        // Verify .pre-restore has original data.
+        let pre_conn = Connection::open(&pre_restore).unwrap();
+        let count: i64 = pre_conn
+            .query_row("SELECT COUNT(*) FROM original", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+        drop(pre_conn);
+
+        // Verify current DB has restored data.
+        let restored_conn = Connection::open(&db_path).unwrap();
+        let val: i64 = restored_conn
+            .query_row("SELECT id FROM restored", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(val, 42);
+        drop(restored_conn);
     }
 
     #[test]
