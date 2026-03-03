@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-02)
-- **v1.1 MCP Integration** — Phases 15-20 (in progress)
+- **v1.1 MCP Integration** — Phases 15-22 (in progress)
 
 ## Phases
 
@@ -39,6 +39,8 @@
 - [x] **Phase 18: MCP Client** - External MCP server connections, tool discovery, security hardening, agent integration (completed 2026-03-03)
 - [x] **Phase 19: Integration Testing + Tech Debt** - E2E tests, cross-contamination, Prometheus metrics, connection limits, v1.0 debt (completed 2026-03-03)
 - [x] **Phase 20: Verify Phase 15 & 16 Completeness** - Create VERIFICATION.md for unverified phases, update REQUIREMENTS.md checkboxes, fix SUMMARY inconsistencies (completed 2026-03-03)
+- [ ] **Phase 21: Fix MCP Wiring Gaps** - Wire PinStore, spawn HealthTracker, implement per-server budget, inject trust zone guidance, add Prometheus metric call sites
+- [ ] **Phase 22: Verify Phase 18 & 19 + Close Traceability** - Create VERIFICATION.md for Phases 18 and 19, update REQUIREMENTS.md checkboxes for 26 requirements, fix SUMMARY frontmatter
 
 ## Phase Details
 
@@ -114,9 +116,34 @@
   4. Phase 16 SUMMARY frontmatter key normalized to `requirements_completed`
 **Plans**: TBD
 
+### Phase 21: Fix MCP Wiring Gaps
+**Goal**: Fix 5 code-level wiring issues found by milestone audit — the root causes behind 3 broken E2E flows (resilience, rug-pull detection, observability) and 6 integration gaps
+**Depends on**: Phase 20
+**Requirements**: CLNT-06, CLNT-07, CLNT-10, CLNT-12, INTG-04
+**Gap Closure:** Closes 5 wiring gaps + 3 broken flows + 6 integration gaps from v1.1 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. HealthTracker background task is spawned in serve.rs and detects degraded external MCP servers
+  2. PinStore is instantiated and tool definition mutations are detected and flagged
+  3. Per-server budget tracking is implemented in CostLedger with cost fields per server
+  4. External tools trust zone guidance is injected into agent prompt context
+  5. Prometheus MCP metrics (connection count, tool response sizes, context utilization) emit non-zero values during MCP operations
+**Plans**: TBD
+
+### Phase 22: Verify Phase 18 & 19 + Close Traceability
+**Goal**: Formally verify Phase 18 and Phase 19 implementations, create missing VERIFICATION.md files, update REQUIREMENTS.md checkboxes for all 26 remaining requirements, and fix SUMMARY frontmatter inconsistencies
+**Depends on**: Phase 21 (wiring gaps must be fixed before verification)
+**Requirements**: CLNT-01, CLNT-02, CLNT-03, CLNT-04, CLNT-05, CLNT-06, CLNT-07, CLNT-08, CLNT-09, CLNT-10, CLNT-11, CLNT-12, CLNT-13, CLNT-14, INTG-01, INTG-02, INTG-03, INTG-04, INTG-05, DEBT-01, DEBT-02, DEBT-03, DEBT-04, DEBT-05, DEBT-06, DEBT-07
+**Gap Closure:** Closes 26 orphaned requirements from v1.1 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. VERIFICATION.md exists for Phase 18 with pass/fail for each of Phase 18's success criteria
+  2. VERIFICATION.md exists for Phase 19 with pass/fail for each of Phase 19's success criteria
+  3. REQUIREMENTS.md checkboxes updated for all 26 requirements (CLNT-01-14, INTG-01-05, DEBT-01-07)
+  4. Phase 19 SUMMARY frontmatter key normalized to `requirements_completed`
+**Plans**: TBD
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order: 15 -> 15.x -> 16 -> 16.x -> 17 -> 17.x -> 18 -> 18.x -> 19 -> 20
+**Execution Order:** Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -140,7 +167,9 @@
 | 18. MCP Client | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 19. Integration Testing + Tech Debt | v1.1 | 5/5 | Complete | 2026-03-03 |
 | 20. Verify Phase 15 & 16 Completeness | 4/4 | Complete    | 2026-03-03 | - |
+| 21. Fix MCP Wiring Gaps | v1.1 | 0/TBD | Pending | - |
+| 22. Verify Phase 18 & 19 + Close Traceability | v1.1 | 0/TBD | Pending | - |
 
 ---
 *Roadmap created: 2026-03-02*
-*Last updated: 2026-03-03 (Phase 19 completed)*
+*Last updated: 2026-03-03 (gap closure phases 21-22 added)*

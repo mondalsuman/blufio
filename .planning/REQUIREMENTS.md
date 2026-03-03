@@ -125,32 +125,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRVR-14 | Phase 17 | Complete |
 | SRVR-15 | Phase 16 (verify: Phase 20) | Complete |
 | SRVR-16 | Phase 17 | Complete |
-| CLNT-01 | Phase 18 | Pending |
-| CLNT-02 | Phase 18 | Pending |
-| CLNT-03 | Phase 18 | Pending |
-| CLNT-04 | Phase 18 | Pending |
-| CLNT-05 | Phase 18 | Pending |
-| CLNT-06 | Phase 18 | Pending |
-| CLNT-07 | Phase 18 | Pending |
-| CLNT-08 | Phase 18 | Pending |
-| CLNT-09 | Phase 18 | Pending |
-| CLNT-10 | Phase 18 | Pending |
-| CLNT-11 | Phase 18 | Pending |
-| CLNT-12 | Phase 18 | Pending |
-| CLNT-13 | Phase 18 | Pending |
-| CLNT-14 | Phase 18 | Pending |
-| INTG-01 | Phase 19 | Pending |
-| INTG-02 | Phase 19 | Pending |
-| INTG-03 | Phase 19 | Pending |
-| INTG-04 | Phase 19 | Pending |
-| INTG-05 | Phase 19 | Pending |
-| DEBT-01 | Phase 19 | Pending |
-| DEBT-02 | Phase 19 | Pending |
-| DEBT-03 | Phase 19 | Pending |
-| DEBT-04 | Phase 19 | Pending |
-| DEBT-05 | Phase 19 | Pending |
-| DEBT-06 | Phase 19 | Pending |
-| DEBT-07 | Phase 19 | Pending |
+| CLNT-01 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-02 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-03 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-04 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-05 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-06 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
+| CLNT-07 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
+| CLNT-08 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-09 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-10 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
+| CLNT-11 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-12 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
+| CLNT-13 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-14 | Phase 18 (verify: Phase 22) | Pending |
+| INTG-01 | Phase 19 (verify: Phase 22) | Pending |
+| INTG-02 | Phase 19 (verify: Phase 22) | Pending |
+| INTG-03 | Phase 19 (verify: Phase 22) | Pending |
+| INTG-04 | Phase 19 (fix: Phase 21, verify: Phase 22) | Pending |
+| INTG-05 | Phase 19 (verify: Phase 22) | Pending |
+| DEBT-01 | Phase 19 (verify: Phase 22) | Pending |
+| DEBT-02 | Phase 19 (verify: Phase 22) | Pending |
+| DEBT-03 | Phase 19 (verify: Phase 22) | Pending |
+| DEBT-04 | Phase 19 (verify: Phase 22) | Pending |
+| DEBT-05 | Phase 19 (verify: Phase 22) | Pending |
+| DEBT-06 | Phase 19 (verify: Phase 22) | Pending |
+| DEBT-07 | Phase 19 (verify: Phase 22) | Pending |
 
 **Coverage:**
 - v1.1 requirements: 48 total
@@ -159,4 +159,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-03 after Phase 20 verification*
+*Last updated: 2026-03-03 after gap closure phases 21-22 added*
