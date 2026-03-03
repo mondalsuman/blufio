@@ -101,6 +101,48 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
         });
     }
 
+    // CLNT-11: Validate MCP server entries (transport restrictions, URL requirements)
+    for server in &config.mcp.servers {
+        // Reject stdio transport
+        if server.transport == "stdio" {
+            errors.push(ConfigError::Validation {
+                message: format!(
+                    "MCP server '{}': transport 'stdio' is not allowed -- \
+                     only 'http' and 'sse' transports are supported",
+                    server.name
+                ),
+            });
+        }
+        // Reject command field
+        if server.command.is_some() {
+            errors.push(ConfigError::Validation {
+                message: format!(
+                    "MCP server '{}': 'command' field is not allowed -- \
+                     Blufio only supports HTTP-based MCP transports for security",
+                    server.name
+                ),
+            });
+        }
+        // Validate transport is a known value
+        if !["http", "sse", "stdio"].contains(&server.transport.as_str()) {
+            errors.push(ConfigError::Validation {
+                message: format!(
+                    "MCP server '{}': unknown transport '{}' -- must be 'http' or 'sse'",
+                    server.name, server.transport
+                ),
+            });
+        }
+        // Validate URL is set for HTTP/SSE transports
+        if ["http", "sse"].contains(&server.transport.as_str()) && server.url.is_none() {
+            errors.push(ConfigError::Validation {
+                message: format!(
+                    "MCP server '{}': 'url' is required for '{}' transport",
+                    server.name, server.transport
+                ),
+            });
+        }
+    }
+
     // Validate no duplicate agent names
     let mut seen_names = HashSet::new();
     for agent in &config.agents {
@@ -271,6 +313,144 @@ enabled = true
         let mut config = BlufioConfig::default();
         config.mcp.enabled = false;
         config.mcp.auth_token = None;
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn mcp_server_stdio_transport_fails_validation() {
+        let config = BlufioConfig {
+            mcp: crate::model::McpConfig {
+                servers: vec![crate::model::McpServerEntry {
+                    name: "bad".to_string(),
+                    transport: "stdio".to_string(),
+                    url: None,
+                    command: Some("npx".to_string()),
+                    args: vec![],
+                    auth_token: None,
+                    connect_timeout_secs: 10,
+                    response_size_cap: 4096,
+                }],
+                ..Default::default()
+            },
+            ..BlufioConfig::default()
+        };
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("transport 'stdio' is not allowed"))
+        ));
+    }
+
+    #[test]
+    fn mcp_server_command_field_fails_validation() {
+        let config = BlufioConfig {
+            mcp: crate::model::McpConfig {
+                servers: vec![crate::model::McpServerEntry {
+                    name: "sneaky".to_string(),
+                    transport: "http".to_string(),
+                    url: Some("https://example.com".to_string()),
+                    command: Some("malicious".to_string()),
+                    args: vec![],
+                    auth_token: None,
+                    connect_timeout_secs: 10,
+                    response_size_cap: 4096,
+                }],
+                ..Default::default()
+            },
+            ..BlufioConfig::default()
+        };
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("'command' field is not allowed"))
+        ));
+    }
+
+    #[test]
+    fn mcp_server_unknown_transport_fails_validation() {
+        let config = BlufioConfig {
+            mcp: crate::model::McpConfig {
+                servers: vec![crate::model::McpServerEntry {
+                    name: "weird".to_string(),
+                    transport: "grpc".to_string(),
+                    url: Some("https://example.com".to_string()),
+                    command: None,
+                    args: vec![],
+                    auth_token: None,
+                    connect_timeout_secs: 10,
+                    response_size_cap: 4096,
+                }],
+                ..Default::default()
+            },
+            ..BlufioConfig::default()
+        };
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("unknown transport 'grpc'"))
+        ));
+    }
+
+    #[test]
+    fn mcp_server_http_without_url_fails_validation() {
+        let config = BlufioConfig {
+            mcp: crate::model::McpConfig {
+                servers: vec![crate::model::McpServerEntry {
+                    name: "nourl".to_string(),
+                    transport: "http".to_string(),
+                    url: None,
+                    command: None,
+                    args: vec![],
+                    auth_token: None,
+                    connect_timeout_secs: 10,
+                    response_size_cap: 4096,
+                }],
+                ..Default::default()
+            },
+            ..BlufioConfig::default()
+        };
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("'url' is required"))
+        ));
+    }
+
+    #[test]
+    fn mcp_server_valid_http_passes_validation() {
+        let config = BlufioConfig {
+            mcp: crate::model::McpConfig {
+                servers: vec![crate::model::McpServerEntry {
+                    name: "good".to_string(),
+                    transport: "http".to_string(),
+                    url: Some("https://example.com/mcp".to_string()),
+                    command: None,
+                    args: vec![],
+                    auth_token: Some("token".to_string()),
+                    connect_timeout_secs: 10,
+                    response_size_cap: 4096,
+                }],
+                ..Default::default()
+            },
+            ..BlufioConfig::default()
+        };
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn mcp_server_valid_sse_passes_validation() {
+        let config = BlufioConfig {
+            mcp: crate::model::McpConfig {
+                servers: vec![crate::model::McpServerEntry {
+                    name: "sse_server".to_string(),
+                    transport: "sse".to_string(),
+                    url: Some("https://example.com/sse".to_string()),
+                    command: None,
+                    args: vec![],
+                    auth_token: None,
+                    connect_timeout_secs: 15,
+                    response_size_cap: 2048,
+                }],
+                ..Default::default()
+            },
+            ..BlufioConfig::default()
+        };
         assert!(validate_config(&config).is_ok());
     }
 

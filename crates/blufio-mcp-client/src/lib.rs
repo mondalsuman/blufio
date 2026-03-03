@@ -12,3 +12,12 @@
 //! The `rmcp` crate is used freely within this crate for protocol
 //! handling. However, **no rmcp types appear in the public API**.
 //! All public types are Blufio-owned.
+
+pub mod external_tool;
+pub mod health;
+pub mod manager;
+pub mod pin;
+pub mod pin_store;
+pub mod sanitize;
+
+pub use manager::{DiagnosticResult, McpClientManager, diagnose_server};

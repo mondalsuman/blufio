@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: MCP Integration
 status: unknown
-last_updated: "2026-03-02T21:45:10.683Z"
+last_updated: "2026-03-03"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 12
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 16
+  completed_plans: 16
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.1 MCP Integration -- Phase 17: MCP Server HTTP + Resources
+**Current focus:** v1.1 MCP Integration -- Phase 19: Integration Testing + Tech Debt
 
 ## Current Position
 
-Phase: 17 of 19 (MCP Server HTTP + Resources)
-Plan: 5 of 5 in current phase (PHASE COMPLETE)
-Status: Phase 17 Complete
-Last activity: 2026-03-02 -- Plan 17-05 Gap Closure completed
+Phase: 18 of 20 (MCP Client)
+Plan: 4 of 4 in current phase (PHASE COMPLETE)
+Status: Phase 18 Complete
+Last activity: 2026-03-03 -- Phase 18 MCP Client completed (4 plans, 4 commits)
 
-Progress: [#########################.....] 17/19 phases (v1.0 complete, v1.1 Phases 15-17 done)
+Progress: [##########################....] 18/20 phases (v1.0 complete, v1.1 Phases 15-18 done)
 
 ## Performance Metrics
 
@@ -40,7 +40,8 @@ Progress: [#########################.....] 17/19 phases (v1.0 complete, v1.1 Pha
 - Phase 15: 4 plans completed
 - Phase 16: 3 plans completed
 - Phase 17: 5 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files; 17-03, 17min, 2 tasks, 6 files; 17-04, 15min, 2 tasks, 4 files; 17-05, 5min, 1 task, 2 files)
-- Total plans completed: 12
+- Phase 18: 4 plans completed (18-01: config+security; 18-02: manager+ExternalTool+wiring; 18-03: PinStore+health+unregister; 18-04: doctor checks)
+- Total plans completed: 16
 
 ## Accumulated Context
 
@@ -93,6 +94,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-02
-Stopped at: Completed 17-05-PLAN.md (Gap Closure: notification wiring + progress reporter) -- Phase 17 fully complete
-Next action: Begin Phase 18 (MCP Client)
+Last session: 2026-03-03
+Stopped at: Completed Phase 18 (MCP Client) -- all 4 plans executed, all requirements met
+Next action: Begin Phase 19 (Integration Testing + Tech Debt)

@@ -918,14 +918,15 @@ pub struct McpServerEntry {
     /// Unique name for this MCP server (used as namespace prefix).
     pub name: String,
 
-    /// Transport type: "http" or "stdio".
+    /// Transport type: "http" (Streamable HTTP, default) or "sse" (legacy).
+    /// "stdio" is rejected at validation time (CLNT-11).
     pub transport: String,
 
-    /// URL for HTTP transport connections.
+    /// URL for HTTP/SSE transport connections.
     #[serde(default)]
     pub url: Option<String>,
 
-    /// Command for stdio transport.
+    /// Command for stdio transport (rejected at validation — CLNT-11).
     #[serde(default)]
     pub command: Option<String>,
 
@@ -936,6 +937,23 @@ pub struct McpServerEntry {
     /// Optional bearer token for HTTP authentication.
     #[serde(default)]
     pub auth_token: Option<String>,
+
+    /// Connection timeout in seconds (default: 10).
+    #[serde(default = "default_connect_timeout_secs")]
+    pub connect_timeout_secs: u64,
+
+    /// Maximum response size in characters (default: 4096).
+    /// Responses exceeding this cap are truncated with a [truncated] suffix.
+    #[serde(default = "default_response_size_cap")]
+    pub response_size_cap: usize,
+}
+
+fn default_connect_timeout_secs() -> u64 {
+    10
+}
+
+fn default_response_size_cap() -> usize {
+    4096
 }
 
 #[cfg(test)]
@@ -978,11 +996,45 @@ args = ["-y", "mcp-server"]
             config.mcp.servers[0].url.as_deref(),
             Some("https://mcp.github.com")
         );
+        // Verify new field defaults
+        assert_eq!(config.mcp.servers[0].connect_timeout_secs, 10);
+        assert_eq!(config.mcp.servers[0].response_size_cap, 4096);
         assert_eq!(config.mcp.servers[1].name, "local");
         assert_eq!(config.mcp.servers[1].transport, "stdio");
         assert_eq!(config.mcp.servers[1].command.as_deref(), Some("npx"));
         assert_eq!(config.mcp.servers[1].args, vec!["-y", "mcp-server"]);
         assert_eq!(config.mcp.export_tools, vec!["http", "file"]);
+    }
+
+    #[test]
+    fn mcp_server_entry_custom_timeout_and_cap() {
+        let toml_str = r#"
+[[mcp.servers]]
+name = "custom"
+transport = "http"
+url = "https://example.com/mcp"
+connect_timeout_secs = 30
+response_size_cap = 8192
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.mcp.servers[0].connect_timeout_secs, 30);
+        assert_eq!(config.mcp.servers[0].response_size_cap, 8192);
+    }
+
+    #[test]
+    fn mcp_server_entry_sse_transport_parses() {
+        let toml_str = r#"
+[[mcp.servers]]
+name = "legacy"
+transport = "sse"
+url = "https://sse-server.example.com/sse"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.mcp.servers[0].transport, "sse");
+        assert_eq!(
+            config.mcp.servers[0].url.as_deref(),
+            Some("https://sse-server.example.com/sse")
+        );
     }
 
     #[test]

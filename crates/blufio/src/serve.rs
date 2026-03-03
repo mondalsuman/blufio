@@ -204,6 +204,44 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         SkillProvider::new(tool_registry.clone(), config.skill.max_skills_in_prompt);
     context_engine.add_conditional_provider(Box::new(skill_provider));
 
+    // Initialize MCP client connections to external servers (if configured).
+    #[cfg(feature = "mcp-client")]
+    let _mcp_client_manager = if !config.mcp.servers.is_empty() {
+        // Redact MCP server auth tokens in logs.
+        for server in &config.mcp.servers {
+            if let Some(ref token) = server.auth_token {
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    token.clone(),
+                );
+            }
+        }
+
+        let (manager, result) =
+            blufio_mcp_client::McpClientManager::connect_all(&config.mcp.servers, &tool_registry)
+                .await;
+
+        if result.connected > 0 {
+            info!(
+                connected = result.connected,
+                failed = result.failed,
+                tools = result.tools_registered,
+                "MCP client initialized"
+            );
+        }
+        if result.failed > 0 {
+            warn!(
+                failed = result.failed,
+                "some MCP server connections failed (non-fatal)"
+            );
+        }
+
+        Some(manager)
+    } else {
+        debug!("no MCP servers configured");
+        None
+    };
+
     let context_engine = Arc::new(context_engine);
 
     // Initialize Anthropic provider.
