@@ -139,20 +139,27 @@ impl Default for HealthTracker {
     }
 }
 
+/// Timeout for individual ping requests.
+const PING_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Spawn the health monitor background task.
 ///
-/// The health monitor periodically checks server health. For this initial
-/// implementation, it tracks state transitions but does not perform actual
-/// pings (that requires access to the RunningService instances which will
-/// be integrated in a future refinement).
+/// The health monitor periodically pings each connected MCP server session.
+/// On ping success, the server is marked healthy. On ping failure (timeout
+/// or error), the server is marked degraded with exponential backoff tracking.
+///
+/// State transitions are logged by [`HealthTracker::mark_healthy`] (info)
+/// and [`HealthTracker::mark_degraded`] (warn).
 ///
 /// The task runs until the cancellation token is triggered.
 pub fn spawn_health_monitor(
-    server_names: Vec<String>,
+    sessions: HashMap<String, std::sync::Arc<rmcp::service::RunningService<rmcp::RoleClient, ()>>>,
+    tracker: std::sync::Arc<tokio::sync::RwLock<HealthTracker>>,
+    interval_secs: u64,
     cancel: tokio_util::sync::CancellationToken,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(DEFAULT_HEALTH_INTERVAL_SECS));
+        let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
 
         // Skip initial tick.
         interval.tick().await;
@@ -160,8 +167,31 @@ pub fn spawn_health_monitor(
         loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    for name in &server_names {
-                        debug!(server = %name, "MCP health check tick");
+                    for (name, session) in &sessions {
+                        debug!(server = %name, "MCP health check ping");
+
+                        let ping_result = tokio::time::timeout(
+                            PING_TIMEOUT,
+                            session.send_request(
+                                rmcp::model::ClientRequest::PingRequest(Default::default())
+                            ),
+                        )
+                        .await;
+
+                        // Acquire lock, update state, drop lock before next iteration.
+                        let mut t = tracker.write().await;
+                        match ping_result {
+                            Ok(Ok(_)) => {
+                                t.mark_healthy(name);
+                            }
+                            Ok(Err(e)) => {
+                                t.mark_degraded(name, format!("ping error: {e}"));
+                            }
+                            Err(_) => {
+                                t.mark_degraded(name, "ping timed out".to_string());
+                            }
+                        }
+                        drop(t);
                     }
                 }
                 _ = cancel.cancelled() => {
@@ -258,7 +288,14 @@ mod tests {
     #[tokio::test]
     async fn health_monitor_shuts_down_on_cancel() {
         let cancel = tokio_util::sync::CancellationToken::new();
-        let handle = spawn_health_monitor(vec!["test".to_string()], cancel.clone());
+        let sessions = HashMap::new();
+        let tracker = std::sync::Arc::new(tokio::sync::RwLock::new(HealthTracker::new()));
+        let handle = spawn_health_monitor(
+            sessions,
+            tracker,
+            DEFAULT_HEALTH_INTERVAL_SECS,
+            cancel.clone(),
+        );
 
         // Cancel immediately.
         cancel.cancel();
