@@ -355,6 +355,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             };
             let gateway = GatewayChannel::new(gateway_config);
 
+            // Wire storage adapter for GET /v1/sessions (DEBT-01).
+            gateway.set_storage(storage.clone()).await;
+
             // Wire MCP HTTP transport onto the gateway (if enabled).
             #[cfg(feature = "mcp-server")]
             if config.mcp.enabled {

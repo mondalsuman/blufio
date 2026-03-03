@@ -203,24 +203,24 @@ impl TestHarness {
         self.storage.create_session(&session).await?;
 
         // Create a SessionActor
-        use blufio_agent::session::SessionActor;
-        let mut actor = SessionActor::new(
-            session_id.clone(),
-            self.storage.clone(),
-            self.mock_provider.clone() as Arc<dyn ProviderAdapter + Send + Sync>,
-            self.context_engine.clone(),
-            self.budget_tracker.clone(),
-            self.cost_ledger.clone(),
-            None, // no memory provider
-            None, // no memory extractor
-            "mock".to_string(),
-            self.router.clone(),
-            self.config.anthropic.default_model.clone(),
-            self.config.anthropic.max_tokens,
-            self.config.routing.enabled,
-            self.config.memory.idle_timeout_secs,
-            self.tool_registry.clone(),
-        );
+        use blufio_agent::session::{SessionActor, SessionActorConfig};
+        let mut actor = SessionActor::new(SessionActorConfig {
+            session_id: session_id.clone(),
+            storage: self.storage.clone(),
+            provider: self.mock_provider.clone() as Arc<dyn ProviderAdapter + Send + Sync>,
+            context_engine: self.context_engine.clone(),
+            budget_tracker: self.budget_tracker.clone(),
+            cost_ledger: self.cost_ledger.clone(),
+            memory_provider: None, // no memory provider
+            memory_extractor: None, // no memory extractor
+            channel: "mock".to_string(),
+            router: self.router.clone(),
+            default_model: self.config.anthropic.default_model.clone(),
+            default_max_tokens: self.config.anthropic.max_tokens,
+            routing_enabled: self.config.routing.enabled,
+            idle_timeout_secs: self.config.memory.idle_timeout_secs,
+            tool_registry: self.tool_registry.clone(),
+        });
 
         // Create inbound message
         let inbound = InboundMessage {

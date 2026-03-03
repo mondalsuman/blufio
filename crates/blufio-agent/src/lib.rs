@@ -43,7 +43,7 @@ pub use heartbeat::HeartbeatRunner;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use crate::session::SessionActor;
+use crate::session::{SessionActor, SessionActorConfig};
 
 /// The main agent loop that coordinates message flow between channel, provider, and storage.
 ///
@@ -588,23 +588,23 @@ impl AgentLoop {
                     "resuming existing session"
                 );
                 // Create actor for the existing session.
-                let actor = SessionActor::new(
-                    session.id.clone(),
-                    self.storage.clone(),
-                    self.provider.clone(),
-                    self.context_engine.clone(),
-                    self.budget_tracker.clone(),
-                    self.cost_ledger.clone(),
-                    self.memory_provider.as_ref().cloned(),
-                    self.memory_extractor.clone(),
-                    channel.to_string(),
-                    self.router.clone(),
-                    self.config.anthropic.default_model.clone(),
-                    self.config.anthropic.max_tokens,
-                    self.config.routing.enabled,
-                    self.config.memory.idle_timeout_secs,
-                    self.tool_registry.clone(),
-                );
+                let actor = SessionActor::new(SessionActorConfig {
+                    session_id: session.id.clone(),
+                    storage: self.storage.clone(),
+                    provider: self.provider.clone(),
+                    context_engine: self.context_engine.clone(),
+                    budget_tracker: self.budget_tracker.clone(),
+                    cost_ledger: self.cost_ledger.clone(),
+                    memory_provider: self.memory_provider.as_ref().cloned(),
+                    memory_extractor: self.memory_extractor.clone(),
+                    channel: channel.to_string(),
+                    router: self.router.clone(),
+                    default_model: self.config.anthropic.default_model.clone(),
+                    default_max_tokens: self.config.anthropic.max_tokens,
+                    routing_enabled: self.config.routing.enabled,
+                    idle_timeout_secs: self.config.memory.idle_timeout_secs,
+                    tool_registry: self.tool_registry.clone(),
+                });
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
                 #[cfg(feature = "prometheus")]
@@ -636,23 +636,23 @@ impl AgentLoop {
             "created new session"
         );
 
-        let actor = SessionActor::new(
-            session_id.clone(),
-            self.storage.clone(),
-            self.provider.clone(),
-            self.context_engine.clone(),
-            self.budget_tracker.clone(),
-            self.cost_ledger.clone(),
-            self.memory_provider.as_ref().cloned(),
-            self.memory_extractor.clone(),
-            channel.to_string(),
-            self.router.clone(),
-            self.config.anthropic.default_model.clone(),
-            self.config.anthropic.max_tokens,
-            self.config.routing.enabled,
-            self.config.memory.idle_timeout_secs,
-            self.tool_registry.clone(),
-        );
+        let actor = SessionActor::new(SessionActorConfig {
+            session_id: session_id.clone(),
+            storage: self.storage.clone(),
+            provider: self.provider.clone(),
+            context_engine: self.context_engine.clone(),
+            budget_tracker: self.budget_tracker.clone(),
+            cost_ledger: self.cost_ledger.clone(),
+            memory_provider: self.memory_provider.as_ref().cloned(),
+            memory_extractor: self.memory_extractor.clone(),
+            channel: channel.to_string(),
+            router: self.router.clone(),
+            default_model: self.config.anthropic.default_model.clone(),
+            default_max_tokens: self.config.anthropic.max_tokens,
+            routing_enabled: self.config.routing.enabled,
+            idle_timeout_secs: self.config.memory.idle_timeout_secs,
+            tool_registry: self.tool_registry.clone(),
+        });
         self.sessions.insert(session_key, actor);
         #[cfg(feature = "prometheus")]
         blufio_prometheus::set_active_sessions(self.sessions.len() as f64);

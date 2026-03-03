@@ -26,7 +26,7 @@ use futures::StreamExt;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::session::SessionActor;
+use crate::session::{SessionActor, SessionActorConfig};
 
 /// Internal representation of a specialist agent.
 struct AgentSpec {
@@ -167,23 +167,23 @@ impl DelegationRouter {
         let tool_registry = Arc::new(RwLock::new(ToolRegistry::new()));
 
         // Create ephemeral SessionActor
-        let mut actor = SessionActor::new(
-            session_id.clone(),
-            self.storage.clone(),
-            self.provider.clone(),
+        let mut actor = SessionActor::new(SessionActorConfig {
+            session_id: session_id.clone(),
+            storage: self.storage.clone(),
+            provider: self.provider.clone(),
             context_engine,
-            self.budget_tracker.clone(),
-            self.cost_ledger.clone(),
-            None, // no memory provider for specialists
-            None, // no memory extractor for specialists
-            "delegation".to_string(),
-            self.router.clone(),
-            agent.config.model.clone(),
-            4096,  // default max tokens for specialists
-            false, // routing disabled for specialists
-            300,   // idle timeout (irrelevant for ephemeral)
+            budget_tracker: self.budget_tracker.clone(),
+            cost_ledger: self.cost_ledger.clone(),
+            memory_provider: None, // no memory provider for specialists
+            memory_extractor: None, // no memory extractor for specialists
+            channel: "delegation".to_string(),
+            router: self.router.clone(),
+            default_model: agent.config.model.clone(),
+            default_max_tokens: 4096,  // default max tokens for specialists
+            routing_enabled: false, // routing disabled for specialists
+            idle_timeout_secs: 300,   // idle timeout (irrelevant for ephemeral)
             tool_registry,
-        );
+        });
 
         // 5. Build inbound message from the delegation request
         let combined_content = if context.is_empty() {

@@ -12,6 +12,7 @@ use axum::{
     routing::{get, post},
 };
 use blufio_core::BlufioError;
+use blufio_core::StorageAdapter;
 use blufio_core::types::InboundMessage;
 use dashmap::DashMap;
 use tokio::sync::{mpsc, oneshot};
@@ -43,6 +44,8 @@ pub struct GatewayState {
     pub auth: AuthConfig,
     /// Health state for unauthenticated endpoints.
     pub health: HealthState,
+    /// Storage adapter for querying sessions (DEBT-01).
+    pub storage: Option<Arc<dyn StorageAdapter + Send + Sync>>,
 }
 
 /// Gateway server configuration (mirrors GatewayConfig from blufio-config).
@@ -157,6 +160,7 @@ mod tests {
                 start_time: std::time::Instant::now(),
                 prometheus_render: None,
             },
+            storage: None,
         };
         let _cloned = state.clone();
     }
