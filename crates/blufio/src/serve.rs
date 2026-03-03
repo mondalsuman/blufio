@@ -96,6 +96,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         match blufio_vault::vault_startup_check(vault_conn, &config.vault).await {
             Ok(Some(_vault)) => {
                 info!("vault unlocked -- secrets available");
+                blufio_agent::sdnotify::notify_status("Initializing: vault unlocked");
             }
             Ok(None) => {
                 debug!("no vault found -- skipping vault startup check");
@@ -501,6 +502,19 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         channels = mux.channel_count(),
         "channel multiplexer connected"
     );
+    {
+        let ready_status = format!(
+            "Ready: {} channel{}{}",
+            mux.channel_count(),
+            if mux.channel_count() == 1 { "" } else { "s" },
+            if memory_provider.is_some() {
+                ", memory enabled"
+            } else {
+                ""
+            }
+        );
+        blufio_agent::sdnotify::notify_ready(&ready_status);
+    }
 
     // Initialize model router.
     let router = Arc::new(ModelRouter::new(config.routing.clone()));
@@ -584,6 +598,12 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             limit_mb = config.daemon.memory_limit_mb,
             "memory monitor started"
         );
+    }
+
+    // Spawn sd_notify watchdog ping task (if systemd watchdog is enabled).
+    {
+        let wd_cancel = cancel.clone();
+        let _watchdog_handle = blufio_agent::sdnotify::spawn_watchdog(wd_cancel);
     }
 
     // Spawn heartbeat background task if enabled.
