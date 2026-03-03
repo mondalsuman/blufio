@@ -202,7 +202,9 @@ impl ChannelAdapter for GatewayChannel {
         let mcp_max_connections = self.config.mcp_max_connections;
 
         let handle = tokio::spawn(async move {
-            if let Err(e) = server::start_server(&server_config, state, mcp_router, mcp_max_connections).await {
+            if let Err(e) =
+                server::start_server(&server_config, state, mcp_router, mcp_max_connections).await
+            {
                 tracing::error!("gateway server error: {e}");
             }
         });

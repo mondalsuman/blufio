@@ -9,9 +9,9 @@
 
 use std::sync::Arc;
 
+use axum::Router;
 use axum::body::Body;
 use axum::routing::{get, post};
-use axum::Router;
 use blufio_core::types::InboundMessage;
 use blufio_gateway::auth::AuthConfig;
 use blufio_gateway::server::{GatewayState, HealthState};
@@ -45,10 +45,7 @@ fn build_test_router() -> Router {
             "/v1/messages",
             post(blufio_gateway::handlers::post_messages),
         )
-        .route(
-            "/v1/sessions",
-            get(blufio_gateway::handlers::get_sessions),
-        )
+        .route("/v1/sessions", get(blufio_gateway::handlers::get_sessions))
         .route("/v1/health", get(blufio_gateway::handlers::get_health))
         .route("/health", get(blufio_gateway::handlers::get_public_health))
         .with_state(state)
@@ -132,10 +129,7 @@ async fn test_sessions_endpoint_returns_json_list() {
         json.get("sessions").is_some(),
         "response should have 'sessions' field"
     );
-    assert!(
-        json["sessions"].is_array(),
-        "'sessions' should be an array"
-    );
+    assert!(json["sessions"].is_array(), "'sessions' should be an array");
 }
 
 #[tokio::test]

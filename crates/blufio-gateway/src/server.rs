@@ -111,9 +111,14 @@ pub async fn start_server(
     // so it must be nested BEFORE the permissive CORS layer.
     // Connection limit (INTG-05) enforces max concurrent MCP connections.
     if let Some(mcp) = mcp_router {
-        let limited_mcp = mcp.layer(tower::limit::ConcurrencyLimitLayer::new(mcp_max_connections));
+        let limited_mcp = mcp.layer(tower::limit::ConcurrencyLimitLayer::new(
+            mcp_max_connections,
+        ));
         app = app.nest("/mcp", limited_mcp);
-        tracing::info!(max_connections = mcp_max_connections, "MCP connection limit enabled");
+        tracing::info!(
+            max_connections = mcp_max_connections,
+            "MCP connection limit enabled"
+        );
     }
 
     // Permissive CORS for non-MCP routes.

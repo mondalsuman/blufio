@@ -211,7 +211,7 @@ impl TestHarness {
             context_engine: self.context_engine.clone(),
             budget_tracker: self.budget_tracker.clone(),
             cost_ledger: self.cost_ledger.clone(),
-            memory_provider: None, // no memory provider
+            memory_provider: None,  // no memory provider
             memory_extractor: None, // no memory extractor
             channel: "mock".to_string(),
             router: self.router.clone(),

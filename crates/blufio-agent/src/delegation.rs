@@ -174,13 +174,13 @@ impl DelegationRouter {
             context_engine,
             budget_tracker: self.budget_tracker.clone(),
             cost_ledger: self.cost_ledger.clone(),
-            memory_provider: None, // no memory provider for specialists
+            memory_provider: None,  // no memory provider for specialists
             memory_extractor: None, // no memory extractor for specialists
             channel: "delegation".to_string(),
             router: self.router.clone(),
             default_model: agent.config.model.clone(),
-            default_max_tokens: 4096,  // default max tokens for specialists
-            routing_enabled: false, // routing disabled for specialists
+            default_max_tokens: 4096, // default max tokens for specialists
+            routing_enabled: false,   // routing disabled for specialists
             idle_timeout_secs: 300,   // idle timeout (irrelevant for ephemeral)
             tool_registry,
         });

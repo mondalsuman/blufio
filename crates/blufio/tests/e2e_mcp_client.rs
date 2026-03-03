@@ -165,7 +165,11 @@ fn test_external_tool_description_sanitization() {
     // Long descriptions should be truncated.
     let long_desc = "a".repeat(2000);
     let sanitized = sanitize_description("test", &long_desc);
-    assert!(sanitized.len() <= 1024, "description should be capped at 1024, got {}", sanitized.len());
+    assert!(
+        sanitized.len() <= 1024,
+        "description should be capped at 1024, got {}",
+        sanitized.len()
+    );
 
     // Normal descriptions pass through (modulo any cleaning).
     let normal = sanitize_description("test", "A useful tool for searching.");

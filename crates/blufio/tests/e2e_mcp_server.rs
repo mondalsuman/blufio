@@ -45,9 +45,7 @@ fn create_test_handler_with_resources() -> BlufioMcpHandler {
         fn adapter_type(&self) -> blufio_core::types::AdapterType {
             blufio_core::types::AdapterType::Storage
         }
-        async fn health_check(
-            &self,
-        ) -> Result<blufio_core::types::HealthStatus, BlufioError> {
+        async fn health_check(&self) -> Result<blufio_core::types::HealthStatus, BlufioError> {
             Ok(blufio_core::types::HealthStatus::Healthy)
         }
         async fn shutdown(&self) -> Result<(), BlufioError> {
@@ -72,11 +70,7 @@ fn create_test_handler_with_resources() -> BlufioMcpHandler {
         async fn list_sessions(&self, _state: Option<&str>) -> Result<Vec<Session>, BlufioError> {
             Ok(self.sessions.clone())
         }
-        async fn update_session_state(
-            &self,
-            _id: &str,
-            _state: &str,
-        ) -> Result<(), BlufioError> {
+        async fn update_session_state(&self, _id: &str, _state: &str) -> Result<(), BlufioError> {
             Ok(())
         }
         async fn insert_message(&self, _message: &Message) -> Result<(), BlufioError> {
@@ -89,17 +83,10 @@ fn create_test_handler_with_resources() -> BlufioMcpHandler {
         ) -> Result<Vec<Message>, BlufioError> {
             Ok(vec![])
         }
-        async fn enqueue(
-            &self,
-            _queue_name: &str,
-            _payload: &str,
-        ) -> Result<i64, BlufioError> {
+        async fn enqueue(&self, _queue_name: &str, _payload: &str) -> Result<i64, BlufioError> {
             Ok(0)
         }
-        async fn dequeue(
-            &self,
-            _queue_name: &str,
-        ) -> Result<Option<QueueEntry>, BlufioError> {
+        async fn dequeue(&self, _queue_name: &str) -> Result<Option<QueueEntry>, BlufioError> {
             Ok(None)
         }
         async fn ack(&self, _id: i64) -> Result<(), BlufioError> {
@@ -136,7 +123,10 @@ fn test_mcp_server_info_has_tool_capability() {
     let info = handler.get_info();
 
     // Server should advertise tool capabilities.
-    assert!(info.capabilities.tools.is_some(), "expected tools capability");
+    assert!(
+        info.capabilities.tools.is_some(),
+        "expected tools capability"
+    );
     assert_eq!(info.server_info.name, "blufio");
 }
 
