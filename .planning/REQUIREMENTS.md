@@ -128,10 +128,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UPDT-08 | Phase 27 | Pending |
 
 **Coverage:**
-- v1.2 requirements: 26 total
-- Mapped to phases: 26
-- Unmapped: 0 ✓
+- v1.2 requirements: 30 total
+- Mapped to phases: 30
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-03*
-*Last updated: 2026-03-03 after initial definition*
+*Last updated: 2026-03-03 after roadmap creation*
