@@ -1,198 +1,287 @@
-# Feature Landscape: MCP Integration (Server + Client)
+# Feature Research: v1.2 Production Hardening
 
-**Domain:** MCP integration for existing Rust AI agent platform (Blufio v1.1)
-**Researched:** 2026-03-02
-**Confidence:** HIGH (verified against MCP spec 2025-11-25, official Rust SDK rmcp 0.17, existing codebase)
+**Domain:** Production hardening for existing Rust AI agent platform (Blufio v1.2)
+**Researched:** 2026-03-03
+**Confidence:** HIGH (verified against official crate docs, systemd manpages, SQLCipher API docs, existing codebase)
 
 ---
 
 ## Context
 
-Blufio v1.0 shipped with 28,790 LOC Rust, 14 crates, and a complete agent platform (FSM sessions, Telegram, WASM skills, memory, model routing, multi-agent delegation, Prometheus). This research covers ONLY the MCP server and MCP client features for v1.1.
+Blufio v1.1 shipped with 36,462 LOC Rust across 16 crates, 118 requirements verified across 2 milestones. This research covers ONLY the five production hardening features for v1.2:
 
-MCP (Model Context Protocol) spec version targeted: **2025-11-25** (latest stable).
+1. **sd_notify integration** -- systemd Type=notify, watchdog pings
+2. **SQLCipher encryption at rest** -- PRAGMA key, plaintext migration
+3. **Minisign binary verification** -- verify-only (no key generation)
+4. **Self-update with rollback** -- download, verify, atomic swap, health check, rollback
+5. **Backup integrity verification** -- post-backup and post-restore PRAGMA integrity_check
 
----
+### What Already Exists
 
-## Table Stakes
-
-Features that any MCP integration must have. Missing these = the MCP integration is broken or useless.
-
-### MCP Server: Table Stakes
-
-| Feature | Why Expected | Complexity | Blufio Dependency | Notes |
-|---------|--------------|------------|-------------------|-------|
-| **JSON-RPC 2.0 message layer** | MCP is built on JSON-RPC 2.0. Every request, response, notification, and error follows this format. Without it, nothing works. | LOW | New code (blufio-mcp crate) | serde + serde_json already in workspace. The rmcp crate handles this, but Blufio could also implement the thin JSON-RPC layer directly for control. |
-| **Capability negotiation (initialize/initialized handshake)** | Spec-mandated lifecycle. Client sends `initialize` with its capabilities, server responds with its capabilities and protocol version. Then client sends `initialized` notification. Without this, no MCP client can connect. | LOW | New code | Must declare which server features are supported: tools, resources, prompts. Must include `protocolVersion: "2025-11-25"`. |
-| **tools/list and tools/call** | The primary reason to expose Blufio as an MCP server. External clients (Claude Desktop, VS Code, other agents) discover and invoke Blufio's tools. This is the #1 use case in PROJECT.md ("point Claude Desktop at Blufio via stdio and use skills/memory"). | MEDIUM | ToolRegistry, Tool trait, SkillRuntimeAdapter | Map Blufio's existing `Tool` trait (name, description, parameters_schema, invoke) directly to MCP tool definitions (name, description, inputSchema, tools/call). The mapping is nearly 1:1. Built-in tools (bash, HTTP, file) + WASM skills all become MCP tools. |
-| **stdio transport** | Spec says clients SHOULD support stdio. Claude Desktop, Claude Code, and most local MCP clients use stdio as the primary transport. PROJECT.md explicitly lists stdio as a required transport. | MEDIUM | New code (stdin/stdout JSON-RPC loop) | Blufio runs as subprocess of the host (Claude Desktop launches `blufio mcp-server`). Communication over stdin/stdout. Must handle line-delimited JSON-RPC. The rmcp crate provides `TokioChildProcess` and stdio transport. |
-| **Streamable HTTP transport** | The modern standard for remote MCP connections (replaced legacy SSE). PROJECT.md lists this as required. Needed for programmatic clients and remote access. | MEDIUM | blufio-gateway (axum) | Single HTTP endpoint, POST for requests, GET for SSE stream. Can coexist with existing axum gateway routes. The rmcp crate has `transport-streamable-http-server` feature. |
-| **SSE transport (legacy)** | PROJECT.md lists SSE as a required transport. While deprecated in favor of Streamable HTTP, many existing clients still use it. Needed for backward compatibility. | LOW | blufio-gateway (axum) | SSE endpoint + POST endpoint. Axum already has SSE support. Can share transport layer with Streamable HTTP. |
-| **Tool input validation** | Spec requires servers MUST validate all tool inputs. Blufio already has JSON Schema for each tool via `parameters_schema()`. | LOW | Existing Tool trait | Validate incoming `tools/call` arguments against the tool's inputSchema before invoking. Return JSON-RPC error (-32602) for invalid input. |
-| **Error handling (protocol + tool execution)** | Spec distinguishes protocol errors (JSON-RPC errors for unknown tools, malformed requests) from tool execution errors (returned in result with `isError: true`). Must implement both. | LOW | Existing ToolOutput.is_error | Direct mapping: Blufio's `ToolOutput { content, is_error }` maps to MCP's `{ content: [{ type: "text", text }], isError }`. Protocol errors use standard JSON-RPC error codes. |
-| **Ping/keepalive** | Spec defines `ping` method for connection health checking. Clients send pings, server must respond. | LOW | New code | Trivial: respond to `ping` with empty result. |
-
-### MCP Client: Table Stakes
-
-| Feature | Why Expected | Complexity | Blufio Dependency | Notes |
-|---------|--------------|------------|-------------------|-------|
-| **MCP client connection manager** | Must connect to external MCP servers, perform initialization handshake, discover capabilities. Without this, no external MCP tools are available. | MEDIUM | New code (blufio-mcp crate) | Manages lifecycle: connect -> initialize -> discover tools -> maintain connection. Must handle multiple concurrent MCP server connections. |
-| **stdio transport (client side)** | Must launch external MCP servers as subprocesses and communicate via stdin/stdout. This is how most MCP servers are distributed (CLI tools). | MEDIUM | New code (tokio process) | Launch configured command, pipe stdin/stdout, parse JSON-RPC. The rmcp crate's `TokioChildProcess` handles this. |
-| **Streamable HTTP transport (client side)** | Must connect to remote MCP servers over HTTP. Needed for cloud-hosted MCP services. | LOW | reqwest (already in workspace) | HTTP POST for requests, optional SSE for notifications. |
-| **tools/list discovery** | Must discover available tools from each connected MCP server. Tools become available to the agent during conversations. | LOW | ToolRegistry | Fetch tool list from each MCP server, register them in the agent's ToolRegistry with a namespace prefix (e.g., `mcp.github.create_issue`). |
-| **tools/call invocation** | When the LLM requests an MCP tool, the client must route the call to the correct MCP server and return the result. | MEDIUM | Agent loop (session.rs) | Agent loop already handles tool_use content blocks. Add MCP tool routing: if tool name starts with `mcp.{server_name}.`, route to that MCP server's tools/call endpoint. |
-| **TOML configuration for MCP servers** | Operators configure which MCP servers to connect to, their transport type, command/URL, and environment variables. PROJECT.md explicitly requires TOML-based config. | LOW | blufio-config | Add `[[mcp.servers]]` array to TOML config. Each entry: name, transport (stdio/http), command or url, optional env vars, optional args. |
-| **Connection lifecycle management** | Handle MCP server startup, crashes, reconnection, and shutdown. Always-on agent must recover from MCP server failures without crashing. | MEDIUM | New code | Retry with backoff on connection failure. Log errors, mark server as degraded. Continue operating with remaining MCP servers. Health check integration. |
-| **Tool schema forwarding to LLM** | External MCP tools must be included in the LLM's tool definitions so the model can discover and use them. | LOW | ToolRegistry.tool_definitions() | MCP tool schemas (inputSchema) map directly to Anthropic tool definitions (input_schema). Add MCP tools to the definitions array sent to the provider. |
+| Area | Current State | Gap |
+|------|--------------|-----|
+| systemd | Unit file generation exists, Type=simple | No sd_notify, no READY=1, no watchdog |
+| SQLite | WAL-mode with rusqlite 0.37 bundled, plaintext | No encryption at rest |
+| Binary signing | Ed25519 for inter-agent messages | Not for binary verification |
+| Self-update | No update mechanism | Entirely new feature |
+| Backup | SQLite Backup API in backup.rs | No integrity check post-backup/restore |
+| Doctor | PRAGMA integrity_check on live DB via --deep | Not wired into backup/restore flow |
 
 ---
 
-## Differentiators
+## Feature 1: sd_notify Integration
 
-Features that go beyond basic MCP compliance. These create real value for Blufio operators.
+### Table Stakes
 
-### MCP Server: Differentiators
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **READY=1 notification** | systemd Type=notify services MUST send READY=1 when initialization completes. Without it, systemd considers the service failed after TimeoutStartSec. | LOW | Send after vault unlock, storage init, channel connect, provider init -- right before agent_loop.run(). Single call: sd_notify::notify(true, &[NotifyState::Ready]). |
+| **STOPPING=1 notification** | systemd should know when the service is shutting down gracefully vs. crashing. Sent when SIGTERM/SIGINT is received, before cleanup begins. | LOW | Send in the signal handler callback, before cancellation token fires. |
+| **Watchdog ping (WATCHDOG=1)** | systemd kills services that stop pinging with SIGABRT. The WatchdogSec directive in the unit file defines the timeout. Best practice: ping at half the WatchdogSec interval. | LOW | Spawn a tokio task that calls sd_notify::notify(true, &[NotifyState::Watchdog]) on an interval derived from sd_notify::watchdog_enabled(). The watchdog task should only run if systemd reports watchdog is enabled. |
+| **Unit file update to Type=notify** | The generated systemd unit file must change from Type=simple to Type=notify and add WatchdogSec= directive. | LOW | Update the unit file template. Add WatchdogSec=30 (30s is conservative for an agent with HTTP + LLM dependencies). Add NotifyAccess=main. |
+| **Graceful no-op on non-systemd** | sd_notify must be a no-op on macOS/dev environments where NOTIFY_SOCKET is unset. The process should not crash or log errors. | LOW | sd_notify::notify(true, ...) already handles this -- the true parameter means "unset NOTIFY_SOCKET after sending" and the function returns Ok(()) when the socket is missing. |
 
-| Feature | Value Proposition | Complexity | Blufio Dependency | Notes |
-|---------|-------------------|------------|-------------------|-------|
-| **Expose memory as MCP resources** | External clients can read Blufio's long-term memory via `resources/read`. URI scheme: `blufio://memory/{id}` for specific memories, `blufio://memory/search?q={query}` as resource template. Unique: most MCP servers are stateless tools. Blufio has a real memory system with hybrid search. | MEDIUM | MemoryStore, HybridRetriever | Expose `resources/list` (recent/important memories), `resources/templates/list` (search template), `resources/read` (fetch specific memory or search results). This lets Claude Desktop "see" what Blufio remembers. |
-| **Expose sessions as MCP resources** | External clients can read conversation history. URI: `blufio://session/{id}` for session messages, `blufio://sessions` for listing. Useful for debugging, auditing, or feeding session context into other tools. | LOW | StorageAdapter (sessions, messages) | Read-only access to session data. Paginated. Operators can configure which sessions are exposed (all vs. specific). |
-| **MCP prompts for agent workflows** | Expose predefined prompt templates via `prompts/list` and `prompts/get`. Examples: "summarize-session" (summarize a conversation), "remember-fact" (store a memory), "search-memory" (semantic search). These become slash commands in Claude Desktop. | MEDIUM | Context engine, memory system | Prompts are dynamic: "summarize-session" takes a session_id argument and returns a formatted prompt with the session's messages embedded. More useful than static templates because they pull real data. |
-| **Tool annotations** | Add `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` to each exposed tool. Helps clients display appropriate UI (confirmation dialogs for destructive tools, auto-approve for read-only). | LOW | Tool trait metadata | bash tool: `destructiveHint: true, openWorldHint: true`. HTTP tool: `openWorldHint: true`. file read: `readOnlyHint: true`. Memory search: `readOnlyHint: true, idempotentHint: true`. Improves trust and usability in Claude Desktop. |
-| **listChanged notifications** | Notify connected clients when tools/resources/prompts change (e.g., a new WASM skill is installed, memories are updated). Spec-defined but optional; implementing it makes the server feel alive. | LOW | Skill install events, memory write events | When `blufio skill install` adds a new skill, emit `notifications/tools/list_changed`. When memory is created/updated, emit `notifications/resources/list_changed`. Clients re-fetch the lists. |
-| **Resource subscriptions for memory** | Clients can subscribe to specific memory resources and get notified when they change (superseded, forgotten, new related memories). | MEDIUM | MemoryStore write hooks | Subscribe to `blufio://memory/{id}` -- get notified if that memory is superseded or forgotten. Subscribe to `blufio://memory/search?q=project` -- get notified when new memories match the query. Rich integration. |
-| **Structured tool output (outputSchema)** | Define JSON schemas for tool outputs, not just inputs. Lets clients parse and validate structured responses. New in 2025-11-25 spec. | LOW | ToolOutput enhancement | Add optional `output_schema()` to Tool trait. Tools like "search-memory" return structured JSON (array of memories with scores). Clients can render this as tables, not raw text. |
-| **Progress reporting for long tools** | WASM skills and HTTP tools can take seconds. Report progress via `notifications/progress` so clients show progress bars instead of "thinking...". | LOW | Existing epoch-based timeouts in WASM sandbox | Emit progress notifications during WASM skill execution (fuel consumed / fuel limit) and HTTP requests (connected, waiting, received). Better UX in Claude Desktop. |
-| **`blufio mcp-server` CLI subcommand** | Dedicated CLI entry point for running Blufio as an MCP server. Claude Desktop config points to: `"command": "blufio", "args": ["mcp-server"]`. Clean, discoverable, follows MCP conventions. | LOW | CLI (clap) | New subcommand that starts the stdio MCP server loop. Does not start Telegram, gateway, or other services -- just the MCP server. Minimal startup for fast connection. |
+### Differentiators
 
-### MCP Client: Differentiators
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **STATUS= messages during startup** | systemd shows startup progress: "Loading vault...", "Connecting channels...", "Ready". Visible via systemctl status blufio. Operators see exactly where startup is. | LOW | Sprinkle NotifyState::Status("phase") calls throughout run_serve(). Five or six calls total. |
+| **ExtendTimeoutUsec during slow init** | If vault unlock or ONNX model download takes longer than TimeoutStartSec, extend the timeout dynamically rather than failing. | LOW | Before vault unlock and model download, send NotifyState::ExtendTimeoutUsec(30_000_000) (30s). Prevents false startup failures on first run. |
+| **RELOADING=1 for config reload** | If hot-reload is implemented later, the service can signal it is reloading. Not needed now, but the infrastructure (sd_notify crate) supports it for free. | N/A | Defer. No config hot-reload in v1.2. |
 
-| Feature | Value Proposition | Complexity | Blufio Dependency | Notes |
-|---------|-------------------|------------|-------------------|-------|
-| **Namespace-prefixed tool names** | External MCP tools are prefixed with their server name: `mcp.github.create_issue`, `mcp.filesystem.read_file`. Prevents name collisions between multiple MCP servers and Blufio's built-in tools. | LOW | ToolRegistry | Convention: `mcp.{server_name}.{tool_name}`. The LLM sees clear provenance. Agent loop routes by prefix. |
-| **Per-server budget tracking** | Track token cost and invocation count for each external MCP server. Operators can set per-server limits: "github MCP server max 100 calls/day". | MEDIUM | Cost ledger | Extend cost_events table with mcp_server column. Report in `blufio status`. Kill switch per MCP server when budget exceeded. |
-| **MCP server health in `blufio doctor`** | `blufio doctor` checks connectivity to all configured MCP servers: can connect, initialize, list tools. Reports degraded/unhealthy servers. | LOW | Existing doctor command | Add MCP server health checks alongside existing checks (LLM, DB, channel). |
-| **Dynamic MCP server discovery** | Hot-reload MCP server configuration without restarting Blufio. Edit TOML, server picks up changes. New MCP servers become available, removed ones disconnect. | MEDIUM | Config watch (already supported in blufio-config) | Watch `mcp.servers` section for changes. Connect to new servers, disconnect removed ones. Emit tool list changes to agent. |
-| **Sampling capability (server-initiated LLM calls)** | When an external MCP server requests sampling (`sampling/createMessage`), Blufio routes it through its own LLM provider (with model routing). The MCP server gets LLM access without needing its own API keys. | HIGH | Provider trait, model routing | Declare `sampling` capability during client initialization. Handle `sampling/createMessage` by routing through Blufio's provider. Apply budget caps, model preferences, and rate limits. This turns Blufio into an LLM gateway for MCP servers. |
-| **Roots capability** | Declare filesystem roots that MCP servers can operate within. Scopes MCP server access to specific directories. | LOW | Security model | Declare `roots` capability. Return configured roots (e.g., `file:///home/user/projects`). Notify when roots change. Security boundary for file-accessing MCP servers. |
+### Anti-Features
+
+| Anti-Feature | Why Problematic | Alternative |
+|--------------|-----------------|-------------|
+| **Linking against libsystemd** | Adds a native library dependency. Breaks static musl builds. The sd-notify crate uses raw Unix sockets instead. | Use sd-notify crate (pure Rust, zero dependencies beyond std). |
+| **Watchdog tied to LLM health** | Tempting to only ping watchdog when an LLM call succeeds. But LLM outages are external -- restarting the agent fixes nothing. | Watchdog should verify internal health: tokio runtime alive, DB connection open. LLM outages are logged and metriced, not treated as daemon failure. |
+| **Socket activation (systemd sockets)** | Adds complexity. Blufio already binds its own sockets in axum. | Keep self-managed socket binding. Socket activation is useful for on-demand services; Blufio is always-on. |
 
 ---
 
-## Anti-Features
+## Feature 2: SQLCipher Encryption at Rest
 
-Features that seem logical for MCP integration but should be explicitly avoided.
+### Table Stakes
 
-| Anti-Feature | Why It Seems Reasonable | Why Problematic | What to Do Instead |
-|--------------|------------------------|-----------------|-------------------|
-| **Implement MCP from scratch (no SDK)** | Full control, no dependency, matches Blufio's "minimal deps" philosophy. | JSON-RPC 2.0 + MCP lifecycle + transport negotiation + capability negotiation is ~2,000-4,000 lines of protocol code. The spec has edge cases (pagination cursors, cancellation tokens, task states). rmcp 0.17 is the official Rust SDK, actively maintained, tokio-native, and handles all of this. Reinventing it wastes time and introduces spec-compliance bugs. | Use rmcp crate with feature flags. It is the official Rust MCP SDK, uses tokio + serde (already in workspace), and has `ServerHandler`/`ClientHandler` traits. Feature-flag transports to control binary size. |
-| **Expose every internal as an MCP tool** | "More tools = more useful." Expose session management, config editing, plugin management, vault operations, etc. | Security disaster. MCP tools are invoked by LLMs. An LLM calling `vault.decrypt_secret` or `config.set_bind_address("0.0.0.0")` is a privilege escalation vector. Tool annotations are hints, not enforcement. | Expose a curated set: built-in tools (bash, HTTP, file), WASM skills, memory search, session read. Never expose vault, config mutation, or security-sensitive operations as MCP tools. |
-| **MCP server as the primary agent interface** | "Replace Telegram with MCP. Claude Desktop becomes the interface." | MCP is a tool/resource protocol, not a chat protocol. It has no concept of streaming responses, typing indicators, conversation sessions, or message formatting. The agent loop needs a Channel adapter, not an MCP connection. | MCP server is an auxiliary interface: it exposes tools and data. Telegram (and future channels) remain the primary conversational interfaces. MCP and channels serve different purposes. |
-| **Implement Tasks (async tool execution)** | Spec 2025-11-25 adds Tasks for long-running operations. Seems forward-thinking. | Tasks are marked EXPERIMENTAL in the spec. The rmcp crate has partial support. Client adoption is minimal (Claude Desktop does not support tasks yet as of early 2026). Building against an experimental feature risks rework when the spec changes. | Defer Tasks to v1.2+. Synchronous tool execution is sufficient for v1.1. WASM skills have 5-second epoch timeouts which keep tools responsive. If a tool is too slow, it should be redesigned, not made async. |
-| **Implement Elicitation** | Spec 2025-11-25 adds Elicitation for servers to request user input. Could be useful for WASM skills that need parameters. | Elicitation requires the client to present UI for user input. Blufio's MCP client connects to external servers -- it has no UI (Telegram is the UI). Implementing elicitation in the client means proxying input requests through Telegram, which is complex and confusing UX. | Defer Elicitation. External MCP servers that need user input should use tool parameters instead. For Blufio-as-server, the connected client (Claude Desktop) handles elicitation natively. |
-| **MCP Bundles (.mcpb) distribution** | Package Blufio's MCP server as an .mcpb bundle for easy distribution. | Bundles are a distribution format for MCP servers, not a runtime feature. Blufio already ships as a single binary. An .mcpb bundle would just contain the binary + a manifest.json pointing to `blufio mcp-server`. Adds packaging complexity for minimal value. | Document the Claude Desktop JSON config needed to connect to Blufio. Ship an example config file. The single binary IS the distribution. |
-| **OAuth 2.1 authorization for MCP server** | Spec 2025-11-25 adds OAuth with CIMD for remote MCP servers. Enterprise feature. | Blufio's MCP server will primarily run locally (stdio) or on the same machine (localhost HTTP). OAuth adds significant complexity (authorization server, token management, scope negotiation). Not needed when the server is local. | Use Blufio's existing device keypair authentication for HTTP transport. For stdio transport, the process is already authenticated by the OS (parent process launched it). Add OAuth as a v1.2+ feature if remote MCP server access becomes a requirement. |
-| **MCP Apps Extension** | Interactive UI within MCP. Could show dashboards, configuration panels. | Experimental. No major client supports it. Adds a web UI dependency which contradicts Blufio's CLI-first philosophy. | Skip entirely. CLI + TOML config is the interface. |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **PRAGMA key on every connection open** | SQLCipher requires the key to be set immediately after opening a connection, before any other operation. Every connection in every crate that opens the DB must do this. | MEDIUM | Blufio opens connections in: blufio-storage (main), blufio-cost (ledger), blufio-memory (store), blufio-vault (vault), blufio-mcp-client (pin store), backup.rs, doctor.rs. All must be updated. Centralize key management. |
+| **bundled-sqlcipher feature flag** | Switch from rusqlite features=["bundled"] to rusqlite features=["bundled-sqlcipher"]. These are mutually exclusive -- bundled-sqlcipher replaces bundled. Available in rusqlite 0.37. | LOW | Single Cargo.toml change in workspace dependencies. bundled-sqlcipher compiles SQLCipher from source and links it statically. Needs OpenSSL or bundled-sqlcipher-vendored-openssl for crypto. |
+| **Key derivation from passphrase** | SQLCipher uses PBKDF2-HMAC-SHA512 with 256,000 iterations by default (SQLCipher 4.x). The operator provides a passphrase via env var or interactive prompt. | LOW | Re-use existing vault passphrase flow: BLUFIO_DB_KEY env var or rpassword interactive prompt. The passphrase goes to PRAGMA key = 'passphrase'. SQLCipher handles KDF internally. |
+| **Plaintext-to-encrypted migration** | Existing v1.0/v1.1 deployments have plaintext databases. Must provide a one-time migration path. | MEDIUM | Use sqlcipher_export(): open plaintext DB, attach new encrypted DB with key, export all data, swap files. Implement as blufio db encrypt CLI command. This is a one-shot offline operation. |
+| **Verify key correctness on open** | SQLCipher does not error on wrong key until the first read. Must immediately test with SELECT count(*) FROM sqlite_master after PRAGMA key. | LOW | Add a verification query right after PRAGMA key in the centralized connection opener. Fail fast with a clear error: "Database key is incorrect or database is not encrypted." |
+| **Backup/restore with encrypted DB** | The SQLite Backup API works with SQLCipher -- both source and destination must use the same key. The backup.rs code must set the key on both connections. | LOW | Pass the DB key into run_backup() and run_restore(). Apply PRAGMA key to both source and destination connections before starting the backup. |
+
+### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **PRAGMA rekey for key rotation** | Operators can change the encryption key without dump/restore. PRAGMA rekey = 'new_passphrase' re-encrypts all pages in-place. | LOW | Implement as blufio db rekey CLI command. Requires current key + new key. SQLCipher handles the heavy lifting. |
+| **Raw key mode (skip KDF)** | For operators who manage their own key material: PRAGMA key = "x'<64-hex-chars>'" bypasses PBKDF2 entirely, saving ~200ms on every connection open. | LOW | Config option: storage.cipher_key_format = "passphrase" or "raw". Raw mode skips KDF. Document the security implications (operator responsible for key entropy). |
+| **PRAGMA cipher_memory_security = ON** | Zeroes out SQLCipher internal key material when connections close. Defense against memory forensics on compromised machines. | LOW | Single PRAGMA call after key is set. Minor performance impact. Enable by default for production; document option to disable for development. |
+| **doctor --deep checks encryption** | blufio doctor --deep reports whether the database is encrypted, the cipher version, page size, and KDF iterations. | LOW | Query PRAGMA cipher_version, PRAGMA cipher_settings. Report in doctor output. |
+
+### Anti-Features
+
+| Anti-Feature | Why Problematic | Alternative |
+|--------------|-----------------|-------------|
+| **Per-table encryption** | SQLCipher encrypts the entire database file, not individual tables. Attempting partial encryption requires two databases and cross-DB queries, which breaks the single-file deployment model. | Encrypt everything. The vault already stores secrets in the same DB file -- encryption at rest protects it all. |
+| **Application-layer encryption (encrypt columns)** | The vault already does AES-256-GCM on credential values. Extending this to all data means encrypting every column, breaking queries, indexes, and full-text search. | SQLCipher encrypts at the page level transparently. Queries, indexes, and FTS work normally. Application-layer encryption is only needed for the vault extra-sensitive fields (which already has it). |
+| **Supporting both plaintext and encrypted modes simultaneously** | Tempting to make encryption optional via feature flag. But this doubles the test matrix and means some deployments are unencrypted. | Make encryption the default for new installs. Provide a migration command for existing installs. After v1.2, all databases are encrypted. |
+| **vendored-openssl on all platforms** | bundled-sqlcipher-vendored-openssl vendors OpenSSL source and compiles it. Adds ~2 minutes to build time and ~1MB to binary. | Use bundled-sqlcipher (not vendored) for CI/release builds where OpenSSL is available. Use bundled-sqlcipher-vendored-openssl only as a fallback for environments without system OpenSSL. For musl static builds, vendored OpenSSL is likely required. |
+
+---
+
+## Feature 3: Minisign Binary Verification
+
+### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Verify binary signature before update** | Before replacing the running binary with a downloaded update, verify its Minisign signature against the project public key. Prevents supply chain attacks. | LOW | Use minisign-verify crate (zero dependencies, verify-only). Embed the project public key as a const in the binary. Download blufio.minisig alongside the binary. Call public_key.verify(binary_bytes, signature). |
+| **Embedded public key** | The verification public key must be compiled into the binary, not loaded from a file (which could be tampered with). | LOW | const MINISIGN_PUBLIC_KEY: &str = "untrusted comment: ...\nRW..."; in the update module. Parsed once at verification time. |
+| **Signature file convention** | The .minisig signature file must be distributed alongside every release binary. Standard naming: blufio-linux-amd64.minisig next to blufio-linux-amd64. | LOW | CI/release pipeline concern, not runtime code. Document the convention. |
+| **Clear error on signature failure** | If verification fails, the update must abort with a clear message: "Signature verification failed. The downloaded binary may be tampered with." Never proceed with an unverified binary. | LOW | Return error from verify step. The self-update flow checks this before any file operations. |
+
+### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **Trusted comment verification** | Minisign signatures include a "trusted comment" (typically the filename and hash). Verify the trusted comment matches the expected binary name and version. Prevents signature reuse across different binaries. | LOW | minisign-verify includes trusted comment in the signature struct. Compare against expected values. |
+| **blufio verify CLI command** | Standalone command to verify any file against a Minisign signature. Useful for operators who download binaries manually. blufio verify blufio-linux-amd64 blufio-linux-amd64.minisig. | LOW | Thin wrapper around the verify function. Takes file path + signature path as arguments. |
+| **Streaming verification for large binaries** | For binaries >50MB (unlikely for Blufio, but future-proof), use StreamVerifier to avoid loading the entire binary into memory. | LOW | minisign-verify supports StreamVerifier with update() + finalize() API. Use for all verifications regardless of size -- the API is the same complexity. |
+
+### Anti-Features
+
+| Anti-Feature | Why Problematic | Alternative |
+|--------------|-----------------|-------------|
+| **Key generation in the binary** | Minisign key generation should happen in CI/release pipeline, not in the agent binary. Including key generation adds the full minisign crate instead of the lighter minisign-verify. | Use minisign-verify (verify-only, zero deps). Generate keys with the minisign CLI tool in CI. |
+| **Multiple trusted public keys** | Key rotation scheme where multiple public keys are valid. Adds complexity for a single-developer project. | Single embedded public key. When the key rotates, ship a new binary signed with the new key. Old binaries verify with the old key; new binaries verify with the new key. |
+| **GPG/PGP signatures** | GPG is the traditional approach but requires a GPG keyring, trust model, and large dependencies (gpgme or sequoia-pgp). | Minisign is purpose-built for file signing: simpler, smaller, and faster than GPG. Ed25519-based. Perfect fit for single-binary distribution. |
+
+---
+
+## Feature 4: Self-Update with Rollback
+
+### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **blufio update CLI command** | Check for newer version, download it, verify signature, replace binary, report result. | MEDIUM | New CLI subcommand. Orchestrates: version check -> download -> verify -> swap -> health check -> done/rollback. |
+| **Version check against GitHub Releases** | Query GitHub Releases API for the latest version. Compare with current version (semver). Report "already up to date" or "update available: v1.2.1 -> v1.3.0". | LOW | Use reqwest (already in workspace) to hit the GitHub API releases/latest endpoint. Parse the tag_name field. Compare with the compile-time CARGO_PKG_VERSION. |
+| **Download binary + signature** | Download the platform-appropriate binary and its .minisig signature from the GitHub Release assets. | LOW | Determine platform at compile time: target_os + target_arch. Download blufio-{os}-{arch} and blufio-{os}-{arch}.minisig. Use reqwest with progress callback. |
+| **Minisign signature verification** | Verify the downloaded binary signature before any file operations. Abort on failure. | LOW | Calls the Minisign verify function from Feature 3. This is a hard dependency -- Feature 3 must be built first. |
+| **Atomic binary swap** | Replace the running binary atomically. On Unix: rename new binary over old binary (atomic on same filesystem). The self-replace crate handles platform differences. | LOW | Use self-replace crate. On Unix it does an atomic rename. On Windows it uses a cleanup subprocess. Blufio targets Linux production; macOS dev only. |
+| **Pre-swap backup of current binary** | Before replacing, copy the current binary to blufio.backup (or blufio.v1.2.0). This is the rollback target. | LOW | std::fs::copy(current_exe, backup_path) before the atomic swap. Store the backup path for the rollback command. |
+| **blufio update --check (dry run)** | Check for updates without downloading or installing. Reports available version and changelog URL. | LOW | Skip download/verify/swap steps. Just the version check. |
+| **Require --yes or interactive confirmation** | Do not auto-update without confirmation. Self-modifying binaries are dangerous. Show version diff and ask "Proceed? [y/N]". | LOW | Interactive prompt via rpassword-style input. --yes flag for non-interactive/CI use. |
+
+### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **Post-update health check** | After swapping the binary, spawn the new binary with blufio doctor (or a lightweight health subcommand). If it fails, auto-rollback. | MEDIUM | Spawn the new binary as a subprocess with "doctor" arg. If exit code != 0, trigger rollback. This catches binary corruption, missing dependencies, or ABI issues. |
+| **blufio update --rollback** | Revert to the pre-update binary. Swaps the backup binary back. | LOW | Reverse the atomic swap: rename blufio.backup over the current binary. |
+| **Changelog display** | Show the GitHub Release body (changelog) before confirming the update. Operators see what changed. | LOW | Parse the body field from the GitHub Releases API response. Render as plain text (strip markdown). |
+| **Download progress bar** | Show download progress for large binaries. Blufio is ~25-50MB. On slow connections, silence is alarming. | LOW | reqwest streaming response with content-length. Print progress to stderr. |
+| **Update channel configuration** | Config option: update.channel = "stable" or "pre-release". Default to stable (exclude pre-release GitHub tags). | LOW | Filter GitHub Releases by prerelease: false for stable channel. Include pre-releases for the pre-release channel. |
+
+### Anti-Features
+
+| Anti-Feature | Why Problematic | Alternative |
+|--------------|-----------------|-------------|
+| **Auto-update on startup** | Silent self-modification is hostile. Operators must control when updates happen. An always-on daemon that modifies itself could break during critical operations. | Manual blufio update only. Never auto-update. Operators schedule updates in maintenance windows. |
+| **Delta/patch updates** | Binary diff (bsdiff/bspatch) saves bandwidth but adds complexity. Blufio is 25-50MB; full downloads are fine. | Full binary download. The simplicity is worth the bandwidth. |
+| **Using self_update crate** | The self_update crate abstracts GitHub/S3 backends but does not support Minisign verification, health checks, or rollback. It uses zipsign (not Minisign) for verification. Its API is designed for simple cases and is hard to extend. | Build a custom update flow using: reqwest (download), minisign-verify (verify), self-replace (atomic swap). The individual steps are simple; the orchestration is where the value is. |
+| **In-process restart after update** | Risky: if the new binary has a startup bug, you lose the running agent with no recovery. | Swap the binary, run health check as a subprocess, report success. The agent continues running as the old version until the operator restarts it (or systemd restarts it via systemctl restart blufio). |
+
+---
+
+## Feature 5: Backup Integrity Verification
+
+### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **PRAGMA integrity_check after backup** | After run_backup() completes, open the backup file and run PRAGMA integrity_check. Catches corruption from disk errors, interrupted writes, or buggy backup logic. | LOW | Open backup DB (read-only), run PRAGMA integrity_check, verify result is ["ok"]. If not, delete the corrupt backup and return error. With SQLCipher: must set key before integrity check. |
+| **PRAGMA integrity_check after restore** | After run_restore() completes, run integrity check on the restored database. Catches corruption in the backup file that passed the "can query it" validation but has deeper issues. | LOW | The current restore validation is SELECT 1 -- insufficient. Replace with full PRAGMA integrity_check. This catches index corruption, missing pages, and malformed records. |
+| **Report integrity status to operator** | Print integrity check result alongside backup/restore status. "Backup complete: 5.2 MB written, integrity: ok" or "Restore failed: integrity check found 3 issues". | LOW | Extend the existing eprintln! output in backup.rs. |
+| **Fail backup on integrity failure** | If the backup file fails integrity check, do not report success. Return an error. The backup file should be deleted to avoid operators trusting a corrupt backup. | LOW | Delete corrupt backup file. Return BlufioError::Storage with descriptive message. |
+
+### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **PRAGMA quick_check option** | quick_check is O(N) vs integrity_check O(NlogN). For large databases, quick_check is significantly faster. Offer as --quick flag on backup/restore. | LOW | Default to full integrity_check. --quick uses PRAGMA quick_check (skips index verification). Document the tradeoff. |
+| **SHA-256 checksum of backup file** | After backup + integrity check, compute and print/store the SHA-256 hash of the backup file. Operators can verify the backup file has not been modified since creation. | LOW | ring::digest::SHA256 (ring already in workspace). Print hash alongside backup status. Optionally write to backup.sha256 sidecar file. |
+| **Scheduled backup verification** | Background task that periodically runs integrity check on the most recent backup file. Catches bit rot on backup storage. | MEDIUM | Spawn a tokio task with configurable interval (e.g., daily). Log results. Emit Prometheus metric blufio_backup_last_integrity_check_ok. |
+| **blufio backup --verify-only** | Run integrity check on an existing backup file without creating a new backup. Useful for auditing old backups. | LOW | Open the backup file, set key (if encrypted), run integrity check, report result. |
+| **Foreign key check** | PRAGMA integrity_check does NOT check foreign key constraints. Add PRAGMA foreign_key_check as an additional verification step. | LOW | Run after integrity_check. Reports orphaned foreign key references. Blufio uses foreign keys for session-message relationships. |
+
+### Anti-Features
+
+| Anti-Feature | Why Problematic | Alternative |
+|--------------|-----------------|-------------|
+| **Integrity check on live DB during backup** | Running PRAGMA integrity_check on the live production database locks it and takes O(NlogN) time. Blocks all writes. | Only check the backup copy. The backup API creates a consistent snapshot; verify that. The live DB integrity check already exists in doctor --deep for offline diagnostics. |
+| **Automatic repair on integrity failure** | SQLite has no built-in repair tool. "Repair" means dumping what is readable and creating a new DB, which loses corrupt data. Automatic repair risks silent data loss. | Report the failure. Let the operator decide: restore from a known-good backup, or run .dump manually. Never auto-repair. |
+| **Encrypted backup checksums** | Computing SHA-256 of an encrypted backup file is meaningless for content verification (the hash changes with re-encryption). | The integrity_check runs AFTER decryption (inside SQLCipher). That is the true content verification. The SHA-256 checksum is for detecting file-level tampering, not content correctness. Both are useful for different purposes. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[MCP Server - Core]
-    |-- requires --> Tool trait + ToolRegistry (existing)
-    |-- requires --> JSON-RPC 2.0 layer (rmcp crate)
-    |-- requires --> stdio transport (rmcp + tokio stdin/stdout)
-    |-- requires --> Streamable HTTP transport (rmcp + axum)
-    |-- requires --> SSE transport (rmcp + axum)
-    |-- requires --> CLI subcommand `blufio mcp-server` (clap)
-    |-- requires --> Capability negotiation (rmcp ServerHandler)
+[sd_notify Integration]
+    |-- requires --> serve.rs startup sequence (existing)
+    |-- requires --> signal handler / cancellation token (existing)
+    |-- requires --> systemd unit file template (existing, update to Type=notify)
+    |-- independent of all other v1.2 features
 
-[MCP Server - Resources]
-    |-- requires --> MCP Server Core
-    |-- requires --> MemoryStore + HybridRetriever (existing)
-    |-- requires --> StorageAdapter for sessions (existing)
+[SQLCipher Encryption at Rest]
+    |-- requires --> rusqlite feature flag change (bundled -> bundled-sqlcipher)
+    |-- requires --> centralized connection opener (new, refactor)
+    |-- requires --> key management (env var / prompt, similar to vault)
+    |-- requires --> migration command (new CLI subcommand)
+    |-- affects --> backup.rs (must pass key to both connections)
+    |-- affects --> doctor.rs (must set key before integrity check)
 
-[MCP Server - Prompts]
-    |-- requires --> MCP Server Core
-    |-- requires --> Context engine (existing)
-    |-- requires --> Memory retriever (existing)
+[Minisign Binary Verification]
+    |-- requires --> minisign-verify crate (new dependency)
+    |-- requires --> embedded public key (compile-time constant)
+    |-- independent of SQLCipher and sd_notify
+    |-- required by --> Self-Update (hard dependency)
 
-[MCP Server - Notifications]
-    |-- requires --> MCP Server Core
-    |-- requires --> Skill install events (existing store.rs)
-    |-- requires --> Memory write events (existing store.rs)
+[Self-Update with Rollback]
+    |-- requires --> Minisign verification (Feature 3)
+    |-- requires --> self-replace crate (new dependency)
+    |-- requires --> reqwest (existing)
+    |-- requires --> GitHub Releases API access
+    |-- independent of SQLCipher and sd_notify
 
-[MCP Client - Core]
-    |-- requires --> JSON-RPC 2.0 layer (rmcp crate)
-    |-- requires --> stdio transport client (rmcp + tokio process)
-    |-- requires --> Streamable HTTP transport client (rmcp + reqwest)
-    |-- requires --> TOML config for MCP servers (blufio-config)
-    |-- requires --> Connection lifecycle manager (new code)
-
-[MCP Client - Agent Integration]
-    |-- requires --> MCP Client Core
-    |-- requires --> ToolRegistry (existing, extend with MCP tools)
-    |-- requires --> Agent loop tool routing (existing session.rs)
-    |-- requires --> Cost ledger (existing, extend with MCP server tracking)
-
-[MCP Client - Sampling]
-    |-- requires --> MCP Client Core
-    |-- requires --> Provider trait (existing)
-    |-- requires --> Model routing (existing)
-    |-- requires --> Cost ledger (existing)
+[Backup Integrity Verification]
+    |-- requires --> backup.rs (existing)
+    |-- requires --> doctor.rs integrity check pattern (existing, reuse)
+    |-- affected by --> SQLCipher (must set key before integrity check)
+    |-- should follow SQLCipher if both are in same milestone
 ```
 
 ### Dependency Notes
 
-- **MCP Server Core has zero dependencies on MCP Client.** They are independent features. Server can ship without client, client can ship without server.
-- **MCP Server maps almost 1:1 to existing Blufio types.** `Tool` trait -> MCP tools. `ToolOutput` -> MCP tool result. `SkillManifest` -> MCP tool metadata. `Memory` -> MCP resource. The mapping layer is thin.
-- **MCP Client integrates at the ToolRegistry level.** External MCP tools register like any other tool. The agent loop does not need to know about MCP -- it just sees tools.
-- **Sampling capability is the most complex client feature.** It requires routing MCP server requests through Blufio's own LLM provider, with all the budget/routing/security implications. Defer to later in the milestone if needed.
+- **sd_notify is fully independent.** It touches only serve.rs and the unit file template. Can be built in any order.
+- **SQLCipher has the widest blast radius.** It affects every crate that opens a DB connection. Must be done carefully with centralized key management.
+- **Minisign must precede Self-Update.** Self-Update calls Minisign verify as a mandatory step.
+- **Backup Integrity is mostly independent** but must account for SQLCipher if encryption is already active. Build after SQLCipher to avoid doing it twice.
+- **No circular dependencies.** The dependency graph is a DAG with clear ordering.
 
 ---
 
-## MVP Recommendation for v1.1
+## MVP Definition for v1.2
 
-### Phase 1: MCP Server (ship first)
+### Must Ship (all five features)
 
-Priority: **The done condition says "point Claude Desktop at Blufio via stdio and use skills/memory."**
+- [ ] **sd_notify READY=1 + STOPPING=1 + watchdog** -- Core systemd integration. Unit file update to Type=notify. Graceful no-op on non-systemd. STATUS= messages during startup.
+- [ ] **SQLCipher encryption at rest** -- Feature flag switch, centralized key management, PRAGMA key on all connections, plaintext-to-encrypted migration command, backup/restore with key.
+- [ ] **Minisign binary verification** -- Verify-only with embedded public key. Used by self-update. Standalone blufio verify command.
+- [ ] **Self-update with rollback** -- blufio update command: version check, download, verify, atomic swap, pre-swap backup, health check, rollback.
+- [ ] **Backup integrity check** -- PRAGMA integrity_check post-backup and post-restore. Fail on corruption. Report status.
 
-Build in this order:
+### Add After Core (v1.2.x)
 
-1. **`blufio mcp-server` CLI subcommand** -- Entry point. Starts stdio MCP server.
-2. **Capability negotiation** -- Initialize handshake. Declare tools + resources capabilities.
-3. **tools/list mapping** -- Expose all ToolRegistry entries as MCP tools.
-4. **tools/call routing** -- Route MCP tool calls to Blufio's Tool::invoke().
-5. **Tool annotations** -- Tag each tool with behavior hints.
-6. **resources/list + resources/read for memory** -- Expose memory as readable resources.
-7. **Streamable HTTP + SSE transports** -- Add HTTP-based transports on axum gateway.
-8. **prompts/list + prompts/get** -- Expose workflow prompts (summarize-session, search-memory).
-9. **listChanged notifications** -- Notify on skill install, memory changes.
+- [ ] **PRAGMA rekey** for key rotation -- Trigger: operator requests key change
+- [ ] **SHA-256 checksum** of backup files -- Trigger: operator requests tamper detection
+- [ ] **Download progress bar** for self-update -- Trigger: user feedback on large downloads
+- [ ] **Scheduled backup verification** -- Trigger: long-running deployments need periodic checks
+- [ ] **Update channel configuration** (stable/pre-release) -- Trigger: pre-release testing workflow
 
-### Phase 2: MCP Client (ship second)
+### Defer to v1.3+
 
-Priority: **The done condition says "configure external MCP servers in TOML, agent uses external MCP tools in conversation."**
+- [ ] **Auto-update** -- Never auto-update an always-on daemon
+- [ ] **Delta/patch updates** -- Full binary downloads are fine at 25-50MB
+- [ ] **Automatic DB repair** -- Too dangerous for automatic execution
+- [ ] **Per-table encryption** -- Contradicts single-file deployment model
+- [ ] **Socket activation** -- Not needed for an always-on service
 
-Build in this order:
+---
 
-1. **TOML config for MCP servers** -- `[[mcp.servers]]` configuration section.
-2. **MCP client connection manager** -- Connect, initialize, discover tools.
-3. **stdio transport client** -- Launch MCP servers as subprocesses.
-4. **Tool discovery + ToolRegistry integration** -- Register external tools with namespace prefix.
-5. **Agent loop MCP tool routing** -- Route `mcp.*` tool calls to external servers.
-6. **Streamable HTTP transport client** -- Connect to remote MCP servers.
-7. **Connection lifecycle (retry, health)** -- Resilient connections, doctor integration.
-8. **Per-server budget tracking** -- Cost attribution per MCP server.
+## Feature Prioritization Matrix
 
-### Defer to v1.2+
+| Feature | User Value | Implementation Cost | Risk | Priority |
+|---------|------------|---------------------|------|----------|
+| sd_notify integration | HIGH | LOW | LOW | P1 |
+| Backup integrity check | HIGH | LOW | LOW | P1 |
+| SQLCipher encryption at rest | HIGH | MEDIUM | MEDIUM | P1 |
+| Minisign binary verification | MEDIUM | LOW | LOW | P1 |
+| Self-update with rollback | MEDIUM | MEDIUM | MEDIUM | P1 |
+| PRAGMA rekey (key rotation) | MEDIUM | LOW | LOW | P2 |
+| SHA-256 backup checksums | LOW | LOW | LOW | P2 |
+| Doctor encryption reporting | LOW | LOW | LOW | P2 |
+| Foreign key check in backup | LOW | LOW | LOW | P2 |
+| Scheduled backup verification | LOW | MEDIUM | LOW | P3 |
 
-- Tasks (experimental spec feature)
-- Elicitation (requires UI proxy, complex)
-- Sampling capability (complex, requires LLM gateway pattern)
-- OAuth 2.1 (only needed for remote servers)
-- MCP Apps Extension (experimental)
-- MCP Bundles distribution (single binary is sufficient)
-- Resource subscriptions for memory (nice-to-have, not needed for done condition)
+**Priority key:**
+- P1: Must have for v1.2 launch
+- P2: Should have, add when possible (low-hanging fruit during implementation)
+- P3: Nice to have, defer unless trivial
 
 ---
 
@@ -200,53 +289,61 @@ Build in this order:
 
 | Feature | Estimated LOC | Risk | Notes |
 |---------|--------------|------|-------|
-| MCP Server Core (stdio + negotiate + tools) | 800-1200 | LOW | rmcp handles protocol. Thin mapping layer to existing Tool trait. |
-| MCP Server Resources (memory + sessions) | 400-600 | LOW | Read-only wrappers around existing stores. |
-| MCP Server Prompts | 200-400 | LOW | Template construction from existing data. |
-| MCP Server HTTP transports (Streamable + SSE) | 300-500 | MEDIUM | axum integration. Must coexist with existing gateway routes. |
-| MCP Server tool annotations | 100-200 | LOW | Metadata addition to existing tools. |
-| MCP Server notifications | 200-300 | MEDIUM | Event plumbing from skill/memory stores to MCP transport. |
-| MCP Client Core (connect + discover) | 600-900 | MEDIUM | Connection lifecycle, error handling, reconnection. |
-| MCP Client stdio transport | 200-300 | LOW | rmcp handles protocol. Process management. |
-| MCP Client HTTP transport | 100-200 | LOW | rmcp + reqwest. |
-| MCP Client ToolRegistry integration | 300-500 | LOW | Namespace prefixing, schema forwarding, routing. |
-| MCP Client TOML config | 200-300 | LOW | Config struct + validation. |
-| MCP Client agent loop integration | 300-500 | MEDIUM | Tool routing in session.rs, handling MCP-specific result formats. |
-| **Total estimated** | **3,400-5,900** | | Approximately 15-20% of v1.0 codebase size. |
+| sd_notify integration (all table stakes + STATUS=) | 80-150 | LOW | ~5 notify calls in serve.rs, one watchdog task, unit file update |
+| SQLCipher feature flag + centralized connection opener | 200-400 | MEDIUM | Refactor connection opening across 6+ crates to use shared key management |
+| SQLCipher plaintext-to-encrypted migration | 150-250 | MEDIUM | CLI command using sqlcipher_export(). One-shot offline operation |
+| Minisign verification module | 80-120 | LOW | Thin wrapper around minisign-verify. Embedded public key |
+| blufio verify CLI command | 40-60 | LOW | CLI plumbing for the verify function |
+| Self-update orchestration | 300-500 | MEDIUM | Version check + download + verify + swap + health check + rollback |
+| Backup integrity check (post-backup + post-restore) | 80-120 | LOW | Add integrity_check calls to existing backup.rs functions |
+| **Total estimated** | **930-1,600** | | ~3-4% of current codebase. Small, focused changes. |
+
+---
+
+## Competitor Feature Analysis
+
+| Feature | OpenClaw (incumbent) | Blufio v1.2 |
+|---------|---------------------|-------------|
+| systemd integration | None (Node.js, uses pm2 or manual) | Type=notify, watchdog, STATUS= messages |
+| Database encryption at rest | None (JSONL files, plaintext) | SQLCipher AES-256, PRAGMA key, migration |
+| Binary verification | None (npm install, hundreds of deps) | Minisign Ed25519 signatures, embedded public key |
+| Self-update | npm update (trust npm registry) | Download + verify + atomic swap + health check + rollback |
+| Backup integrity | None (JSONL, no integrity tools) | PRAGMA integrity_check on backup + restore |
+
+Every feature in v1.2 addresses a gap that the incumbent cannot fix due to its Node.js/JSONL architecture. These are structural advantages of the single-binary + SQLite model.
 
 ---
 
 ## Sources
 
-### MCP Specification (PRIMARY -- HIGH confidence)
-- [MCP Spec 2025-11-25 (latest)](https://modelcontextprotocol.io/specification/2025-11-25) -- Authoritative protocol specification
-- [MCP Tools Spec](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) -- Tool listing, calling, annotations, structured output
-- [MCP Resources Spec](https://modelcontextprotocol.io/specification/2025-11-25/server/resources) -- Resource URIs, templates, subscriptions, reading
-- [MCP Prompts Spec](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts) -- Prompt listing, arguments, messages
-- [MCP Sampling Spec](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling) -- Server-initiated LLM calls, tool use in sampling
-- [MCP Roots Spec](https://modelcontextprotocol.io/specification/2025-11-25/client/roots) -- Filesystem boundaries
-- [MCP Transports Spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) -- stdio, Streamable HTTP, SSE
+### Crate Documentation (HIGH confidence)
+- [sd-notify 0.4.5 -- NotifyState variants](https://docs.rs/sd-notify/0.4.5/sd_notify/enum.NotifyState.html) -- READY, STOPPING, Watchdog, Status, ExtendTimeoutUsec, and 8 more variants
+- [sd-notify crate](https://crates.io/crates/sd-notify) -- Pure Rust, MIT OR Apache-2.0, zero native deps
+- [minisign-verify 0.2.5](https://docs.rs/minisign-verify) -- Zero-dependency verify-only crate, StreamVerifier support
+- [self-replace 1.3.6](https://docs.rs/self-replace/1.3.6/self_replace/) -- Atomic binary swap: Unix rename, Windows cleanup subprocess
+- [rusqlite feature flags](https://lib.rs/crates/rusqlite/features) -- bundled-sqlcipher, bundled-sqlcipher-vendored-openssl
 
-### Rust SDK (HIGH confidence)
-- [Official rmcp crate (0.17)](https://docs.rs/crate/rmcp/latest) -- ServerHandler, ClientHandler, transport support, tool macros
-- [modelcontextprotocol/rust-sdk GitHub](https://github.com/modelcontextprotocol/rust-sdk) -- Official Rust SDK, 3.1k stars, 144 contributors
+### Official Documentation (HIGH confidence)
+- [systemd sd_notify manpage](https://www.freedesktop.org/software/systemd/man/latest/sd_notify.html) -- READY=1, STOPPING=1, WATCHDOG=1, STATUS=, ExtendTimeoutUsec
+- [systemd.service manpage](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html) -- Type=notify, WatchdogSec, NotifyAccess
+- [SQLCipher API](https://www.zetetic.net/sqlcipher/sqlcipher-api/) -- PRAGMA key, PRAGMA rekey, cipher_migrate, sqlcipher_export, cipher_memory_security
+- [SQLCipher plaintext migration guide](https://discuss.zetetic.net/t/how-to-encrypt-a-plaintext-sqlite-database-to-use-sqlcipher-and-avoid-file-is-encrypted-or-is-not-a-database-errors/868)
+- [SQLite PRAGMA integrity_check](https://sqlite.org/pragma.html) -- integrity_check vs quick_check, O(NlogN) vs O(N), partial table checks
 
-### MCP Ecosystem (MEDIUM confidence)
-- [MCP Features Guide (WorkOS)](https://workos.com/blog/mcp-features-guide) -- Comprehensive feature overview: tools, resources, prompts, sampling, roots, elicitation
-- [MCP 2025-11-25 Spec Update (WorkOS)](https://workos.com/blog/mcp-2025-11-25-spec-update) -- Tasks, OAuth improvements, sampling with tools, bundles
-- [MCP November 2025 Spec Deep Dive (Medium)](https://medium.com/@dave-patten/mcps-next-phase-inside-the-november-2025-specification-49f298502b03) -- Async tasks, enterprise features
-- [MCP Tool Annotations Guide](https://blog.marcnuri.com/mcp-tool-annotations-introduction) -- readOnlyHint, destructiveHint, idempotentHint, openWorldHint
-- [MCP Memory Service (GitHub)](https://github.com/doobidoo/mcp-memory-service) -- Open-source persistent memory MCP server example
-- [MCP Permissions (Cerbos)](https://www.cerbos.dev/blog/mcp-permissions-securing-ai-agent-access-to-tools) -- Security best practices for MCP tool access
-- [How to Build MCP Server in Rust (Shuttle)](https://www.shuttle.dev/blog/2025/07/18/how-to-build-a-stdio-mcp-server-in-rust) -- Practical Rust MCP server guide
+### Architecture References (MEDIUM confidence)
+- [Writing a proper systemd daemon in Rust](https://deterministic.space/writing-a-daemon.html) -- Type=notify, watchdog, structured logging, socket activation guidance
+- [rusqlite SQLCipher issue #219](https://github.com/rusqlite/rusqlite/issues/219) -- SQLCipher support history, PRAGMA key/rekey wrappers
+- [rusqlite bundled-sqlcipher issue #765](https://github.com/rusqlite/rusqlite/issues/765) -- Build integration details, crypto backend options
+- [self_update crate](https://github.com/jaemk/self_update) -- GitHub releases backend, evaluated but not recommended (no Minisign, no rollback)
+- [jedisct1/rust-minisign-verify](https://github.com/jedisct1/rust-minisign-verify) -- Official minisign-verify source
 
 ### Blufio Codebase (verified by reading source)
-- `crates/blufio-skill/src/tool.rs` -- Tool trait, ToolRegistry, ToolOutput (maps to MCP tools)
-- `crates/blufio-core/src/types.rs` -- SkillManifest, SkillInvocation, SkillResult, ContentBlock
-- `crates/blufio-core/src/traits/skill.rs` -- SkillRuntimeAdapter trait
-- `crates/blufio-memory/src/types.rs` -- Memory, ScoredMemory, MemorySource, MemoryStatus
-- `crates/blufio-memory/src/retriever.rs` -- HybridRetriever (maps to MCP resource read)
+- crates/blufio/src/serve.rs -- Startup sequence where sd_notify calls will be inserted
+- crates/blufio/src/backup.rs -- Backup API, restore with safety backup, no integrity check
+- crates/blufio/src/doctor.rs -- Existing PRAGMA integrity_check in check_db_integrity()
+- crates/blufio/Cargo.toml -- rusqlite with "bundled" + "backup" features
+- Cargo.toml (workspace) -- rusqlite 0.37, all workspace dependencies
 
 ---
-*Feature research for: MCP Integration (Server + Client) -- Blufio v1.1*
-*Researched: 2026-03-02*
+*Feature research for: v1.2 Production Hardening -- Blufio*
+*Researched: 2026-03-03*
