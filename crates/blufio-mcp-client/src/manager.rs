@@ -114,6 +114,10 @@ impl McpClientManager {
                                 tools = count,
                                 "MCP server connected, tools registered"
                             );
+
+                            // Record Prometheus metric for successful connection (INTG-04).
+                            blufio_prometheus::recording::record_mcp_connection(&server.transport);
+
                             server_states.insert(
                                 server.name.clone(),
                                 ServerState::Connected {

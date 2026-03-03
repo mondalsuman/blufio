@@ -237,6 +237,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         )
         .await;
 
+        // INTG-04: Set active MCP connections gauge.
+        blufio_prometheus::recording::set_mcp_active_connections(result.connected as f64);
+
         if result.connected > 0 {
             info!(
                 connected = result.connected,

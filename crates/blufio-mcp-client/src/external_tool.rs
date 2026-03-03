@@ -32,6 +32,8 @@ use crate::sanitize::truncate_response;
 ///
 /// All rmcp types are internal; the public API uses only Blufio types.
 pub struct ExternalTool {
+    /// Server name for cost attribution.
+    server_name: String,
     /// Original tool name from the MCP server.
     tool_name: String,
     /// Namespaced name: `server__tool`.
@@ -61,6 +63,7 @@ impl ExternalTool {
     ) -> Self {
         let namespaced_name = format!("{server_name}__{tool_name}");
         Self {
+            server_name: server_name.to_string(),
             tool_name,
             namespaced_name,
             description,
@@ -68,6 +71,11 @@ impl ExternalTool {
             session,
             response_size_cap,
         }
+    }
+
+    /// Get the server name for cost attribution.
+    pub fn server_name(&self) -> &str {
+        &self.server_name
     }
 
     /// Extract text content from an MCP `CallToolResult`.
@@ -124,6 +132,10 @@ impl BlufioTool for ExternalTool {
 
         // Extract text content from MCP response.
         let content = Self::extract_text(&result);
+
+        // INTG-04: Record tool response size metric.
+        let response_bytes = content.len() as f64;
+        blufio_prometheus::recording::record_mcp_tool_response_size(response_bytes);
 
         // CLNT-09: Truncate if over per-server cap.
         let content = truncate_response(&content, self.response_size_cap);

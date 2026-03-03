@@ -604,6 +604,7 @@ dependencies = [
  "blufio-config",
  "blufio-context",
  "blufio-core",
+ "blufio-prometheus",
  "blufio-skill",
  "hex",
  "regex",

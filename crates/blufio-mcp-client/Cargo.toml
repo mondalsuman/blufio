@@ -12,6 +12,7 @@ description = "MCP client implementation for the Blufio agent framework"
 blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
 blufio-context = { path = "../blufio-context" }
+blufio-prometheus = { path = "../blufio-prometheus" }
 blufio-skill = { path = "../blufio-skill" }
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client", "transport-streamable-http-client-reqwest"] }
 serde.workspace = true
