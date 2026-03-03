@@ -44,7 +44,16 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Active
 
-(None — planning next milestone)
+## Current Milestone: v1.2 Production Hardening
+
+**Goal:** Close critical PRD gaps — systemd readiness, database encryption at rest, supply chain integrity, self-update, and backup verification.
+
+**Target features:**
+- sd_notify integration (systemd Type=notify, watchdog pings)
+- SQLCipher database encryption at rest
+- Minisign binary signature verification
+- blufio update with rollback (self-update mechanism)
+- Backup integrity verification (PRAGMA integrity_check post-backup/restore)
 
 ## Shipped Milestones
 
@@ -130,4 +139,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Trust zone labeling | External tools labeled separately in prompt context | ✓ Good — factual tone, no alarmist language |
 
 ---
-*Last updated: 2026-03-03 after v1.1 milestone*
+*Last updated: 2026-03-03 after v1.2 milestone started*

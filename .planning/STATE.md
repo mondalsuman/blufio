@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: MCP Integration
-status: shipped
-last_updated: "2026-03-03T18:10:00.000Z"
+milestone: v1.2
+milestone_name: Production Hardening
+status: unknown
+last_updated: "2026-03-03T19:04:59.876Z"
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 32
-  completed_plans: 32
+  total_phases: 1
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
 ---
 
 # Project State
@@ -18,15 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Planning next milestone
+**Current focus:** v1.2 Production Hardening -- Phase 23 Backup Integrity Verification
 
 ## Current Position
 
-Phase: 22 of 22 (all phases complete)
-Status: v1.1 SHIPPED
-Last activity: 2026-03-03 — Milestone v1.1 archived
+Phase: 24 of 27 (sd_notify Integration)
+Plan: 0 of TBD in current phase
+Status: Phase 23 complete, ready to plan Phase 24
+Last activity: 2026-03-03 -- Phase 23 complete (1/1 plans, 4min)
 
-Progress: [##############################] 22/22 phases (v1.0 + v1.1 complete)
+Progress: [####................] 20%
 
 ## Performance Metrics
 
@@ -46,16 +47,21 @@ Progress: [##############################] 22/22 phases (v1.0 + v1.1 complete)
 
 All decisions logged in PROJECT.md Key Decisions table.
 
+- Phase 23: Kept integrity check in backup.rs (not shared with doctor.rs) due to sync/async mismatch
+- Phase 23: Used PRAGMA integrity_check(1) for single-error detection performance
+- Phase 23: Rollback uses fs::copy from .pre-restore (not Backup API)
+
 ### Pending Todos
 
 None.
 
 ### Blockers/Concerns
 
-None — milestone shipped.
+- Phase 25 (SQLCipher): musl cross-compilation with bundled-sqlcipher-vendored-openssl must be validated early -- test cross build as first task
+- Phase 27 (Self-Update): Integration testing depends on GitHub Releases API conventions (asset naming, tag format)
 
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: v1.1 milestone archived
-Next action: `/gsd:new-milestone` to start v1.2
+Stopped at: Completed 23-01-PLAN.md
+Next action: Plan Phase 24

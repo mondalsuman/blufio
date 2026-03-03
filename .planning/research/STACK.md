@@ -1,295 +1,361 @@
-# Technology Stack: MCP Integration (v1.1)
+# Technology Stack: v1.2 Production Hardening
 
-**Project:** Blufio MCP Server + Client
-**Researched:** 2026-03-02
-**Overall confidence:** HIGH
+**Project:** Blufio
+**Researched:** 2026-03-03
+**Scope:** NEW crate additions and feature changes for sd_notify, SQLCipher, Minisign verification, self-update with rollback, and backup integrity verification.
 
-> This document covers ONLY the new dependencies needed for MCP integration.
-> Existing stack (tokio, axum, serde, reqwest, etc.) is validated and unchanged from v1.0.
+> Existing stack (tokio, axum, rusqlite 0.37, ring, reqwest 0.13, ed25519-dalek, etc.) is validated and unchanged from v1.1. This document covers ONLY what changes.
 
 ---
 
-## Recommended Stack
+## Recommended Stack Additions
 
-### Core MCP Library
+### 1. sd_notify Integration
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| `rmcp` | 0.17.0 | Official Rust MCP SDK (server + client) | Official Anthropic-maintained SDK under `modelcontextprotocol/rust-sdk`. Implements MCP spec 2025-11-25. Tokio-native async, serde-based serialization, proc-macro tooling. 3,080 GitHub stars. Released 2026-02-27. Shares tokio/serde/axum ecosystem with existing Blufio stack. |
+| sd-notify | 0.4.5 | systemd Type=notify readiness + watchdog pings | Pure Rust, zero dependencies (only libc, already present). 1.2M+ downloads. Gracefully no-ops on non-systemd environments. Compiles on all Unix including macOS. |
 
-**Why `rmcp` over alternatives:**
+**Key API surface:**
+- `sd_notify::notify(false, &[NotifyState::Ready])` -- signal startup complete
+- `sd_notify::notify(false, &[NotifyState::Watchdog])` -- ping watchdog timer
+- `sd_notify::notify(false, &[NotifyState::Status("message")])` -- free-form status
+- `sd_notify::notify(false, &[NotifyState::Stopping])` -- graceful shutdown signal
+- `sd_notify::watchdog_enabled(false)` -- returns watchdog interval if configured
 
-| Crate | Why Not |
-|-------|---------|
-| `rust-mcp-sdk` | Third-party, not official. Duplicates what rmcp provides. Risk of spec drift. |
-| `mcp-protocol-sdk` | Community crate, lower adoption, fewer downloads. |
-| `mcpx` | Targets older spec (2025-03-26), not the current 2025-11-25. |
-| `pmcp` (Prism) | Enterprise-focused, heavier dependency footprint. |
-| Hand-roll JSON-RPC | MCP spec is complex: session management, SSE resumability, protocol version negotiation, `Last-Event-ID` redelivery, `Mcp-Session-Id` lifecycle. Using the official SDK avoids subtle spec violations that would surface as broken Claude Desktop integration. |
+**Non-systemd behavior (HIGH confidence, verified from source):**
 
-### New Supporting Library
+The crate uses `std::os::unix` (not `cfg(target_os = "linux")`), so it compiles on all Unix targets including macOS. The `notify()` function checks for the `NOTIFY_SOCKET` environment variable. When absent (macOS, non-systemd Linux, Docker without socket passthrough), `connect_notify_socket()` returns `Ok(None)` and `notify()` returns `Ok(())` immediately. No error, no panic, no log noise.
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| `schemars` | 1.0 | JSON Schema generation (2020-12 draft) | rmcp 0.17.0 depends on schemars ^1.0. Required by the `#[tool]` proc macro to generate JSON Schema for tool parameter types. MCP requires JSON Schema descriptions for all tool inputs. Not currently in the Blufio workspace. |
+This means calling `sd_notify::notify()` unconditionally is safe on all platforms. No `#[cfg]` guards needed in application code.
 
-### Existing Dependencies Reused (no version changes)
+**systemd unit file pattern:**
+```ini
+[Service]
+Type=notify
+WatchdogSec=30
+NotifyAccess=main
+```
 
-| Library | Version | How MCP Uses It |
-|---------|---------|-----------------|
-| `tokio` | 1.x | rmcp is tokio-native. stdin/stdout async I/O, child process spawning, HTTP server. |
-| `axum` | 0.8.x | `StreamableHttpService` mounts via `Router::nest_service("/mcp", service)`. |
-| `serde` | 1.x | JSON-RPC message serialization, tool parameter structs. |
-| `serde_json` | 1.x | Tool argument construction, JSON-RPC payloads. |
-| `reqwest` | 0.12.x | Used by rmcp's HTTP client transports (streamable-http-client, sse-client). Already in workspace with `rustls-tls`. |
-| `tracing` | 0.1.x | rmcp emits tracing events internally. Blufio's subscriber captures them. |
-| `uuid` | 1.x | Session ID generation for Streamable HTTP (`Mcp-Session-Id` header). |
+**Integration points:**
+1. Call `NotifyState::Ready` at the end of `run_serve()` after all adapters are initialized.
+2. Spawn a tokio task that calls `NotifyState::Watchdog` at `WatchdogUsec / 2` interval (queried via `watchdog_enabled()`).
+3. Call `NotifyState::Stopping` in the SIGTERM/SIGINT shutdown handler.
+4. Optionally: `NotifyState::Status("sessions=5, cost=$0.42")` for `systemctl status` display.
+
+**Confidence:** HIGH -- verified from crate source code at github.com/lnicola/sd-notify.
 
 ---
 
-## rmcp Feature Flags
+### 2. SQLCipher Database Encryption
 
-### Feature Map (what to enable and why)
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| rusqlite | 0.37.0 (existing, feature change) | SQLite/SQLCipher bindings | Add `bundled-sqlcipher-vendored-openssl` feature flag. REPLACES existing `bundled`. |
 
-| Feature Flag | Purpose | Needed For | Side |
-|---|---|---|---|
-| `server` | Server-side MCP handler trait (`ServerHandler`) | Exposing Blufio tools/skills/memory | Server |
-| `client` | Client-side MCP handler trait (`ClientHandler`) | Consuming external MCP servers | Client |
-| `macros` | `#[tool]`, `#[tool_router]`, `#[tool_handler]` proc macros | Ergonomic tool definitions with auto-generated JSON Schema | Both |
-| `schemars` | JSON Schema generation for tool parameters | MCP requires JSON Schema for all tool inputs | Server |
-| `transport-io` | `stdio()` -- stdin/stdout transport | stdio MCP server mode (Claude Desktop) | Server |
-| `transport-child-process` | `TokioChildProcess` -- spawn subprocess | MCP client connecting to external stdio servers | Client |
-| `transport-streamable-http-server` | `StreamableHttpService` for axum | HTTP-based MCP server endpoint at `/mcp` | Server |
-| `transport-streamable-http-client` | `StreamableHttpClientTransport` | MCP client connecting to remote HTTP servers | Client |
-| `transport-sse-client-reqwest` | `SseClientTransport` (backward compat) | MCP client connecting to legacy SSE-only servers | Client |
-| `reqwest` | HTTP client (rustls backend) | Required by streamable-http-client and sse-client | Client |
+**What changes:** Replace the workspace-level `rusqlite` feature `bundled` with `bundled-sqlcipher-vendored-openssl`. This is a feature flag change on an existing dependency, not a version change.
 
-**Default features** (`base64`, `macros`, `server`) cover the server basics. Client features and all transports must be explicitly enabled.
+**Feature dependency chain:**
+```
+bundled-sqlcipher-vendored-openssl
+  -> bundled-sqlcipher
+    -> bundled (cc + bundled_bindings)
+  -> openssl-sys/vendored
+```
 
-### Features NOT needed
+**Why `bundled-sqlcipher-vendored-openssl` specifically:**
 
-| Feature | Why Skip |
-|---------|----------|
-| `auth` (OAuth2) | Blufio has its own device keypair auth. OAuth2 for MCP is only needed when connecting to third-party MCP servers requiring OAuth. Defer until a concrete use case. |
-| `tower` | Blufio already uses axum middleware. rmcp's tower feature adds MCP-specific middleware layers that are not needed for basic integration. |
-| `elicitation` | Interactive user input prompting. Not needed for an always-on agent that operates autonomously. |
-| `transport-worker` | In-process worker pattern. Not needed -- Blufio uses child process or HTTP for external servers. |
+| Feature | Crypto Source | Musl Static Build | System Headers Needed |
+|---------|-------------|-------------------|----------------------|
+| `bundled-sqlcipher` | System OpenSSL/LibreSSL | BREAKS -- no system crypto in cross Docker | YES -- libcrypto headers |
+| `bundled-sqlcipher-vendored-openssl` | Vendored OpenSSL (compiled from source) | WORKS -- fully self-contained | NO -- everything bundled |
+
+The vendored variant compiles OpenSSL from source via the `openssl-sys` crate's build script, producing a static `libcrypto.a`. This is the standard approach for musl cross-compilation and is used by hundreds of Rust projects shipping static binaries.
+
+**SQLCipher is a strict superset of SQLite (HIGH confidence):**
+- When no key is provided, SQLCipher behaves identically to standard SQLite.
+- Existing unencrypted databases continue to work without ANY code changes.
+- Encryption is opt-in via `PRAGMA key = '...'` immediately after opening a connection.
+- ALL existing APIs work unchanged: WAL mode, backup API, PRAGMA integrity_check, all SQL.
+- Migration from unencrypted to encrypted uses `ATTACH DATABASE + sqlcipher_export()`.
+
+**CRITICAL: `bundled` must be REMOVED, not kept alongside.** `bundled-sqlcipher` implies `bundled`. Having both in the feature list is redundant but harmless. However, the workspace Cargo.toml should cleanly specify only `bundled-sqlcipher-vendored-openssl` to avoid confusion.
+
+**Encryption key management approach:**
+The existing vault already derives a 256-bit key from a passphrase using Argon2id. For SQLCipher:
+1. Derive a separate 256-bit key from the master key using HKDF (via `ring::hkdf`) with context `"blufio-sqlcipher-v1"`.
+2. Pass as hex string via `PRAGMA key = "x'...'";` immediately after `Connection::open()`.
+3. Hold key in `Zeroizing<String>` -- never log, never persist.
+4. On `tokio-rusqlite::Connection::open()`, use the `.call()` method to run the PRAGMA on the inner connection.
+
+**Build system implications:**
+
+| Concern | Impact | Mitigation |
+|---------|--------|------------|
+| Compile time | +30-90s clean builds (OpenSSL from source) | Incremental builds unaffected. CI caching helps. |
+| Binary size | +300-500KB (static libcrypto) | Acceptable for encryption-at-rest. |
+| cross musl builds | openssl-sys vendored compiles inside cross Docker | Standard approach. Default cross images include C compiler + perl (needed by OpenSSL Configure). |
+| macOS dev builds | openssl-sys vendored compiles on macOS natively | No Homebrew OpenSSL needed. Fully self-contained. |
+| C compiler | Already required by existing `bundled` feature | No new toolchain dependency. |
+| aarch64-unknown-linux-musl | openssl-sys vendored supports aarch64 | Cross default image works. |
+
+**Risk: Cross Docker image compatibility (MEDIUM confidence).**
+The default `ghcr.io/cross-rs/x86_64-unknown-linux-musl:main` image should have all prerequisites (cc, perl, make). If issues arise, a `Cross.toml` can pin a known-good image version. Test the cross build EARLY in the milestone.
+
+**Why NOT upgrade to rusqlite 0.38:**
+rusqlite 0.38 has 4 breaking changes (u64 ToSql/FromSql disabled by default, statement cache optional, min SQLite 3.34.1, Connection ownership checks for hooks). These require code changes across the workspace. The `bundled-sqlcipher-vendored-openssl` feature is fully supported on 0.37. Upgrade to 0.38 in a separate future milestone.
+
+**Confidence:** HIGH for feature flags and API behavior. MEDIUM for musl cross-compilation (well-established pattern but should be validated early).
 
 ---
 
-## Transport Implementation Details
+### 3. Minisign Binary Verification
 
-### Transport 1: stdio (PRIMARY -- Claude Desktop integration)
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| minisign-verify | 0.2.5 | Verify Ed25519-based Minisign signatures on downloaded binaries | Zero dependencies. ~2500 lines. Maintained by jedisct1 (Minisign creator). Published 2026-03-03 (actively maintained). Supports streaming verification. |
 
-**MCP Spec behavior:** Client launches server as subprocess. Server reads JSON-RPC from stdin, writes to stdout. Messages are newline-delimited, MUST NOT contain embedded newlines. stderr is for logging only.
+**Why Minisign over alternatives:**
 
-**rmcp server API:**
+| Alternative | Why NOT |
+|-------------|---------|
+| GPG signatures | Complex keyring management, large dependency (gpgme). Overkill for single-key verification. |
+| signify (BSD) | Less ecosystem tooling. Minisign is a superset with trusted comments. |
+| sigstore/cosign | Requires certificate transparency infrastructure. Too heavy for a single-binary project. |
+| ed25519-dalek directly | Could work (same curve), but Minisign adds trusted comments, key IDs, and a standard signature format. The minisign-verify crate handles all parsing. |
+| minisign (full crate) | Includes signing code. We only need verification. minisign-verify has zero dependencies; minisign pulls in several. |
+
+**Key API surface:**
 ```rust
-use rmcp::transport::io::stdio;
+use minisign_verify::{PublicKey, Signature};
 
-// In `blufio mcp serve-stdio` CLI subcommand
-let service = BlufioMcpServer::new(agent_handle)
-    .serve(stdio())  // binds to process stdin/stdout
-    .await?;
-service.waiting().await?;  // blocks until client disconnects
+// Embedded at compile time:
+const MINISIGN_PK: &str = "untrusted comment: blufio release key\nRWQ...base64...";
+
+let pk = PublicKey::from_base64("RWQ...base64...")?;
+let sig = Signature::decode(&sig_content)?;
+
+// Small file (in-memory):
+pk.verify(&binary_data, &sig, false)?;
+
+// Large file (streaming -- preferred for binaries):
+let mut verifier = pk.verify_stream(&sig)?;
+for chunk in file_chunks {
+    verifier.update(&chunk)?;
+}
+verifier.finalize()?;
 ```
 
-**rmcp client API (Blufio consuming external stdio servers):**
-```rust
-use rmcp::transport::child_process::{TokioChildProcess, ConfigureCommandExt};
-use tokio::process::Command;
+**Streaming verification note:** Only works with pre-hashed signatures (the default in modern Minisign). Ensure release signing uses `minisign -S` without the legacy `-H` flag.
 
-let transport = TokioChildProcess::new(
-    Command::new("npx").configure(|cmd| {
-        cmd.arg("-y").arg("@modelcontextprotocol/server-filesystem");
-    })
-)?;
-let client = ().serve(transport).await?;
-let tools = client.list_tools(Default::default()).await?;
-let result = client.call_tool(CallToolRequestParams {
-    name: "read_file".into(),
-    arguments: serde_json::json!({"path": "/tmp/test.txt"}).as_object().cloned(),
-}).await?;
+**Integration point:**
+1. Embed the Minisign public key as a `const` in the binary crate.
+2. During self-update: download `{tarball}.minisig` alongside the tarball.
+3. Stream-verify the tarball against the signature before extraction.
+4. Reject the update if verification fails -- do not extract, do not swap.
+
+**Release workflow addition:**
+```yaml
+# In .github/workflows/release.yml, after Package step:
+- name: Install Minisign
+  run: |
+    curl -sL https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux-x86_64.tar.gz \
+      | tar xz -C /usr/local/bin --strip-components=2
+
+- name: Sign release artifacts
+  run: |
+    echo "${{ secrets.MINISIGN_SECRET_KEY }}" > /tmp/minisign.key
+    for f in blufio-*.tar.gz; do
+      minisign -Sm "$f" -s /tmp/minisign.key -t "blufio ${{ github.ref_name }}"
+    done
+    rm /tmp/minisign.key
 ```
 
-**rmcp features needed:** `transport-io` (server), `transport-child-process` (client)
+Upload `.minisig` files as additional release assets alongside tarballs.
 
-**Integration point:** New `blufio mcp serve-stdio` CLI subcommand. Launches agent in MCP server mode, reading from stdin/stdout instead of starting the HTTP gateway. The existing `blufio serve` continues to run the HTTP/WS gateway.
+**Confidence:** HIGH -- zero dependencies, actively maintained, API verified from docs.rs.
 
-**Claude Desktop config (`claude_desktop_config.json`):**
-```json
-{
-  "mcpServers": {
-    "blufio": {
-      "command": "/usr/local/bin/blufio",
-      "args": ["mcp", "serve-stdio"]
+---
+
+### 4. Self-Update with Rollback
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| self-replace | 1.5.0 | Atomic binary replacement on disk | By Armin Ronacher (mitsuhiko). Uses atomic `rename()` on Unix: places new file adjacent, then renames. POSIX-standard, works on any filesystem including musl static binaries. |
+| reqwest | 0.13 (existing) | GitHub releases API + binary download | Already in workspace with `json`, `rustls`, `stream` features. Fully sufficient. |
+| flate2 | 1 | gzip decompression | Pure Rust (miniz_oxide backend). Decompress `.tar.gz` release tarballs. |
+| tar | 0.4 | tar archive extraction | Extract the `blufio` binary from the decompressed stream. |
+| tempfile | 3 (promote to regular dep) | Stage downloaded binary atomically | Already in workspace as dev-dependency. Promote to regular dependency in the binary crate. |
+
+**Why NOT self_update (jaemk) crate:**
+
+| Concern | self_update | Manual (reqwest + self-replace) |
+|---------|------------|--------------------------------|
+| Dependencies | Pulls reqwest, indicatif, zip, flate2, tar, serde, etc. | Uses existing reqwest. Adds only self-replace + flate2 + tar. |
+| Control | Opinionated GitHub integration | Full control over flow, error handling, retry logic |
+| Signature verification | None built-in | We integrate minisign-verify ourselves |
+| Release format | Assumes specific naming conventions | We define our own (already have a release workflow) |
+| Maintenance | Last major update ~2023 | Our code, our maintenance |
+
+Building from primitives is the right call because:
+1. We already have `reqwest` with the features we need.
+2. We need Minisign verification integrated into the flow (self_update doesn't support it).
+3. The actual logic is ~200 lines of straightforward code.
+
+**self-replace on Unix (HIGH confidence):**
+On Unix, `self_replace::self_replace(new_binary_path)` places the new binary next to the current executable and performs an atomic `rename()`. The `rename()` syscall is POSIX-standard and works on all Linux filesystems (including musl static binaries, tmpfs, overlayfs). The old inode remains valid for the running process (open file descriptors survive rename/unlink).
+
+**Self-update flow:**
+```
+1. Query: GET https://api.github.com/repos/{owner}/{repo}/releases/latest
+   -> Parse JSON for assets matching current target triple
+   -> Compare semver with current version (skip if up to date)
+
+2. Download:
+   -> {binary}-{version}-{target}.tar.gz
+   -> {binary}-{version}-{target}.tar.gz.minisig
+
+3. Verify: minisign-verify signature against embedded public key
+   -> REJECT if verification fails (do not proceed)
+
+4. Extract: flate2 decompress -> tar extract -> binary to tempfile
+   -> Verify extracted binary SHA-256 against release metadata
+
+5. Set permissions: chmod +x on extracted binary
+
+6. Backup: copy current binary to {path}.rollback
+
+7. Swap: self_replace::self_replace(temp_path)
+   -> Atomic rename on Unix
+
+8. Verify: exec the new binary with --version, confirm it runs
+   -> On failure: rename {path}.rollback back to {path}
+```
+
+**Rollback mechanism:**
+- `blufio update` -- performs the flow above
+- `blufio update --rollback` -- swaps `.rollback` back if it exists
+- Keep exactly one `.rollback` file (not a history)
+- The `.rollback` file is overwritten on each successful update
+
+**GitHub API via reqwest (no new dependency):**
+```rust
+#[derive(Deserialize)]
+struct Release {
+    tag_name: String,
+    assets: Vec<Asset>,
+}
+
+#[derive(Deserialize)]
+struct Asset {
+    name: String,
+    browser_download_url: String,
+}
+
+let release: Release = reqwest::Client::new()
+    .get("https://api.github.com/repos/blufio/blufio/releases/latest")
+    .header("User-Agent", "blufio-updater")
+    .send().await?
+    .json().await?;
+```
+
+**Target triple detection at compile time:**
+```rust
+const TARGET: &str = env!("TARGET"); // Set via build.rs or cargo
+// Or use compile-time cfg:
+#[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "musl"))]
+const TARGET_TRIPLE: &str = "x86_64-unknown-linux-musl";
+```
+
+**Confidence:** HIGH for self-replace mechanism. MEDIUM for full update flow (integration testing with real GitHub releases needed).
+
+---
+
+### 5. Backup Integrity Verification
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| ring | 0.17 (existing) | SHA-256 digest of backup files | Already in workspace (used by blufio-vault and blufio-mcp-client). No new dependency. |
+| rusqlite | 0.37.0 (existing) | PRAGMA integrity_check on backup/restore | Already implemented in doctor.rs. Extend pattern to backup flow. |
+
+**No new dependencies needed.**
+
+**Enhancement to existing backup.rs:**
+
+1. **After `run_backup()`:**
+   - Open the backup file read-only.
+   - Run `PRAGMA integrity_check` -- confirm `"ok"`.
+   - Compute SHA-256 hash of the backup file (streaming via `ring::digest`).
+   - Write sidecar `{backup_path}.meta.json` with: path, timestamp, sha256, size_bytes, integrity_status.
+   - Print hash and integrity result to stderr.
+
+2. **After `run_restore()`:**
+   - Run `PRAGMA integrity_check` on the restored database -- confirm `"ok"`.
+   - If integrity check fails, warn and suggest using the `.pre-restore` safety backup.
+
+3. **New: `blufio backup --verify {path}`:**
+   - Recompute SHA-256 of backup file.
+   - Compare against stored `.meta.json` hash.
+   - Run `PRAGMA integrity_check` on the backup.
+   - Report pass/fail.
+
+**SHA-256 via ring (existing dependency):**
+```rust
+use ring::digest;
+use std::io::Read;
+
+fn sha256_file(path: &str) -> Result<String, std::io::Error> {
+    let mut ctx = digest::Context::new(&digest::SHA256);
+    let mut file = std::fs::File::open(path)?;
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 { break; }
+        ctx.update(&buf[..n]);
     }
-  }
+    let hash = ctx.finish();
+    Ok(hex::encode(hash.as_ref()))
 }
 ```
 
-### Transport 2: Streamable HTTP (PRIMARY -- remote/production)
-
-**MCP Spec (2025-11-25):** Single endpoint (e.g., `/mcp`) accepting:
-- **POST**: Client sends JSON-RPC request/notification/response. Server returns `application/json` (single response) or `text/event-stream` (SSE stream with response + notifications).
-- **GET**: Client opens SSE stream for server-initiated messages.
-- **DELETE**: Client terminates session.
-
-Session management via `Mcp-Session-Id` header. Supports resumability via `Last-Event-ID`. Protocol version via `MCP-Protocol-Version` header.
-
-**Security requirements (from MCP spec):**
-- MUST validate `Origin` header (DNS rebinding protection)
-- Bind to 127.0.0.1 for local, not 0.0.0.0
-- Session IDs must be cryptographically secure (UUID v4)
-- Blufio already has TLS enforcement and SSRF protection -- reuse those
-
-**rmcp server API:**
-```rust
-use rmcp::transport::streamable_http_server::{
-    StreamableHttpService, session::local::LocalSessionManager,
-};
-
-// Factory creates a new MCP server instance per session
-let mcp_service = StreamableHttpService::new(
-    move || Ok(BlufioMcpServer::new(agent_handle.clone())),
-    LocalSessionManager::default().into(),
-    Default::default(),
-);
-
-// Mount on existing axum router alongside /v1/* REST API
-let router = existing_blufio_router
-    .nest_service("/mcp", mcp_service);
-
-// Serve with existing TCP listener
-axum::serve(tcp_listener, router)
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
-```
-
-**rmcp client API:**
-```rust
-use rmcp::transport::streamable_http_client::StreamableHttpClientTransport;
-
-let transport = StreamableHttpClientTransport::new(
-    "https://remote-server:8443/mcp".parse()?
-);
-let client = ().serve(transport).await?;
-let tools = client.list_tools(Default::default()).await?;
-```
-
-**rmcp features needed:** `transport-streamable-http-server` (server), `transport-streamable-http-client` + `reqwest` (client)
-
-**Integration point:** Mount `StreamableHttpService` at `/mcp` on the existing axum `Router` in `blufio-gateway`. Coexists with `/v1/*` REST API and WebSocket endpoints on the same port. No new ports needed.
-
-### Transport 3: SSE Client (BACKWARD COMPAT -- legacy servers only)
-
-**Context:** SSE was the HTTP transport in MCP spec 2024-11-05. Deprecated in 2025-03-26 in favor of Streamable HTTP. Still needed because many existing MCP servers only support the old SSE transport (separate `/sse` and `/messages` endpoints).
-
-**Approach:** Do NOT build a separate SSE server. Streamable HTTP subsumes SSE on the server side (it uses SSE internally for streaming). Only add SSE as a client transport so Blufio can connect to legacy MCP servers that haven't migrated to Streamable HTTP yet.
-
-**rmcp client API:**
-```rust
-use rmcp::transport::sse_client::SseClientTransport;
-
-let transport = SseClientTransport::new("http://legacy-server:3000/sse")?;
-let client = ().serve(transport).await?;
-```
-
-**rmcp features needed:** `transport-sse-client-reqwest` + `reqwest` (client only)
-
-**TOML config drives transport selection:**
-```toml
-[mcp.servers.filesystem]
-transport = "stdio"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem"]
-
-[mcp.servers.github]
-transport = "streamable-http"
-url = "https://mcp.github.com/mcp"
-
-[mcp.servers.legacy-tool]
-transport = "sse"
-url = "http://localhost:3000/sse"
-```
+**Confidence:** HIGH -- uses only existing dependencies and patterns already in the codebase.
 
 ---
 
-## Cargo.toml Configuration
+## Summary: All Dependency Changes
 
-### New workspace dependency additions
+### New Dependencies (5 crates)
 
-```toml
-# Add to [workspace.dependencies] in root Cargo.toml
-rmcp = { version = "0.17", default-features = false, features = [
-    "server",
-    "client",
-    "macros",
-    "schemars",
-    "transport-io",
-    "transport-child-process",
-    "transport-streamable-http-server",
-    "transport-streamable-http-client",
-    "transport-sse-client-reqwest",
-    "reqwest",
-] }
-schemars = "1.0"
-```
+| Crate | Version | Transitive Deps Added | Size Impact |
+|-------|---------|----------------------|-------------|
+| sd-notify | 0.4.5 | 0 (libc already present) | ~10KB |
+| minisign-verify | 0.2.5 | 0 (zero dependencies) | ~15KB |
+| self-replace | 1.5.0 | 0 on Unix | ~10KB |
+| flate2 | 1 | miniz_oxide, crc32fast | ~50KB |
+| tar | 0.4 | filetime, xattr | ~30KB |
 
-`serde_json` is already a transitive dependency but may need an explicit workspace entry if tool argument construction requires it directly.
+**Total new transitive dependencies: ~4-5 crates**
+**Binary size impact: ~200-400KB estimated**
 
-### Per-crate dependency allocation
+### Feature Flag Changes (1 existing crate)
 
-**Option A: All features at workspace level (simpler)**
+| Crate | Before | After | Impact |
+|-------|--------|-------|--------|
+| rusqlite | `bundled` | `bundled-sqlcipher-vendored-openssl` | Compiles SQLCipher + vendored OpenSSL from source. +300-500KB binary, +30-90s clean build. |
 
-Every crate that uses rmcp gets all features. Fine for a single binary where tree-shaking happens at link time.
+### Promotions (1 existing crate)
 
-**Option B: Split features per-crate (tighter control)**
+| Crate | Before | After |
+|-------|--------|-------|
+| tempfile | dev-dependency in blufio | regular dependency in blufio |
 
-```toml
-# Root Cargo.toml [workspace.dependencies]
-rmcp = { version = "0.17", default-features = false }
-schemars = "1.0"
+### Dependency Budget
 
-# blufio-mcp-server/Cargo.toml (new crate)
-[dependencies]
-rmcp = { workspace = true, features = [
-    "server", "macros", "schemars",
-    "transport-io",
-    "transport-streamable-http-server",
-] }
-schemars = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
-blufio-core = { path = "../blufio-core" }
-
-# blufio-mcp-client/Cargo.toml (new crate)
-[dependencies]
-rmcp = { workspace = true, features = [
-    "client",
-    "transport-child-process",
-    "transport-streamable-http-client",
-    "transport-sse-client-reqwest",
-    "reqwest",
-] }
-serde = { workspace = true }
-serde_json = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
-blufio-core = { path = "../blufio-core" }
-
-# blufio-gateway/Cargo.toml (existing -- add MCP mount)
-[dependencies]
-rmcp = { workspace = true, features = [
-    "transport-streamable-http-server",
-] }
-blufio-mcp-server = { path = "../blufio-mcp-server" }
-# ... existing deps unchanged
-```
-
-**Recommendation:** Option A for v1.1. The binary is a single artifact anyway, and Cargo's feature unification means all features get compiled once regardless. Option B adds maintenance burden with no real binary size savings until/unless Blufio ships separate server-only and client-only binaries.
+| Metric | Before (v1.1) | After (v1.2) |
+|--------|--------------|--------------|
+| Direct workspace deps | ~37 | ~42 |
+| Well within <80 constraint | Yes | Yes |
+| New crates with zero deps | 3 of 5 | Minimal audit surface |
 
 ---
 
@@ -297,107 +363,91 @@ blufio-mcp-server = { path = "../blufio-mcp-server" }
 
 | Temptation | Why Avoid |
 |------------|-----------|
-| `eventsource-client` or `sse-codec` | rmcp handles SSE internally via its transport features. Adding standalone SSE crates creates duplicate SSE parsing code. |
-| `jsonrpc-core` or `jsonrpc-v2` | rmcp implements JSON-RPC 2.0 internally. A separate JSON-RPC crate creates type conflicts and redundant serialization. |
-| `tower` as new dependency | rmcp has optional `tower` feature but Blufio already uses axum middleware. Only add if you need rmcp-specific Tower middleware layers. |
-| `oauth2` crate directly | rmcp has `auth` feature for OAuth2. Defer unless connecting to OAuth-protected MCP servers becomes a real requirement. |
-| `hyper` directly | axum already wraps hyper. `StreamableHttpService` plugs into axum router, not raw hyper. |
-| A second MCP crate | Do NOT use rmcp for server and a different crate for client. Use rmcp for both -- consistent types, no conversion layer, shared JSON-RPC implementation. |
-| `schemars` 0.8 | rmcp 0.17 requires schemars ^1.0. Using 0.8 will fail to compile. The 1.0 release changed `Schema` from a struct to a `serde_json::Value` wrapper -- cleaner API. |
+| `self_update` (jaemk) | Heavy dependency tree, no Minisign support, opinionated GitHub integration. We have reqwest already. |
+| `sha2` / `sha256` crate | `ring` 0.17 already provides `ring::digest::SHA256`. Adding another SHA-256 crate is wasteful. |
+| `openssl` (direct) | `openssl-sys` is pulled transitively by `bundled-sqlcipher-vendored-openssl`. Do NOT add openssl as a direct dependency -- it's an implementation detail of the SQLCipher build. |
+| `systemd` crate | Full libsystemd C bindings. Massive overkill. sd-notify is pure Rust and covers Type=notify + watchdog. |
+| `minisign` (full crate) | Includes signing code + dependencies (scrypt, getrandom, rpassword). We only need verification. |
+| `rusqlite` 0.38 upgrade | 4 breaking changes. Not needed -- 0.37 supports all required SQLCipher features. Upgrade in a separate milestone. |
+| `indicatif` (progress bars) | Nice-to-have for download progress, but adds dependency. Use simple stderr logging instead. Can add later if users request it. |
+| Custom OpenSSL build | Vendored OpenSSL via openssl-sys is the correct approach. Do NOT download/compile OpenSSL separately in CI. |
 
 ---
 
-## Dependency Impact Assessment
+## Workspace Cargo.toml Changes
 
-| Metric | Before (v1.0) | After (v1.1) | Delta |
-|--------|----------------|--------------|-------|
-| Workspace crates | 14 | 16 | +2 (`blufio-mcp-server`, `blufio-mcp-client`) |
-| Direct workspace deps | ~35 | ~37 | +2 (`rmcp`, `schemars`) |
-| Transitive deps (est.) | ~300 | ~315 | +~15 (rmcp brings rmcp-macros, pastey, pin-project-lite, etc. -- many already present via tokio/axum/reqwest) |
-| Binary size impact (est.) | ~25MB | ~26-27MB | +1-2MB (JSON-RPC impl, SSE codec, session management) |
-| Compile time impact (est.) | baseline | +10-15% | rmcp-macros proc macro, schemars derive |
+```toml
+[workspace.dependencies]
+# CHANGED: Replace "bundled" with SQLCipher + vendored OpenSSL
+rusqlite = { version = "0.37", features = ["bundled-sqlcipher-vendored-openssl"] }
 
-**Low risk:** rmcp's dependency tree heavily overlaps with Blufio's existing deps: tokio, serde, serde_json, futures, reqwest, http, hyper-util, tracing, thiserror, bytes, base64. The genuinely new transitive deps are primarily `rmcp-macros`, `pastey`, and `schemars`.
+# NEW: Production hardening dependencies
+sd-notify = "0.4"
+minisign-verify = "0.2"
+self-replace = "1.5"
+flate2 = "1"
+tar = "0.4"
+```
 
----
+## Binary Crate Cargo.toml Changes
 
-## MCP Protocol Version Support
+```toml
+# crates/blufio/Cargo.toml additions:
+[dependencies]
+sd-notify = { workspace = true }
+minisign-verify = { workspace = true }
+self-replace = { workspace = true }
+flate2 = { workspace = true }
+tar = { workspace = true }
+tempfile = "3"  # promoted from [dev-dependencies]
 
-| Spec Version | Status | rmcp 0.17 Support | Notes |
-|---|---|---|---|
-| **2025-11-25** | **Current** | Full | Streamable HTTP, session management, resumability, `MCP-Protocol-Version` header |
-| 2025-06-18 | Previous | Full | Backward compatible |
-| 2025-03-26 | Previous | Full | First version to deprecate SSE |
-| 2024-11-05 | Legacy | Via SSE client | SSE client transport connects to servers still on this spec |
+# CHANGED: Add backup feature (already present, just confirming)
+rusqlite = { workspace = true, features = ["backup"] }
+```
 
----
+## Storage Crate Cargo.toml
 
-## Version Compatibility with Existing Stack
-
-| rmcp Dependency | Blufio Existing | Conflict? |
-|-----------------|-----------------|-----------|
-| tokio ^1 | tokio 1.x | None -- same major |
-| serde ^1.0 | serde 1.x | None -- same major |
-| serde_json ^1.0 | serde_json (transitive) | None |
-| futures ^0.3 | futures 0.3 | None -- same |
-| thiserror ^2 | thiserror 2 | None -- same |
-| tracing ^0.1 | tracing 0.1 | None -- same |
-| reqwest (via features) | reqwest 0.12 | **CHECK:** rmcp's reqwest feature pulls reqwest internally. If rmcp pins a different reqwest minor, Cargo may unify or error. Both use `rustls-tls`. Should resolve cleanly. |
-| http (transitive) | http (via axum) | None -- axum 0.8 and rmcp both use http 1.x |
-| schemars ^1.0 | **NEW** | No conflict -- new dependency |
-
-**One concern:** rmcp 0.17 may internally depend on a newer reqwest than Blufio's 0.12. Check `cargo tree -p rmcp` after adding the dependency. If version conflict, upgrade Blufio's reqwest to match. Both use rustls-tls so the upgrade path is clean.
+No changes needed to `blufio-storage/Cargo.toml`. The rusqlite feature change at workspace level flows through automatically. The storage crate will compile against SQLCipher instead of SQLite transparently.
 
 ---
 
-## Alternatives Considered
+## Build System Impact Summary
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| MCP SDK | **rmcp 0.17** (official) | rust-mcp-sdk | Not official. Smaller community. Risk of falling behind spec updates. |
-| MCP SDK | **rmcp 0.17** (official) | Hand-roll JSON-RPC | MCP spec complexity (session mgmt, resumability, protocol negotiation, SSE framing) makes hand-rolling a 3-4 week effort that would replicate what rmcp provides. |
-| JSON Schema | **schemars 1.0** | schemars 0.8 | rmcp 0.17 depends on schemars ^1.0. Must match. 1.0 is also a better API (Schema is serde_json::Value wrapper). |
-| HTTP transport | **Streamable HTTP** (2025-11-25 spec) | SSE-only server | SSE deprecated in MCP spec since 2025-03-26. Streamable HTTP is the current standard. |
-| HTTP framework | **axum 0.8** (existing) | actix-web | Already using axum. rmcp has first-class axum integration via `nest_service`. No reason to add a framework. |
-| SSE backward compat | **SSE client only** | Full SSE server + client | Building an SSE server is unnecessary work. Streamable HTTP covers modern clients. SSE client covers legacy servers. |
-
----
-
-## Integration Points with Existing Blufio Stack
-
-| Existing Component | How MCP Integrates | Notes |
-|---|---|---|
-| **blufio-gateway** (axum router) | Mount `StreamableHttpService` at `/mcp` via `Router::nest_service` | Coexists with `/v1/*` REST and WebSocket endpoints on same port |
-| **blufio-core** (7 adapter traits) | MCP client likely needs new trait or extension to existing `SkillRuntime` | External MCP tools appear as invocable tools to the agent |
-| **blufio-config** (figment + TOML) | New `[mcp]` config section with `[mcp.servers.<name>]` entries | Per-server: transport type, command/URL, args, env vars |
-| **blufio-skill** (WASM sandbox) | MCP server exposes each WASM skill as an MCP tool | Skill manifest -> MCP tool schema mapping |
-| **blufio-memory** (ONNX embeddings) | MCP server exposes memory search as MCP resource or tool | Semantic search becomes MCP-accessible |
-| **blufio-agent** (FSM loop) | Agent discovers external MCP tools and merges into tool list during context assembly | MCP tools treated same as built-in tools |
-| **blufio-security** (TLS/SSRF) | MCP HTTP endpoint reuses existing security middleware | Origin validation, TLS enforcement, SSRF protection |
-| **blufio** (CLI binary) | New subcommand: `blufio mcp serve-stdio` | Launches MCP server mode on stdin/stdout |
+| Build Target | Change | Risk |
+|-------------|--------|------|
+| macOS (dev, cargo build) | +OpenSSL vendored compile time | LOW -- works out of the box |
+| x86_64-unknown-linux-musl (cross) | +OpenSSL vendored in Docker | MEDIUM -- test early, default cross image should work |
+| aarch64-unknown-linux-musl (cross) | +OpenSSL vendored in Docker | MEDIUM -- same as x86_64 |
+| x86_64-apple-darwin (native) | +OpenSSL vendored compile time | LOW -- works out of the box |
+| aarch64-apple-darwin (native) | +OpenSSL vendored compile time | LOW -- works out of the box |
+| CI (GitHub Actions) | +Minisign signing step in release workflow | LOW -- simple addition |
 
 ---
 
 ## Sources
 
-### Official / Authoritative (HIGH confidence)
-- [Official rmcp repository -- modelcontextprotocol/rust-sdk](https://github.com/modelcontextprotocol/rust-sdk) -- 3,080 stars, Anthropic-maintained
-- [rmcp 0.17.0 on docs.rs](https://docs.rs/rmcp/0.17.0/rmcp/) -- Released 2026-02-27, feature flags and API reference
-- [MCP Specification 2025-11-25: Transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) -- Authoritative spec for stdio and Streamable HTTP
-- [schemars 1.0 migration guide](https://graham.cool/schemars/migrating/) -- 0.8 to 1.0 changes
+### Crate Pages (version + metadata)
+- [sd-notify 0.4.5 on crates.io](https://crates.io/crates/sd-notify) -- Published 2025-01-18
+- [minisign-verify 0.2.5 on crates.io](https://crates.io/crates/minisign-verify) -- Published 2026-03-03
+- [self-replace 1.5.0 on crates.io](https://crates.io/crates/self-replace) -- Published 2024-09-01
+- [rusqlite 0.37.0 on crates.io](https://crates.io/crates/rusqlite) -- bundled-sqlcipher features documented
 
-### Tutorials / Guides (MEDIUM confidence, code patterns verified)
-- [Shuttle: Build a Streamable HTTP MCP Server in Rust](https://www.shuttle.dev/blog/2025/10/29/stream-http-mcp) -- axum + rmcp integration pattern with `StreamableHttpService`
-- [Shuttle: Build a stdio MCP Server in Rust](https://www.shuttle.dev/blog/2025/07/18/how-to-build-a-stdio-mcp-server-in-rust) -- stdio transport pattern
-- [DeepWiki: rmcp Client Examples](https://deepwiki.com/modelcontextprotocol/rust-sdk/6.5-client-examples) -- All 8 client examples with feature requirements
-- [DeepWiki: rmcp Getting Started](https://deepwiki.com/modelcontextprotocol/rust-sdk/1.1-getting-started) -- Complete feature flag reference
-- [HackMD: MCP in Rust Practical Guide](https://hackmd.io/@Hamze/SytKkZP01l) -- End-to-end walkthrough
+### API Documentation (verified)
+- [sd-notify docs.rs](https://docs.rs/sd-notify/0.4.5/sd_notify/) -- NotifyState variants, notify() behavior
+- [sd-notify source (lib.rs)](https://github.com/lnicola/sd-notify) -- Verified NOTIFY_SOCKET no-op behavior from source
+- [minisign-verify docs.rs](https://docs.rs/minisign-verify/0.2.5/minisign_verify/) -- PublicKey, Signature, StreamVerifier API
+- [self-replace docs.rs](https://docs.rs/self-replace/latest/self_replace/) -- self_replace() function, Unix behavior
+- [rusqlite features](https://lib.rs/crates/rusqlite/features) -- Complete feature flag list with dependency chains
 
-### Analysis (MEDIUM confidence)
-- [Why MCP Deprecated SSE and Went with Streamable HTTP](https://blog.fka.dev/blog/2025-06-06-why-mcp-deprecated-sse-and-go-with-streamable-http/) -- SSE deprecation rationale
-- [Auth0: Why MCP's Move Away from SSE Simplifies Security](https://auth0.com/blog/mcp-streamable-http/) -- Security implications of transport change
-- [crates.io: rmcp versions](https://crates.io/crates/rmcp/versions) -- Version history
+### Build System (verified)
+- [libsqlite3-sys Cargo.toml](https://github.com/rusqlite/rusqlite/blob/master/libsqlite3-sys/Cargo.toml) -- bundled-sqlcipher-vendored-openssl feature definition
+- [rusqlite issue #765](https://github.com/rusqlite/rusqlite/issues/765) -- bundled-sqlcipher design discussion
+- [rusqlite issue #926](https://github.com/rusqlite/rusqlite/issues/926) -- bundled-sqlcipher usage guidance
+
+### Protocol / Spec
+- [SQLCipher (zetetic.net)](https://www.zetetic.net/sqlcipher/) -- SQLCipher is a strict SQLite superset
+- [Minisign (jedisct1)](https://github.com/jedisct1/minisign) -- Minisign specification and tooling
 
 ---
-*Stack research for: Blufio v1.1 MCP Integration*
-*Researched: 2026-03-02*
+*Stack research for: Blufio v1.2 Production Hardening*
+*Researched: 2026-03-03*
