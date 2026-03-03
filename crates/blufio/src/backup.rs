@@ -50,10 +50,7 @@ pub fn run_integrity_check(path: &Path) -> Result<(), BlufioError> {
     if rows.len() == 1 && rows[0] == "ok" {
         Ok(())
     } else {
-        let first_error = rows
-            .first()
-            .map(|s| s.as_str())
-            .unwrap_or("unknown error");
+        let first_error = rows.first().map(|s| s.as_str()).unwrap_or("unknown error");
         Err(BlufioError::Storage {
             source: Box::new(std::io::Error::new(
                 ErrorKind::InvalidData,
@@ -198,10 +195,8 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
 
         // Restore from .pre-restore if it exists.
         if Path::new(&pre_restore_path).exists() {
-            std::fs::copy(&pre_restore_path, db_path).map_err(|copy_err| {
-                BlufioError::Storage {
-                    source: Box::new(copy_err),
-                }
+            std::fs::copy(&pre_restore_path, db_path).map_err(|copy_err| BlufioError::Storage {
+                source: Box::new(copy_err),
             })?;
             eprintln!("Restore FAILED: {e}. Database rolled back to pre-restore state.");
         } else {
@@ -388,14 +383,15 @@ mod tests {
 
         // Create a valid DB, then corrupt it to simulate a corrupt backup file.
         let conn = Connection::open(&corrupt_backup).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);",
-        )
-        .unwrap();
+        conn.execute_batch("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);")
+            .unwrap();
         for i in 0..100 {
             conn.execute(
                 "INSERT INTO test VALUES (?1, ?2)",
-                rusqlite::params![i, format!("data-{i}-padding-to-make-rows-longer-for-page-fill")],
+                rusqlite::params![
+                    i,
+                    format!("data-{i}-padding-to-make-rows-longer-for-page-fill")
+                ],
             )
             .unwrap();
         }
@@ -404,17 +400,17 @@ mod tests {
         // Corrupt the "backup" file.
         let mut data = std::fs::read(&corrupt_backup).unwrap();
         assert!(data.len() > 4096);
-        for i in 4096..4196 {
-            data[i] = 0xFF;
+        for byte in data.iter_mut().take(4196).skip(4096) {
+            *byte = 0xFF;
         }
         std::fs::write(&corrupt_backup, &data).unwrap();
 
         // Attempt restore -- should fail during pre-check.
-        let result = run_restore(
-            db_path.to_str().unwrap(),
-            corrupt_backup.to_str().unwrap(),
+        let result = run_restore(db_path.to_str().unwrap(), corrupt_backup.to_str().unwrap());
+        assert!(
+            result.is_err(),
+            "Expected restore to fail on corrupt backup"
         );
-        assert!(result.is_err(), "Expected restore to fail on corrupt backup");
 
         // Verify no .pre-restore was created (nothing was modified).
         let pre_restore = format!("{}.pre-restore", db_path.to_str().unwrap());
@@ -517,15 +513,16 @@ mod tests {
 
         // Create a valid DB with enough data to have multiple pages.
         let conn = Connection::open(&db_path).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);",
-        )
-        .unwrap();
+        conn.execute_batch("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);")
+            .unwrap();
         // Insert enough rows to push data past the first page.
         for i in 0..100 {
             conn.execute(
                 "INSERT INTO test VALUES (?1, ?2)",
-                rusqlite::params![i, format!("data-{i}-padding-to-make-rows-longer-for-page-fill")],
+                rusqlite::params![
+                    i,
+                    format!("data-{i}-padding-to-make-rows-longer-for-page-fill")
+                ],
             )
             .unwrap();
         }
@@ -535,10 +532,13 @@ mod tests {
         // metadata) to trigger integrity_check failure without preventing
         // the file from being opened.
         let mut data = std::fs::read(&db_path).unwrap();
-        assert!(data.len() > 4096, "DB file too small for multi-page corruption test");
+        assert!(
+            data.len() > 4096,
+            "DB file too small for multi-page corruption test"
+        );
         // Corrupt bytes in the second page area (offset 4096+).
-        for i in 4096..4196 {
-            data[i] = 0xFF;
+        for byte in data.iter_mut().take(4196).skip(4096) {
+            *byte = 0xFF;
         }
         std::fs::write(&db_path, &data).unwrap();
 
