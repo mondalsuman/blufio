@@ -46,7 +46,7 @@ Requirements for MCP Integration milestone. Each maps to roadmap phases.
 - [x] **CLNT-07**: SHA-256 hash pinning of tool definitions at discovery (stored in SQLite)
 - [ ] **CLNT-08**: Description sanitization (instruction-pattern stripping, 200-char cap on external descriptions)
 - [ ] **CLNT-09**: Response size caps (4096 char default, configurable per-server in TOML)
-- [ ] **CLNT-10**: External tools labeled as separate trust zone in prompt context
+- [x] **CLNT-10**: External tools labeled as separate trust zone in prompt context
 - [ ] **CLNT-11**: HTTP-only transport enforced (reject command: config entries with clear error message)
 - [x] **CLNT-12**: Per-server budget tracking in unified cost ledger
 - [ ] **CLNT-13**: MCP server health checks added to `blufio doctor`
@@ -134,7 +134,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLNT-07 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
 | CLNT-08 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-09 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-10 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
+| CLNT-10 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
 | CLNT-11 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-12 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
 | CLNT-13 | Phase 18 (verify: Phase 22) | Pending |

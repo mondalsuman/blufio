@@ -41,8 +41,8 @@ Progress: [##########################....] 18/20 phases (v1.0 complete, v1.1 Pha
 - Phase 16: 3 plans completed
 - Phase 17: 5 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files; 17-03, 17min, 2 tasks, 6 files; 17-04, 15min, 2 tasks, 4 files; 17-05, 5min, 1 task, 2 files)
 - Phase 18: 4 plans completed (18-01: config+security; 18-02: manager+ExternalTool+wiring; 18-03: PinStore+health+unregister; 18-04: doctor checks)
-- Phase 21: 2/4 plans completed (21-01: 18min, 2 tasks, 6 files; 21-02: 20min, 2 tasks, 3 files)
-- Total plans completed: 18
+- Phase 21: 3/4 plans completed (21-01: 18min, 2 tasks, 6 files; 21-02: 20min, 2 tasks, 3 files; 21-03: 20min, 2 tasks, 9 files)
+- Total plans completed: 19
 
 ## Accumulated Context
 
@@ -87,6 +87,8 @@ v1.1 decisions so far:
 - 5-second timeout per ping request in health monitor to balance responsiveness vs. false positives
 - Health monitor spawned after cancel token creation (not inside MCP client block) for graceful shutdown
 - rmcp ClientRequest::PingRequest(Default::default()) for session health probing
+- TrustZoneProvider identifies external tools by __ namespace separator convention
+- Trust zone guidance uses factual/neutral tone (no alarmist language per CONTEXT.md)
 
 ### Pending Todos
 
@@ -101,5 +103,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 21-02-PLAN.md (health monitor ping checks + config wiring)
-Next action: Execute 21-03-PLAN.md
+Stopped at: Completed 21-03-PLAN.md (TrustZoneProvider + trusted config field + serve.rs wiring)
+Next action: Execute 21-04-PLAN.md
