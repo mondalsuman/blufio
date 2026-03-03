@@ -167,7 +167,7 @@
 | 18. MCP Client | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 19. Integration Testing + Tech Debt | v1.1 | 5/5 | Complete | 2026-03-03 |
 | 20. Verify Phase 15 & 16 Completeness | 4/4 | Complete    | 2026-03-03 | - |
-| 21. Fix MCP Wiring Gaps | v1.1 | 0/TBD | Pending | - |
+| 21. Fix MCP Wiring Gaps | 1/4 | In Progress|  | - |
 | 22. Verify Phase 18 & 19 + Close Traceability | v1.1 | 0/TBD | Pending | - |
 
 ---

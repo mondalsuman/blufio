@@ -43,12 +43,12 @@ Requirements for MCP Integration milestone. Each maps to roadmap phases.
 - [ ] **CLNT-04**: Agent can invoke external MCP tools in conversation turns
 - [ ] **CLNT-05**: Legacy SSE client transport for backward compatibility with older MCP servers
 - [ ] **CLNT-06**: Connection lifecycle management (ping health checks, exponential backoff, graceful degradation)
-- [ ] **CLNT-07**: SHA-256 hash pinning of tool definitions at discovery (stored in SQLite)
+- [x] **CLNT-07**: SHA-256 hash pinning of tool definitions at discovery (stored in SQLite)
 - [ ] **CLNT-08**: Description sanitization (instruction-pattern stripping, 200-char cap on external descriptions)
 - [ ] **CLNT-09**: Response size caps (4096 char default, configurable per-server in TOML)
 - [ ] **CLNT-10**: External tools labeled as separate trust zone in prompt context
 - [ ] **CLNT-11**: HTTP-only transport enforced (reject command: config entries with clear error message)
-- [ ] **CLNT-12**: Per-server budget tracking in unified cost ledger
+- [x] **CLNT-12**: Per-server budget tracking in unified cost ledger
 - [ ] **CLNT-13**: MCP server health checks added to `blufio doctor`
 - [ ] **CLNT-14**: Client startup failure is non-fatal (agent starts without external MCP tools)
 
@@ -131,12 +131,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLNT-04 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-05 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-06 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
-| CLNT-07 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
+| CLNT-07 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
 | CLNT-08 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-09 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-10 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
 | CLNT-11 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-12 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
+| CLNT-12 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
 | CLNT-13 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-14 | Phase 18 (verify: Phase 22) | Pending |
 | INTG-01 | Phase 19 (verify: Phase 22) | Pending |
