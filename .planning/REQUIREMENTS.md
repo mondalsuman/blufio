@@ -42,7 +42,7 @@ Requirements for MCP Integration milestone. Each maps to roadmap phases.
 - [ ] **CLNT-03**: External tools discovered (tools/list) and registered in ToolRegistry with namespace prefix
 - [ ] **CLNT-04**: Agent can invoke external MCP tools in conversation turns
 - [ ] **CLNT-05**: Legacy SSE client transport for backward compatibility with older MCP servers
-- [ ] **CLNT-06**: Connection lifecycle management (ping health checks, exponential backoff, graceful degradation)
+- [x] **CLNT-06**: Connection lifecycle management (ping health checks, exponential backoff, graceful degradation)
 - [x] **CLNT-07**: SHA-256 hash pinning of tool definitions at discovery (stored in SQLite)
 - [ ] **CLNT-08**: Description sanitization (instruction-pattern stripping, 200-char cap on external descriptions)
 - [ ] **CLNT-09**: Response size caps (4096 char default, configurable per-server in TOML)
@@ -130,7 +130,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLNT-03 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-04 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-05 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-06 | Phase 18 (fix: Phase 21, verify: Phase 22) | Pending |
+| CLNT-06 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
 | CLNT-07 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
 | CLNT-08 | Phase 18 (verify: Phase 22) | Pending |
 | CLNT-09 | Phase 18 (verify: Phase 22) | Pending |
