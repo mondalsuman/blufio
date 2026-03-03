@@ -2,7 +2,7 @@
 phase: 19-integration-testing-tech-debt
 plan: 04
 status: completed
-requirements: [INTG-02]
+requirements_completed: [INTG-02]
 commit: 53d93a6
 ---
 

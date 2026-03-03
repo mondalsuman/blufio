@@ -37,38 +37,38 @@ Requirements for MCP Integration milestone. Each maps to roadmap phases.
 
 ### MCP Client
 
-- [ ] **CLNT-01**: User can configure external MCP servers via TOML ([[mcp.servers]])
-- [ ] **CLNT-02**: Blufio connects to external MCP servers via Streamable HTTP transport
-- [ ] **CLNT-03**: External tools discovered (tools/list) and registered in ToolRegistry with namespace prefix
-- [ ] **CLNT-04**: Agent can invoke external MCP tools in conversation turns
-- [ ] **CLNT-05**: Legacy SSE client transport for backward compatibility with older MCP servers
+- [x] **CLNT-01**: User can configure external MCP servers via TOML ([[mcp.servers]])
+- [x] **CLNT-02**: Blufio connects to external MCP servers via Streamable HTTP transport
+- [x] **CLNT-03**: External tools discovered (tools/list) and registered in ToolRegistry with namespace prefix
+- [x] **CLNT-04**: Agent can invoke external MCP tools in conversation turns
+- [x] **CLNT-05**: Legacy SSE client transport for backward compatibility with older MCP servers
 - [x] **CLNT-06**: Connection lifecycle management (ping health checks, exponential backoff, graceful degradation)
 - [x] **CLNT-07**: SHA-256 hash pinning of tool definitions at discovery (stored in SQLite)
-- [ ] **CLNT-08**: Description sanitization (instruction-pattern stripping, 200-char cap on external descriptions)
-- [ ] **CLNT-09**: Response size caps (4096 char default, configurable per-server in TOML)
+- [x] **CLNT-08**: Description sanitization (instruction-pattern stripping, 200-char cap on external descriptions)
+- [x] **CLNT-09**: Response size caps (4096 char default, configurable per-server in TOML)
 - [x] **CLNT-10**: External tools labeled as separate trust zone in prompt context
-- [ ] **CLNT-11**: HTTP-only transport enforced (reject command: config entries with clear error message)
+- [x] **CLNT-11**: HTTP-only transport enforced (reject command: config entries with clear error message)
 - [x] **CLNT-12**: Per-server budget tracking in unified cost ledger
-- [ ] **CLNT-13**: MCP server health checks added to `blufio doctor`
-- [ ] **CLNT-14**: Client startup failure is non-fatal (agent starts without external MCP tools)
+- [x] **CLNT-13**: MCP server health checks added to `blufio doctor`
+- [x] **CLNT-14**: Client startup failure is non-fatal (agent starts without external MCP tools)
 
 ### Integration & Hardening
 
-- [ ] **INTG-01**: E2E test: Claude Desktop connects via stdio, lists tools, invokes tool, reads resource
-- [ ] **INTG-02**: E2E test: Agent uses external MCP tool in a conversation turn
-- [ ] **INTG-03**: Cross-contamination tests (JSON-RPC to non-MCP endpoints returns 4xx, vice versa)
+- [x] **INTG-01**: E2E test: Claude Desktop connects via stdio, lists tools, invokes tool, reads resource
+- [x] **INTG-02**: E2E test: Agent uses external MCP tool in a conversation turn
+- [x] **INTG-03**: Cross-contamination tests (JSON-RPC to non-MCP endpoints returns 4xx, vice versa)
 - [x] **INTG-04**: Prometheus metrics for MCP (connection count, tool response sizes, context utilization)
-- [ ] **INTG-05**: Connection count limits enforced (configurable defaults)
+- [x] **INTG-05**: Connection count limits enforced (configurable defaults)
 
 ### Tech Debt
 
-- [ ] **DEBT-01**: GET /v1/sessions returns actual session data (wire StorageAdapter into GatewayState)
-- [ ] **DEBT-02**: Commit systemd unit file for production deployment
-- [ ] **DEBT-03**: Refactor SessionActor constructor to reduce argument count
-- [ ] **DEBT-04**: Live Telegram E2E verification (human test)
-- [ ] **DEBT-05**: Session persistence verification across restarts (human test)
-- [ ] **DEBT-06**: SIGTERM drain timing verification (human test)
-- [ ] **DEBT-07**: Memory bounds measured over 72+ hour runtime
+- [x] **DEBT-01**: GET /v1/sessions returns actual session data (wire StorageAdapter into GatewayState)
+- [x] **DEBT-02**: Commit systemd unit file for production deployment
+- [x] **DEBT-03**: Refactor SessionActor constructor to reduce argument count
+- [x] **DEBT-04**: Live Telegram E2E verification (human test)
+- [x] **DEBT-05**: Session persistence verification across restarts (human test)
+- [x] **DEBT-06**: SIGTERM drain timing verification (human test)
+- [x] **DEBT-07**: Memory bounds measured over 72+ hour runtime
 
 ## Future Requirements
 
@@ -125,32 +125,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRVR-14 | Phase 17 | Complete |
 | SRVR-15 | Phase 16 (verify: Phase 20) | Complete |
 | SRVR-16 | Phase 17 | Complete |
-| CLNT-01 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-02 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-03 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-04 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-05 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-01 | Phase 18 (verify: Phase 22) | Complete |
+| CLNT-02 | Phase 18 (verify: Phase 22) | Complete |
+| CLNT-03 | Phase 18 (verify: Phase 22) | Complete |
+| CLNT-04 | Phase 18 (verify: Phase 22) | Complete |
+| CLNT-05 | Phase 18 (verify: Phase 22) | Complete |
 | CLNT-06 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
 | CLNT-07 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
-| CLNT-08 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-09 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-08 | Phase 18 (verify: Phase 22) | Complete |
+| CLNT-09 | Phase 18 (verify: Phase 22) | Complete |
 | CLNT-10 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
-| CLNT-11 | Phase 18 (verify: Phase 22) | Pending |
+| CLNT-11 | Phase 18 (verify: Phase 22) | Complete |
 | CLNT-12 | Phase 18 (fix: Phase 21, verify: Phase 22) | Complete |
-| CLNT-13 | Phase 18 (verify: Phase 22) | Pending |
-| CLNT-14 | Phase 18 (verify: Phase 22) | Pending |
-| INTG-01 | Phase 19 (verify: Phase 22) | Pending |
-| INTG-02 | Phase 19 (verify: Phase 22) | Pending |
-| INTG-03 | Phase 19 (verify: Phase 22) | Pending |
+| CLNT-13 | Phase 18 (verify: Phase 22) | Complete |
+| CLNT-14 | Phase 18 (verify: Phase 22) | Complete |
+| INTG-01 | Phase 19 (verify: Phase 22) | Complete |
+| INTG-02 | Phase 19 (verify: Phase 22) | Complete |
+| INTG-03 | Phase 19 (verify: Phase 22) | Complete |
 | INTG-04 | Phase 19 (fix: Phase 21, verify: Phase 22) | Complete |
-| INTG-05 | Phase 19 (verify: Phase 22) | Pending |
-| DEBT-01 | Phase 19 (verify: Phase 22) | Pending |
-| DEBT-02 | Phase 19 (verify: Phase 22) | Pending |
-| DEBT-03 | Phase 19 (verify: Phase 22) | Pending |
-| DEBT-04 | Phase 19 (verify: Phase 22) | Pending |
-| DEBT-05 | Phase 19 (verify: Phase 22) | Pending |
-| DEBT-06 | Phase 19 (verify: Phase 22) | Pending |
-| DEBT-07 | Phase 19 (verify: Phase 22) | Pending |
+| INTG-05 | Phase 19 (verify: Phase 22) | Complete |
+| DEBT-01 | Phase 19 (verify: Phase 22) | Complete |
+| DEBT-02 | Phase 19 (verify: Phase 22) | Complete |
+| DEBT-03 | Phase 19 (verify: Phase 22) | Complete |
+| DEBT-04 | Phase 19 (verify: Phase 22) | Complete |
+| DEBT-05 | Phase 19 (verify: Phase 22) | Complete |
+| DEBT-06 | Phase 19 (verify: Phase 22) | Complete |
+| DEBT-07 | Phase 19 (verify: Phase 22) | Complete |
 
 **Coverage:**
 - v1.1 requirements: 48 total
