@@ -28,8 +28,7 @@ pub fn notify_ready(status: &str) {
 /// Sends STOPPING=1 paired with a STATUS= message.
 pub fn notify_stopping(status: &str) {
     debug!(status, "sd_notify: STOPPING=1");
-    if let Err(e) =
-        sd_notify::notify(false, &[NotifyState::Stopping, NotifyState::Status(status)])
+    if let Err(e) = sd_notify::notify(false, &[NotifyState::Stopping, NotifyState::Status(status)])
     {
         debug!(error = %e, "sd_notify: failed to send STOPPING (best-effort)");
     }
