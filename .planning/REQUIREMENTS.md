@@ -9,10 +9,10 @@ Requirements for production hardening milestone. Each maps to roadmap phases.
 
 ### Backup Integrity
 
-- [ ] **BKUP-01**: Backup runs PRAGMA integrity_check on the backup file after write completes
-- [ ] **BKUP-02**: Restore runs PRAGMA integrity_check on the restored database after completion
-- [ ] **BKUP-03**: Corrupt backup file is deleted and operation returns an error
-- [ ] **BKUP-04**: Backup/restore reports integrity status to operator alongside file size
+- [x] **BKUP-01**: Backup runs PRAGMA integrity_check on the backup file after write completes
+- [x] **BKUP-02**: Restore runs PRAGMA integrity_check on the restored database after completion
+- [x] **BKUP-03**: Corrupt backup file is deleted and operation returns an error
+- [x] **BKUP-04**: Backup/restore reports integrity status to operator alongside file size
 
 ### systemd Notification
 
@@ -96,10 +96,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BKUP-01 | Phase 23 | Pending |
-| BKUP-02 | Phase 23 | Pending |
-| BKUP-03 | Phase 23 | Pending |
-| BKUP-04 | Phase 23 | Pending |
+| BKUP-01 | Phase 23 | Complete |
+| BKUP-02 | Phase 23 | Complete |
+| BKUP-03 | Phase 23 | Complete |
+| BKUP-04 | Phase 23 | Complete |
 | SYSD-01 | Phase 24 | Pending |
 | SYSD-02 | Phase 24 | Pending |
 | SYSD-03 | Phase 24 | Pending |
