@@ -20,6 +20,7 @@ use dashmap::DashMap;
 use tokio::sync::{Mutex, mpsc};
 
 use blufio_core::BlufioError;
+use blufio_core::StorageAdapter;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{
@@ -47,6 +48,8 @@ pub struct GatewayChannelConfig {
     pub keypair_public_key: Option<ed25519_dalek::VerifyingKey>,
     /// Optional Prometheus metrics render function for /metrics endpoint.
     pub prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>>,
+    /// Maximum concurrent MCP connections (INTG-05). Default: 10.
+    pub mcp_max_connections: usize,
 }
 
 impl std::fmt::Debug for GatewayChannelConfig {
@@ -84,6 +87,9 @@ pub struct GatewayChannel {
     /// Optional MCP HTTP router to mount at /mcp on the gateway.
     /// Set via [`set_mcp_router`] before calling `connect()`.
     mcp_router: Mutex<Option<axum::Router>>,
+    /// Optional storage adapter for session queries (DEBT-01).
+    /// Set via [`set_storage`] before calling `connect()`.
+    storage: Mutex<Option<Arc<dyn StorageAdapter + Send + Sync>>>,
 }
 
 impl GatewayChannel {
@@ -98,6 +104,7 @@ impl GatewayChannel {
             ws_senders: Arc::new(DashMap::new()),
             server_handle: Mutex::new(None),
             mcp_router: Mutex::new(None),
+            storage: Mutex::new(None),
         }
     }
 
@@ -108,6 +115,15 @@ impl GatewayChannel {
     pub async fn set_mcp_router(&self, router: axum::Router) {
         let mut mcp = self.mcp_router.lock().await;
         *mcp = Some(router);
+    }
+
+    /// Sets the storage adapter for session queries.
+    ///
+    /// Must be called before `connect()`. Enables GET /v1/sessions to return
+    /// actual session data from the database.
+    pub async fn set_storage(&self, storage: Arc<dyn StorageAdapter + Send + Sync>) {
+        let mut s = self.storage.lock().await;
+        *s = Some(storage);
     }
 }
 
@@ -163,6 +179,9 @@ impl ChannelAdapter for GatewayChannel {
             bearer_token: self.config.bearer_token.clone(),
         };
 
+        // Take optional storage adapter (if set) for session queries.
+        let storage = self.storage.lock().await.take();
+
         let state = GatewayState {
             inbound_tx: self.inbound_tx.clone(),
             response_map: Arc::clone(&self.response_map),
@@ -175,13 +194,17 @@ impl ChannelAdapter for GatewayChannel {
                 start_time: std::time::Instant::now(),
                 prometheus_render: self.config.prometheus_render.clone(),
             },
+            storage,
         };
 
         // Take the MCP router (if set) to pass to the server.
         let mcp_router = self.mcp_router.lock().await.take();
+        let mcp_max_connections = self.config.mcp_max_connections;
 
         let handle = tokio::spawn(async move {
-            if let Err(e) = server::start_server(&server_config, state, mcp_router).await {
+            if let Err(e) =
+                server::start_server(&server_config, state, mcp_router, mcp_max_connections).await
+            {
                 tracing::error!("gateway server error: {e}");
             }
         });
@@ -272,6 +295,7 @@ mod tests {
             bearer_token: None,
             keypair_public_key: None,
             prometheus_render: None,
+            mcp_max_connections: 10,
         }
     }
 

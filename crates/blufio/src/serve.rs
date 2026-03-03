@@ -351,8 +351,12 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 bearer_token: config.gateway.bearer_token.clone(),
                 keypair_public_key,
                 prometheus_render: prometheus_render.clone(),
+                mcp_max_connections: config.mcp.max_connections,
             };
             let gateway = GatewayChannel::new(gateway_config);
+
+            // Wire storage adapter for GET /v1/sessions (DEBT-01).
+            gateway.set_storage(storage.clone()).await;
 
             // Wire MCP HTTP transport onto the gateway (if enabled).
             #[cfg(feature = "mcp-server")]

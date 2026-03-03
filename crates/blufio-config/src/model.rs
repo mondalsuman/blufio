@@ -889,6 +889,12 @@ pub struct McpConfig {
     /// Only applies to /mcp routes; existing gateway routes are unaffected.
     #[serde(default)]
     pub cors_origins: Vec<String>,
+
+    /// Maximum concurrent MCP connections allowed.
+    /// Over-limit connections receive HTTP 503 Service Unavailable.
+    /// Default: 10 (conservative for personal agent use case).
+    #[serde(default = "default_mcp_max_connections")]
+    pub max_connections: usize,
 }
 
 impl Default for McpConfig {
@@ -900,12 +906,17 @@ impl Default for McpConfig {
             tool_timeout_secs: default_tool_timeout_secs(),
             auth_token: None,
             cors_origins: Vec::new(),
+            max_connections: default_mcp_max_connections(),
         }
     }
 }
 
 fn default_tool_timeout_secs() -> u64 {
     60
+}
+
+fn default_mcp_max_connections() -> usize {
+    10
 }
 
 /// Configuration entry for an external MCP server.

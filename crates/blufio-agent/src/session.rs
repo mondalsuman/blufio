@@ -65,6 +65,43 @@ impl std::fmt::Display for SessionState {
     }
 }
 
+/// Configuration for creating a SessionActor.
+///
+/// Groups the constructor arguments into a single struct for readability
+/// and to eliminate the 15-argument constructor (DEBT-03).
+pub struct SessionActorConfig {
+    /// Unique session identifier.
+    pub session_id: String,
+    /// Storage adapter for persisting messages and sessions.
+    pub storage: Arc<dyn StorageAdapter + Send + Sync>,
+    /// LLM provider adapter for streaming completions.
+    pub provider: Arc<dyn ProviderAdapter + Send + Sync>,
+    /// Context engine for three-zone prompt assembly.
+    pub context_engine: Arc<ContextEngine>,
+    /// Budget tracker for pre-call spending gates.
+    pub budget_tracker: Arc<tokio::sync::Mutex<BudgetTracker>>,
+    /// Cost ledger for post-call cost recording.
+    pub cost_ledger: Arc<CostLedger>,
+    /// Memory provider for setting current query before context assembly.
+    pub memory_provider: Option<MemoryProvider>,
+    /// Memory extractor for end-of-conversation fact extraction.
+    pub memory_extractor: Option<Arc<MemoryExtractor>>,
+    /// Channel name this session belongs to.
+    pub channel: String,
+    /// Model router for per-message complexity classification.
+    pub router: Arc<ModelRouter>,
+    /// Default model used when routing is disabled.
+    pub default_model: String,
+    /// Default max tokens used when routing is disabled.
+    pub default_max_tokens: u32,
+    /// Whether model routing is enabled.
+    pub routing_enabled: bool,
+    /// Idle timeout in seconds for triggering memory extraction.
+    pub idle_timeout_secs: u64,
+    /// Registry of available tools (built-in and WASM skills).
+    pub tool_registry: Arc<RwLock<ToolRegistry>>,
+}
+
 /// Manages the state and message processing for a single conversation session.
 ///
 /// The session actor is responsible for:
@@ -110,44 +147,27 @@ pub struct SessionActor {
 }
 
 impl SessionActor {
-    /// Creates a new session actor with context engine, cost tracking, routing, memory, and tools.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        session_id: String,
-        storage: Arc<dyn StorageAdapter + Send + Sync>,
-        provider: Arc<dyn ProviderAdapter + Send + Sync>,
-        context_engine: Arc<ContextEngine>,
-        budget_tracker: Arc<tokio::sync::Mutex<BudgetTracker>>,
-        cost_ledger: Arc<CostLedger>,
-        memory_provider: Option<MemoryProvider>,
-        memory_extractor: Option<Arc<MemoryExtractor>>,
-        channel: String,
-        router: Arc<ModelRouter>,
-        default_model: String,
-        default_max_tokens: u32,
-        routing_enabled: bool,
-        idle_timeout_secs: u64,
-        tool_registry: Arc<RwLock<ToolRegistry>>,
-    ) -> Self {
+    /// Creates a new session actor from a configuration struct.
+    pub fn new(config: SessionActorConfig) -> Self {
         Self {
-            session_id,
+            session_id: config.session_id,
             state: SessionState::Idle,
-            storage,
-            provider,
-            context_engine,
-            budget_tracker,
-            cost_ledger,
-            memory_provider,
-            memory_extractor,
-            channel,
-            router,
-            default_model,
-            default_max_tokens,
-            routing_enabled,
+            storage: config.storage,
+            provider: config.provider,
+            context_engine: config.context_engine,
+            budget_tracker: config.budget_tracker,
+            cost_ledger: config.cost_ledger,
+            memory_provider: config.memory_provider,
+            memory_extractor: config.memory_extractor,
+            channel: config.channel,
+            router: config.router,
+            default_model: config.default_model,
+            default_max_tokens: config.default_max_tokens,
+            routing_enabled: config.routing_enabled,
             last_routing_decision: None,
             last_message_at: None,
-            idle_timeout: Duration::from_secs(idle_timeout_secs),
-            tool_registry,
+            idle_timeout: Duration::from_secs(config.idle_timeout_secs),
+            tool_registry: config.tool_registry,
             max_tool_iterations: MAX_TOOL_ITERATIONS,
         }
     }

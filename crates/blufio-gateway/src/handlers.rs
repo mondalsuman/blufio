@@ -246,12 +246,36 @@ pub async fn get_public_metrics(State(state): State<GatewayState>) -> Response {
 
 /// GET /v1/sessions
 ///
-/// Returns list of active sessions.
-///
-/// TODO: Wire StorageAdapter into GatewayState in Plan 03 integration
-/// to provide actual session data.
-pub async fn get_sessions(State(_state): State<GatewayState>) -> Json<SessionListResponse> {
-    Json(SessionListResponse { sessions: vec![] })
+/// Returns list of active sessions from storage.
+pub async fn get_sessions(State(state): State<GatewayState>) -> Response {
+    let Some(storage) = &state.storage else {
+        return Json(SessionListResponse { sessions: vec![] }).into_response();
+    };
+
+    match storage.list_sessions(None).await {
+        Ok(sessions) => {
+            let infos: Vec<SessionInfo> = sessions
+                .into_iter()
+                .map(|s| SessionInfo {
+                    id: s.id,
+                    channel: s.channel,
+                    state: s.state,
+                    created_at: s.created_at,
+                })
+                .collect();
+            Json(SessionListResponse { sessions: infos }).into_response()
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list sessions");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "failed to retrieve sessions".to_string(),
+                }),
+            )
+                .into_response()
+        }
+    }
 }
 
 #[cfg(test)]

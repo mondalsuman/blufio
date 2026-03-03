@@ -1,0 +1,37 @@
+[Unit]
+Description=Blufio AI Agent
+Documentation=https://github.com/mondalsuman/blufio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=blufio
+Group=blufio
+ExecStart=/usr/local/bin/blufio serve
+Restart=on-failure
+RestartSec=5
+WatchdogSec=300
+
+# Graceful shutdown -- 60s drain window for in-flight LLM responses
+TimeoutStopSec=60
+KillSignal=SIGTERM
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/blufio
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+
+# Environment
+Environment=BLUFIO_CONFIG=/etc/blufio/config.toml
+Environment=RUST_LOG=blufio=info
+
+[Install]
+WantedBy=multi-user.target

@@ -73,7 +73,18 @@ tikv-jemalloc-ctl = { workspace = true }
 blufio-test-utils = { path = "../blufio-test-utils" }
 blufio-auth-keypair = { path = "../blufio-auth-keypair" }
 blufio-storage = { path = "../blufio-storage" }
+blufio-gateway = { path = "../blufio-gateway" }
+blufio-mcp-server = { path = "../blufio-mcp-server" }
+blufio-mcp-client = { path = "../blufio-mcp-client" }
+blufio-skill = { path = "../blufio-skill" }
 serde_json = "1"
 tempfile = "3"
 toml.workspace = true
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+tower.workspace = true
+http = "1"
+axum.workspace = true
+dashmap.workspace = true
+rmcp.workspace = true
+async-trait.workspace = true
+semver.workspace = true

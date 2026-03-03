@@ -12,6 +12,7 @@ use axum::{
     routing::{get, post},
 };
 use blufio_core::BlufioError;
+use blufio_core::StorageAdapter;
 use blufio_core::types::InboundMessage;
 use dashmap::DashMap;
 use tokio::sync::{mpsc, oneshot};
@@ -43,6 +44,8 @@ pub struct GatewayState {
     pub auth: AuthConfig,
     /// Health state for unauthenticated endpoints.
     pub health: HealthState,
+    /// Storage adapter for querying sessions (DEBT-01).
+    pub storage: Option<Arc<dyn StorageAdapter + Send + Sync>>,
 }
 
 /// Gateway server configuration (mirrors GatewayConfig from blufio-config).
@@ -72,6 +75,7 @@ pub async fn start_server(
     config: &ServerConfig,
     state: GatewayState,
     mcp_router: Option<Router>,
+    mcp_max_connections: usize,
 ) -> Result<(), BlufioError> {
     let auth_state = state.auth.clone();
 
@@ -105,8 +109,16 @@ pub async fn start_server(
     // Mount MCP Streamable HTTP routes at /mcp (if enabled).
     // The MCP router includes its own restricted CORS and auth layers,
     // so it must be nested BEFORE the permissive CORS layer.
+    // Connection limit (INTG-05) enforces max concurrent MCP connections.
     if let Some(mcp) = mcp_router {
-        app = app.nest("/mcp", mcp);
+        let limited_mcp = mcp.layer(tower::limit::ConcurrencyLimitLayer::new(
+            mcp_max_connections,
+        ));
+        app = app.nest("/mcp", limited_mcp);
+        tracing::info!(
+            max_connections = mcp_max_connections,
+            "MCP connection limit enabled"
+        );
     }
 
     // Permissive CORS for non-MCP routes.
@@ -153,6 +165,7 @@ mod tests {
                 start_time: std::time::Instant::now(),
                 prometheus_render: None,
             },
+            storage: None,
         };
         let _cloned = state.clone();
     }

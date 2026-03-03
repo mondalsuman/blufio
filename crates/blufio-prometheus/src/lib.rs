@@ -18,8 +18,20 @@ use blufio_core::traits::observability::ObservabilityAdapter;
 use blufio_core::types::{AdapterType, HealthStatus, MetricEvent};
 
 pub use recording::{
-    record_error, record_latency, record_message, record_tokens, set_active_sessions,
-    set_budget_remaining, set_memory_heap, set_memory_pressure, set_memory_resident,
+    record_error,
+    record_latency,
+    // MCP metrics (INTG-04)
+    record_mcp_connection,
+    record_mcp_tool_response_size,
+    record_message,
+    record_tokens,
+    set_active_sessions,
+    set_budget_remaining,
+    set_mcp_active_connections,
+    set_mcp_context_utilization,
+    set_memory_heap,
+    set_memory_pressure,
+    set_memory_resident,
     set_memory_rss,
 };
 
