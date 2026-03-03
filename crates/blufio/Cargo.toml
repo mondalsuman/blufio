@@ -64,6 +64,8 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 reqwest = { workspace = true }
 rusqlite = { workspace = true, features = ["backup"] }
+ring.workspace = true
+hex.workspace = true
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { workspace = true }
@@ -88,3 +90,4 @@ dashmap.workspace = true
 rmcp.workspace = true
 async-trait.workspace = true
 semver.workspace = true
+serial_test.workspace = true

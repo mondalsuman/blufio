@@ -18,5 +18,5 @@ pub mod queries;
 pub mod writer;
 
 pub use adapter::SqliteStorage;
-pub use database::Database;
+pub use database::{Database, is_plaintext_sqlite, open_connection, open_connection_sync};
 pub use models::*;

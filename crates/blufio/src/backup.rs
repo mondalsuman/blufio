@@ -7,13 +7,16 @@
 //! even while the database is being written to in WAL mode. Since the
 //! vault is stored in the same SQLite file, backup automatically includes
 //! encrypted credentials.
+//!
+//! When `BLUFIO_DB_KEY` is set, both source and destination connections
+//! are opened through the centralized factory, ensuring PRAGMA key is
+//! applied transparently.
 
 use std::io::ErrorKind;
 use std::path::Path;
 use std::time::Duration;
 
 use blufio_core::BlufioError;
-use rusqlite::Connection;
 
 /// Verify the integrity of a SQLite database file using `PRAGMA integrity_check`.
 ///
@@ -25,13 +28,10 @@ use rusqlite::Connection;
 /// The connection is automatically dropped when this function returns,
 /// ensuring no file locks are held after verification.
 pub fn run_integrity_check(path: &Path) -> Result<(), BlufioError> {
-    let conn = Connection::open_with_flags(
-        path,
+    let conn = blufio_storage::open_connection_sync(
+        path.to_str().unwrap_or_default(),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    )?;
 
     let mut stmt = conn
         .prepare("PRAGMA integrity_check(1)")
@@ -76,17 +76,13 @@ pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
     }
 
     // Open source in read-only mode to minimize impact on running instance.
-    let src = Connection::open_with_flags(
+    let src = blufio_storage::open_connection_sync(
         db_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    )?;
 
-    let mut dst = Connection::open(backup_path).map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    let mut dst =
+        blufio_storage::open_connection_sync(backup_path, rusqlite::OpenFlags::default())?;
 
     let backup =
         rusqlite::backup::Backup::new(&src, &mut dst).map_err(|e| BlufioError::Storage {
@@ -114,12 +110,14 @@ pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
         return Err(e);
     }
 
-    // Report file size with integrity status.
+    // Report file size with integrity and encryption status.
     let metadata = std::fs::metadata(backup_path).map_err(|e| BlufioError::Storage {
         source: Box::new(e),
     })?;
     let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
-    eprintln!("Backup complete: {size_mb:.1} MB, integrity: ok");
+    let encrypted = std::env::var("BLUFIO_DB_KEY").is_ok();
+    let enc_status = if encrypted { "enabled" } else { "none" };
+    eprintln!("Backup complete: {size_mb:.1} MB, integrity: ok, encryption: {enc_status}");
 
     Ok(())
 }
@@ -163,14 +161,12 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
     }
 
     // Perform restore using backup API (reverse direction).
-    let src = Connection::open_with_flags(restore_from, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+    let src = blufio_storage::open_connection_sync(
+        restore_from,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
 
-    let mut dst = Connection::open(db_path).map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    let mut dst = blufio_storage::open_connection_sync(db_path, rusqlite::OpenFlags::default())?;
 
     let backup =
         rusqlite::backup::Backup::new(&src, &mut dst).map_err(|e| BlufioError::Storage {
@@ -210,7 +206,9 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
         source: Box::new(e),
     })?;
     let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
-    eprintln!("Restore complete: {size_mb:.1} MB, integrity: ok");
+    let encrypted = std::env::var("BLUFIO_DB_KEY").is_ok();
+    let enc_status = if encrypted { "enabled" } else { "none" };
+    eprintln!("Restore complete: {size_mb:.1} MB, integrity: ok, encryption: {enc_status}");
 
     Ok(())
 }
@@ -218,6 +216,13 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::Connection;
+    use serial_test::serial;
+
+    /// Safety: env var mutations are guarded by #[serial].
+    unsafe fn clear_key() {
+        unsafe { std::env::remove_var("BLUFIO_DB_KEY") };
+    }
 
     #[test]
     fn backup_nonexistent_source_fails() {
@@ -236,7 +241,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn backup_and_restore_roundtrip() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let src_path = dir.path().join("source.db");
         let backup_path = dir.path().join("backup.db");
@@ -264,7 +271,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn restore_creates_pre_restore_backup() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("current.db");
         let backup_path = dir.path().join("backup.db");
@@ -312,7 +321,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn restore_invalid_source_fails() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("target.db");
         let invalid_path = dir.path().join("invalid.db");
@@ -325,7 +336,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn backup_empty_db() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let src_path = dir.path().join("empty.db");
         let backup_path = dir.path().join("empty_backup.db");
@@ -344,7 +357,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_integrity_check_valid_db() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("valid.db");
 
@@ -363,7 +378,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_integrity_check_empty_db() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("empty.db");
 
@@ -376,7 +393,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_restore_pre_check_catches_corrupt_backup() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("target.db");
         let corrupt_backup = dir.path().join("corrupt_backup.db");
@@ -421,7 +440,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_restore_first_time_no_pre_restore() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("new_target.db");
         let backup_path = dir.path().join("backup.db");
@@ -456,7 +477,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_restore_keeps_pre_restore_after_success() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("current.db");
         let backup_path = dir.path().join("backup.db");
@@ -507,7 +530,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_integrity_check_corrupt_db() {
+        unsafe { clear_key() };
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("corrupt.db");
 
@@ -550,9 +575,15 @@ mod tests {
             "Expected integrity check to fail on corrupt database"
         );
         let err = result.unwrap_err().to_string();
-        // Accept either our custom message or rusqlite's malformed error.
+        // Accept our custom message, rusqlite's malformed error, or the
+        // encryption detection error (corruption of the header can make the
+        // file look non-SQLite to the plaintext check, triggering "encrypted
+        // but BLUFIO_DB_KEY is not set").
         assert!(
-            err.contains("integrity check failed") || err.contains("malformed"),
+            err.contains("integrity check failed")
+                || err.contains("malformed")
+                || err.contains("not a database")
+                || err.contains("encrypted"),
             "Expected corruption-related error, got: {err}"
         );
     }

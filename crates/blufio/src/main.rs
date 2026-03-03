@@ -14,6 +14,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 mod backup;
 mod doctor;
+mod encrypt;
 #[cfg(feature = "mcp-server")]
 mod mcp_server;
 mod serve;
@@ -83,6 +84,11 @@ enum Commands {
     /// Start the MCP server on stdio (for Claude Desktop integration).
     #[command(name = "mcp-server")]
     McpServer,
+    /// Database management commands.
+    Db {
+        #[command(subcommand)]
+        action: DbCommands,
+    },
 }
 
 /// Config management subcommands.
@@ -151,6 +157,19 @@ enum PluginCommands {
     },
     /// Show plugin update information.
     Update,
+}
+
+/// Database management subcommands.
+#[derive(Subcommand, Debug)]
+enum DbCommands {
+    /// Encrypt an existing plaintext database with SQLCipher.
+    Encrypt {
+        /// Skip interactive confirmation.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Generate a random 256-bit encryption key (hex-encoded).
+    Keygen,
 }
 
 #[tokio::main]
@@ -250,6 +269,17 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::Db { action }) => match action {
+            DbCommands::Encrypt { yes } => {
+                if let Err(e) = encrypt::run_encrypt(&config.storage.database_path, yes) {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+            DbCommands::Keygen => {
+                encrypt::run_keygen();
+            }
+        },
         Some(Commands::McpServer) => {
             #[cfg(feature = "mcp-server")]
             {
@@ -384,11 +414,7 @@ async fn handle_skill_command(
             Ok(())
         }
         SkillCommands::List => {
-            let conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
-                .await
-                .map_err(|e| blufio_core::BlufioError::Storage {
-                    source: Box::new(e),
-                })?;
+            let conn = blufio_storage::open_connection(&config.storage.database_path).await?;
             let store = blufio_skill::SkillStore::new(std::sync::Arc::new(conn));
             let skills = store.list().await?;
 
@@ -435,11 +461,7 @@ async fn handle_skill_command(
                 serde_json::to_string(&manifest.capabilities).unwrap_or_else(|_| "{}".to_string());
 
             // Open DB and store the skill.
-            let conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
-                .await
-                .map_err(|e| blufio_core::BlufioError::Storage {
-                    source: Box::new(e),
-                })?;
+            let conn = blufio_storage::open_connection(&config.storage.database_path).await?;
             let store = blufio_skill::SkillStore::new(std::sync::Arc::new(conn));
 
             store
@@ -476,11 +498,7 @@ async fn handle_skill_command(
             Ok(())
         }
         SkillCommands::Remove { name } => {
-            let conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
-                .await
-                .map_err(|e| blufio_core::BlufioError::Storage {
-                    source: Box::new(e),
-                })?;
+            let conn = blufio_storage::open_connection(&config.storage.database_path).await?;
             let store = blufio_skill::SkillStore::new(std::sync::Arc::new(conn));
             store.remove(&name).await?;
             eprintln!("Skill '{name}' removed.");

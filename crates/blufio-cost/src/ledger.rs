@@ -131,12 +131,7 @@ impl CostLedger {
     /// Creates its own tokio-rusqlite connection to the given path.
     /// The cost_ledger table must already exist (created by storage migrations).
     pub async fn open(path: &str) -> Result<Self, BlufioError> {
-        let conn =
-            tokio_rusqlite::Connection::open(path)
-                .await
-                .map_err(|e| BlufioError::Storage {
-                    source: Box::new(e),
-                })?;
+        let conn = blufio_storage::open_connection(path).await?;
         Ok(Self::new(conn))
     }
 

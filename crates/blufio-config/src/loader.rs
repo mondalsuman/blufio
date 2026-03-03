@@ -82,7 +82,7 @@ pub fn build_figment() -> Figment {
 fn env_provider() -> Env {
     Env::prefixed("BLUFIO_")
         // Ignore env vars that are not config keys (e.g., BLUFIO_VAULT_KEY is a runtime passphrase).
-        .ignore(&["vault_key"])
+        .ignore(&["vault_key", "db_key"])
         .map(|key| {
             // `key` is the lowercased env var name with prefix stripped.
             // Example: BLUFIO_TELEGRAM_BOT_TOKEN -> "telegram_bot_token"
