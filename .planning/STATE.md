@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: MCP Integration
 status: in-progress
-last_updated: "2026-03-03T14:14:07Z"
+last_updated: "2026-03-03T14:25:58Z"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 25
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 21 of 22 (Fix MCP Wiring Gaps)
-Plan: 3 of 4 in current phase
-Status: Phase 21 In Progress
-Last activity: 2026-03-03 -- Plan 21-03 complete (TrustZoneProvider + trusted config field + serve.rs wiring)
+Plan: 4 of 4 in current phase (COMPLETE)
+Status: Phase 21 Complete
+Last activity: 2026-03-03 -- Plan 21-04 complete (Prometheus MCP metric wiring + ExternalTool server_name)
 
-Progress: [##########################....] 18/20 phases (v1.0 complete, v1.1 Phases 15-18 done, Phase 21 plan 3/4)
+Progress: [############################..] 19/20 phases (v1.0 complete, v1.1 Phases 15-18 + 21 done)
 
 ## Performance Metrics
 
@@ -41,8 +41,8 @@ Progress: [##########################....] 18/20 phases (v1.0 complete, v1.1 Pha
 - Phase 16: 3 plans completed
 - Phase 17: 5 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files; 17-03, 17min, 2 tasks, 6 files; 17-04, 15min, 2 tasks, 4 files; 17-05, 5min, 1 task, 2 files)
 - Phase 18: 4 plans completed (18-01: config+security; 18-02: manager+ExternalTool+wiring; 18-03: PinStore+health+unregister; 18-04: doctor checks)
-- Phase 21: 3/4 plans completed (21-01: 18min, 2 tasks, 6 files; 21-02: 20min, 2 tasks, 3 files; 21-03: 20min, 2 tasks, 9 files)
-- Total plans completed: 19
+- Phase 21: 4/4 plans completed (21-01: 18min, 2 tasks, 6 files; 21-02: 20min, 2 tasks, 3 files; 21-03: 20min, 2 tasks, 9 files; 21-04: 8min, 2 tasks, 8 files)
+- Total plans completed: 20
 
 ## Accumulated Context
 
@@ -89,6 +89,8 @@ v1.1 decisions so far:
 - rmcp ClientRequest::PingRequest(Default::default()) for session health probing
 - TrustZoneProvider identifies external tools by __ namespace separator convention
 - Trust zone guidance uses factual/neutral tone (no alarmist language per CONTEXT.md)
+- Response size metric recorded before truncation to capture true MCP response size
+- set_mcp_context_utilization deferred to context engine integration (separate from MCP wiring)
 
 ### Pending Todos
 
@@ -103,5 +105,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 21-03-PLAN.md (TrustZoneProvider + trusted config field + serve.rs wiring)
-Next action: Execute 21-04-PLAN.md
+Stopped at: Completed 21-04-PLAN.md (Prometheus MCP metric wiring + ExternalTool server_name) -- Phase 21 COMPLETE
+Next action: Phase 22 planning or execution

@@ -57,7 +57,7 @@ Requirements for MCP Integration milestone. Each maps to roadmap phases.
 - [ ] **INTG-01**: E2E test: Claude Desktop connects via stdio, lists tools, invokes tool, reads resource
 - [ ] **INTG-02**: E2E test: Agent uses external MCP tool in a conversation turn
 - [ ] **INTG-03**: Cross-contamination tests (JSON-RPC to non-MCP endpoints returns 4xx, vice versa)
-- [ ] **INTG-04**: Prometheus metrics for MCP (connection count, tool response sizes, context utilization)
+- [x] **INTG-04**: Prometheus metrics for MCP (connection count, tool response sizes, context utilization)
 - [ ] **INTG-05**: Connection count limits enforced (configurable defaults)
 
 ### Tech Debt
@@ -142,7 +142,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INTG-01 | Phase 19 (verify: Phase 22) | Pending |
 | INTG-02 | Phase 19 (verify: Phase 22) | Pending |
 | INTG-03 | Phase 19 (verify: Phase 22) | Pending |
-| INTG-04 | Phase 19 (fix: Phase 21, verify: Phase 22) | Pending |
+| INTG-04 | Phase 19 (fix: Phase 21, verify: Phase 22) | Complete |
 | INTG-05 | Phase 19 (verify: Phase 22) | Pending |
 | DEBT-01 | Phase 19 (verify: Phase 22) | Pending |
 | DEBT-02 | Phase 19 (verify: Phase 22) | Pending |
