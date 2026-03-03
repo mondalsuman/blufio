@@ -15,6 +15,7 @@ pub mod context;
 pub mod delegation;
 pub mod heartbeat;
 pub mod session;
+pub mod sdnotify;
 pub mod shutdown;
 
 pub use delegation::{DelegationRouter, DelegationTool};
