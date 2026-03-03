@@ -259,6 +259,27 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             None
         };
 
+        // Register TrustZoneProvider when external tools were discovered (CLNT-10).
+        if result.tools_registered > 0 {
+            let trusted_servers: std::collections::HashSet<String> = config
+                .mcp
+                .servers
+                .iter()
+                .filter(|s| s.trusted)
+                .map(|s| s.name.clone())
+                .collect();
+            let trusted_servers_count = trusted_servers.len();
+            let trust_zone_provider = blufio_mcp_client::TrustZoneProvider::new(
+                tool_registry.clone(),
+                trusted_servers,
+            );
+            context_engine.add_conditional_provider(Box::new(trust_zone_provider));
+            info!(
+                trusted_servers = trusted_servers_count,
+                "trust zone provider registered for external tools"
+            );
+        }
+
         (Some(manager), health_sessions)
     } else {
         debug!("no MCP servers configured");
