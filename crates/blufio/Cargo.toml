@@ -75,6 +75,7 @@ blufio-auth-keypair = { path = "../blufio-auth-keypair" }
 blufio-storage = { path = "../blufio-storage" }
 blufio-gateway = { path = "../blufio-gateway" }
 blufio-mcp-server = { path = "../blufio-mcp-server" }
+blufio-mcp-client = { path = "../blufio-mcp-client" }
 blufio-skill = { path = "../blufio-skill" }
 serde_json = "1"
 tempfile = "3"

@@ -638,6 +638,7 @@ mod tests {
             tool_timeout_secs: 60,
             auth_token: None,
             cors_origins: Vec::new(),
+            max_connections: 10,
         }
     }
 
