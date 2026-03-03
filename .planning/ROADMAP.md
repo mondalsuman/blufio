@@ -47,7 +47,7 @@
 **Milestone Goal:** Close critical PRD gaps -- systemd readiness, database encryption at rest, supply chain integrity, self-update, and backup verification.
 
 - [x] **Phase 23: Backup Integrity Verification** - PRAGMA integrity_check after backup and restore with corruption handling (completed 2026-03-03)
-- [ ] **Phase 24: sd_notify Integration** - systemd Type=notify readiness, watchdog pings, and status reporting
+- [x] **Phase 24: sd_notify Integration** - systemd Type=notify readiness, watchdog pings, and status reporting (completed 2026-03-03)
 - [ ] **Phase 25: SQLCipher Database Encryption** - Encryption at rest with centralized key management and migration CLI
 - [ ] **Phase 26: Minisign Signature Verification** - Ed25519 binary signature verification with embedded public key
 - [ ] **Phase 27: Self-Update with Rollback** - Version check, download, verify, atomic swap, health check, rollback
@@ -142,7 +142,7 @@ Phases execute in numeric order: 23 -> 24 -> 25 -> 26 -> 27
 | 21. Fix MCP Wiring Gaps | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 22. Verify Phase 18 & 19 + Close Traceability | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 23. Backup Integrity Verification | 1/1 | Complete    | 2026-03-03 | - |
-| 24. sd_notify Integration | v1.2 | 0/0 | Not started | - |
+| 24. sd_notify Integration | 2/2 | Complete    | 2026-03-03 | - |
 | 25. SQLCipher Database Encryption | v1.2 | 0/0 | Not started | - |
 | 26. Minisign Signature Verification | v1.2 | 0/0 | Not started | - |
 | 27. Self-Update with Rollback | v1.2 | 0/0 | Not started | - |

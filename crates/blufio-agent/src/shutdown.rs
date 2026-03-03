@@ -48,6 +48,7 @@ pub fn install_signal_handler() -> CancellationToken {
             info!("received Ctrl+C, initiating shutdown");
         }
 
+        crate::sdnotify::notify_stopping("Shutting down...");
         token_clone.cancel();
         debug!("shutdown signal handler completed");
     });
@@ -81,6 +82,8 @@ pub async fn drain_sessions(sessions: &HashMap<String, SessionActor>, timeout: D
         return;
     }
 
+    crate::sdnotify::notify_status(&format!("Draining {} active sessions...", active_count));
+
     info!(
         count = active_count,
         "waiting for active sessions to complete"
@@ -101,6 +104,7 @@ pub async fn drain_sessions(sessions: &HashMap<String, SessionActor>, timeout: D
 
         if still_active == 0 {
             info!("all sessions drained successfully");
+            crate::sdnotify::notify_status("Shutdown complete");
             return;
         }
 
@@ -121,6 +125,7 @@ pub async fn drain_sessions(sessions: &HashMap<String, SessionActor>, timeout: D
                 remaining = still_active,
                 "timeout reached, some sessions did not complete"
             );
+            crate::sdnotify::notify_status("Shutdown complete (timeout)");
             return;
         }
 
