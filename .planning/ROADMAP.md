@@ -63,7 +63,8 @@
   2. After `blufio restore` completes, the restored database has been verified with PRAGMA integrity_check and the operator sees integrity status in the output
   3. A backup file that fails integrity_check is automatically deleted and the operator sees a clear error explaining the corruption
   4. Backup and restore output includes both file size and integrity status (e.g., "Backup complete: 5.2 MB, integrity: ok")
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 23-01-PLAN.md -- Add integrity check helper, verify backup/restore output, pre-check, post-check, rollback
 
 ### Phase 24: sd_notify Integration
 **Goal**: systemd knows exactly when Blufio is ready, when it is shutting down, and that it is still alive -- enabling proper Type=notify service management
