@@ -569,6 +569,7 @@ mod tests {
             auth_token: None,
             connect_timeout_secs: 2,
             response_size_cap: 4096,
+            trusted: false,
         });
 
         let results = check_mcp_servers(&config).await;

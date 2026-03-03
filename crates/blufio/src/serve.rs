@@ -206,7 +206,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Initialize MCP client connections to external servers (if configured).
     #[cfg(feature = "mcp-client")]
-    let _mcp_client_manager = if !config.mcp.servers.is_empty() {
+    let (_mcp_client_manager, _mcp_health_sessions) = if !config.mcp.servers.is_empty() {
         // Redact MCP server auth tokens in logs.
         for server in &config.mcp.servers {
             if let Some(ref token) = server.auth_token {
@@ -217,9 +217,25 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             }
         }
 
-        let (manager, result) =
-            blufio_mcp_client::McpClientManager::connect_all(&config.mcp.servers, &tool_registry)
-                .await;
+        // Open PinStore for tool schema rug-pull detection (CLNT-07).
+        let pin_store = match blufio_mcp_client::PinStore::open(&config.storage.database_path).await
+        {
+            Ok(store) => {
+                info!("MCP PinStore initialized");
+                Some(store)
+            }
+            Err(e) => {
+                warn!(error = %e, "failed to open PinStore, continuing without pin verification");
+                None
+            }
+        };
+
+        let (manager, result) = blufio_mcp_client::McpClientManager::connect_all(
+            &config.mcp.servers,
+            &tool_registry,
+            pin_store.as_ref(),
+        )
+        .await;
 
         if result.connected > 0 {
             info!(
@@ -236,10 +252,17 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             );
         }
 
-        Some(manager)
+        // Extract connected sessions for health monitoring (spawned after cancel token).
+        let health_sessions = if result.connected > 0 {
+            Some(manager.connected_session_map())
+        } else {
+            None
+        };
+
+        (Some(manager), health_sessions)
     } else {
         debug!("no MCP servers configured");
-        None
+        (None, None)
     };
 
     let context_engine = Arc::new(context_engine);
@@ -303,6 +326,28 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Install signal handler early so the cancellation token is available
     // for MCP HTTP transport and gateway startup.
     let cancel = shutdown::install_signal_handler();
+
+    // Spawn MCP health monitor for connected servers (CLNT-06).
+    #[cfg(feature = "mcp-client")]
+    let _mcp_health_handle = if let Some(sessions) = _mcp_health_sessions {
+        let health_tracker = std::sync::Arc::new(tokio::sync::RwLock::new(
+            blufio_mcp_client::health::HealthTracker::new(),
+        ));
+        let health_cancel = cancel.child_token();
+        let handle = blufio_mcp_client::health::spawn_health_monitor(
+            sessions,
+            health_tracker,
+            config.mcp.health_check_interval_secs,
+            health_cancel,
+        );
+        info!(
+            interval_secs = config.mcp.health_check_interval_secs,
+            "MCP health monitor spawned"
+        );
+        Some(handle)
+    } else {
+        None
+    };
 
     // Declare holder for MCP tools-changed sender so it lives until run_serve returns.
     #[cfg(feature = "mcp-server")]

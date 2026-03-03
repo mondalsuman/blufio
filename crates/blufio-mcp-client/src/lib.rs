@@ -19,5 +19,8 @@ pub mod manager;
 pub mod pin;
 pub mod pin_store;
 pub mod sanitize;
+pub mod trust_zone;
 
 pub use manager::{DiagnosticResult, McpClientManager, diagnose_server};
+pub use pin_store::PinStore;
+pub use trust_zone::TrustZoneProvider;

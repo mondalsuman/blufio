@@ -329,6 +329,7 @@ enabled = true
                     auth_token: None,
                     connect_timeout_secs: 10,
                     response_size_cap: 4096,
+                    trusted: false,
                 }],
                 ..Default::default()
             },
@@ -353,6 +354,7 @@ enabled = true
                     auth_token: None,
                     connect_timeout_secs: 10,
                     response_size_cap: 4096,
+                    trusted: false,
                 }],
                 ..Default::default()
             },
@@ -377,6 +379,7 @@ enabled = true
                     auth_token: None,
                     connect_timeout_secs: 10,
                     response_size_cap: 4096,
+                    trusted: false,
                 }],
                 ..Default::default()
             },
@@ -401,6 +404,7 @@ enabled = true
                     auth_token: None,
                     connect_timeout_secs: 10,
                     response_size_cap: 4096,
+                    trusted: false,
                 }],
                 ..Default::default()
             },
@@ -425,6 +429,7 @@ enabled = true
                     auth_token: Some("token".to_string()),
                     connect_timeout_secs: 10,
                     response_size_cap: 4096,
+                    trusted: false,
                 }],
                 ..Default::default()
             },
@@ -446,6 +451,7 @@ enabled = true
                     auth_token: None,
                     connect_timeout_secs: 15,
                     response_size_cap: 2048,
+                    trusted: false,
                 }],
                 ..Default::default()
             },

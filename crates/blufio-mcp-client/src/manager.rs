@@ -22,6 +22,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::external_tool::ExternalTool;
 use crate::pin::compute_tool_pin;
+use crate::pin_store::{PinStore, PinVerification};
 use crate::sanitize::sanitize_description;
 
 /// Trust guidance text injected into system prompt when external tools are active.
@@ -78,10 +79,13 @@ impl McpClientManager {
     /// Connect to all configured MCP servers and register discovered tools.
     ///
     /// Connection failures are non-fatal: each server is independent.
+    /// When `pin_store` is provided, tool schema hashes are verified against
+    /// stored pins (CLNT-07). On mismatch, the entire server is blocked.
     /// Returns a summary of connections and tools registered.
     pub async fn connect_all(
         servers: &[McpServerEntry],
         tool_registry: &Arc<RwLock<ToolRegistry>>,
+        pin_store: Option<&PinStore>,
     ) -> (Self, ConnectResult) {
         let mut server_states = HashMap::new();
         let mut connected = 0;
@@ -102,7 +106,7 @@ impl McpClientManager {
                 Ok((server, Ok(session))) => {
                     let session = Arc::new(session);
                     // Discover and register tools from this server.
-                    match discover_and_register(&server, &session, tool_registry).await {
+                    match discover_and_register(&server, &session, tool_registry, pin_store).await {
                         Ok(tool_names) => {
                             let count = tool_names.len();
                             info!(
@@ -197,6 +201,17 @@ impl McpClientManager {
             .collect()
     }
 
+    /// Get a map of connected server sessions for health monitoring (CLNT-06).
+    pub fn connected_session_map(&self) -> HashMap<String, Arc<RunningService<RoleClient, ()>>> {
+        self.servers
+            .iter()
+            .filter_map(|(name, state)| match state {
+                ServerState::Connected { session, .. } => Some((name.clone(), session.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Gracefully shut down all server connections.
     pub async fn shutdown(mut self) {
         for (name, state) in self.servers.drain() {
@@ -285,10 +300,14 @@ async fn connect_streamable_http(
 }
 
 /// Discover tools from a connected server and register them in the ToolRegistry.
+///
+/// When `pin_store` is provided, each tool's schema hash is verified against stored pins.
+/// On mismatch (rug pull detected), the entire server is blocked (CLNT-07).
 async fn discover_and_register(
     server: &McpServerEntry,
     session: &Arc<RunningService<RoleClient, ()>>,
     tool_registry: &Arc<RwLock<ToolRegistry>>,
+    pin_store: Option<&PinStore>,
 ) -> Result<Vec<String>, BlufioError> {
     let tools_result = session
         .list_all_tools()
@@ -309,9 +328,44 @@ async fn discover_and_register(
         // Convert rmcp input_schema (Arc<JsonObject>) to serde_json::Value.
         let schema = serde_json::Value::Object((*tool.input_schema).clone());
 
-        // Compute pin hash for later verification (CLNT-07).
-        let _pin = compute_tool_pin(&tool_name, tool.description.as_deref(), &schema);
-        // Pin storage will be integrated in Plan 03 (PinStore SQLite).
+        // Verify tool schema hash against stored pins (CLNT-07).
+        let pin_hash = compute_tool_pin(&tool_name, tool.description.as_deref(), &schema);
+        if let Some(store) = pin_store {
+            match store.verify_or_store(&server.name, &tool_name, &pin_hash).await {
+                Ok(PinVerification::FirstSeen) => {
+                    debug!(server = %server.name, tool = %tool_name, "tool pin stored (first discovery)");
+                }
+                Ok(PinVerification::Verified) => {
+                    debug!(server = %server.name, tool = %tool_name, "tool pin verified");
+                }
+                Ok(PinVerification::Mismatch { stored, computed }) => {
+                    error!(
+                        server = %server.name,
+                        tool = %tool_name,
+                        old_pin = %stored,
+                        new_pin = %computed,
+                        "SECURITY: tool schema mutated (rug pull detected) -- blocking entire server"
+                    );
+                    // Block the entire server: return error so no tools from this server are registered.
+                    return Err(BlufioError::Skill {
+                        message: format!(
+                            "SECURITY: rug pull detected on server '{}' tool '{}'. \
+                             Use 'blufio mcp re-pin' to re-trust.",
+                            server.name, tool_name
+                        ),
+                        source: None,
+                    });
+                }
+                Err(e) => {
+                    warn!(
+                        server = %server.name,
+                        tool = %tool_name,
+                        error = %e,
+                        "pin verification DB error, continuing without pin check"
+                    );
+                }
+            }
+        }
 
         let external_tool = ExternalTool::new(
             &server.name,
@@ -434,7 +488,7 @@ mod tests {
     #[tokio::test]
     async fn connect_all_with_empty_servers() {
         let tool_registry = Arc::new(RwLock::new(ToolRegistry::new()));
-        let (manager, result) = McpClientManager::connect_all(&[], &tool_registry).await;
+        let (manager, result) = McpClientManager::connect_all(&[], &tool_registry, None).await;
         assert_eq!(result.connected, 0);
         assert_eq!(result.failed, 0);
         assert_eq!(result.tools_registered, 0);
@@ -453,9 +507,10 @@ mod tests {
             auth_token: None,
             connect_timeout_secs: 2,
             response_size_cap: 4096,
+            trusted: false,
         }];
 
-        let (manager, result) = McpClientManager::connect_all(&servers, &tool_registry).await;
+        let (manager, result) = McpClientManager::connect_all(&servers, &tool_registry, None).await;
         assert_eq!(result.connected, 0);
         assert_eq!(result.failed, 1);
         assert_eq!(result.tools_registered, 0);
@@ -474,6 +529,7 @@ mod tests {
             auth_token: None,
             connect_timeout_secs: 5,
             response_size_cap: 4096,
+            trusted: false,
         };
         let err = connect_server(&server).await.unwrap_err();
         assert!(err.to_string().contains("no URL configured"));
@@ -490,6 +546,7 @@ mod tests {
             auth_token: None,
             connect_timeout_secs: 2,
             response_size_cap: 4096,
+            trusted: false,
         };
         let err = connect_server(&server).await.unwrap_err();
         assert!(err.to_string().contains("unsupported transport"));
@@ -507,6 +564,7 @@ mod tests {
             auth_token: None,
             connect_timeout_secs: 1,
             response_size_cap: 4096,
+            trusted: false,
         };
         let err = connect_server(&server).await.unwrap_err();
         // Should either timeout or fail to connect.

@@ -32,6 +32,7 @@ async fn test_mcp_client_unreachable_server_graceful() {
         args: vec![],
         connect_timeout_secs: 2,
         response_size_cap: 10000,
+        trusted: false,
     };
 
     let (_manager, result) = McpClientManager::connect_all(&[entry], &registry).await;
@@ -61,6 +62,7 @@ async fn test_mcp_client_multiple_unreachable_servers_graceful() {
             args: vec![],
             connect_timeout_secs: 2,
             response_size_cap: 10000,
+            trusted: false,
         },
         McpServerEntry {
             name: "server-b".to_string(),
@@ -71,6 +73,7 @@ async fn test_mcp_client_multiple_unreachable_servers_graceful() {
             args: vec![],
             connect_timeout_secs: 2,
             response_size_cap: 10000,
+            trusted: false,
         },
     ];
 
@@ -107,6 +110,7 @@ async fn test_mcp_client_invalid_transport_graceful() {
         args: vec![],
         connect_timeout_secs: 2,
         response_size_cap: 10000,
+        trusted: false,
     };
 
     let (_manager, result) = McpClientManager::connect_all(&[entry], &registry).await;
@@ -129,6 +133,7 @@ async fn test_mcp_client_server_state_tracking() {
         args: vec![],
         connect_timeout_secs: 2,
         response_size_cap: 10000,
+        trusted: false,
     };
 
     let (manager, _result) = McpClientManager::connect_all(&[entry], &registry).await;
