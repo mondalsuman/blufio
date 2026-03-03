@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude, with Telegram messaging, SQLite persistence (WAL mode, ACID), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox, plugin system with 7 adapter traits, HTTP/WebSocket gateway, model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, and Prometheus observability. 28,790 LOC Rust across 14 crates, all 70 v1 requirements verified.
+Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude, with Telegram messaging, SQLite persistence (WAL mode, ACID), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox, plugin system with 7 adapter traits, HTTP/WebSocket gateway, model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, Prometheus observability, and full MCP integration (server + client). 36,462 LOC Rust across 16 crates, 118 requirements verified across 2 milestones.
 
 ## Core Value
 
@@ -35,28 +35,21 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ Dual-license MIT + Apache-2.0 — v1.0
 - ✓ TLS enforcement and SSRF protection on all outbound connections — v1.0
 - ✓ Secret redaction in all log output — v1.0
+- ✓ MCP server exposing Blufio tools/skills/memory as MCP resources (stdio + Streamable HTTP) — v1.1
+- ✓ MCP client consuming external MCP servers via TOML config — v1.1
+- ✓ Agent discovers and invokes external MCP tools in conversation — v1.1
+- ✓ MCP security: namespace enforcement, export allowlist, SHA-256 hash pinning, description sanitization, trust zone labeling — v1.1
+- ✓ MCP resources: memory search/lookup, session history, prompt templates — v1.1
+- ✓ Critical v1.0 tech debt resolved (GET /v1/sessions, systemd file, SessionActor refactor) — v1.1
 
 ### Active
 
-<!-- v1.1 MCP Integration -->
+(None — planning next milestone)
 
-- [ ] MCP server exposing Blufio tools/skills/memory as MCP resources
-- [ ] MCP server transports: stdio, SSE, Streamable HTTP
-- [ ] MCP client plugin adapter consuming external MCP servers
-- [ ] MCP client configuration via TOML (per-server connection config)
-- [ ] Agent discovers and invokes external MCP tools in conversation
-- [ ] Critical v1.0 tech debt resolution (GET /v1/sessions, systemd file)
+## Shipped Milestones
 
-## Current Milestone: v1.1 MCP Integration
-
-**Goal:** Make Blufio a full MCP citizen — expose its capabilities as an MCP server and consume external MCP tools as a client, with all three transports (stdio, SSE, Streamable HTTP).
-
-**Target features:**
-- MCP server: expose tools/skills/memory to Claude Desktop, AI apps, programmatic clients
-- MCP client: plugin-based adapter, operators configure MCP server connections via TOML
-- Critical tech debt: fix most impactful v1.0 items (GET /v1/sessions stub, systemd file)
-
-**Done =** Operator can (1) point Claude Desktop at Blufio via stdio and use skills/memory, (2) configure external MCP servers in TOML, (3) agent uses external MCP tools in conversation.
+- **v1.0 MVP** — 14 phases, 43 plans, 70 requirements (2026-02-28 → 2026-03-02)
+- **v1.1 MCP Integration** — 8 phases, 32 plans, 48 requirements (2026-03-02 → 2026-03-03)
 
 ### Out of Scope
 
@@ -66,7 +59,6 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - DAG workflow engine — post-v1.0
 - Client SDKs (Python, TypeScript, Go) — post-v1.0
 - Multi-node sharding — single-instance only for v1.0
-- MCP server/client — post-v1.0
 - Native plugin system (libloading) — WASM-only for v1.0
 - Windows native builds — WSL2 is the path
 - Shell automation layer (lifecycle scripts, hooks) — not needed for v1.0, scripts suffice
@@ -76,13 +68,13 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.0 MVP with 28,790 LOC Rust across 14 crates and 111 source files.
+Shipped v1.1 with 36,462 LOC Rust across 16 crates. 118 requirements verified across 2 milestones.
 
-**Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2.
+**Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower.
 
-**Architecture:** 14-crate workspace — blufio-core (traits), blufio-config, blufio-storage, blufio-vault, blufio-security, blufio-anthropic, blufio-telegram, blufio-agent, blufio-context, blufio-cost, blufio-memory, blufio-router, blufio-skill, blufio-prometheus, blufio-plugin, blufio-gateway, blufio-test-utils, blufio (binary).
+**Architecture:** 16-crate workspace — blufio-core (traits), blufio-config, blufio-storage, blufio-vault, blufio-security, blufio-anthropic, blufio-telegram, blufio-agent, blufio-context, blufio-cost, blufio-memory, blufio-router, blufio-skill, blufio-prometheus, blufio-plugin, blufio-gateway, blufio-mcp-server, blufio-mcp-client, blufio-test-utils, blufio (binary).
 
-**Known tech debt:** 10 items documented in MILESTONES.md (human verification pending, GET /v1/sessions stub, memory bounds not measured over 72h, systemd file not committed).
+**Known tech debt:** 12 items documented in MILESTONES.md v1.1 section (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps).
 
 ### The Kill Shot
 
@@ -131,6 +123,11 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Argon2id for vault KDF | Memory-hard KDF resists GPU attacks. Key never stored on disk. | ✓ Good — Zeroizing<[u8;32]> for master key |
 | ort 2.0-rc for ONNX inference | Local embedding inference with no external API calls. RC status monitored. | ⚠️ Revisit — RC not stable, ndarray 0.17 required |
 | Ed25519 for agent signing | Lightweight, fast, well-audited. ed25519-dalek mature crate. | ✓ Good — sign/verify on DeviceKeypair, delegation works |
+| rmcp 0.17 as MCP SDK | Official Anthropic-maintained Rust SDK, matches MCP spec 2025-11-25 | ✓ Good — stdio + HTTP transports, clean handler API |
+| HTTP-only MCP client | No stdio subprocess spawning — preserves single-binary constraint | ✓ Good — Streamable HTTP + SSE fallback covers all cases |
+| Security embedded per phase | Namespace (15), allowlist (16), CORS/auth (17), hash pinning (18) — never deferred | ✓ Good — complete security chain from day one |
+| SHA-256 hash pinning for tools | Detect tool definition mutations (rug pulls) at discovery time | ✓ Good — PinStore in SQLite, graceful fallback |
+| Trust zone labeling | External tools labeled separately in prompt context | ✓ Good — factual tone, no alarmist language |
 
 ---
-*Last updated: 2026-03-02 after v1.1 milestone start*
+*Last updated: 2026-03-03 after v1.1 milestone*

@@ -51,21 +51,71 @@
 
 ---
 
+## Milestone: v1.1 — MCP Integration
+
+**Shipped:** 2026-03-03
+**Phases:** 8 | **Plans:** 32
+
+### What Was Built
+- MCP server with stdio + Streamable HTTP transports for Claude Desktop connectivity
+- MCP client consuming external servers via TOML config with agent tool invocation
+- Security chain: namespace enforcement, export allowlist, SHA-256 hash pinning, description sanitization, trust zone labeling
+- MCP resources: memory search/lookup, session history, prompt templates
+- Prometheus MCP metrics, connection limits, health monitoring with exponential backoff
+- 2 new crates (blufio-mcp-server, blufio-mcp-client), ~8,452 lines added
+
+### What Worked
+- **Audit-driven gap closure**: First audit (gaps_found) triggered phases 20-22 which closed all 26 orphaned requirements and 6 integration gaps. Second audit confirmed tech_debt only.
+- **Security-per-phase pattern**: Embedding security in each phase (namespace in 15, allowlist in 16, CORS/auth in 17, hash pinning in 18) instead of deferring to a security phase. Zero security gaps at audit.
+- **rmcp SDK choice**: Official Anthropic Rust MCP SDK worked cleanly for both stdio and HTTP transports with a single handler implementation.
+- **Phase velocity**: 32 plans in 2 days (~16 plans/day), up from ~10/day in v1.0. Structured approach matured.
+- **Verification phases**: Dedicated verification phases (20, 22) created formal VERIFICATION.md reports, catching SUMMARY frontmatter inconsistencies.
+
+### What Was Inefficient
+- **SUMMARY frontmatter gaps persisted**: Phases 16, 18, 19 still had empty `requirements_completed` arrays despite lesson from v1.0. The fix (Phase 20, 22 verification) validated requirements but didn't retroactively fix frontmatter.
+- **Three audit rounds**: Initial build → first audit (gaps) → gap closure phases → second audit (tech_debt). Could have caught wiring gaps earlier with integration checks during phase execution.
+- **Deferred infrastructure consumption**: 5 items (SRVR-13/14, CLNT-06/12, INTG-04) built infrastructure but never wired consumption. The pattern "build infrastructure now, wire callers later" creates tech debt that accumulates.
+- **Phase 18 consolidated SUMMARY**: Single 18-SUMMARY.md instead of per-plan summaries made the roadmap analyzer report Phase 18 as "partial" despite full completion. Convention mismatch.
+
+### Patterns Established
+- **MCP handler pattern**: Single BlufioMcpHandler with `#[tool]` macros, shared between stdio and HTTP transports via Arc
+- **Trust zone separation**: External tools identified by `__` namespace separator, labeled in prompt context with factual/neutral tone
+- **Hash pinning for rug-pull detection**: PinStore in SQLite with SHA-256 hashes, checked at discovery time
+- **Builder pattern for optional fields**: `with_resources()`, `with_server_name()` patterns for graceful degradation
+
+### Key Lessons
+1. **Integration checks during phase execution, not just at audit.** The same lesson from v1.0 repeated — wiring gaps found at audit instead of during execution. Must be enforced as a phase gate.
+2. **SUMMARY frontmatter must be filled during execution.** Two milestones of the same lesson. Consider making gsd-tools reject empty `requirements_completed` arrays.
+3. **Consolidated SUMMARYs break tooling conventions.** Phase 18's single SUMMARY confused the roadmap analyzer. One SUMMARY per plan is the convention.
+4. **"Infrastructure built, consumption deferred" is a pattern that needs tracking.** The 5 deferred items are all this pattern. Consider a DEFERRED.md or explicit tracking.
+5. **Dual-audit pattern is valuable but expensive.** The gap-closure phases (20-22) were 3 of 8 phases (37.5%). Earlier integration verification would reduce this overhead.
+
+### Cost Observations
+- Commits: 42 total
+- Timeline: 2 calendar days
+- Notable: Gap-closure phases (20-22) were 37.5% of phases, consistent with v1.0 (25%). Integration verification remains the main quality gate.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
 
-| Milestone | Phases | Plans | Key Change |
-|-----------|--------|-------|------------|
-| v1.0 | 14 | 43 | Initial structured approach with GSD workflow |
+| Milestone | Phases | Plans | Velocity | Key Change |
+|-----------|--------|-------|----------|------------|
+| v1.0 | 14 | 43 | ~10/day | Initial structured approach with GSD workflow |
+| v1.1 | 8 | 32 | ~16/day | Security-per-phase, dual audit, gap closure phases |
 
 ### Cumulative Quality
 
-| Milestone | LOC | Source Files | Requirements | Verified |
-|-----------|-----|-------------|-------------|----------|
-| v1.0 | 28,790 | 111 | 70 | 70/70 |
+| Milestone | LOC | Crates | Requirements | Verified | Tech Debt Items |
+|-----------|-----|--------|-------------|----------|-----------------|
+| v1.0 | 28,790 | 14 | 70 | 70/70 | 10 |
+| v1.1 | 36,462 | 16 | 48 (118 total) | 48/48 | 12 |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. Wire integration at phase boundaries — don't defer cross-phase wiring to later phases
-2. Milestone audit before completion catches gaps that in-phase verification misses
+1. **Wire integration at phase boundaries** — both milestones had wiring gaps caught only at audit. Must be enforced as a phase gate, not just advice.
+2. **Milestone audit before completion catches gaps** — v1.0 found 33 stale requirements; v1.1 found 26 orphaned requirements. Always audit.
+3. **SUMMARY frontmatter must be filled during execution** — both milestones had empty/missing frontmatter. Consider tooling enforcement.
+4. **Gap-closure phases are ~25-37% overhead** — v1.0: 4/14 phases (28%), v1.1: 3/8 phases (37%). Worth the investment but reducible with earlier verification.

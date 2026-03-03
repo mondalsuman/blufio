@@ -1,5 +1,31 @@
 # Milestones
 
+## v1.1 MCP Integration (Shipped: 2026-03-03)
+
+**Delivered:** Full MCP citizen — Blufio exposes skills/memory as MCP tools and consumes external MCP servers, with security hardening across every layer.
+
+**Phases completed:** 8 phases, 32 plans
+**Timeline:** 2 days (2026-03-02 → 2026-03-03)
+**Commits:** 42 total
+**Lines added:** ~8,452 (total Rust LOC: 36,462 across 16 crates)
+**Git range:** af82e42 → 4844998
+**Requirements:** 48/48 satisfied (all formally verified)
+
+**Key accomplishments:**
+1. MCP server with stdio + Streamable HTTP transports — Claude Desktop connects and uses Blufio skills/memory as MCP tools
+2. MCP client consuming external servers via TOML config — agent discovers and invokes external MCP tools in conversation
+3. Security hardening chain: namespace enforcement, export allowlist, SHA-256 hash pinning, description sanitization, trust zone labeling
+4. MCP resources exposing memory (search + lookup) and session history, prompt templates via prompts/list
+5. Full observability: Prometheus MCP metrics, connection limits, health monitoring with exponential backoff
+6. All 48 requirements formally verified with VERIFICATION.md reports, 4 E2E flow traces passing
+
+### Known Tech Debt
+- 5 deferred integration items: tools/list_changed notification (SRVR-13), progress notifications (SRVR-14), degraded tool unregistration (CLNT-06), per-server cost write path (CLNT-12), context utilization metric (INTG-04)
+- 4 human verification items pending: live Telegram E2E, session persistence, SIGTERM drain, memory bounds 72h (runbooks exist)
+- SUMMARY frontmatter gaps in phases 16, 18, 19 (bookkeeping only, all verified in VERIFICATION.md)
+
+---
+
 ## v1.0 MVP (Shipped: 2026-03-02)
 
 **Delivered:** A ground-up Rust AI agent platform shipping as a single static binary — 14 crates, 28,790 LOC, 70 requirements satisfied, all verified.
