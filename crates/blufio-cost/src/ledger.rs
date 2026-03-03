@@ -53,6 +53,9 @@ pub struct CostRecord {
     /// Model the classifier intended before budget downgrades.
     /// `None` when routing is disabled or no downgrade occurred.
     pub intended_model: Option<String>,
+    /// MCP server name for per-server cost attribution (CLNT-12).
+    /// `None` for non-MCP calls.
+    pub server_name: Option<String>,
 }
 
 impl CostRecord {
@@ -81,6 +84,7 @@ impl CostRecord {
                 .format("%Y-%m-%dT%H:%M:%S%.3fZ")
                 .to_string(),
             intended_model: None,
+            server_name: None,
         }
     }
 
@@ -89,6 +93,14 @@ impl CostRecord {
     /// Returns `self` for builder-style chaining.
     pub fn with_intended_model(mut self, intended: String) -> Self {
         self.intended_model = Some(intended);
+        self
+    }
+
+    /// Set the MCP server name for per-server cost attribution (CLNT-12).
+    ///
+    /// Returns `self` for builder-style chaining.
+    pub fn with_server_name(mut self, name: String) -> Self {
+        self.server_name = Some(name);
         self
     }
 }
@@ -141,14 +153,15 @@ impl CostLedger {
         let cost_usd = record.cost_usd;
         let created_at = record.created_at.clone();
         let intended_model = record.intended_model.clone();
+        let server_name = record.server_name.clone();
 
         self.conn
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO cost_ledger (id, session_id, model, feature_type, \
                      input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, \
-                     cost_usd, created_at, intended_model) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                     cost_usd, created_at, intended_model, server_name) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                     rusqlite::params![
                         id,
                         session_id,
@@ -161,6 +174,7 @@ impl CostLedger {
                         cost_usd,
                         created_at,
                         intended_model,
+                        server_name,
                     ],
                 )?;
                 Ok(())
@@ -216,6 +230,31 @@ impl CostLedger {
             .map_err(map_tr_err)
     }
 
+    /// Per-server cost totals for MCP cost attribution (CLNT-12).
+    ///
+    /// Returns `(server_name, total_cost_usd)` pairs, ordered by cost descending.
+    /// Only includes records where `server_name` is non-NULL.
+    pub async fn by_server_total(&self) -> Result<Vec<(String, f64)>, BlufioError> {
+        self.conn
+            .call(move |conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT server_name, SUM(cost_usd) \
+                     FROM cost_ledger \
+                     WHERE server_name IS NOT NULL \
+                     GROUP BY server_name \
+                     ORDER BY SUM(cost_usd) DESC",
+                )?;
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(rows)
+            })
+            .await
+            .map_err(map_tr_err)
+    }
+
     /// Sum of costs for a given session.
     pub async fn session_total(&self, session_id: &str) -> Result<f64, BlufioError> {
         let session_id = session_id.to_string();
@@ -254,11 +293,13 @@ mod tests {
                     cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
                     cost_usd REAL NOT NULL DEFAULT 0.0,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    intended_model TEXT
+                    intended_model TEXT,
+                    server_name TEXT
                 );
                 CREATE INDEX idx_cost_ledger_session ON cost_ledger(session_id);
                 CREATE INDEX idx_cost_ledger_created ON cost_ledger(created_at);
-                CREATE INDEX idx_cost_ledger_model ON cost_ledger(model);",
+                CREATE INDEX idx_cost_ledger_model ON cost_ledger(model);
+                CREATE INDEX idx_cost_ledger_server ON cost_ledger(server_name);",
             )?;
             Ok(())
         })
@@ -280,6 +321,7 @@ mod tests {
             cost_usd,
             created_at: created_at.to_string(),
             intended_model: None,
+            server_name: None,
         }
     }
 
@@ -458,6 +500,58 @@ mod tests {
             rec.intended_model.as_deref(),
             Some("claude-opus-4-20250514")
         );
+    }
+
+    #[test]
+    fn cost_record_with_server_name() {
+        let usage = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+        };
+        let rec = CostRecord::new(
+            "s1".to_string(),
+            "claude-sonnet-4-20250514".to_string(),
+            FeatureType::Tool,
+            &usage,
+            0.01,
+        )
+        .with_server_name("github".to_string());
+
+        assert_eq!(rec.server_name.as_deref(), Some("github"));
+    }
+
+    #[tokio::test]
+    async fn by_server_total_groups_by_server() {
+        let conn = test_db().await;
+        let ledger = CostLedger::new(conn);
+
+        let ts = "2026-03-01T10:00:00.000Z";
+
+        // Record costs for two different servers.
+        let mut r1 = sample_record("s1", 1.0, ts);
+        r1.server_name = Some("github".to_string());
+        ledger.record(&r1).await.unwrap();
+
+        let mut r2 = sample_record("s1", 2.0, ts);
+        r2.server_name = Some("github".to_string());
+        ledger.record(&r2).await.unwrap();
+
+        let mut r3 = sample_record("s1", 0.5, ts);
+        r3.server_name = Some("slack".to_string());
+        ledger.record(&r3).await.unwrap();
+
+        // Record one without server_name (should not appear).
+        ledger.record(&sample_record("s1", 10.0, ts)).await.unwrap();
+
+        let totals = ledger.by_server_total().await.unwrap();
+        assert_eq!(totals.len(), 2);
+        // Ordered by cost desc: github (3.0), slack (0.5).
+        assert_eq!(totals[0].0, "github");
+        assert!((totals[0].1 - 3.0).abs() < 1e-10);
+        assert_eq!(totals[1].0, "slack");
+        assert!((totals[1].1 - 0.5).abs() < 1e-10);
     }
 
     #[tokio::test]

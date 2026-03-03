@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: MCP Integration
 status: unknown
-last_updated: "2026-03-03T09:37:38.439Z"
+last_updated: "2026-03-03T14:30:59.104Z"
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 25
-  completed_plans: 22
+  total_phases: 8
+  completed_phases: 6
+  total_plans: 29
+  completed_plans: 26
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.1 MCP Integration -- Phase 19: Integration Testing + Tech Debt
+**Current focus:** v1.1 MCP Integration -- Phase 21: Fix MCP Wiring Gaps
 
 ## Current Position
 
-Phase: 18 of 20 (MCP Client)
-Plan: 4 of 4 in current phase (PHASE COMPLETE)
-Status: Phase 18 Complete
-Last activity: 2026-03-03 -- Phase 18 MCP Client completed (4 plans, 4 commits)
+Phase: 21 of 22 (Fix MCP Wiring Gaps)
+Plan: 4 of 4 in current phase (COMPLETE)
+Status: Phase 21 Complete
+Last activity: 2026-03-03 -- Plan 21-04 complete (Prometheus MCP metric wiring + ExternalTool server_name)
 
-Progress: [##########################....] 18/20 phases (v1.0 complete, v1.1 Phases 15-18 done)
+Progress: [############################..] 19/20 phases (v1.0 complete, v1.1 Phases 15-18 + 21 done)
 
 ## Performance Metrics
 
@@ -41,7 +41,8 @@ Progress: [##########################....] 18/20 phases (v1.0 complete, v1.1 Pha
 - Phase 16: 3 plans completed
 - Phase 17: 5 plans completed (17-01, 33min, 2 tasks, 11 files; 17-02, 15min, 2 tasks, 2 files; 17-03, 17min, 2 tasks, 6 files; 17-04, 15min, 2 tasks, 4 files; 17-05, 5min, 1 task, 2 files)
 - Phase 18: 4 plans completed (18-01: config+security; 18-02: manager+ExternalTool+wiring; 18-03: PinStore+health+unregister; 18-04: doctor checks)
-- Total plans completed: 16
+- Phase 21: 4/4 plans completed (21-01: 18min, 2 tasks, 6 files; 21-02: 20min, 2 tasks, 3 files; 21-03: 20min, 2 tasks, 9 files; 21-04: 8min, 2 tasks, 8 files)
+- Total plans completed: 20
 
 ## Accumulated Context
 
@@ -81,6 +82,15 @@ v1.1 decisions so far:
 - ToolsChangedSender held via Option<> with underscore prefix in serve.rs (no callers yet)
 - ProgressReporter created with underscore prefix in call_tool (BlufioTool::invoke lacks progress callback)
 - progressToken extraction handles both String and Number value types per MCP spec
+- PinStore opened from database_path in serve.rs with graceful fallback on failure
+- connected_session_map() added to McpClientManager for health monitoring (CLNT-06)
+- 5-second timeout per ping request in health monitor to balance responsiveness vs. false positives
+- Health monitor spawned after cancel token creation (not inside MCP client block) for graceful shutdown
+- rmcp ClientRequest::PingRequest(Default::default()) for session health probing
+- TrustZoneProvider identifies external tools by __ namespace separator convention
+- Trust zone guidance uses factual/neutral tone (no alarmist language per CONTEXT.md)
+- Response size metric recorded before truncation to capture true MCP response size
+- set_mcp_context_utilization deferred to context engine integration (separate from MCP wiring)
 
 ### Pending Todos
 
@@ -95,5 +105,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed Phase 18 (MCP Client) -- all 4 plans executed, all requirements met
-Next action: Begin Phase 19 (Integration Testing + Tech Debt)
+Stopped at: Completed 21-04-PLAN.md (Prometheus MCP metric wiring + ExternalTool server_name) -- Phase 21 COMPLETE
+Next action: Phase 22 planning or execution

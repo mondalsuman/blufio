@@ -895,6 +895,11 @@ pub struct McpConfig {
     /// Default: 10 (conservative for personal agent use case).
     #[serde(default = "default_mcp_max_connections")]
     pub max_connections: usize,
+
+    /// Health check interval in seconds for external MCP server ping checks.
+    /// Default: 60 seconds.
+    #[serde(default = "default_health_check_interval_secs")]
+    pub health_check_interval_secs: u64,
 }
 
 impl Default for McpConfig {
@@ -907,6 +912,7 @@ impl Default for McpConfig {
             auth_token: None,
             cors_origins: Vec::new(),
             max_connections: default_mcp_max_connections(),
+            health_check_interval_secs: default_health_check_interval_secs(),
         }
     }
 }
@@ -917,6 +923,10 @@ fn default_tool_timeout_secs() -> u64 {
 
 fn default_mcp_max_connections() -> usize {
     10
+}
+
+fn default_health_check_interval_secs() -> u64 {
+    60
 }
 
 /// Configuration entry for an external MCP server.
@@ -957,6 +967,11 @@ pub struct McpServerEntry {
     /// Responses exceeding this cap are truncated with a [truncated] suffix.
     #[serde(default = "default_response_size_cap")]
     pub response_size_cap: usize,
+
+    /// Whether this server is operator-trusted. Trusted servers suppress
+    /// trust zone warnings in agent prompts.
+    #[serde(default)]
+    pub trusted: bool,
 }
 
 fn default_connect_timeout_secs() -> u64 {
@@ -1100,5 +1115,52 @@ cors_origins = ["https://app.example.com", "https://other.example.com"]
         let config: BlufioConfig = toml::from_str("").unwrap();
         assert!(config.mcp.auth_token.is_none());
         assert!(config.mcp.cors_origins.is_empty());
+    }
+
+    #[test]
+    fn mcp_health_check_interval_defaults_to_60() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert_eq!(config.mcp.health_check_interval_secs, 60);
+    }
+
+    #[test]
+    fn mcp_health_check_interval_custom_value() {
+        let toml_str = r#"
+[mcp]
+health_check_interval_secs = 30
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.mcp.health_check_interval_secs, 30);
+    }
+
+    #[test]
+    fn mcp_server_trusted_defaults_to_false() {
+        let toml_str = r#"
+[[mcp.servers]]
+name = "untrusted-server"
+transport = "http"
+url = "https://example.com/mcp"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(
+            !config.mcp.servers[0].trusted,
+            "trusted should default to false"
+        );
+    }
+
+    #[test]
+    fn mcp_server_trusted_can_be_set_true() {
+        let toml_str = r#"
+[[mcp.servers]]
+name = "trusted-server"
+transport = "http"
+url = "https://internal.example.com/mcp"
+trusted = true
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(
+            config.mcp.servers[0].trusted,
+            "trusted should be true when set"
+        );
     }
 }

@@ -108,6 +108,11 @@ pub fn record_error(error_type: &str) {
 }
 
 // ---- MCP metrics (INTG-04) ----
+// Call sites:
+//   record_mcp_connection()         -> manager.rs connect_all() on successful connect
+//   set_mcp_active_connections()    -> serve.rs after connect_all() returns
+//   record_mcp_tool_response_size() -> external_tool.rs invoke() after response
+//   set_mcp_context_utilization()   -> not yet wired (requires context engine integration)
 
 /// Record an MCP connection by transport type.
 pub fn record_mcp_connection(transport: &str) {
