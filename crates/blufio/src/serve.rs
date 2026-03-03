@@ -88,11 +88,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // SEC-03: Vault startup check -- unlock vault if it exists so secrets
     // are available for provider initialization. Silent no-op when no vault.
     {
-        let vault_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
-            .await
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+        let vault_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
         match blufio_vault::vault_startup_check(vault_conn, &config.vault).await {
             Ok(Some(_vault)) => {
                 info!("vault unlocked -- secrets available");
@@ -738,11 +734,7 @@ async fn initialize_memory(
     let embedder = Arc::new(OnnxEmbedder::new(&model_path)?);
 
     // Create memory store (opens its own connection to the same DB).
-    let memory_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
-        .await
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+    let memory_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
     let memory_store = Arc::new(MemoryStore::new(memory_conn));
 
     // Create hybrid retriever.

@@ -41,11 +41,7 @@ pub async fn run_mcp_server(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Vault startup check (for WASM skills that may need secrets).
     {
-        let vault_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
-            .await
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+        let vault_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
         match blufio_vault::vault_startup_check(vault_conn, &config.vault).await {
             Ok(Some(_vault)) => info!("vault unlocked"),
             Ok(None) => tracing::debug!("no vault found"),

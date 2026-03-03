@@ -589,11 +589,7 @@ async fn initialize_memory(
     let embedder = Arc::new(OnnxEmbedder::new(&model_path)?);
 
     // Create memory store (opens its own connection to the same DB).
-    let memory_conn = tokio_rusqlite::Connection::open(&config.storage.database_path)
-        .await
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+    let memory_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
     let memory_store = Arc::new(MemoryStore::new(memory_conn));
 
     // Create hybrid retriever.

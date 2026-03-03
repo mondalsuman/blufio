@@ -11,6 +11,7 @@ description = "Cost tracking, budget enforcement, and pricing for Blufio"
 [dependencies]
 blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
+blufio-storage = { path = "../blufio-storage" }
 tokio-rusqlite.workspace = true
 rusqlite.workspace = true
 chrono.workspace = true

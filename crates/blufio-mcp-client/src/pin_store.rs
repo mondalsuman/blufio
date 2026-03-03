@@ -40,7 +40,9 @@ pub enum PinVerification {
 impl PinStore {
     /// Open or create the pin store, creating the table if needed.
     pub async fn open(db_path: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let conn = Connection::open(db_path).await?;
+        let conn = blufio_storage::open_connection(db_path)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         conn.call(|conn| {
             conn.execute_batch(
                 "CREATE TABLE IF NOT EXISTS mcp_tool_pins (

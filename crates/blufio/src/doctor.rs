@@ -47,6 +47,7 @@ pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Resul
     // Quick checks (always run)
     results.push(check_config().await);
     results.push(check_database(&config.storage.database_path).await);
+    results.push(check_encryption(&config.storage.database_path).await);
     results.push(check_llm_connectivity(config).await);
     results.push(check_health_endpoint(config).await);
 
@@ -183,9 +184,9 @@ async fn check_database(db_path: &str) -> CheckResult {
         };
     }
 
-    match tokio_rusqlite::Connection::open(db_path).await {
+    match blufio_storage::open_connection(db_path).await {
         Ok(conn) => {
-            let query_result: Result<(), tokio_rusqlite::Error> = conn
+            let query_result: Result<(), tokio_rusqlite::Error<rusqlite::Error>> = conn
                 .call(|conn| {
                     conn.execute_batch("SELECT 1")?;
                     Ok(())
@@ -213,6 +214,93 @@ async fn check_database(db_path: &str) -> CheckResult {
             message: format!("open failed: {e}"),
             duration: start.elapsed(),
         },
+    }
+}
+
+/// Check encryption status of the database (CIPH-08).
+///
+/// Reports:
+/// - Pass ("not encrypted") when no key and plaintext DB
+/// - Warn when BLUFIO_DB_KEY set but DB is still plaintext
+/// - Fail when DB is encrypted but no key is set
+/// - Pass with cipher details when encrypted and key is correct
+async fn check_encryption(db_path: &str) -> CheckResult {
+    let start = Instant::now();
+    let path = std::path::Path::new(db_path);
+
+    if !path.exists() {
+        return CheckResult {
+            name: "Encryption".to_string(),
+            status: CheckStatus::Pass,
+            message: "no database yet".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    let is_plaintext = blufio_storage::is_plaintext_sqlite(path).unwrap_or(true);
+    let has_key = std::env::var("BLUFIO_DB_KEY").is_ok();
+
+    match (is_plaintext, has_key) {
+        (true, false) => CheckResult {
+            name: "Encryption".to_string(),
+            status: CheckStatus::Pass,
+            message: "not encrypted".to_string(),
+            duration: start.elapsed(),
+        },
+        (true, true) => CheckResult {
+            name: "Encryption".to_string(),
+            status: CheckStatus::Warn,
+            message: "BLUFIO_DB_KEY set but database is plaintext -- run: blufio db encrypt"
+                .to_string(),
+            duration: start.elapsed(),
+        },
+        (false, false) => CheckResult {
+            name: "Encryption".to_string(),
+            status: CheckStatus::Fail,
+            message: "database is encrypted but BLUFIO_DB_KEY is not set".to_string(),
+            duration: start.elapsed(),
+        },
+        (false, true) => {
+            // Query cipher details.
+            match blufio_storage::open_connection(db_path).await {
+                Ok(conn) => {
+                    let info = conn
+                        .call(|conn| -> Result<(String, i64), rusqlite::Error> {
+                            let version: String = conn
+                                .query_row("PRAGMA cipher_version;", [], |row| row.get(0))
+                                .unwrap_or_else(|_| "unknown".to_string());
+                            let page_size: i64 = conn
+                                .query_row("PRAGMA cipher_page_size;", [], |row| row.get(0))
+                                .unwrap_or(4096);
+                            Ok((version, page_size))
+                        })
+                        .await;
+
+                    match info {
+                        Ok((version, page_size)) => CheckResult {
+                            name: "Encryption".to_string(),
+                            status: CheckStatus::Pass,
+                            message: format!(
+                                "encrypted (SQLCipher {version}, page size: {page_size})"
+                            ),
+                            duration: start.elapsed(),
+                        },
+                        Err(_) => CheckResult {
+                            name: "Encryption".to_string(),
+                            status: CheckStatus::Warn,
+                            message: "encrypted but could not query cipher details".to_string(),
+                            duration: start.elapsed(),
+                        },
+                    }
+                }
+                Err(_) => CheckResult {
+                    name: "Encryption".to_string(),
+                    status: CheckStatus::Fail,
+                    message: "encrypted but cannot open -- verify BLUFIO_DB_KEY".to_string(),
+                    duration: start.elapsed(),
+                },
+            }
+        }
     }
 }
 
@@ -383,9 +471,9 @@ async fn check_db_integrity(db_path: &str) -> CheckResult {
         };
     }
 
-    match tokio_rusqlite::Connection::open(db_path).await {
+    match blufio_storage::open_connection(db_path).await {
         Ok(conn) => {
-            let result: Result<Vec<String>, tokio_rusqlite::Error> = conn
+            let result: Result<Vec<String>, tokio_rusqlite::Error<rusqlite::Error>> = conn
                 .call(|conn| {
                     let mut stmt = conn.prepare("PRAGMA integrity_check")?;
                     let rows: Vec<String> = stmt
@@ -544,6 +632,13 @@ mod tests {
     async fn check_db_integrity_missing_warns() {
         let result = check_db_integrity("/tmp/nonexistent-blufio-test-xyz.db").await;
         assert_eq!(result.status, CheckStatus::Warn);
+    }
+
+    #[tokio::test]
+    async fn check_encryption_no_db_passes() {
+        let result = check_encryption("/tmp/nonexistent-blufio-test-xyz.db").await;
+        assert_eq!(result.status, CheckStatus::Pass);
+        assert!(result.message.contains("no database yet"));
     }
 
     #[cfg(feature = "mcp-client")]
