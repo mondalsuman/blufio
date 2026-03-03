@@ -164,12 +164,11 @@ pub fn verify_signature(
         message: e.to_string(),
     })?;
 
-    let signature =
-        minisign_verify::Signature::decode(&sig_content).map_err(|e| {
-            VerifyError::InvalidSignature {
-                message: e.to_string(),
-            }
-        })?;
+    let signature = minisign_verify::Signature::decode(&sig_content).map_err(|e| {
+        VerifyError::InvalidSignature {
+            message: e.to_string(),
+        }
+    })?;
 
     // 5. Read file content
     let content = std::fs::read(file_path).map_err(|e| VerifyError::Io {
@@ -417,9 +416,7 @@ trusted comment: signed by blufio maintainer\n\
                 // Good — it found the sig file and attempted verification
             }
             Err(VerifyError::SignatureNotFound { path, .. }) => {
-                panic!(
-                    "Auto-detect should find release.tar.gz.minisig, but looked for: {path}"
-                );
+                panic!("Auto-detect should find release.tar.gz.minisig, but looked for: {path}");
             }
             Ok(_) => {
                 panic!("Should not verify with wrong content");
@@ -431,7 +428,10 @@ trusted comment: signed by blufio maintainer\n\
 
         // Also verify the wrong path was NOT used
         let wrong_path = dir.path().join("release.tar.minisig");
-        assert!(!wrong_path.exists(), "Should not create release.tar.minisig");
+        assert!(
+            !wrong_path.exists(),
+            "Should not create release.tar.minisig"
+        );
     }
 
     #[test]

@@ -1101,8 +1101,13 @@ mod tests {
 
     #[test]
     fn cli_parses_verify_with_signature() {
-        let cli =
-            Cli::parse_from(["blufio", "verify", "myfile.bin", "--signature", "custom.minisig"]);
+        let cli = Cli::parse_from([
+            "blufio",
+            "verify",
+            "myfile.bin",
+            "--signature",
+            "custom.minisig",
+        ]);
         match cli.command {
             Some(Commands::Verify { file, signature }) => {
                 assert_eq!(file, "myfile.bin");
