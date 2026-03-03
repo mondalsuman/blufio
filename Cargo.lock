@@ -416,6 +416,7 @@ dependencies = [
  "blufio-telegram",
  "blufio-test-utils",
  "blufio-vault",
+ "blufio-verify",
  "chrono",
  "clap",
  "colored 2.2.0",
