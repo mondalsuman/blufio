@@ -66,7 +66,7 @@
   3. A backup file that fails integrity_check is automatically deleted and the operator sees a clear error explaining the corruption
   4. Backup and restore output includes both file size and integrity status (e.g., "Backup complete: 5.2 MB, integrity: ok")
 **Plans**: 1 plan
-  - [ ] 23-01-PLAN.md -- Add integrity check helper, verify backup/restore output, pre-check, post-check, rollback
+  - [x] 23-01-PLAN.md -- Add integrity check helper, verify backup/restore output, pre-check, post-check, rollback
 
 ### Phase 24: sd_notify Integration
 **Goal**: systemd knows exactly when Blufio is ready, when it is shutting down, and that it is still alive -- enabling proper Type=notify service management
@@ -78,7 +78,9 @@
   3. systemd automatically restarts Blufio if the watchdog ping stops arriving (watchdog ping at half the WatchdogSec interval)
   4. `systemctl stop blufio` triggers a clean shutdown sequence (sd_notify STOPPING=1 sent when shutdown begins)
   5. On macOS or Docker (no NOTIFY_SOCKET), all sd_notify calls are silent no-ops -- no errors, no log noise
-**Plans**: TBD
+**Plans**: 2 plans
+  - [x] 24-01-PLAN.md -- sd_notify module, watchdog task, status reporting
+  - [x] 24-02-PLAN.md -- systemd unit file update for Type=notify
 
 ### Phase 25: SQLCipher Database Encryption
 **Goal**: Operator can encrypt the database at rest so that a stolen disk or backup file reveals nothing without the encryption key
@@ -90,7 +92,11 @@
   3. All 6+ database consumers (storage, memory, cost, queue, sessions, vault) use the centralized open_connection() factory -- no raw Connection::open() calls bypass encryption
   4. `blufio doctor` reports encryption status, cipher version, and page size for the database
   5. Backup and restore work correctly with encrypted databases (encryption key passed to both source and destination connections)
-**Plans**: TBD
+**Plans**: 4 plans
+  - [x] 25-01-PLAN.md -- Centralized open_connection with PRAGMA key
+  - [x] 25-02-PLAN.md -- Wire all consumers to centralized opener
+  - [x] 25-03-PLAN.md -- blufio db encrypt migration CLI
+  - [x] 25-04-PLAN.md -- Doctor encryption reporting and backup integration
 
 ### Phase 26: Minisign Signature Verification
 **Goal**: Operator can verify that any Blufio binary or file is authentically signed by the project maintainer
@@ -100,7 +106,9 @@
   1. The Minisign public key is compiled into the binary -- no external key file needed for verification
   2. `blufio verify <file> <signature>` verifies any file against its .minisig signature and reports pass/fail with clear output
   3. Signature verification failure produces a clear, actionable error message that names the file, states what failed, and does not proceed with any file operations
-**Plans**: TBD
+**Plans**: 2 plans
+  - [x] 26-01-PLAN.md -- blufio-verify crate with embedded public key
+  - [x] 26-02-PLAN.md -- blufio verify CLI command
 
 ### Phase 27: Self-Update with Rollback
 **Goal**: Operator can update Blufio in place with a single command, with signature verification and automatic rollback if the new binary is broken
@@ -112,7 +120,9 @@
   3. `blufio update rollback` reverts to the pre-update binary that was backed up before the swap
   4. `blufio update` requires explicit confirmation (--yes flag or interactive prompt) before proceeding -- no silent updates
   5. If signature verification fails at any point, the update aborts immediately with a clear error and the current binary is untouched
-**Plans**: TBD
+**Plans**: 2 plans
+  - [x] 27-01-PLAN.md -- Update check, download, verify, swap with rollback
+  - [x] 27-02-PLAN.md -- Confirmation prompt and CLI integration
 
 ### Phase 28: Close Audit Gaps
 **Goal**: Close all gaps identified in v1.2-MILESTONE-AUDIT.md — fix CIPH-01 feature flag, create missing verification files, update traceability
@@ -126,13 +136,13 @@
   4. All 30 v1.2 requirements show `[x]` in REQUIREMENTS.md and `Complete` in traceability table
   5. SUMMARY frontmatter in 26-01, 26-02, 27-01, 27-02 has requirements_completed populated
 **Plans**: 2 plans
-  - [ ] 28-01-PLAN.md -- Fix CIPH-01 feature flag + create 25-VERIFICATION.md and 27-VERIFICATION.md
-  - [ ] 28-02-PLAN.md -- Update REQUIREMENTS.md checkboxes/traceability + populate SUMMARY frontmatter
+  - [x] 28-01-PLAN.md -- Fix CIPH-01 feature flag + create 25-VERIFICATION.md and 27-VERIFICATION.md
+  - [x] 28-02-PLAN.md -- Update REQUIREMENTS.md checkboxes/traceability + populate SUMMARY frontmatter
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 23 -> 24 -> 25 -> 26 -> 27
+Phases execute in numeric order: 23 -> 24 -> 25 -> 26 -> 27 -> 28
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -158,12 +168,12 @@ Phases execute in numeric order: 23 -> 24 -> 25 -> 26 -> 27
 | 20. Verify Phase 15 & 16 Completeness | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 21. Fix MCP Wiring Gaps | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 22. Verify Phase 18 & 19 + Close Traceability | v1.1 | 3/3 | Complete | 2026-03-03 |
-| 23. Backup Integrity Verification | 1/1 | Complete    | 2026-03-03 | - |
-| 24. sd_notify Integration | 2/2 | Complete    | 2026-03-03 | - |
+| 23. Backup Integrity Verification | v1.2 | 1/1 | Complete | 2026-03-03 |
+| 24. sd_notify Integration | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 25. SQLCipher Database Encryption | v1.2 | 4/4 | Complete | 2026-03-03 |
-| 26. Minisign Signature Verification | 2/2 | Complete   | 2026-03-03 | - |
-| 27. Self-Update with Rollback | 2/2 | Complete    | 2026-03-03 | - |
-| 28. Close Audit Gaps | 2/2 | Complete    | 2026-03-04 | 2026-03-04 |
+| 26. Minisign Signature Verification | v1.2 | 2/2 | Complete | 2026-03-03 |
+| 27. Self-Update with Rollback | v1.2 | 2/2 | Complete | 2026-03-03 |
+| 28. Close Audit Gaps | v1.2 | 2/2 | Complete | 2026-03-04 |
 
 ---
 *Roadmap created: 2026-02-28*
