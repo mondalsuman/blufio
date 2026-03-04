@@ -163,7 +163,7 @@ Phases execute in numeric order: 23 -> 24 -> 25 -> 26 -> 27
 | 25. SQLCipher Database Encryption | v1.2 | 4/4 | Complete | 2026-03-03 |
 | 26. Minisign Signature Verification | 2/2 | Complete   | 2026-03-03 | - |
 | 27. Self-Update with Rollback | 2/2 | Complete    | 2026-03-03 | - |
-| 28. Close Audit Gaps | v1.2 | 2/2 | Complete | 2026-03-04 |
+| 28. Close Audit Gaps | 2/2 | Complete   | 2026-03-04 | 2026-03-04 |
 
 ---
 *Roadmap created: 2026-02-28*
