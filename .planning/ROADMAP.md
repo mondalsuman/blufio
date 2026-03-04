@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-02)
 - ✅ **v1.1 MCP Integration** — Phases 15-22 (shipped 2026-03-03)
-- 🚧 **v1.2 Production Hardening** — Phases 23-28 (in progress)
+- **v1.2 Production Hardening** — Phases 23-28 (shipped 2026-03-04)
 
 ## Phases
 
@@ -42,14 +42,14 @@
 
 </details>
 
-### 🚧 v1.2 Production Hardening (In Progress)
+### v1.2 Production Hardening (Complete)
 
 - [x] **Phase 23: Backup Integrity Verification** - PRAGMA integrity_check after backup and restore with corruption handling (completed 2026-03-03)
 - [x] **Phase 24: sd_notify Integration** - systemd Type=notify readiness, watchdog pings, and status reporting (completed 2026-03-03)
 - [x] **Phase 25: SQLCipher Database Encryption** - Encryption at rest with centralized key management and migration CLI (completed 2026-03-03)
 - [x] **Phase 26: Minisign Signature Verification** - Ed25519 binary signature verification with embedded public key (completed 2026-03-03)
 - [x] **Phase 27: Self-Update with Rollback** - Version check, download, verify, atomic swap, health check, rollback (completed 2026-03-03)
-- [ ] **Phase 28: Close Audit Gaps** - Fix CIPH-01 feature flag, create missing verifications, close traceability gaps
+- [x] **Phase 28: Close Audit Gaps** - Fix CIPH-01 feature flag, create missing verifications, close traceability gaps (completed 2026-03-04)
 
 **Milestone Goal:** Close critical PRD gaps -- systemd readiness, database encryption at rest, supply chain integrity, self-update, and backup verification.
 **Gap closure:** Phase 28 closes all audit gaps from v1.2-MILESTONE-AUDIT.md
@@ -163,8 +163,8 @@ Phases execute in numeric order: 23 -> 24 -> 25 -> 26 -> 27
 | 25. SQLCipher Database Encryption | v1.2 | 4/4 | Complete | 2026-03-03 |
 | 26. Minisign Signature Verification | 2/2 | Complete   | 2026-03-03 | - |
 | 27. Self-Update with Rollback | 2/2 | Complete    | 2026-03-03 | - |
-| 28. Close Audit Gaps | v1.2 | 0/0 | Pending | - |
+| 28. Close Audit Gaps | v1.2 | 2/2 | Complete | 2026-03-04 |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-03 after v1.2 roadmap creation*
+*Last updated: 2026-03-04 after Phase 28 completion -- v1.2 milestone complete*
