@@ -125,7 +125,9 @@
   3. 27-VERIFICATION.md exists and verifies UPDT-01..08 against Phase 27 success criteria
   4. All 30 v1.2 requirements show `[x]` in REQUIREMENTS.md and `Complete` in traceability table
   5. SUMMARY frontmatter in 26-01, 26-02, 27-01, 27-02 has requirements_completed populated
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 28-01-PLAN.md -- Fix CIPH-01 feature flag + create 25-VERIFICATION.md and 27-VERIFICATION.md
+  - [ ] 28-02-PLAN.md -- Update REQUIREMENTS.md checkboxes/traceability + populate SUMMARY frontmatter
 
 ## Progress
 
