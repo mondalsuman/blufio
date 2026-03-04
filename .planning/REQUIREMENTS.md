@@ -16,41 +16,41 @@ Requirements for production hardening milestone. Each maps to roadmap phases.
 
 ### systemd Notification
 
-- [ ] **SYSD-01**: Binary sends sd_notify READY=1 after all initialization completes
-- [ ] **SYSD-02**: Binary sends sd_notify STOPPING=1 when shutdown begins
-- [ ] **SYSD-03**: Binary sends watchdog ping at half the WatchdogSec interval
-- [ ] **SYSD-04**: systemd unit file uses Type=notify with WatchdogSec=30
-- [ ] **SYSD-05**: sd_notify is a silent no-op on non-systemd platforms (macOS, Docker)
-- [ ] **SYSD-06**: Binary sends STATUS= messages during startup phases
+- [x] **SYSD-01**: Binary sends sd_notify READY=1 after all initialization completes
+- [x] **SYSD-02**: Binary sends sd_notify STOPPING=1 when shutdown begins
+- [x] **SYSD-03**: Binary sends watchdog ping at half the WatchdogSec interval
+- [x] **SYSD-04**: systemd unit file uses Type=notify with WatchdogSec=30
+- [x] **SYSD-05**: sd_notify is a silent no-op on non-systemd platforms (macOS, Docker)
+- [x] **SYSD-06**: Binary sends STATUS= messages during startup phases
 
 ### SQLCipher Encryption
 
-- [ ] **CIPH-01**: rusqlite uses bundled-sqlcipher-vendored-openssl feature flag
-- [ ] **CIPH-02**: PRAGMA key is the first statement on every database connection across all crates
-- [ ] **CIPH-03**: Encryption key sourced from BLUFIO_DB_KEY environment variable
-- [ ] **CIPH-04**: Connection opener verifies key correctness with immediate SELECT after PRAGMA key
-- [ ] **CIPH-05**: Centralized open_connection() factory in blufio-storage used by all 6+ consumers
-- [ ] **CIPH-06**: blufio db encrypt CLI migrates plaintext database to encrypted with three-file safety strategy
-- [ ] **CIPH-07**: Backup and restore pass encryption key to both source and destination connections
-- [ ] **CIPH-08**: blufio doctor reports encryption status, cipher version, and settings
+- [x] **CIPH-01**: rusqlite uses bundled-sqlcipher-vendored-openssl feature flag
+- [x] **CIPH-02**: PRAGMA key is the first statement on every database connection across all crates
+- [x] **CIPH-03**: Encryption key sourced from BLUFIO_DB_KEY environment variable
+- [x] **CIPH-04**: Connection opener verifies key correctness with immediate SELECT after PRAGMA key
+- [x] **CIPH-05**: Centralized open_connection() factory in blufio-storage used by all 6+ consumers
+- [x] **CIPH-06**: blufio db encrypt CLI migrates plaintext database to encrypted with three-file safety strategy
+- [x] **CIPH-07**: Backup and restore pass encryption key to both source and destination connections
+- [x] **CIPH-08**: blufio doctor reports encryption status, cipher version, and settings
 
 ### Minisign Verification
 
-- [ ] **SIGN-01**: Minisign public key is embedded as a compile-time constant in the binary
-- [ ] **SIGN-02**: Downloaded binary signature is verified against embedded public key before any file operations
-- [ ] **SIGN-03**: Signature verification failure aborts with clear error message
-- [ ] **SIGN-04**: blufio verify CLI command verifies any file against a .minisig signature
+- [x] **SIGN-01**: Minisign public key is embedded as a compile-time constant in the binary
+- [x] **SIGN-02**: Downloaded binary signature is verified against embedded public key before any file operations
+- [x] **SIGN-03**: Signature verification failure aborts with clear error message
+- [x] **SIGN-04**: blufio verify CLI command verifies any file against a .minisig signature
 
 ### Self-Update
 
-- [ ] **UPDT-01**: blufio update checks latest version against GitHub Releases API
-- [ ] **UPDT-02**: blufio update downloads platform-appropriate binary and .minisig signature
-- [ ] **UPDT-03**: Downloaded binary is Minisign-verified before any file operations
-- [ ] **UPDT-04**: Current binary is backed up before atomic swap via self-replace
-- [ ] **UPDT-05**: Post-swap health check runs blufio doctor on new binary
-- [ ] **UPDT-06**: blufio update rollback reverts to pre-update binary
-- [ ] **UPDT-07**: blufio update --check reports available version without downloading
-- [ ] **UPDT-08**: Update requires --yes flag or interactive confirmation before proceeding
+- [x] **UPDT-01**: blufio update checks latest version against GitHub Releases API
+- [x] **UPDT-02**: blufio update downloads platform-appropriate binary and .minisig signature
+- [x] **UPDT-03**: Downloaded binary is Minisign-verified before any file operations
+- [x] **UPDT-04**: Current binary is backed up before atomic swap via self-replace
+- [x] **UPDT-05**: Post-swap health check runs blufio doctor on new binary
+- [x] **UPDT-06**: blufio update rollback reverts to pre-update binary
+- [x] **UPDT-07**: blufio update --check reports available version without downloading
+- [x] **UPDT-08**: Update requires --yes flag or interactive confirmation before proceeding
 
 ## Future Requirements
 
@@ -100,32 +100,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BKUP-02 | Phase 23 | Complete |
 | BKUP-03 | Phase 23 | Complete |
 | BKUP-04 | Phase 23 | Complete |
-| SYSD-01 | Phase 24 → 28 | Pending |
-| SYSD-02 | Phase 24 → 28 | Pending |
-| SYSD-03 | Phase 24 → 28 | Pending |
-| SYSD-04 | Phase 24 → 28 | Pending |
-| SYSD-05 | Phase 24 → 28 | Pending |
-| SYSD-06 | Phase 24 → 28 | Pending |
-| CIPH-01 | Phase 25 → 28 | Pending |
-| CIPH-02 | Phase 25 → 28 | Pending |
-| CIPH-03 | Phase 25 → 28 | Pending |
-| CIPH-04 | Phase 25 → 28 | Pending |
-| CIPH-05 | Phase 25 → 28 | Pending |
-| CIPH-06 | Phase 25 → 28 | Pending |
-| CIPH-07 | Phase 25 → 28 | Pending |
-| CIPH-08 | Phase 25 → 28 | Pending |
-| SIGN-01 | Phase 26 → 28 | Pending |
-| SIGN-02 | Phase 26 → 28 | Pending |
-| SIGN-03 | Phase 26 → 28 | Pending |
-| SIGN-04 | Phase 26 → 28 | Pending |
-| UPDT-01 | Phase 27 → 28 | Pending |
-| UPDT-02 | Phase 27 → 28 | Pending |
-| UPDT-03 | Phase 27 → 28 | Pending |
-| UPDT-04 | Phase 27 → 28 | Pending |
-| UPDT-05 | Phase 27 → 28 | Pending |
-| UPDT-06 | Phase 27 → 28 | Pending |
-| UPDT-07 | Phase 27 → 28 | Pending |
-| UPDT-08 | Phase 27 → 28 | Pending |
+| SYSD-01 | Phase 24 | Complete |
+| SYSD-02 | Phase 24 | Complete |
+| SYSD-03 | Phase 24 | Complete |
+| SYSD-04 | Phase 24 | Complete |
+| SYSD-05 | Phase 24 | Complete |
+| SYSD-06 | Phase 24 | Complete |
+| CIPH-01 | Phase 25 | Complete |
+| CIPH-02 | Phase 25 | Complete |
+| CIPH-03 | Phase 25 | Complete |
+| CIPH-04 | Phase 25 | Complete |
+| CIPH-05 | Phase 25 | Complete |
+| CIPH-06 | Phase 25 | Complete |
+| CIPH-07 | Phase 25 | Complete |
+| CIPH-08 | Phase 25 | Complete |
+| SIGN-01 | Phase 26 | Complete |
+| SIGN-02 | Phase 26 | Complete |
+| SIGN-03 | Phase 26 | Complete |
+| SIGN-04 | Phase 26 | Complete |
+| UPDT-01 | Phase 27 | Complete |
+| UPDT-02 | Phase 27 | Complete |
+| UPDT-03 | Phase 27 | Complete |
+| UPDT-04 | Phase 27 | Complete |
+| UPDT-05 | Phase 27 | Complete |
+| UPDT-06 | Phase 27 | Complete |
+| UPDT-07 | Phase 27 | Complete |
+| UPDT-08 | Phase 27 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 30 total
