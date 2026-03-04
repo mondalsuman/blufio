@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude, with Telegram messaging, SQLite persistence (WAL mode, ACID), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox, plugin system with 7 adapter traits, HTTP/WebSocket gateway, model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, Prometheus observability, and full MCP integration (server + client). 36,462 LOC Rust across 16 crates, 118 requirements verified across 2 milestones.
+Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude, with Telegram messaging, SQLite persistence (WAL mode, ACID), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox, plugin system with 7 adapter traits, HTTP/WebSocket gateway, model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, Prometheus observability, and full MCP integration (server + client). 39,168 LOC Rust across 21 crates, 148 requirements verified across 3 milestones.
 
 ## Core Value
 
@@ -44,21 +44,13 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Active
 
-## Current Milestone: v1.2 Production Hardening
-
-**Goal:** Close critical PRD gaps — systemd readiness, database encryption at rest, supply chain integrity, self-update, and backup verification.
-
-**Target features:**
-- sd_notify integration (systemd Type=notify, watchdog pings)
-- SQLCipher database encryption at rest
-- Minisign binary signature verification
-- blufio update with rollback (self-update mechanism)
-- Backup integrity verification (PRAGMA integrity_check post-backup/restore)
+None -- all milestones shipped.
 
 ## Shipped Milestones
 
-- **v1.0 MVP** — 14 phases, 43 plans, 70 requirements (2026-02-28 → 2026-03-02)
+- **v1.2 Production Hardening** -- 6 phases, 13 plans, 30 requirements (2026-03-03 -> 2026-03-04)
 - **v1.1 MCP Integration** — 8 phases, 32 plans, 48 requirements (2026-03-02 → 2026-03-03)
+- **v1.0 MVP** — 14 phases, 43 plans, 70 requirements (2026-02-28 → 2026-03-02)
 
 ### Out of Scope
 
@@ -77,13 +69,13 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.1 with 36,462 LOC Rust across 16 crates. 118 requirements verified across 2 milestones.
+Shipped v1.2 with 39,168 LOC Rust across 21 crates. 148 requirements verified across 3 milestones.
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower.
 
-**Architecture:** 16-crate workspace — blufio-core (traits), blufio-config, blufio-storage, blufio-vault, blufio-security, blufio-anthropic, blufio-telegram, blufio-agent, blufio-context, blufio-cost, blufio-memory, blufio-router, blufio-skill, blufio-prometheus, blufio-plugin, blufio-gateway, blufio-mcp-server, blufio-mcp-client, blufio-test-utils, blufio (binary).
+**Architecture:** 21-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-gateway, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-skill, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, plus blufio (binary).
 
-**Known tech debt:** 12 items documented in MILESTONES.md v1.1 section (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps).
+**Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). v1.2 introduced no new tech debt.
 
 ### The Kill Shot
 
@@ -139,4 +131,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Trust zone labeling | External tools labeled separately in prompt context | ✓ Good — factual tone, no alarmist language |
 
 ---
-*Last updated: 2026-03-03 after v1.2 milestone started*
+*Last updated: 2026-03-04 after v1.2 milestone shipped*
