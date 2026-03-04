@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.2 Production Hardening -- SHIPPED 2026-03-04
+**Current focus:** v1.2 Production Hardening — SHIPPED 2026-03-04. Planning next milestone.
 
 ## Current Position
 
-Phase: 28 of 28 (Close Audit Gaps) -- ALL COMPLETE
+Phase: 28 of 28 (Close Audit Gaps) — ALL COMPLETE
 Plan: 2 of 2 in current phase (final)
-Status: All 6 phases, 13 plans complete. 30/30 requirements verified.
-Last activity: 2026-03-04 - Completed quick task 1: Update all documentation according to current states
+Status: v1.2 archived. 3 milestones shipped (v1.0, v1.1, v1.2). 148 requirements verified.
+Last activity: 2026-03-04 - Milestone v1.2 archived
 
 Progress: [####################] 100%
 
@@ -52,25 +52,13 @@ Progress: [####################] 100%
 
 All decisions logged in PROJECT.md Key Decisions table.
 
-- Phase 23: Kept integrity check in backup.rs (not shared with doctor.rs) due to sync/async mismatch
-- Phase 23: Used PRAGMA integrity_check(1) for single-error detection performance
-- Phase 23: Rollback uses fs::copy from .pre-restore (not Backup API)
-- Phase 25: BLUFIO_DB_KEY env var for encryption key (consistent with BLUFIO_VAULT_KEY)
-- Phase 25: Auto-detect hex vs passphrase keys: 64 hex chars = raw hex, else passphrase
-- Phase 25: Three-file safety strategy for encrypt migration: .encrypting temp -> verify -> swap
-- Phase 25: Empty/small files treated as plaintext by is_plaintext_sqlite()
-- Phase 25: Added db_key to config env_provider ignore list
-- Phase 28: CIPH-01 fix: changed feature flag rather than adding vendored-openssl as separate dependency
-- Phase 28: SIGN-04 assigned to 26-02 only (SIGN-02/03 already in 26-01, no duplication)
-- Phase 28: Frontmatter uses requirements-completed (hyphen) matching 25-01-SUMMARY.md pattern
-
 ### Pending Todos
 
 None.
 
 ### Blockers/Concerns
 
-None -- milestone complete.
+None — all milestones complete.
 
 ### Quick Tasks Completed
 
@@ -81,5 +69,5 @@ None -- milestone complete.
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Milestone v1.2 complete. All documentation updated.
-Next action: Milestone complete. Ready for v1.3 planning or release.
+Stopped at: Milestone v1.2 archived. All documentation updated.
+Next action: `/gsd:new-milestone` for v1.3 planning.

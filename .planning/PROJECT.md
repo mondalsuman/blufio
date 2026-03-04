@@ -41,6 +41,13 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ MCP security: namespace enforcement, export allowlist, SHA-256 hash pinning, description sanitization, trust zone labeling — v1.1
 - ✓ MCP resources: memory search/lookup, session history, prompt templates — v1.1
 - ✓ Critical v1.0 tech debt resolved (GET /v1/sessions, systemd file, SessionActor refactor) — v1.1
+- ✓ Backup integrity verification with PRAGMA integrity_check and corruption auto-cleanup — v1.2
+- ✓ systemd Type=notify with READY/STOPPING/watchdog/STATUS lifecycle — v1.2
+- ✓ SQLCipher database encryption at rest with centralized connection factory — v1.2
+- ✓ Database encryption migration CLI with three-file safety strategy — v1.2
+- ✓ Minisign Ed25519 signature verification with embedded public key — v1.2
+- ✓ Self-update with download, Minisign verify, atomic swap, health check, rollback — v1.2
+- ✓ All 30 v1.2 requirements verified with VERIFICATION.md reports — v1.2
 
 ### Active
 
@@ -129,6 +136,13 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Security embedded per phase | Namespace (15), allowlist (16), CORS/auth (17), hash pinning (18) — never deferred | ✓ Good — complete security chain from day one |
 | SHA-256 hash pinning for tools | Detect tool definition mutations (rug pulls) at discovery time | ✓ Good — PinStore in SQLite, graceful fallback |
 | Trust zone labeling | External tools labeled separately in prompt context | ✓ Good — factual tone, no alarmist language |
+| SQLCipher over custom encryption | Whole-file encryption, industry standard, single PRAGMA key statement | ✓ Good — transparent encryption, zero code changes for consumers |
+| BLUFIO_DB_KEY env var | Consistent with BLUFIO_VAULT_KEY pattern, never stored on disk | ✓ Good — auto-detect hex vs passphrase keys |
+| Three-file safety for encrypt migration | Original untouched until verified copy passes integrity check | ✓ Good — zero data loss risk during migration |
+| Minisign over GPG | Simpler, Ed25519-only, single embedded key fits single-binary model | ✓ Good — compile-time constant, no key distribution problem |
+| self-replace for atomic binary swap | Cross-platform atomic file replacement for running binary | ✓ Good — handles Windows locking, Unix atomic rename |
+| Health check via child process | Spawn `blufio doctor` after swap rather than in-process check | ✓ Good — tests actual new binary, 30s timeout with auto-rollback |
+| sd-notify best-effort wrapper | Silent no-op on non-systemd platforms, never blocks or errors | ✓ Good — zero-impact on macOS/Docker development |
 
 ---
-*Last updated: 2026-03-04 after v1.2 milestone shipped*
+*Last updated: 2026-03-04 after v1.2 milestone archived*
