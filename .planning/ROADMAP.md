@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-02)
 - ✅ **v1.1 MCP Integration** — Phases 15-22 (shipped 2026-03-03)
-- 🚧 **v1.2 Production Hardening** — Phases 23-27 (in progress)
+- 🚧 **v1.2 Production Hardening** — Phases 23-28 (in progress)
 
 ## Phases
 
@@ -44,13 +44,15 @@
 
 ### 🚧 v1.2 Production Hardening (In Progress)
 
-**Milestone Goal:** Close critical PRD gaps -- systemd readiness, database encryption at rest, supply chain integrity, self-update, and backup verification.
-
 - [x] **Phase 23: Backup Integrity Verification** - PRAGMA integrity_check after backup and restore with corruption handling (completed 2026-03-03)
 - [x] **Phase 24: sd_notify Integration** - systemd Type=notify readiness, watchdog pings, and status reporting (completed 2026-03-03)
 - [x] **Phase 25: SQLCipher Database Encryption** - Encryption at rest with centralized key management and migration CLI (completed 2026-03-03)
 - [x] **Phase 26: Minisign Signature Verification** - Ed25519 binary signature verification with embedded public key (completed 2026-03-03)
-- [ ] **Phase 27: Self-Update with Rollback** - Version check, download, verify, atomic swap, health check, rollback
+- [x] **Phase 27: Self-Update with Rollback** - Version check, download, verify, atomic swap, health check, rollback (completed 2026-03-03)
+- [ ] **Phase 28: Close Audit Gaps** - Fix CIPH-01 feature flag, create missing verifications, close traceability gaps
+
+**Milestone Goal:** Close critical PRD gaps -- systemd readiness, database encryption at rest, supply chain integrity, self-update, and backup verification.
+**Gap closure:** Phase 28 closes all audit gaps from v1.2-MILESTONE-AUDIT.md
 
 ## Phase Details
 
@@ -112,6 +114,19 @@
   5. If signature verification fails at any point, the update aborts immediately with a clear error and the current binary is untouched
 **Plans**: TBD
 
+### Phase 28: Close Audit Gaps
+**Goal**: Close all gaps identified in v1.2-MILESTONE-AUDIT.md — fix CIPH-01 feature flag, create missing verification files, update traceability
+**Depends on**: Phase 27 (all implementation phases must be complete before gap closure)
+**Requirements**: CIPH-01 (fix), CIPH-02..08, SIGN-01..04, UPDT-01..08, SYSD-01..06 (verify & close)
+**Gap Closure:** Closes gaps from audit
+**Success Criteria** (what must be TRUE):
+  1. Cargo.toml uses `bundled-sqlcipher-vendored-openssl` feature flag (CIPH-01 fix)
+  2. 25-VERIFICATION.md exists and verifies CIPH-01..08 against Phase 25 success criteria
+  3. 27-VERIFICATION.md exists and verifies UPDT-01..08 against Phase 27 success criteria
+  4. All 30 v1.2 requirements show `[x]` in REQUIREMENTS.md and `Complete` in traceability table
+  5. SUMMARY frontmatter in 26-01, 26-02, 27-01, 27-02 has requirements_completed populated
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
@@ -145,7 +160,8 @@ Phases execute in numeric order: 23 -> 24 -> 25 -> 26 -> 27
 | 24. sd_notify Integration | 2/2 | Complete    | 2026-03-03 | - |
 | 25. SQLCipher Database Encryption | v1.2 | 4/4 | Complete | 2026-03-03 |
 | 26. Minisign Signature Verification | 2/2 | Complete   | 2026-03-03 | - |
-| 27. Self-Update with Rollback | v1.2 | 0/0 | Not started | - |
+| 27. Self-Update with Rollback | 2/2 | Complete    | 2026-03-03 | - |
+| 28. Close Audit Gaps | v1.2 | 0/0 | Pending | - |
 
 ---
 *Roadmap created: 2026-02-28*

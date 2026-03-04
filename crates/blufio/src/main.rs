@@ -20,6 +20,7 @@ mod mcp_server;
 mod serve;
 mod shell;
 mod status;
+mod update;
 mod verify;
 
 use clap::{Parser, Subcommand};
@@ -98,6 +99,23 @@ enum Commands {
         #[arg(long)]
         signature: Option<String>,
     },
+    /// Update Blufio to the latest version.
+    Update {
+        #[command(subcommand)]
+        action: Option<UpdateCommands>,
+        /// Skip interactive confirmation.
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+/// Update subcommands.
+#[derive(Subcommand, Debug)]
+enum UpdateCommands {
+    /// Check for available updates without downloading.
+    Check,
+    /// Rollback to the pre-update binary.
+    Rollback,
 }
 
 /// Config management subcommands.
@@ -295,6 +313,26 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::Update { action, yes }) => match action {
+            Some(UpdateCommands::Check) => {
+                if let Err(e) = update::run_check().await {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+            Some(UpdateCommands::Rollback) => {
+                if let Err(e) = update::run_rollback() {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+            None => {
+                if let Err(e) = update::run_update(yes).await {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        },
         Some(Commands::McpServer) => {
             #[cfg(feature = "mcp-server")]
             {
@@ -1241,5 +1279,53 @@ plugins = { telegram = true, prometheus = false }
         db.close().await.unwrap();
 
         unsafe { std::env::remove_var("BLUFIO_VAULT_KEY") };
+    }
+
+    #[test]
+    fn cli_parses_update() {
+        let cli = Cli::parse_from(["blufio", "update"]);
+        match cli.command {
+            Some(Commands::Update { action, yes }) => {
+                assert!(action.is_none());
+                assert!(!yes);
+            }
+            _ => panic!("expected Update command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_update_yes() {
+        let cli = Cli::parse_from(["blufio", "update", "--yes"]);
+        match cli.command {
+            Some(Commands::Update { action, yes }) => {
+                assert!(action.is_none());
+                assert!(yes);
+            }
+            _ => panic!("expected Update --yes command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_update_check() {
+        let cli = Cli::parse_from(["blufio", "update", "check"]);
+        match cli.command {
+            Some(Commands::Update {
+                action: Some(UpdateCommands::Check),
+                ..
+            }) => {}
+            _ => panic!("expected Update Check command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_update_rollback() {
+        let cli = Cli::parse_from(["blufio", "update", "rollback"]);
+        match cli.command {
+            Some(Commands::Update {
+                action: Some(UpdateCommands::Rollback),
+                ..
+            }) => {}
+            _ => panic!("expected Update Rollback command"),
+        }
     }
 }

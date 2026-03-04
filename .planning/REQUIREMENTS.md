@@ -100,32 +100,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BKUP-02 | Phase 23 | Complete |
 | BKUP-03 | Phase 23 | Complete |
 | BKUP-04 | Phase 23 | Complete |
-| SYSD-01 | Phase 24 | Pending |
-| SYSD-02 | Phase 24 | Pending |
-| SYSD-03 | Phase 24 | Pending |
-| SYSD-04 | Phase 24 | Pending |
-| SYSD-05 | Phase 24 | Pending |
-| SYSD-06 | Phase 24 | Pending |
-| CIPH-01 | Phase 25 | Pending |
-| CIPH-02 | Phase 25 | Pending |
-| CIPH-03 | Phase 25 | Pending |
-| CIPH-04 | Phase 25 | Pending |
-| CIPH-05 | Phase 25 | Pending |
-| CIPH-06 | Phase 25 | Pending |
-| CIPH-07 | Phase 25 | Pending |
-| CIPH-08 | Phase 25 | Pending |
-| SIGN-01 | Phase 26 | Pending |
-| SIGN-02 | Phase 26 | Pending |
-| SIGN-03 | Phase 26 | Pending |
-| SIGN-04 | Phase 26 | Pending |
-| UPDT-01 | Phase 27 | Pending |
-| UPDT-02 | Phase 27 | Pending |
-| UPDT-03 | Phase 27 | Pending |
-| UPDT-04 | Phase 27 | Pending |
-| UPDT-05 | Phase 27 | Pending |
-| UPDT-06 | Phase 27 | Pending |
-| UPDT-07 | Phase 27 | Pending |
-| UPDT-08 | Phase 27 | Pending |
+| SYSD-01 | Phase 24 → 28 | Pending |
+| SYSD-02 | Phase 24 → 28 | Pending |
+| SYSD-03 | Phase 24 → 28 | Pending |
+| SYSD-04 | Phase 24 → 28 | Pending |
+| SYSD-05 | Phase 24 → 28 | Pending |
+| SYSD-06 | Phase 24 → 28 | Pending |
+| CIPH-01 | Phase 25 → 28 | Pending |
+| CIPH-02 | Phase 25 → 28 | Pending |
+| CIPH-03 | Phase 25 → 28 | Pending |
+| CIPH-04 | Phase 25 → 28 | Pending |
+| CIPH-05 | Phase 25 → 28 | Pending |
+| CIPH-06 | Phase 25 → 28 | Pending |
+| CIPH-07 | Phase 25 → 28 | Pending |
+| CIPH-08 | Phase 25 → 28 | Pending |
+| SIGN-01 | Phase 26 → 28 | Pending |
+| SIGN-02 | Phase 26 → 28 | Pending |
+| SIGN-03 | Phase 26 → 28 | Pending |
+| SIGN-04 | Phase 26 → 28 | Pending |
+| UPDT-01 | Phase 27 → 28 | Pending |
+| UPDT-02 | Phase 27 → 28 | Pending |
+| UPDT-03 | Phase 27 → 28 | Pending |
+| UPDT-04 | Phase 27 → 28 | Pending |
+| UPDT-05 | Phase 27 → 28 | Pending |
+| UPDT-06 | Phase 27 → 28 | Pending |
+| UPDT-07 | Phase 27 → 28 | Pending |
+| UPDT-08 | Phase 27 → 28 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 30 total
