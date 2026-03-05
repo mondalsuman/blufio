@@ -122,7 +122,7 @@ impl OpenAIClient {
 
             let response = self
                 .client
-                .post(&self.completions_url())
+                .post(self.completions_url())
                 .json(request)
                 .send()
                 .await
@@ -198,7 +198,7 @@ impl OpenAIClient {
 
             let response = self
                 .client
-                .post(&self.completions_url())
+                .post(self.completions_url())
                 .json(request)
                 .send()
                 .await
