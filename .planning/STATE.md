@@ -99,5 +99,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 30 complete, ready to plan Phase 31
-Resume file: None
+Stopped at: Phase 31 context gathered
+Resume file: .planning/phases/31-openai-compatible-gateway-api/31-CONTEXT.md
