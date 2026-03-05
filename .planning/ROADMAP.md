@@ -61,7 +61,7 @@
 
 - [x] **Phase 29: Event Bus & Core Trait Extensions** — Internal pub/sub backbone and provider-agnostic ToolDefinition
 - [x] **Phase 30: Multi-Provider LLM Support** — OpenAI, Ollama, OpenRouter, and Gemini provider plugins (completed 2026-03-05)
-- [ ] **Phase 31: OpenAI-Compatible Gateway API** — /v1/chat/completions, /v1/responses, /v1/tools endpoints
+- [x] **Phase 31: OpenAI-Compatible Gateway API** (3/3 plans) — completed 2026-03-05
 - [ ] **Phase 32: Scoped API Keys, Webhooks & Batch** — API key management, webhook delivery, and batch operations
 - [ ] **Phase 33: Discord & Slack Channel Adapters** — Two highest-value channel integrations
 - [ ] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** — Remaining channel adapters with cross-channel bridging
