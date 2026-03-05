@@ -155,8 +155,7 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
             });
         }
         // base_url must start with http:// or https://
-        if !provider.base_url.starts_with("http://") && !provider.base_url.starts_with("https://")
-        {
+        if !provider.base_url.starts_with("http://") && !provider.base_url.starts_with("https://") {
             errors.push(ConfigError::Validation {
                 message: format!(
                     "providers.custom.{name}.base_url must start with 'http://' or 'https://', got '{}'",
@@ -167,9 +166,7 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
         // api_key_env must not be empty
         if provider.api_key_env.trim().is_empty() {
             errors.push(ConfigError::Validation {
-                message: format!(
-                    "providers.custom.{name}.api_key_env must not be empty"
-                ),
+                message: format!("providers.custom.{name}.api_key_env must not be empty"),
             });
         }
     }
