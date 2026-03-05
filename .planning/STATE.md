@@ -6,9 +6,9 @@ status: executing
 last_updated: "2026-03-05"
 progress:
   total_phases: 11
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 30
-  completed_plans: 4
+  completed_plans: 6
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — Phase 30 in progress (3/4 plans complete)
+**Current focus:** v1.3 Ecosystem Expansion — Phase 30 complete (4/4 plans), advancing to Phase 31
 
 ## Current Position
 
 Phase: 30 of 39 (Multi-Provider LLM Support)
-Plan: 3 of 4 in current phase
-Status: executing
-Last activity: 2026-03-05 — Plan 30-03 completed (OpenRouter provider crate)
+Plan: 4 of 4 in current phase
+Status: phase-complete
+Last activity: 2026-03-05 — Plan 30-04 completed (Gemini provider crate)
 
-Progress: [█░░░░░░░░░] 13%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
@@ -51,7 +51,9 @@ Progress: [█░░░░░░░░░] 13%
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 30 | 01 | 11min | 3 | 7 |
+| 30 | 02 | 8min | 2 | 5 |
 | 30 | 03 | 6min | 2 | 5 |
+| 30 | 04 | 7min | 2 | 5 |
 
 ## Accumulated Context
 
@@ -69,9 +71,16 @@ Key v1.3 constraints:
 - OpenAI system prompt mapped to system role message (not separate field)
 - Used max_completion_tokens for OpenAI (newer API, not deprecated max_tokens)
 - Tool call args accumulated via HashMap<index, (id, name, args)> across SSE deltas
+- Ollama NDJSON streaming with BytesMut buffer for partial line accumulation
+- Ollama tool calls arrive complete (not partial deltas); each gets generated UUID
+- Ollama response IDs generated as ollama-{uuid} (API doesn't provide them)
 - OpenRouter wire types independent from OpenAI crate (crate decoupling)
 - OpenRouter provider preferences only included when provider_order non-empty
 - OpenRouter health check deferred to first request (no zero-cost auth endpoint)
+- Gemini uses native API format (not OpenAI-compatible shim) with systemInstruction, functionDeclarations
+- Gemini API key sent as query parameter ?key= (not header)
+- Gemini streams chunked JSON (not SSE); parser uses brace depth counter
+- Gemini function calls arrive complete; UUIDs generated for response IDs
 
 ### Pending Todos
 
@@ -90,5 +99,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Plan 30-03 completed (OpenRouter provider crate).
-Next action: Execute plan 30-04 (Gemini provider).
+Stopped at: Phase 30 complete. Plan 30-04 completed (Gemini provider crate).
+Next action: Advance to Phase 31 (next phase in v1.3 milestone).
