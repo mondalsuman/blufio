@@ -617,6 +617,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "blufio-gemini"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-config",
+ "blufio-core",
+ "blufio-security",
+ "bytes",
+ "futures",
+ "reqwest 0.13.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
 name = "blufio-mcp-client"
 version = "0.1.0"
 dependencies = [
@@ -689,6 +709,63 @@ dependencies = [
  "tokio-rusqlite",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "blufio-ollama"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-config",
+ "blufio-core",
+ "bytes",
+ "futures",
+ "reqwest 0.13.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "blufio-openai"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-config",
+ "blufio-core",
+ "blufio-security",
+ "eventsource-stream",
+ "futures",
+ "reqwest 0.13.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "wiremock",
+]
+
+[[package]]
+name = "blufio-openrouter"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-config",
+ "blufio-core",
+ "blufio-security",
+ "eventsource-stream",
+ "futures",
+ "reqwest 0.13.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "wiremock",
 ]
 
 [[package]]
