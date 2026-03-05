@@ -1,237 +1,299 @@
 # Project Research Summary
 
-**Project:** Blufio v1.2 -- Production Hardening
-**Domain:** Production hardening for existing Rust AI agent platform
-**Researched:** 2026-03-03
-**Confidence:** HIGH
+**Project:** Blufio v1.3 Ecosystem Expansion
+**Domain:** Rust AI Agent Platform — multi-provider LLM, multi-channel adapters, OpenAI-compatible API, skill marketplace, node system, Docker deployment
+**Researched:** 2026-03-05
+**Confidence:** HIGH (stack and architecture), MEDIUM (channel adapters, node system, OpenClaw migration)
 
 ## Executive Summary
 
-Blufio v1.2 adds five production hardening features to the existing 16-crate Rust workspace (36,462 LOC, 118 requirements verified across v1.0 and v1.1): systemd Type=notify integration (sd_notify), SQLCipher database encryption at rest, Minisign binary signature verification, self-update with rollback, and backup integrity verification. The total estimated implementation is 930--1,600 LOC (3--4% of the existing codebase), with only 5 new crate dependencies (3 of which are zero-dependency crates), keeping the workspace well within its <80 direct dependency constraint. The approach is conservative: all features integrate into existing crates, primarily the binary crate, with no new workspace crates required.
+Blufio v1.3 is an ecosystem expansion of a production-quality Rust AI agent platform (39K LOC, 21 crates, shipped through v1.2). The goal is to achieve feature parity with OpenClaw (Node.js, the primary competitor) while exploiting Blufio's structural advantages: WASM skill sandboxing, SQLCipher encryption, Ed25519 code signing, bounded resource management, and a single static binary deployment model. The recommended approach builds on the existing well-tested foundation without architectural disruption — all new features extend existing traits (`ProviderAdapter`, `ChannelAdapter`) and reuse existing infrastructure (tokio, axum, SQLite, reqwest, ed25519-dalek) wherever possible. Only 9 net-new Rust crates are required across the entire expansion, keeping the workspace within its 80-dependency constraint.
 
-The recommended approach orders features by dependency chain and blast radius. SQLCipher is the dominant risk -- it touches the database connection path used by 6+ consumers across the workspace and requires strict PRAGMA key ordering (must be the absolute first statement on every connection). The recommended mitigation is a shared `open_connection()` factory in `blufio-storage` that centralizes key application, preventing any connection path from skipping encryption. sd_notify and backup integrity are low-risk, low-complexity warm-ups. Minisign must precede self-update because unsigned binary replacement is a hard security violation. The critical architecture decision is using raw hex keys for SQLCipher (via `BLUFIO_DB_KEY` env var) rather than passphrases, which eliminates the 200--500ms PBKDF2 penalty per connection open.
+The single most important architectural decision in v1.3 is building an event bus (`blufio-bus` wrapping `tokio::sync::broadcast`) first, because four other features depend on it: webhook delivery, cross-channel bridging, node synchronization, and batch completion notification. The second critical decision is implementing a strict wire-type separation between internal Blufio types (Anthropic-influenced, using `stop_reason`) and the external OpenAI-compatible API surface (which requires `finish_reason`) — failure here silently breaks every OpenAI SDK client. The third is that the OpenAI-compatible API layer must be defined before any provider plugin is wired up, because providers must produce responses conforming to the external schema.
 
-The top risks are: (1) SQLCipher plaintext-to-encrypted migration destroying existing data if done incorrectly -- the documented `PRAGMA key` on a plaintext DB returns "file is encrypted or is not a database" and confused operators may delete the "corrupted" file; (2) the `bundled-sqlcipher-vendored-openssl` feature flag changing the build system for all targets, including musl cross-compilation -- this must be validated early in CI; (3) self-update replacing the binary with a partial download if signature verification is not enforced before the swap. All three risks have clear, well-documented prevention strategies detailed in the research.
+The primary risk areas are channel adapter fragility (Signal has no stable Rust library; WhatsApp unofficial libraries result in permanent account bans; Discord requires explicit privileged intents that are silent when missing) and concurrency bottlenecks introduced by exposing a concurrent API layer on top of SQLite's single-writer model. These risks are well-understood and have concrete mitigations. The competitive opportunity is clear: neither OpenClaw nor ZeroClaw exposes an OpenAI-compatible server API — only Blufio will do this, positioning it as a drop-in replacement for any OpenAI-consuming tool or frontend.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The existing stack (tokio, axum, rusqlite 0.37, ring, reqwest 0.13, ed25519-dalek) is unchanged. Five new crates are added, three of which have zero transitive dependencies, and one existing crate (`rusqlite`) changes its feature flag from `bundled` to `bundled-sqlcipher-vendored-openssl`. Total binary size impact is estimated at 500--900KB (including vendored OpenSSL for SQLCipher). Clean build time increases by 30--90 seconds due to OpenSSL compilation from source.
+The v1.2 stack (tokio, axum 0.8, rusqlite 0.37 + SQLCipher, reqwest 0.13, ed25519-dalek, rmcp 0.17) is fully validated and unchanged. v1.3 adds exactly 9 new direct Rust crates, bringing the workspace from ~42 to ~51 direct dependencies. The single most critical version constraint: `matrix-sdk` must be pinned to `0.11.0` — the highest version compatible with `rust-version = "1.85"` in the workspace. Version 0.12+ bumps MSRV to 1.88, which breaks the entire workspace. This pin must be enforced with a comment in Cargo.toml.
 
-**Core technologies:**
-- `sd-notify 0.4.5`: systemd Type=notify readiness + watchdog pings -- pure Rust, zero dependencies, silent no-op on non-systemd platforms (macOS, Docker)
-- `rusqlite 0.37` with `bundled-sqlcipher-vendored-openssl`: replaces `bundled` feature flag to compile SQLCipher + vendored OpenSSL from source -- fully self-contained, works on all targets including musl static builds
-- `minisign-verify 0.2.5`: Ed25519-based binary signature verification -- zero dependencies, verify-only (no signing code), by Frank Denis (libsodium author)
-- `self-replace 1.5.0`: atomic binary replacement via POSIX `rename()` on Unix -- by Armin Ronacher, zero dependencies on Unix
-- `flate2 1` + `tar 0.4`: gzip decompression and tar extraction for release tarballs during self-update
-- `ring 0.17` (existing): SHA-256 digest for backup file checksums -- no new dependency needed
+**Core new technologies:**
+- `tower-governor 0.8.0`: Per-API-key rate limiting via GCRA algorithm — the only Tower-compatible rate limiter with custom key extractors, required for scoped API key rate limits; wraps the governor crate as a Tower Layer compatible with axum 0.8
+- `async-openai 0.33.0`: OpenAI type definitions and HTTP client for OpenAI, Ollama (base URL override), and OpenRouter providers — one crate covers three providers; also covers TTS and Whisper transcription types; released 2026-02-18
+- `genai 0.5.3`: Google Gemini provider — the only production-stable Rust crate with native Gemini support; Gemini is not OpenAI-compatible so a separate crate is unavoidable; released 2026-01-31
+- `serenity 0.12.5`: Discord channel adapter — de facto standard Rust Discord library with automatic sharding and rate limiting; MSRV 1.74, compatible with workspace; released 2025-12-20
+- `slack-morphism 2.18.0`: Slack adapter with Socket Mode support — Slack removed the legacy RTM API in March 2025; this is the only viable maintained async Rust Slack library; released 2026-02-21
+- `matrix-sdk 0.11.0`: Matrix adapter — CRITICAL: must be pinned to 0.11.x; MSRV exactly 1.85; 0.12+ requires MSRV 1.88 and breaks the workspace
+- `irc 1.1.0`: IRC adapter — RFC-compliant, tokio-async, lowest-complexity channel to implement; released 2025-03-24
+- `serde_json 1` + `walkdir 2`: OpenClaw migration tooling only — minimal, well-established crates with no MSRV concerns
 
-**Critical version requirements:**
-- rusqlite must stay at 0.37 (0.38 has 4 breaking changes unrelated to this milestone)
-- `bundled-sqlcipher-vendored-openssl` must REPLACE `bundled`, not coexist alongside it
+**What requires no new crates:** Event bus (tokio::sync::broadcast is already in workspace), WhatsApp Cloud API (reqwest direct implementation), Signal bridge (reqwest to signal-cli sidecar), skill registry/signing (minisign-verify + reqwest + flate2 + tar all in workspace), node system (ed25519-dalek + reqwest already in workspace), Docker (build tooling only — cargo-chef in Dockerfile).
 
-See `.planning/research/STACK.md` for full dependency analysis, Cargo.toml changes, build system impact matrix, and what NOT to add.
+See `.planning/research/STACK.md` for full dependency analysis, version compatibility matrix, workspace Cargo.toml additions, and anti-recommendations.
 
 ### Expected Features
 
-All five features are P1 (must ship for v1.2 launch). Each feature addresses a gap that the incumbent (OpenClaw, Node.js/JSONL) cannot fix due to its architecture. The estimated total LOC is 930--1,600 across all features.
+**Must have (v1.3 launch — table stakes):**
+- Event bus (internal pub/sub) — unblocks four other features; must be implemented first as infrastructure
+- OpenAI-compatible `/v1/chat/completions` — de facto LLM API standard; every tool and SDK expects it; enables drop-in OpenAI replacement
+- OpenAI, Ollama, OpenRouter, and Google/Gemini provider plugins — required for "full provider coverage" claim; each implements existing `ProviderAdapter` trait
+- Discord and Slack channel adapters — largest developer community and enterprise standard respectively
+- Scoped API keys with per-key rate limiting — required before any multi-user or multi-service deployment scenario
+- Webhook management — async event delivery for channel integrations and batch job completion
+- Docker image (Dockerfile + docker-compose) — hard deployment barrier without it; cloud channel webhook testing requires it
+- Skill registry (local) + Ed25519 code signing — security prerequisite before any public skill sharing; signing without registry has no enforcement mechanism
+- OpenClaw migration tool — the primary user acquisition trigger; users will not switch without a migration path
 
-**Must have (table stakes):**
-- sd_notify READY=1, STOPPING=1, and watchdog pings with graceful no-op on non-systemd platforms
-- SQLCipher encryption at rest with `PRAGMA key` on every connection, centralized key management via `BLUFIO_DB_KEY`, and plaintext-to-encrypted migration CLI
-- Minisign binary signature verification with embedded public key (compiled into binary)
-- Self-update: version check against GitHub Releases, download + verify + atomic swap + pre-swap backup + health check + rollback
-- Backup integrity: `PRAGMA integrity_check` after both backup and restore, fail on corruption
+**Should have (v1.3.x after validation):**
+- OpenResponses `/v1/responses` API — stateful agentic loop; add after `/v1/chat/completions` stabilizes
+- Tools Invoke API (`/v1/tools/invoke`) — direct skill execution without agent loop; depends on Responses API shape
+- Batch operations API — 50% cost reduction on async workloads; add when bulk demand is confirmed
+- WhatsApp Cloud API adapter — official Meta Cloud API; requires Meta Business account; add when operator demand justifies the documentation investment
+- Matrix channel adapter — high complexity (E2EE crypto) but high strategic value (bridges to 20+ other platforms natively)
+- Cross-channel bridging — requires event bus and multiple stable adapters; implement after Discord and Slack ship
+- Node system (paired devices) — highest dependency count of any v1.3 feature; implement when event bus and scoped keys are stable
 
-**Should have (add during implementation or in v1.2.x):**
-- STATUS= messages during systemd startup phases (visible via `systemctl status`)
-- `PRAGMA rekey` for encryption key rotation
-- SHA-256 checksum sidecar files for backups
-- `blufio verify` standalone CLI command for manual binary verification
-- Streaming signature verification for future-proofing larger binaries
+**Defer to v1.4+:**
+- IRC and Signal channel adapters — IRC has low business impact; Signal has no stable Rust library and no official bot API
+- Skill marketplace (remote registry) — requires community infrastructure and moderation; local registry must stabilize first
+- TTS/Transcription/Image provider implementations — define trait interfaces in v1.3.x; implementations in v1.4
+- WhatsApp Web mode (unofficial) — permanent account ban risk; experimental at best, never as primary path
 
-**Defer to v1.3+:**
-- Auto-update on startup (never auto-update an always-on daemon)
-- Delta/patch updates (full binary downloads are fine at 25--50MB)
-- Automatic database repair (too dangerous for automatic execution)
-- Per-table encryption (contradicts single-file deployment model)
-- Socket activation (not needed for an always-on service)
+**Anti-features to explicitly reject:**
+- Automatic plugin updates on startup (bypasses code signing; silent supply chain attack vector)
+- Native plugin system via libloading (eliminates memory safety boundary; one bad plugin crashes the process)
+- External message broker like Redis or NATS (contradicts single-binary deployment model; not needed at current scale)
+- OpenAI Assistants API (deprecated by OpenAI; implement Responses API only)
+- GUI or visual config builder (explicitly out of scope in PROJECT.md)
+- WhatsApp unofficial protocol libraries (account ban within days to weeks; no recovery path)
 
-See `.planning/research/FEATURES.md` for full feature tables, dependency graph, sizing estimates, and competitor analysis.
+See `.planning/research/FEATURES.md` for full feature tables, dependency graph, prioritization matrix, and competitor analysis.
 
 ### Architecture Approach
 
-All five features integrate into existing crates with no new workspace crates needed. The highest-impact change is SQLCipher, which requires modifying `Database::open()` in `blufio-storage` to accept an optional encryption key and creating a shared `open_connection()` factory that all 6 database consumers must use. This ensures `PRAGMA key` is always the first statement on every connection. sd_notify adds 3 function calls (serve.rs, shutdown.rs, memory_monitor). Self-update and Minisign live entirely in a new `update.rs` module in the binary crate. Backup integrity adds `verify_integrity()` calls to existing `run_backup()` and `run_restore()` functions.
+All v1.3 features integrate into the existing layered architecture without structural disruption. The `ChannelAdapter` trait already supports N channels via the existing `ChannelMultiplexer` — new channel crates require zero changes to the multiplexer. The `ProviderAdapter` trait already supports streaming — new provider crates implement the existing interface. The gateway (`blufio-gateway`) gains a new route group as a separate module with strict wire-type isolation from internal Blufio types. A new `blufio-bus` crate wraps `tokio::sync::broadcast` and becomes a cross-cutting dependency injected via `Arc<EventBus>` into the agent loop, gateway, and channel adapters.
 
-**Major components and their responsibilities:**
-1. `blufio-storage/database.rs` -- Gains `open_connection()` public helper that centralizes PRAGMA key + WAL + performance PRAGMAs; all 6 connection consumers must use this instead of raw `tokio_rusqlite::Connection::open()`
-2. `blufio-config/model.rs` -- Gains `encryption_key: Option<String>` on StorageConfig, sourced from `BLUFIO_DB_KEY` env var via figment
-3. `crates/blufio/src/serve.rs` -- sd_notify Ready (after mux.connect), Watchdog (in memory_monitor loop), Stopping (in signal handler); passes encryption_key to all connection opens
-4. `crates/blufio/src/update.rs` (NEW) -- Self-update orchestration (GitHub API + reqwest download + minisign-verify + self-replace + rollback) and standalone verify command
-5. `crates/blufio/src/backup.rs` -- Gains `verify_integrity()` calls post-backup and post-restore, with SQLCipher key awareness
-6. `deploy/blufio.service` -- Changes Type=simple to Type=notify (must change in same commit as sd_notify code)
+**Major new components and their responsibilities:**
+1. `blufio-bus` — typed pub/sub event backbone; capacity-bounded broadcast (1024+); use mpsc per critical subscriber (webhook delivery, audit log) and broadcast for fire-and-forget subscribers (metrics, debug logging)
+2. `blufio-gateway` (modified) — adds OpenAI-compatible API surface (`/v1/chat/completions`, `/v1/responses`, `/v1/tools/invoke`, `/v1/webhooks`, `/v1/batch`) as a separate `openai/` module with explicit `OpenAiChatResponse` wire types never exposing internal `ProviderResponse`; also adds API key middleware and rate limiting
+3. `blufio-openai`, `blufio-ollama`, `blufio-openrouter`, `blufio-gemini` — four new provider crates each implementing `ProviderAdapter`; a provider-agnostic `ToolDefinition` type must be added to `blufio-core` before any of these are implemented
+4. `blufio-discord`, `blufio-slack`, `blufio-whatsapp`, `blufio-irc`, `blufio-matrix` — five new channel crates each implementing `ChannelAdapter`; all follow the same structure as `blufio-telegram` (lib.rs, client.rs, types.rs)
+5. `blufio-registry` — skill registry with local JSON index, Ed25519 signature verification at install time AND at every WASM host function invocation (not just at install), CLI subcommands
+6. `blufio-node` — paired device mesh over HTTPS + Ed25519 mutual auth; static peer list in TOML config; no P2P complexity (libp2p explicitly rejected); pairing tokens must have 15-minute expiry and single-use enforcement from day one
+7. Migration subcommand in binary crate — `blufio migrate openclaw`; reads OpenClaw JSONL sessions, flat memory files (MEMORY.md, LESSONS.md, CONTEXT.md, workspace/YYYY-MM-DD.md), and config; maps to Blufio storage API; outputs migration-report.md with dry-run mode
 
-**Key patterns:**
-- SQLCipher raw hex key via env var eliminates PBKDF2 latency (near-zero startup cost)
-- Minisign verify BEFORE self-replace (never swap an unverified binary)
-- Integrity check runs on BACKUP file, not source DB (avoids blocking single-writer thread)
-- sd_notify watchdog in existing memory_monitor loop (5s tick, 300s WatchdogSec = 60x safety margin)
-
-See `.planning/research/ARCHITECTURE.md` for full component dependency graph, data flow diagrams (before/after), concrete code patterns, and anti-patterns.
+See `.planning/research/ARCHITECTURE.md` for full integration analysis, module structure for each new crate, concrete Rust code patterns, and anti-patterns.
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for all 16 pitfalls with full prevention strategies and phase assignments.
+The full pitfall inventory contains 14 critical items. The highest-priority five:
 
-1. **SQLCipher migration destroys plaintext data** -- `PRAGMA key` on an existing plaintext DB returns "file is encrypted or is not a database." Confused operators delete the "corrupted" file. Prevention: dedicated `blufio migrate-db --encrypt` CLI with three-file strategy (original untouched, export to .tmp, verify, rename). NEVER auto-delete the original.
+1. **OpenAI `finish_reason` vs internal `stop_reason` field name mismatch** — The existing `ProviderResponse` uses Anthropic's `stop_reason`; the OpenAI wire format requires `finish_reason`, and maps `"tool_use"` to `"tool_calls"` and `"end_turn"` to `"stop"`. Leaking internal field names silently breaks every OpenAI SDK client (LangChain, LlamaIndex, OpenWebUI all loop forever or drop tool calls). Prevention: define completely separate `OpenAiChatResponse` wire types in `blufio-gateway/src/openai/types.rs` with `#[serde(rename = "finish_reason")]`; write an integration test asserting `finish_reason` appears in both streaming chunks and final responses.
 
-2. **PRAGMA key ordering breaks existing PRAGMA chain** -- `PRAGMA key` MUST be the absolute first statement, before WAL mode, before synchronous, before everything. If `PRAGMA journal_mode = WAL` runs first, SQLCipher fails. Prevention: restructure `Database::open()` to enforce strict ordering in one function. Add CI grep enforcement against raw `Connection::open()` calls.
+2. **Ollama streaming + tool calls silently drops tool invocations** — Ollama's OpenAI compatibility shim (`/v1/chat/completions`) does not correctly forward tool call data when streaming is enabled (confirmed GitHub issue #12557, still open). Blufio streams by default. Prevention: use Ollama's native API (`/api/chat`) for `blufio-ollama`, never the OpenAI shim; add an explicit tool-call + `stream: true` integration test before the Ollama adapter is declared complete.
 
-3. **Self-update replaces binary with partial download** -- Interrupted HTTP download passed to `self-replace` overwrites the working binary with a truncated file. After restart, the deployment is bricked. Prevention: download to temp file, verify Minisign signature + file size + ELF magic BEFORE calling self-replace. Create `.rollback` copy of current binary before swap.
+3. **Provider tool format leaks Anthropic-specific structure to all providers** — The existing `ProviderRequest.tools` is `Option<Vec<serde_json::Value>>` with Anthropic format assumed. OpenAI requires `{type: "function", function: {...}}` wrapping; Gemini requires `{functionDeclarations: [...]}` format. Prevention: define a provider-agnostic `ToolDefinition` type in `blufio-core` before implementing any non-Anthropic provider; each provider adapter serializes to its own wire format independently.
 
-4. **bundled-sqlcipher-vendored-openssl breaks musl cross-builds** -- Feature flag change pulls in OpenSSL compilation from source inside the cross Docker image. Default images should have prerequisites (cc, perl, make) but must be validated early. Prevention: test musl cross-compilation in CI as the FIRST task of the SQLCipher phase.
+4. **Event bus broadcast receiver lag causes silent message loss** — `tokio::sync::broadcast` drops oldest messages when a slow receiver lags; `RecvError::Lagged` is not visible by default. Webhook dispatchers that miss events have no failure signal. Prevention: log `RecvError::Lagged(n)` as `tracing::warn!` with receiver name and emit a Prometheus counter; use `mpsc` per critical subscriber (webhook delivery, audit log); use `broadcast` only for fire-and-forget subscribers (metrics, debug); set capacity to 1024+.
 
-5. **Minisign public key rotation breaks all deployed binaries** -- Embedded public key cannot verify signatures from a new signing key. Prevention: embed multiple keys (current + pre-generated next key). Release transitional binary signed with old key containing new key in embedded list.
+5. **WhatsApp unofficial library causes permanent phone number ban** — Meta detects non-standard clients within days to weeks and permanently bans the phone number with no appeal process. Prevention: use only the official Meta Cloud API (`graph.facebook.com`); never ship unofficial protocol crates even for local testing; document BSP approval requirement in config validation error messages.
+
+See `.planning/research/PITFALLS.md` for all 14 pitfalls with prevention strategies, warning signs, recovery costs, and phase-to-pitfall mapping.
 
 ## Implications for Roadmap
 
-Based on combined research across all four files, the suggested phase structure follows the dependency chain identified in ARCHITECTURE.md and the ordering constraints identified in PITFALLS.md.
+Based on the dependency graph from FEATURES.md and the integration analysis from ARCHITECTURE.md, the following phase structure is recommended. Phase ordering follows the dependency chain: infrastructure before consumers, API surface before providers, local features before remote-dependent features, security features before distribution features.
 
-### Phase 1: Backup Integrity Verification
+### Phase 1: OpenAI-Compatible API Layer + Scoped API Keys
 
-**Rationale:** Zero new dependencies. Standalone feature with no cross-cutting impact. Validates the `PRAGMA integrity_check` pattern that SQLCipher migration will later depend on for safety. The lowest-risk feature to start with, building confidence before tackling SQLCipher.
+**Rationale:** The OpenAI `/v1/chat/completions` endpoint must be defined before any provider plugin is wired up — providers must produce responses conforming to this schema. Scoped API keys must be designed alongside the API surface (not retrofitted) because rate limiting, session scoping, and access control all interact. This phase also establishes the wire-type separation that prevents the `stop_reason` vs `finish_reason` class of bugs from propagating downstream to all providers.
 
-**Delivers:** `verify_integrity()` function in backup.rs; `PRAGMA integrity_check` after `run_backup()` and `run_restore()`; failure deletes corrupt backup and returns error; clear operator-facing status messages ("Backup complete: 5.2 MB, integrity: ok").
+**Delivers:** External callers can use Blufio as an OpenAI-compatible server; scoped API key management (create/list/revoke) with per-key TPM/RPM limits; webhook registration and delivery endpoints; rate limiting via tower-governor; explicit external session IDs distinct from internal SQLite primary keys
 
-**Addresses from FEATURES.md:** Backup integrity check (P1 table stakes), integrity status reporting.
+**Addresses features:** OpenAI-compatible `/v1/chat/completions`, scoped API keys with rate limiting, webhook management
 
-**Avoids from PITFALLS.md:** Pitfall 10 (integrity check blocking writer) -- runs on backup file with separate read-only connection, not source DB. Uses `quick_check` by default for performance.
+**Avoids pitfalls:** `finish_reason` field mismatch (Pitfall 1), internal session ID exposure to external callers (Pitfall 14), scoped key session cross-access, SQLite write queue bottleneck under concurrent load (concurrent load testing must be in acceptance criteria)
 
-### Phase 2: sd_notify Integration
+**Stack additions:** `tower-governor 0.8.0`; `async-openai 0.33.0` (types reference only, not HTTP client)
 
-**Rationale:** Tiny integration surface (3 function calls + 1 service file change). Zero impact on other crates. Immediately testable with `systemctl status`. Independent of all other features. Easy confidence builder before SQLCipher complexity.
+**Research flag:** Standard patterns — axum route nesting is well-documented; OpenAI API spec is authoritative and public; no additional research needed during planning
 
-**Delivers:** `NotifyState::Ready` in serve.rs (after mux.connect), `NotifyState::Watchdog` in memory_monitor loop, `NotifyState::Stopping` in shutdown handler, service file Type=simple to Type=notify, STATUS= messages during startup phases.
+### Phase 2: Event Bus
 
-**Addresses from FEATURES.md:** sd_notify READY=1 + STOPPING=1 + watchdog (P1 table stakes), STATUS= messages (differentiator).
+**Rationale:** Four features depend on the event bus: cross-channel bridging, webhook delivery queue, node sync, and batch completion. The event bus must immediately follow the API layer because webhook delivery (partially needed by Phase 1) requires it, and it must be designed with lag handling from day one — retrofitting broadcast-vs-mpsc selection is harder than getting it right initially.
 
-**Avoids from PITFALLS.md:** Pitfall 6 (sd_notify on non-systemd) -- sd-notify crate returns `Ok(())` when NOTIFY_SOCKET is absent, verified from source; Pitfall 13 (watchdog miscalculation) -- watchdog ping in memory_monitor at 5s interval vs. 300s WatchdogSec = 60x safety margin.
+**Delivers:** `blufio-bus` crate with typed `BlufioEvent` enum; `EventBus` wrapper over `tokio::sync::broadcast`; observable lag handling (`RecvError::Lagged` logged and metered); webhook delivery via dedicated mpsc subscriber; foundation for cross-channel bridging and batch completion notification
 
-### Phase 3: SQLCipher Database Encryption
+**Addresses features:** Event bus (internal pub/sub), webhook delivery queue
 
-**Rationale:** Highest complexity and widest blast radius. Touches 6+ connection consumers across the workspace. Must follow backup integrity (Phase 1) because the migration CLI needs `PRAGMA integrity_check` to verify export correctness. Contains multiple sub-steps that must be ordered carefully.
+**Avoids pitfalls:** Broadcast receiver lag causing silent message loss (Pitfall 5); correct broadcast-vs-mpsc subscriber selection from day one
 
-**Delivers:** `bundled-sqlcipher-vendored-openssl` feature flag in workspace Cargo.toml; `encryption_key` field in StorageConfig; `Database::open(path, key)` signature change; `open_connection()` centralized factory in blufio-storage; all 6 connection callsites updated; `PRAGMA key` as first statement on every connection; `blufio migrate-db --encrypt` CLI for plaintext-to-encrypted migration with three-file strategy; backup/restore with encryption key; doctor encryption awareness.
+**Stack additions:** None — `tokio::sync::broadcast` is already in workspace
 
-**Uses from STACK.md:** rusqlite `bundled-sqlcipher-vendored-openssl` feature (replaces `bundled`).
+**Research flag:** Standard patterns — tokio broadcast is a core primitive with extensive documentation; no additional research needed
 
-**Addresses from FEATURES.md:** SQLCipher encryption at rest (P1 table stakes), centralized key management, plaintext migration.
+### Phase 3: Multi-Provider LLM Support
 
-**Avoids from PITFALLS.md:** Pitfall 1 (migration destroys data -- three-file strategy, never auto-delete original), Pitfall 2 (interrupted export -- wrap in transaction, verify row counts), Pitfall 3 (feature flag breaks build -- vendored OpenSSL for all targets), Pitfall 7 (PRAGMA ordering -- enforce in one function), Pitfall 8 (refinery before PRAGMA key -- strict open sequence), Pitfall 11 (KDF latency -- raw hex key bypasses PBKDF2).
+**Rationale:** Provider plugins depend on the OpenAI wire types defined in Phase 1. All four providers (OpenAI, Ollama, OpenRouter, Gemini) implement the existing `ProviderAdapter` trait. A provider-agnostic `ToolDefinition` type must be introduced in `blufio-core` before any non-Anthropic provider is implemented — this prevents Anthropic-format tool schema from leaking to all providers.
 
-### Phase 4: Minisign Signature Verification
+**Delivers:** OpenAI, Ollama, OpenRouter, and Gemini providers selectable as backends via `[providers.default]` config; `ToolDefinition` type in `blufio-core` with per-provider serialization; `TtsAdapter`, `TranscriptionAdapter`, and `ImageAdapter` trait interfaces defined in blufio-core (no implementations in this phase)
 
-**Rationale:** Prerequisite for self-update. Must be implemented and tested independently before the update flow calls it. Low complexity (80--120 LOC). No existing code changes -- purely additive new module.
+**Addresses features:** OpenAI provider, Ollama provider, OpenRouter provider, Gemini/Google provider, TTS/Transcription/Image provider trait definitions
 
-**Delivers:** `minisign-verify` crate added; verification functions in `update.rs`; embedded Minisign public key constant (with space for next-generation key); `blufio verify` standalone CLI command; streaming verification support.
+**Avoids pitfalls:** Anthropic tool format leaking to all providers (Pitfall 3), Ollama streaming + tools silent drop (Pitfall 2 — native `/api/chat` required), Gemini native tool format differences (`{functionDeclarations: [...]}` format), reqwest Client as long-lived singleton per provider (not per-request)
 
-**Uses from STACK.md:** minisign-verify 0.2.5 (zero dependencies).
+**Stack additions:** `async-openai 0.33.0` (HTTP client for OpenAI/Ollama/OpenRouter), `genai 0.5.3` (Gemini native API)
 
-**Addresses from FEATURES.md:** Minisign binary verification (P1 table stakes), standalone verify CLI (differentiator), trusted comment verification (differentiator).
+**Research flag:** Gemini integration warrants brief research during planning — genai 0.5.3 has no official Google backing and is in active development (0.6.0-beta.3 exists); validate tool calling coverage before committing. OpenAI/Ollama/OpenRouter are standard patterns with async-openai.
 
-**Avoids from PITFALLS.md:** Pitfall 9 (key rotation chicken-and-egg -- embed multiple keys from day one), Pitfall 12 (verify-only crate trusted comments -- test explicitly, implement manual validation if needed).
+### Phase 4: Docker Image
 
-### Phase 5: Self-Update with Rollback
+**Rationale:** Docker must be validated before channel adapters are added, while the binary is at its smallest and the TLS/SQLCipher musl build path can be cleanly verified. Docker is also a deployment prerequisite for cloud-based channel adapter testing — Discord and Slack webhook URLs require a publicly accessible endpoint.
 
-**Rationale:** Last because it depends on Minisign (Phase 4) and has the most external integration complexity (GitHub API, HTTP downloads, file operations, atomic swap). Self-update without signature verification is a hard security violation (Anti-Pattern 2 in PITFALLS.md).
+**Delivers:** Multi-stage Dockerfile using cargo-chef for layer caching; distroless/static-debian12:nonroot runtime base (CA certificates included, non-root by default); docker-compose.yml with volume mounts for `/data`, `/config`, `/plugins` and environment variable injection; CI validation that TLS works inside the container via `docker run blufio blufio doctor`
 
-**Delivers:** `blufio update` CLI command; version check against GitHub Releases API; platform-appropriate binary download; Minisign signature verification before any file operations; pre-swap backup to `.rollback`; atomic binary swap via self-replace; post-swap health check; `blufio update --rollback` to revert; `blufio update --check` dry run; confirmation prompt before proceeding.
+**Addresses features:** Docker image + docker-compose
 
-**Uses from STACK.md:** self-replace 1.5.0, flate2 1, tar 0.4, reqwest 0.13 (existing), tempfile 3 (promoted from dev-dep).
+**Avoids pitfalls:** Docker TLS failure from missing CA bundle with FROM scratch (Pitfall 11 — use distroless instead); container running as root (security mistake); SQLCipher + musl static linking verified
 
-**Addresses from FEATURES.md:** Self-update with rollback (P1 table stakes), version check, health check (differentiator), rollback command (differentiator).
+**Stack additions:** None (cargo-chef in Dockerfile only, not a Rust dependency)
 
-**Avoids from PITFALLS.md:** Pitfall 4 (partial download corruption -- verify size + signature + ELF magic before swap), Pitfall 5 (cross-filesystem EXDEV -- create temp file in same directory as executable, handle EXDEV with copy fallback), Pitfall 14 (stale .tmp files -- use NamedTempFile auto-cleanup, sweep on startup).
+**Research flag:** Standard patterns — cargo-chef + distroless/static-debian12:nonroot is industry standard for Rust production containers; no additional research needed
 
-### Phase 6: Release Pipeline and CI Integration
+### Phase 5: Multi-Channel Adapters (Discord + Slack)
 
-**Rationale:** The self-update feature requires Minisign-signed release artifacts to exist. The CI/CD pipeline must be updated to generate keypairs, sign release tarballs, upload `.minisig` files alongside release assets, and validate that musl cross-builds work with vendored OpenSSL. This is operational work, not application code, but it is a hard prerequisite for self-update to be usable in production.
+**Rationale:** Discord and Slack are the two highest-value channels. Both require the event bus (Phase 2) for bridging and the Docker image (Phase 4) for webhook endpoint testing. WhatsApp Cloud API and Matrix are deferred to v1.3.x because they each have unique setup complexity (Meta Business account BSP approval; Matrix E2EE).
 
-**Delivers:** Minisign keypair generation (secret key in GitHub Secrets); release workflow step to sign all artifacts; `.minisig` files uploaded as release assets; musl cross-build validated with SQLCipher; build time benchmarks documented.
+**Delivers:** Discord and Slack channel adapters; cross-channel bridging between any combination of Telegram, Discord, and Slack via BridgeRule config; observable metrics per channel
+
+**Addresses features:** Discord channel adapter, Slack channel adapter, cross-channel bridging foundation
+
+**Avoids pitfalls:** Discord `MESSAGE_CONTENT` privileged intent silent failure (Pitfall 7 — startup check must emit `tracing::error!` if guild messages arrive with empty content); Slack rate limit tier throttling (Pitfall 8 — Events API or Socket Mode for push delivery, not polling); WhatsApp unofficial library ban (Pitfall 6 — document official-only in config validation)
+
+**Stack additions:** `serenity 0.12.5`, `slack-morphism 2.18.0`
+
+**Research flag:** Standard patterns — serenity and slack-morphism are actively maintained with clear documentation; existing blufio-telegram provides structural reference. Discord Socket Mode vs Events API selection should be confirmed during planning.
+
+### Phase 6: Skill Registry + Code Signing
+
+**Rationale:** The local skill registry must precede code signing enforcement — signing without a registry has no enforcement point. Both must precede any public skill sharing. Capability enforcement (checking per-WASM-host-function-call, not just at install time) must be implemented in this phase because it cannot be retrofitted safely after skills are in production use.
+
+**Delivers:** `blufio skill install/list/search/publish/verify` CLI; Ed25519 signature verification at install time AND at every WASM host function invocation; local registry JSON index with SHA-256 content hashes; `blufio bundle` for air-gapped deployment; key ID versioning in signatures (rotation support from day one)
+
+**Addresses features:** Skill registry (local), code signing for skills, blufio bundle
+
+**Avoids pitfalls:** Skill code signing not preventing capability escalation (Pitfall 10 — per-host-function capability check, not just at install); signing key without rotation mechanism (Technical Debt pattern — key ID versioning in signature format from day one)
+
+**Stack additions:** None — reuses minisign-verify 0.2.5, reqwest 0.13, flate2, tar (all already in workspace from v1.2)
+
+**Research flag:** Standard patterns — ed25519-dalek and minisign-verify are validated from v1.2; wasmtime capability enforcement integration should be reviewed against the existing blufio-skill host function dispatch before implementation begins
+
+### Phase 7: Node System (Paired Devices)
+
+**Rationale:** Node system has the highest dependency count of any v1.3 feature — it requires event bus (Phase 2) + scoped API keys (Phase 1) + Ed25519 (already exists). Implementing last among new infrastructure features ensures all dependencies are stable and lessons from earlier phases inform the protocol design. The design is deliberately minimal: static peer list + HTTPS + Ed25519 auth, not P2P.
+
+**Delivers:** `blufio-node` crate; QR code or token-based node pairing; Ed25519 mutual authentication for all inter-node messages; session sharing and relay across paired instances; node health monitoring; pairing tokens with 15-minute expiry and single-use enforcement
+
+**Addresses features:** Node system (paired devices), multi-instance coordination
+
+**Avoids pitfalls:** Node pairing token with no expiry (Pitfall 12 — `expires_at` column required from day one); token reuse allowing permanent unauthorized access; libp2p complexity for a simple trusted cluster of 2-10 devices
+
+**Stack additions:** None — reuses ed25519-dalek 2.1, reqwest 0.13 (both already in workspace)
+
+**Research flag:** Node system has no precedent in the codebase. Pairing flow, relay protocol, sync conflict resolution, and NAT traversal edge cases all need explicit design decisions before implementation. This phase warrants a `/gsd:research-phase` during planning to validate the HTTPS + Ed25519 approach against real deployment scenarios.
+
+### Phase 8: OpenClaw Migration Tool
+
+**Rationale:** Migration tool is most valuable late in the milestone — the more providers and channels Blufio has, the better the migration coverage. Requires at minimum the OpenAI provider (most common OpenClaw config) and ideally Discord and Slack adapters for complete channel config migration.
+
+**Delivers:** `blufio migrate openclaw [--source] [--dry-run]` subcommand; migrates config, conversation history (JSONL sessions), memory files (MEMORY.md, LESSONS.md, CONTEXT.md, workspace/YYYY-MM-DD.md daily files), and channel configs; outputs migration-report.md with migrated items, manual steps needed, and cost comparison estimate; npm skills flagged for manual conversion (cannot auto-convert to WASM)
+
+**Addresses features:** OpenClaw migration tool
+
+**Avoids pitfalls:** OpenClaw migration losing daily memory and long-term context files (Pitfall 13 — must explicitly enumerate and migrate MEMORY.md, LESSONS.md, CONTEXT.md, and all workspace/ files, not just sessions; dry-run output must include these files before any write operation)
+
+**Stack additions:** `serde_json 1`, `walkdir 2`
+
+**Research flag:** OpenClaw config JSON schema (exact field names, all flat file locations, memory file format) needs validation against a real openclaw.json instance before field mappings are finalized. Plan for a brief discovery step at the start of this phase.
 
 ### Phase Ordering Rationale
 
-- **Backup integrity first** because SQLCipher migration needs it for safety verification of exported data
-- **sd_notify second** as an independent, low-risk confidence builder
-- **SQLCipher third** because it is the highest-risk feature with the widest blast radius and dominates the milestone's complexity budget
-- **Minisign fourth** as standalone preparation for self-update
-- **Self-update fifth** because it depends on Minisign (hard dependency) and has the most external integration points
-- **Release pipeline sixth** because self-update is unusable without signed release artifacts
-- Security constraints embedded per phase, not deferred: migration safety in Phase 3, verify-before-swap in Phase 5, no unsigned binaries ever
+- **Event bus before channel adapters:** Bridging, webhook delivery, and batch completion all require pub/sub; building adapters before the bus forces a retrofit of lag handling and subscriber selection
+- **OpenAI API surface before providers:** Providers must produce responses conforming to the external schema; defining the schema first prevents the entire class of `stop_reason` vs `finish_reason` field name bugs
+- **Docker before channel adapters:** Discord and Slack webhook URLs require a publicly accessible endpoint; Docker is the standard solution; also validates the musl + TLS + SQLCipher build path while the binary is smallest
+- **Local skill registry before code signing:** Signing without an enforcement point (the registry) is theater, not security; capability checks must be at host function call time, not just install time
+- **Node system last among infrastructure:** Highest dependency count; benefits from event bus, scoped keys, and Ed25519 all being stable before its novel protocol design is implemented
+- **Migration tool last:** Value scales with how many providers and channels are already implemented; more equivalents means better migration coverage
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 3 (SQLCipher):** musl cross-compilation with `bundled-sqlcipher-vendored-openssl` must be validated early in CI. The default `ghcr.io/cross-rs/x86_64-unknown-linux-musl:main` image should work but test FIRST. If issues arise, a `Cross.toml` pinning a known-good image version resolves it.
-- **Phase 5 (Self-Update):** Integration testing with real GitHub Releases API. Release asset naming convention (target triple in filename) must be established as part of CI/CD before self-update can discover the correct binary.
+Phases likely needing `/gsd:research-phase` during planning:
+- **Phase 3 (Gemini provider):** genai 0.5.3 has no official Google backing; 0.6.0-beta.3 is in flight; Gemini API has its own authentication and streaming format that differs from all OpenAI-compatible providers. Validate tool calling coverage before committing.
+- **Phase 7 (Node system):** No precedent in the codebase. Pairing flow, relay protocol, sync conflict resolution, and NAT traversal edge cases all need design validation before implementation begins.
+- **Phase 8 (OpenClaw migration):** Exact OpenClaw config JSON schema and flat file locations need validation against real instances before field mappings are finalized.
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (Backup Integrity):** Uses existing `PRAGMA integrity_check` pattern already in doctor.rs. Well-documented SQLite behavior.
-- **Phase 2 (sd_notify):** 3 function calls. Verified from crate source code. Pure Rust, no platform issues.
-- **Phase 4 (Minisign):** Zero-dependency crate, API verified from docs.rs. Thin wrapper around well-documented Ed25519 verification.
-- **Phase 6 (Release Pipeline):** Standard GitHub Actions workflow addition. Minisign CLI is a single binary.
+Phases with well-documented patterns (skip research-phase):
+- **Phase 1 (OpenAI API layer):** OpenAI API spec is authoritative and public; axum routing and tower-governor are well-documented
+- **Phase 2 (Event bus):** tokio::sync::broadcast is a core primitive with extensive official documentation
+- **Phase 4 (Docker):** cargo-chef + distroless is industry standard; musl static builds validated in v1.2
+- **Phase 5 (Discord + Slack):** serenity and slack-morphism are actively maintained; blufio-telegram provides structural reference
+- **Phase 6 (Skill registry):** Reuses v1.2 minisign-verify and ed25519-dalek patterns; wasmtime integration already established
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All crates verified on crates.io and docs.rs with version-specific API checks. Feature flag chains traced through rusqlite source. Zero-dependency crates (sd-notify, minisign-verify, self-replace) have minimal audit surface. |
-| Features | HIGH | Feature scope verified against existing codebase (6 source files read directly). Feature dependencies mapped as DAG with no circular dependencies. LOC estimates based on concrete API surface analysis. Competitor gap analysis confirms structural advantages. |
-| Architecture | HIGH | Integration points identified by reading actual source files (serve.rs, database.rs, backup.rs, doctor.rs, model.rs, shutdown.rs). All 6 database connection callsites enumerated. Data flow before/after diagrams produced. Anti-patterns documented with alternatives. |
-| Pitfalls | HIGH | SQLCipher pitfalls sourced from official Zetetic FAQ and API documentation. sd_notify behavior verified from crate source code (NOTIFY_SOCKET check path). self-replace Unix behavior verified from docs.rs. EXDEV cross-filesystem behavior verified from POSIX specification. |
+| Stack | HIGH | 7 of 9 new crates verified on docs.rs with release dates and MSRV. matrix-sdk version constraint (pin to 0.11.0) is the single critical risk — mandatory, not optional. genai 0.5.3 rated MEDIUM individually (no official Google backing) but HIGH for the overall stack since it covers only Gemini. |
+| Features | HIGH | OpenAI API contracts are authoritative public specs. Feature dependency graph is grounded in official API documentation. Competitor analysis (OpenClaw, ZeroClaw) documented from multiple sources. Anti-features are well-reasoned from known failure modes. |
+| Architecture | HIGH | Based on direct codebase analysis of v1.2 (39K LOC, 21 crates). Integration points verified against existing trait boundaries. Provider and channel adapter patterns are well-established in the codebase. All 9 new crates' integration points are clear. |
+| Pitfalls | HIGH for Rust/axum/SQLite specifics; MEDIUM for channel platform specifics | 14 pitfalls documented with specific prevention strategies, warning signs, recovery costs, and phase assignments. WhatsApp ban risk and Signal ecosystem fragility are the highest-impact MEDIUM-confidence items. Ollama tool-call drop is confirmed via public GitHub issue. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **musl cross-compilation with vendored OpenSSL:** Well-established pattern but not yet validated for this specific workspace. Test the `cross` build for `x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl` as the first task of Phase 3. If the default cross Docker image lacks prerequisites, pin a known-good image in `Cross.toml`.
+- **Gemini tool calling coverage in genai 0.5.3:** genai is in active development with 0.6.0-beta.3 in flight. Validate that genai 0.5.3 correctly handles Gemini function calling (not just text completion) before committing to it as the implementation path. Alternative: direct reqwest + serde implementation against the Gemini REST API spec.
 
-- **Self-update integration testing:** The update flow depends on GitHub Releases API conventions (asset naming, tag format). These conventions must be established in the release pipeline (Phase 6) before self-update can be fully tested. Recommend implementing Phase 6 in parallel with Phase 5 or immediately after.
+- **OpenClaw exact JSON schema:** PITFALLS.md documents that migration must include MEMORY.md, LESSONS.md, and workspace/ daily files — but the exact JSON field names in openclaw.json need validation against a real instance before field mappings are implemented. Plan for a discovery step at the start of Phase 8.
 
-- **minisign-verify trusted comment validation:** The verify-only crate should validate trusted comment signatures, but this must be confirmed by reading the crate source or writing an explicit test. If it does not, manual validation (another Ed25519 signature verification over `signature || trusted comment`) is straightforward.
+- **Node protocol design details:** The node system is the only v1.3 feature with no existing precedent in the codebase. NAT traversal (when both nodes are behind NAT), connection failure handling, sync conflict resolution, and relay message format all need explicit design decisions before implementation begins. A research-phase during planning is warranted.
 
-- **Refinery migration runner with SQLCipher:** Refinery's `runner().run()` takes a `&mut Connection` and immediately queries `refinery_schema_history`. The connection must have `PRAGMA key` already applied. The current code structure in `Database::open()` handles this correctly if the ordering is enforced, but an explicit integration test with an encrypted database is needed.
+- **Signal ecosystem deferral:** Signal has no stable Rust library and no official bot API. Research confirms deferring Signal to v1.4+ or implementing as an explicit signal-cli bridge with a documented Java runtime dependency. This must be communicated clearly in v1.3 release notes to avoid operator expectations.
+
+- **matrix-sdk MSRV lock:** matrix-sdk 0.11.0 is pinned due to the workspace `rust-version = "1.85"` constraint. If the workspace ever bumps to `rust-version = "1.88"`, matrix-sdk can be upgraded to the latest (0.16.0 as of 2025-12-04). Document the constraint in Cargo.toml with a comment explaining the MSRV lock and the upgrade path.
+
+- **Cargo workspace feature unification:** Adding 12 new crates with potentially overlapping feature flags may trigger unexpected feature unification. Run `cargo build --features discord,slack` and `cargo build --features matrix` separately and check for unexpected feature activation before declaring any channel adapter phase complete.
+
+- **WhatsApp v1.3.x sequencing:** WhatsApp Cloud API requires a Meta Business account, BSP verification, and a verified phone number — all operator prerequisites, not code. The implementation itself is straightforward (reqwest + serde, ~300 lines). Defer to v1.3.x to allow documentation of the operator setup path, but do not let the documentation burden block implementation.
 
 ## Sources
 
-### Primary (HIGH confidence)
-- [SQLCipher API Documentation (Zetetic)](https://www.zetetic.net/sqlcipher/sqlcipher-api/) -- PRAGMA key ordering, sqlcipher_export, cipher_migrate, KDF settings
-- [SQLCipher Plaintext Migration FAQ](https://discuss.zetetic.net/t/how-to-encrypt-a-plaintext-sqlite-database-to-use-sqlcipher-and-avoid-file-is-encrypted-or-is-not-a-database-errors/868) -- Official migration procedure
-- [sd-notify 0.4.5 docs.rs](https://docs.rs/sd-notify/0.4.5/sd_notify/) -- NotifyState variants, NOTIFY_SOCKET no-op behavior
-- [sd-notify source (GitHub)](https://github.com/lnicola/sd-notify) -- Verified NOTIFY_SOCKET no-op path from source code
-- [systemd sd_notify(3) man page](https://www.freedesktop.org/software/systemd/man/latest/sd_notify.html) -- READY=1, STOPPING=1, WATCHDOG=1, STATUS=, ExtendTimeoutUsec
-- [minisign-verify 0.2.5 docs.rs](https://docs.rs/minisign-verify/0.2.5/minisign_verify/) -- PublicKey, Signature, StreamVerifier API
-- [self-replace docs.rs](https://docs.rs/self-replace/latest/self_replace/) -- Unix atomic rename behavior
-- [rusqlite 0.37 features](https://docs.rs/crate/rusqlite/0.37.0/features) -- bundled-sqlcipher feature flag chain
-- [libsqlite3-sys Cargo.toml](https://github.com/rusqlite/rusqlite/blob/master/libsqlite3-sys/Cargo.toml) -- bundled-sqlcipher-vendored-openssl definition
+### Primary (HIGH confidence — verified on docs.rs or official documentation)
+- [async-openai 0.33.0 on docs.rs](https://docs.rs/crate/async-openai/latest) — OpenAI API type definitions, TTS/transcription types; released 2026-02-18
+- [serenity 0.12.5 on docs.rs](https://docs.rs/crate/serenity/latest) — Discord gateway + REST; MSRV 1.74; released 2025-12-20
+- [slack-morphism 2.18.0 on docs.rs](https://docs.rs/crate/slack-morphism/latest) — Slack Events API + Socket Mode; released 2026-02-21
+- [matrix-sdk CHANGELOG](https://github.com/matrix-org/matrix-rust-sdk/blob/main/crates/matrix-sdk/CHANGELOG.md) — MSRV 1.85 for 0.11.0; MSRV 1.88 from 0.12+; critical version constraint verified
+- [tower-governor 0.8.0](https://docs.rs/tower-governor/latest/tower_governor/) — GCRA rate limiting with custom key extractors; tower 0.5 compatible
+- [OpenAI Chat Completions API Reference](https://platform.openai.com/docs/api-reference/chat) — `finish_reason`, streaming format, tool calling spec
+- [Ollama GitHub issue #12557](https://github.com/ollama/ollama/issues/12557) — confirmed streaming + tool call silent drop in OpenAI shim; native `/api/chat` required
+- [Slack rate limit changes (May 2025)](https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps/) — 1 req/min for `conversations.history` for non-Marketplace apps
+- [tokio broadcast channel docs](https://docs.rs/tokio/latest/tokio/sync/broadcast/index.html) — lag behavior and `RecvError::Lagged` documented
+- [Blufio codebase v1.2 — direct analysis](https://github.com/mondalsuman/blufio) — `ProviderRequest.tools` Anthropic-format field comment, `GatewayState.response_map` DashMap pattern, existing trait boundaries
 
-### Secondary (MEDIUM confidence)
-- [rusqlite bundled-sqlcipher issue #765](https://github.com/rusqlite/rusqlite/issues/765) -- Build integration discussion
-- [rusqlite issue #926](https://github.com/rusqlite/rusqlite/issues/926) -- bundled-sqlcipher usage guidance
-- [Minisign specification](https://jedisct1.github.io/minisign/) -- Key format, trusted comments, signature structure
-- [SQLCipher WAL mode discussion](https://discuss.zetetic.net/t/can-i-use-pragma-journal-mode-wal-with-an-sqliteconnection/770) -- WAL compatibility with SQLCipher
-- [Writing a proper systemd daemon in Rust](https://deterministic.space/writing-a-daemon.html) -- Type=notify patterns
+### Secondary (MEDIUM confidence — community sources, multiple sources agree)
+- [genai 0.5.3 on docs.rs](https://docs.rs/crate/genai/latest) — Google Gemini provider; released 2026-01-31; no official Google backing
+- [WhatsApp Business API unofficial vs official risk](https://wisemelon.ai/blog/whatsapp-business-api-vs-unofficial-whatsapp-tools) — account ban risk documented
+- [ZeroClaw competitor analysis (DeepWiki)](https://deepwiki.com/zeroclaw-labs/zeroclaw/) — 28+ providers; competitor feature landscape
+- [ZeroClaw migration guide](https://gist.github.com/yanji84/ebc72e9b02553786418c2c24829752c7) — OpenClaw to ZeroClaw migration patterns; informs OpenClaw data format understanding
+- [cargo-chef GitHub](https://github.com/LukeMathWalker/cargo-chef) — three-stage Docker pattern; industry standard for Rust
+- [Discord MESSAGE_CONTENT intent (Discord developer docs)](https://docs.discord.com/developers/topics/gateway#privileged-intents) — privileged intent requirement confirmed
 
-### Codebase (HIGH confidence -- direct source reading)
-- `crates/blufio/src/serve.rs` -- Startup sequence, sd_notify insertion points, connection opens
-- `crates/blufio/src/backup.rs` -- Backup API, restore with safety backup, integrity check insertion points
-- `crates/blufio/src/doctor.rs` -- Existing PRAGMA integrity_check in check_db_integrity()
-- `crates/blufio-storage/src/database.rs` -- Database::open(), PRAGMA ordering, connection setup
-- `crates/blufio-config/src/model.rs` -- StorageConfig struct for encryption_key addition
-- `crates/blufio-agent/src/shutdown.rs` -- Signal handler for sd_notify Stopping
-- `Cargo.toml` (workspace) -- rusqlite 0.37 with bundled feature, all workspace dependencies
+### Tertiary (LOW confidence — inference or single source, needs validation)
+- [OpenClaw migration guide](https://docs.openclaw.ai/install/migrating) — state directory structure; exact field mappings need validation against real openclaw.json instances
+- [presage Signal library](https://github.com/whisperfish/presage) — unofficial; maintenance status uncertain; Signal may break without notice
 
 ---
-*Research completed: 2026-03-03*
+*Research completed: 2026-03-05*
 *Ready for roadmap: yes*

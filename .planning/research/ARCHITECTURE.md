@@ -1,684 +1,1107 @@
-# Architecture Patterns: v1.2 Production Hardening
+# Architecture Research: v1.3 Ecosystem Expansion
 
-**Domain:** Production hardening features for existing Rust AI agent platform
-**Researched:** 2026-03-03
-**Overall confidence:** HIGH (direct codebase analysis + verified library docs)
-
-## Executive Summary
-
-Five features need to integrate into the existing 16-crate Rust workspace: sd_notify (systemd readiness), SQLCipher (database encryption at rest), Minisign (binary signature verification), self-update (binary replacement with rollback), and backup integrity verification. Each feature has a different integration surface. The critical architectural decision is SQLCipher key management -- the encryption key must be applied as the absolute first statement on every database connection, which changes the connection path used by 6+ crates. All other features are isolated to the binary crate with minimal cross-cutting impact.
-
-No new crates are needed. All features integrate into existing crates, primarily the binary crate (`crates/blufio/`), with SQLCipher requiring modifications to `blufio-storage` and `blufio-config`.
-
-## Feature Integration Map
-
-### 1. sd_notify -- systemd Type=notify + Watchdog
-
-**Integration surface:** Binary crate only (`crates/blufio/src/serve.rs`)
-**New crate needed:** No
-**Existing modifications:** `serve.rs`, `deploy/blufio.service`
-
-#### Where It Fits
-
-The current `serve.rs::run_serve()` has a clear integration point. The startup sequence is:
-
-```
-1. init_tracing
-2. plugin registry
-3. vault startup check
-4. storage initialization
-5. cost ledger, budget tracker
-6. context engine, memory, tools, MCP
-7. provider initialization
-8. channels, mux.connect()
-9. signal handler install
-10. agent loop run
-```
-
-`sd_notify::notify(true, &[NotifyState::Ready])` goes **after step 8** (mux.connect()) and **before step 10** (agent loop). This is the moment the service is truly ready to accept messages. Specifically, after line 503 in serve.rs where the log reads `"channel multiplexer connected"`.
-
-#### Watchdog Ping Location
-
-The existing `memory_monitor` loop in `serve.rs` (line 756) runs every 5 seconds with a `cancel` token. The watchdog ping belongs in this same loop -- it represents "the service is alive and processing." Adding `sd_notify::notify(false, &[NotifyState::Watchdog])` inside the memory_monitor tick is the minimal-diff approach.
-
-The systemd service file has `WatchdogSec=300` (5 minutes). The memory_monitor ticks at 5s. This provides a 60x safety margin. No separate watchdog task needed.
-
-#### Service File Changes
-
-```ini
-# deploy/blufio.service
-# BEFORE
-Type=simple
-
-# AFTER
-Type=notify
-```
-
-The existing `WatchdogSec=300` is already present. No other service file changes needed.
-
-#### Stopping Notification
-
-Add `sd_notify::notify(false, &[NotifyState::Stopping])` in the signal handler (currently in `blufio-agent/src/shutdown.rs::install_signal_handler()`), immediately after receiving SIGTERM/SIGINT and before cancelling the token. This tells systemd the service is intentionally shutting down.
-
-#### Library Choice
-
-**Use `sd-notify` 0.4.x** (crate name: `sd-notify`). Pure Rust, zero dependencies, MIT/Apache-2.0.
-
-```rust
-// After initialization complete (serve.rs)
-sd_notify::notify(true, &[NotifyState::Ready]);
-
-// In watchdog loop (serve.rs memory_monitor)
-sd_notify::notify(false, &[NotifyState::Watchdog]);
-
-// During shutdown (shutdown.rs signal handler)
-sd_notify::notify(false, &[NotifyState::Stopping]);
-```
-
-On non-systemd platforms (macOS dev), these are silent no-ops (no NOTIFY_SOCKET = no effect). No `#[cfg(target_os = "linux")]` guards needed.
-
-**Confidence:** HIGH -- docs.rs verified, pure Rust, zero-dependency crate.
+**Domain:** Rust AI Agent Platform — adding OpenAI-compatible API, multi-provider LLM, multi-channel adapters, event bus, skill registry, node system, Docker, and migration tooling to a 21-crate workspace
+**Researched:** 2026-03-05
+**Confidence:** HIGH (direct codebase analysis + verified library docs + official API specs)
 
 ---
 
-### 2. SQLCipher -- Database Encryption at Rest
+## Standard Architecture
 
-**Integration surface:** `blufio-storage`, `blufio-config`, binary crate, all crates that open DB connections
-**New crate needed:** No
-**Existing modifications:** Workspace `Cargo.toml`, `blufio-storage/Cargo.toml`, `blufio-storage/src/database.rs`, `blufio-config/src/model.rs`, `crates/blufio/src/serve.rs`, `crates/blufio/src/backup.rs`, `crates/blufio/src/main.rs`
+### System Overview: Current State (v1.2)
 
-#### The Critical Constraint: PRAGMA key MUST Be First
-
-SQLCipher requires `PRAGMA key = '...'` as the **absolute first statement** on any database connection. Before WAL mode, before `PRAGMA synchronous`, before `PRAGMA foreign_keys` -- before everything. If any read or write occurs before keying, SQLCipher treats the file as unencrypted and either creates an unencrypted database or fails with "file is not a database."
-
-This directly impacts `Database::open()` in `crates/blufio-storage/src/database.rs`, which currently does (line 57-64):
-
-```rust
-// Current order:
-conn.execute_batch("PRAGMA journal_mode = WAL;");
-conn.execute_batch("PRAGMA synchronous = NORMAL; ...");
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                         blufio process (single binary)                │
+│                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────┐ │
+│  │                     INBOUND CHANNELS LAYER                        │ │
+│  │  ┌──────────────┐     ┌───────────────────────────────────────┐  │ │
+│  │  │blufio-telegram│     │     blufio-gateway (axum HTTP/WS)     │  │ │
+│  │  │  (teloxide)  │     │  POST /v1/messages  GET /ws           │  │ │
+│  │  └──────┬───────┘     └──────────────────┬────────────────────┘  │ │
+│  │         │                                 │                        │ │
+│  │         └────────────────┬────────────────┘                       │ │
+│  │                          ▼                                         │ │
+│  │              ┌────────────────────────┐                            │ │
+│  │              │  ChannelMultiplexer    │  (blufio-agent)            │ │
+│  │              │  aggregates N channels │                            │ │
+│  │              └──────────┬─────────────┘                           │ │
+│  └─────────────────────────┼───────────────────────────────────────┘ │
+│                             │                                          │
+│  ┌──────────────────────────▼───────────────────────────────────────┐ │
+│  │                      AGENT LOOP LAYER                              │ │
+│  │  blufio-agent: FSM per session, tool loop, budget enforcement      │ │
+│  │  blufio-router: Haiku/Sonnet/Opus model selection                  │ │
+│  │  blufio-context: 3-zone context engine with cache alignment        │ │
+│  │  blufio-memory: ONNX embedding, hybrid search, fact extraction     │ │
+│  └────────┬──────────────────────────────┬────────────────────────────┘ │
+│           │                              │                              │
+│  ┌────────▼──────────┐     ┌────────────▼──────────────────────────┐  │
+│  │  PROVIDER LAYER   │     │           SKILL / TOOL LAYER          │  │
+│  │  blufio-anthropic  │     │  blufio-skill: WASM sandbox (wasmtime) │  │
+│  │  ProviderAdapter  │     │  blufio-mcp-client: external tools    │  │
+│  └────────┬──────────┘     │  blufio-mcp-server: expose tools      │  │
+│           │                └──────────────┬────────────────────────┘  │
+│           │                               │                            │
+│  ┌────────▼───────────────────────────────▼──────────────────────────┐ │
+│  │                    PERSISTENCE LAYER                                │ │
+│  │  blufio-storage: SQLCipher SQLite (WAL, single-writer)             │ │
+│  │  blufio-vault: AES-256-GCM credential store                        │ │
+│  │  blufio-cost: token usage + budget tracking ledger                 │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+│  CROSS-CUTTING: blufio-core (traits), blufio-config, blufio-security,  │
+│  blufio-plugin, blufio-prometheus, blufio-auth-keypair, blufio-verify  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Required new order:**
+### System Overview: Target State (v1.3)
 
-```rust
-// 1. PRAGMA key (MUST be first, before any other statement)
-if let Some(ref key) = encryption_key {
-    conn.execute_batch(&format!("PRAGMA key = \"x'{key}'\";"))?;
-}
-// 2. WAL mode (safe after keying)
-conn.execute_batch("PRAGMA journal_mode = WAL;")?;
-// 3. All other PRAGMAs
-conn.execute_batch("PRAGMA synchronous = NORMAL; ...")?;
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          blufio process (single binary)                   │
+│                                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐ │
+│  │                     INBOUND CHANNELS LAYER                             │ │
+│  │  ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐   │ │
+│  │  │Telegram│ │ Discord  │ │  Slack   │ │ WhatsApp │ │Matrix/IRC │   │ │
+│  │  │(built-in│ │(NEW crate│ │(NEW crate│ │(NEW crate│ │(NEW crates│   │ │
+│  │  └───┬────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬─────┘   │ │
+│  │      └──────────────────────────────────────────────────┐          │ │
+│  │                                                           ▼          │ │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │ │
+│  │  │             blufio-gateway (MODIFIED — axum)                  │  │ │
+│  │  │  Existing:  POST /v1/messages  GET /ws                        │  │ │
+│  │  │  NEW:       POST /v1/chat/completions (OpenAI compat)         │  │ │
+│  │  │             POST /v1/responses      (OpenResponses)           │  │ │
+│  │  │             POST /v1/tools/invoke   (Tools API)               │  │ │
+│  │  │             POST /v1/webhooks       (Webhook mgmt)            │  │ │
+│  │  │             POST /v1/batch          (Batch ops)               │  │ │
+│  │  │  Auth:      Scoped API keys with per-key rate limits          │  │ │
+│  │  └──────────────────────────────────┬───────────────────────────┘  │ │
+│  └─────────────────────────────────────┼──────────────────────────────┘ │
+│                                         │                                 │
+│  ┌──────────────────────────────────────▼─────────────────────────────┐  │
+│  │                  EVENT BUS (NEW — blufio-bus)                        │  │
+│  │  tokio broadcast channel for cross-component pub/sub events          │  │
+│  │  Events: MessageReceived, MessageSent, ToolInvoked, SessionStarted   │  │
+│  └──────────────┬────────────────────────────────────────────────────┘  │
+│                  │                                                         │
+│  ┌───────────────▼─────────────────────────────────────────────────────┐  │
+│  │                       AGENT LOOP LAYER                                │  │
+│  │  blufio-agent (MODIFIED: event bus integration, multi-provider)       │  │
+│  └──────┬───────────────────────────────────┬────────────────────────┘  │
+│         │                                    │                             │
+│  ┌──────▼──────────────┐        ┌───────────▼────────────────────────┐   │
+│  │  PROVIDER LAYER      │        │       SKILL / TOOL LAYER           │   │
+│  │  blufio-anthropic    │        │  blufio-skill: WASM + registry     │   │
+│  │  blufio-openai (NEW) │        │  blufio-registry (NEW): marketplace│   │
+│  │  blufio-ollama (NEW) │        │  Ed25519 skill signing             │   │
+│  │  blufio-openrouter   │        │  blufio-mcp-client, mcp-server     │   │
+│  │    (NEW)             │        └────────────────────────────────────┘   │
+│  │  blufio-gemini (NEW) │                                                  │
+│  │  (TTS/image traits   │                                                  │
+│  │   in blufio-core)    │                                                  │
+│  └──────────────────────┘                                                  │
+│                                                                             │
+│  NODE SYSTEM (NEW — blufio-node): paired-device mesh via Ed25519 + HTTP   │
+│                                                                             │
+│  MIGRATION (NEW — blufio binary): openclaw import, session bridge          │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Note: WAL mode is persistent in the database header. Once set, subsequent opens automatically use WAL mode. But PRAGMA key must still be first on every connection.
+---
 
-#### Key Management Decision: Raw Hex Key via BLUFIO_DB_KEY
+## Integration Analysis: New Features vs Existing Architecture
 
-Three options were evaluated:
+### Feature 1: OpenAI-Compatible API Layer
 
-| Option | Verdict | Rationale |
-|--------|---------|-----------|
-| Raw hex key via env var | **RECOMMENDED** | SQLCipher skips internal PBKDF2 (256K iterations SHA-512) for raw keys. No startup latency. Matches existing `BLUFIO_VAULT_KEY` pattern. `EnvironmentFile=` in systemd keeps it off disk. |
-| Passphrase via config/env | Rejected | SQLCipher runs PBKDF2 internally adding ~200ms per connection. 5+ connections at startup = 1+ second overhead. Confusion with vault's Argon2id KDF. |
-| Key from vault | Rejected | Circular dependency: vault lives in same SQLite DB. Would need the DB key to open the DB to get the DB key. Solvable with two-phase open but adds complexity for no benefit. |
+**Integration surface:** `blufio-gateway` (modification) + `blufio-config` (modification)
+**New crate needed:** No — gateway modification only
+**Approach:** Add new axum route group `/v1/` alongside existing `/v1/messages`
 
-The key flows: `BLUFIO_DB_KEY` env var -> figment env provider -> `StorageConfig.encryption_key` -> `Database::open()` -> `PRAGMA key`.
+The gateway currently handles Blufio's native protocol (`POST /v1/messages`). The OpenAI-compatible API must translate between OpenAI request format and Blufio's `ProviderRequest`/`InboundMessage` types, then route through the existing agent loop.
 
-Format: `BLUFIO_DB_KEY=2DD29CA851E7B56E4697B0E1F08507293D761A05CE4D1B628663F411A8086D99` (64 hex chars = 32 bytes). The `x'...'` wrapper is added by the code, not the operator.
+**New routes in `blufio-gateway/src/server.rs`:**
 
-#### Does SQLCipher Change the StorageAdapter Trait?
-
-**No.** The `StorageAdapter` trait (`crates/blufio-core/src/traits/storage.rs`) is unchanged. Encryption is transparent to all consumers -- `create_session()`, `insert_message()`, etc. work identically. The only change is inside `Database::open()` which gains an optional key parameter.
-
-#### Database::open() Signature Change
-
-```rust
-// BEFORE (database.rs line 36)
-pub async fn open(path: &str) -> Result<Self, BlufioError>
-
-// AFTER
-pub async fn open(path: &str, encryption_key: Option<&str>) -> Result<Self, BlufioError>
+```
+POST /v1/chat/completions   → OpenAI Chat Completions API
+POST /v1/responses          → OpenResponses API (stateful, multi-turn)
+POST /v1/tools/invoke       → Direct tool invocation without agent loop
+GET  /v1/api-keys           → List scoped API keys
+POST /v1/api-keys           → Create scoped API key
+DELETE /v1/api-keys/{id}    → Revoke scoped API key
+GET  /v1/webhooks           → List webhook registrations
+POST /v1/webhooks           → Register webhook endpoint
+DELETE /v1/webhooks/{id}    → Remove webhook
+POST /v1/batch              → Submit batch of completions
+GET  /v1/batch/{id}         → Poll batch status
 ```
 
-#### StorageConfig Addition
+**New module structure in `blufio-gateway/src/`:**
 
-```rust
-// blufio-config/src/model.rs -- add field to StorageConfig
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct StorageConfig {
-    #[serde(default = "default_database_path")]
-    pub database_path: String,
-    #[serde(default = "default_wal_mode")]
-    pub wal_mode: bool,
-    /// Raw hex encryption key for SQLCipher. When set, database is encrypted at rest.
-    /// Typically sourced from BLUFIO_DB_KEY environment variable, not config file.
-    #[serde(default)]
-    pub encryption_key: Option<String>,
-}
+```
+blufio-gateway/src/
+├── openai/
+│   ├── mod.rs          # Route group assembly
+│   ├── chat.rs         # /v1/chat/completions handler
+│   ├── responses.rs    # /v1/responses handler (OpenResponses)
+│   ├── tools.rs        # /v1/tools/invoke handler
+│   ├── batch.rs        # /v1/batch handlers
+│   ├── types.rs        # OpenAI request/response types (serde)
+│   └── translate.rs    # OpenAI types <-> Blufio types conversion
+├── apikey/
+│   ├── mod.rs          # Scoped API key management
+│   ├── store.rs        # Key storage in SQLite
+│   └── middleware.rs   # Per-key auth + rate limit middleware
+├── webhook/
+│   ├── mod.rs          # Webhook registration + delivery
+│   └── store.rs        # Webhook DB persistence
+├── auth.rs             # Existing auth (bearer + keypair)
+├── handlers.rs         # Existing handlers
+├── server.rs           # MODIFIED: mount openai routes
+├── sse.rs
+└── ws.rs
 ```
 
-#### The Multi-Connection Problem
+**Key translation invariants:**
 
-The codebase opens **6 independent connections** to the same database file:
+The `chat/completions` handler converts OpenAI `messages[]` → Blufio `ProviderRequest`, routes through the existing `AgentLoop` or directly to a `ProviderAdapter`, then translates `ProviderResponse` → OpenAI response format. Streaming uses SSE (`text/event-stream`) with the same SSE infrastructure used by the MCP server.
 
-| Connection | Crate | Current Code Pattern |
-|------------|-------|---------------------|
-| Main storage | `blufio-storage` | `Database::open(&path)` in `adapter.rs` line 92 |
-| Vault | `blufio-vault` | `tokio_rusqlite::Connection::open()` in `serve.rs` line 91 |
-| Cost ledger | `blufio-cost` | `CostLedger::open()` in `serve.rs` line 158 |
-| Memory store | `blufio-memory` | `tokio_rusqlite::Connection::open()` in `serve.rs` line 721 |
-| MCP pin store | `blufio-mcp-client` | `PinStore::open()` in `serve.rs` line 221 |
-| Skill store | `blufio-skill` | `tokio_rusqlite::Connection::open()` in `main.rs` line 387+ |
+**Scoped API keys:** A new `ApiKeyStore` backed by a new table in the existing SQLite DB (via `blufio-storage`). Keys carry a scope bitmask (read, write, tools) and a per-key rate limit config. The `tower_governor` crate (or `governor`) provides token-bucket rate limiting per key using a DashMap keyed by hashed API key.
 
-**Every connection must issue `PRAGMA key` before any operation.** If even one connection path skips it, that connection fails with "file is not a database" errors.
+**Confidence:** HIGH — axum route nesting is a first-class pattern. OpenAI API format is publicly documented. tower_governor verified on docs.rs.
 
-**Solution: Shared connection factory in `blufio-storage`:**
+---
 
-```rust
-// blufio-storage/src/database.rs (new public function)
+### Feature 2: Multi-Provider LLM Support
 
-/// Open a raw tokio-rusqlite connection with encryption key and standard PRAGMAs.
-///
-/// Use this instead of `tokio_rusqlite::Connection::open()` directly.
-/// Applies PRAGMA key (if encryption_key is Some), then WAL mode and
-/// standard performance PRAGMAs.
-pub async fn open_connection(
-    path: &str,
-    encryption_key: Option<&str>,
-) -> Result<tokio_rusqlite::Connection, BlufioError> {
-    let conn = tokio_rusqlite::Connection::open(path).await
-        .map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
+**Integration surface:** New provider crates, `blufio-core` (minor extension), `blufio-config` (new sections)
+**New crates needed:** `blufio-openai`, `blufio-ollama`, `blufio-openrouter`, `blufio-gemini`
 
-    let key_owned = encryption_key.map(|k| k.to_string());
-    conn.call(move |conn| {
-        // PRAGMA key MUST be first
-        if let Some(ref key) = key_owned {
-            conn.execute_batch(&format!("PRAGMA key = \"x'{key}'\""))?;
-        }
-        conn.execute_batch("PRAGMA journal_mode = WAL;")?;
-        conn.execute_batch(
-            "PRAGMA synchronous = NORMAL;
-             PRAGMA busy_timeout = 5000;
-             PRAGMA foreign_keys = ON;
-             PRAGMA cache_size = -16000;
-             PRAGMA temp_store = MEMORY;",
-        )?;
-        Ok(())
-    }).await.map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
+All four new providers implement the existing `ProviderAdapter` trait from `blufio-core`. No trait changes are required for text completion. The trait already supports streaming via `Pin<Box<dyn Stream<...>>>`.
 
-    Ok(conn)
-}
+**Provider architecture pattern (same as `blufio-anthropic`):**
+
+```
+blufio-{provider}/src/
+├── lib.rs        # ProviderAdapter impl struct
+├── client.rs     # reqwest HTTP client wrapper
+├── types.rs      # API request/response structs (serde)
+└── sse.rs        # SSE/streaming parser (for streaming providers)
 ```
 
-All 6 connection sites must switch from raw `tokio_rusqlite::Connection::open()` to `blufio_storage::open_connection()`. This is the most invasive change and requires touching code in vault, cost, memory, mcp-client, and skill crates (or their callsites in serve.rs/main.rs).
+**Provider-specific notes:**
 
-#### Feature Flag: Conditional SQLCipher Compilation
+| Provider | API Format | Key Difference from Anthropic |
+|----------|------------|-------------------------------|
+| `blufio-openai` | OpenAI Chat Completions | SSE format with `data: [DONE]` terminator, `choices[0].delta.content` chunks |
+| `blufio-ollama` | OpenAI-compatible `/api/chat` | Local HTTP (no TLS required), pull model detection, no API key |
+| `blufio-openrouter` | OpenAI-compatible + `HTTP-Referer` header | Model selection via `model` field (maps to OpenRouter's unified namespace) |
+| `blufio-gemini` | Google Generative Language API | Different JSON structure, `candidates[0].content.parts[0].text`, SSE via `alt=sse` |
 
-Use a Cargo feature flag `encryption` (default: off) to gate SQLCipher:
+**TTS/Transcription/Image traits:** Add to `blufio-core/src/traits/`:
+- `TtsAdapter`: `async fn synthesize(&self, text: &str, voice: &str) -> Result<Bytes, BlufioError>`
+- `TranscriptionAdapter`: `async fn transcribe(&self, audio: Bytes, format: &str) -> Result<String, BlufioError>`
+- `ImageAdapter`: `async fn generate(&self, prompt: &str, size: &str) -> Result<String, BlufioError>` (returns URL)
+
+**Config additions for multi-provider:**
 
 ```toml
-# Workspace Cargo.toml -- default: plain SQLite
-[workspace.dependencies]
-rusqlite = { version = "0.37", features = ["bundled"] }
+# blufio-config/src/model.rs — new sections
+[providers]
+default = "anthropic"    # Which provider to use for main agent loop
 
-# To enable SQLCipher, change to:
-# rusqlite = { version = "0.37", features = ["bundled-sqlcipher-vendored-openssl"] }
+[providers.openai]
+api_key = "sk-..."
+model = "gpt-4o"
+
+[providers.ollama]
+base_url = "http://localhost:11434"
+model = "llama3.2"
+
+[providers.openrouter]
+api_key = "sk-or-..."
+model = "anthropic/claude-3.5-sonnet"
+
+[providers.gemini]
+api_key = "..."
+model = "gemini-2.0-flash"
 ```
 
-The `bundled-sqlcipher-vendored-openssl` feature vendors OpenSSL, avoiding system library dependencies. Critical for the musl static binary deployment model.
+The `AgentLoop` selects the active provider at startup from `config.providers.default`. The `ModelRouter` continues to route within the active provider's model tiers (or the provider exposes Haiku/Sonnet/Opus equivalents).
 
-**Build impact:** SQLCipher + vendored OpenSSL adds ~30-60 seconds to compile time and ~2-5 MB to binary size.
-
-When the `encryption` feature is off and no key is provided, `PRAGMA key` is simply not issued. The code path is identical to current behavior. When a key is provided but SQLCipher is not compiled in (plain SQLite), `PRAGMA key` is a no-op -- SQLite ignores unknown PRAGMAs. However, the database will not actually be encrypted. A startup check should warn about this.
-
-#### Migration: Plaintext to Encrypted
-
-Existing deployments have unencrypted databases. SQLCipher provides `sqlcipher_export()`:
-
-```sql
-ATTACH DATABASE 'encrypted.db' AS encrypted KEY 'x''...''';
-SELECT sqlcipher_export('encrypted');
-DETACH DATABASE encrypted;
--- Then: mv encrypted.db blufio.db
-```
-
-This should be an explicit `blufio migrate-db` CLI subcommand, NOT automatic migration. Automatic migration risks data loss if interrupted.
-
-**Confidence:** HIGH -- SQLCipher PRAGMA ordering verified via official Zetetic docs. rusqlite `bundled-sqlcipher` feature verified on docs.rs for version 0.37.0.
+**Confidence:** HIGH — all four providers have verified Rust client libraries. ProviderAdapter trait boundary is clean.
 
 ---
 
-### 3. Minisign -- Binary Signature Verification
+### Feature 3: Multi-Channel Adapters
 
-**Integration surface:** Binary crate only (new `update.rs` module)
-**New crate needed:** No (code in binary crate)
-**Existing modifications:** `crates/blufio/Cargo.toml` (add `minisign-verify` dep)
+**Integration surface:** New channel crates, `blufio-agent/src/channel_mux.rs` (no change needed — multiplexer already supports N channels), `blufio-config` (new sections)
+**New crates needed:** `blufio-discord`, `blufio-slack`, `blufio-whatsapp`, `blufio-signal`, `blufio-irc`, `blufio-matrix`
 
-#### Where It Fits
+All implement `ChannelAdapter` from `blufio-core`. The `ChannelMultiplexer` already handles N channels with per-channel background receive tasks — zero changes needed there.
 
-Minisign verification is used exclusively during the self-update flow. It verifies that a downloaded binary was signed by the project's release key before replacing the running binary.
+**Channel crate structure (same pattern as `blufio-telegram`):**
 
 ```
-1. Download new binary to temp file
-2. Download .minisig signature file
-3. Load embedded public key (compiled into binary)
-4. Verify: public_key.verify(&binary_bytes, &signature, false)
-5. If valid -> proceed with self-replace
-6. If invalid -> abort, delete temp files, report error
+blufio-{channel}/src/
+├── lib.rs       # ChannelAdapter impl — connect(), send(), receive()
+├── client.rs    # Platform SDK wrapper
+└── types.rs     # Platform-specific message types
 ```
 
-#### Public Key Embedding
+**Platform SDK recommendations:**
 
-The Minisign public key is **compiled into the binary** as a constant:
+| Channel | Recommended Crate | Protocol | AGPL Risk |
+|---------|-------------------|----------|-----------|
+| Discord | `serenity` (0.12) or `twilight` | Gateway WebSocket + REST | No |
+| Slack | `slack-morphism` | Events API (HTTP webhook) or Socket Mode (WebSocket) | No |
+| WhatsApp | `reqwest` + unofficial API or official Meta Cloud API | HTTP | No |
+| Signal | `presage` | Signal protocol | AGPL — isolated to crate boundary |
+| IRC | `irc` crate | TCP text protocol | No |
+| Matrix | `matrix-sdk` | HTTP + Matrix protocol | No |
 
-```rust
-// crates/blufio/src/update.rs
-const RELEASE_PUBLIC_KEY: &str = "RWSomeBase64KeyHere==";
+**Signal AGPL isolation:** Signal requires the `presage` crate which is AGPL-3.0. The `blufio-signal` crate must be compiled as a separate binary or kept in a distinct workspace member with clear license documentation. The plugin boundary prevents AGPL contamination of the core. Alternatively, Signal is implemented as a separate `blufio-signal-bridge` process communicating via the gateway HTTP API.
+
+**Cross-channel bridging:** Messages on one channel forwarded to another. Implementation: the agent loop receives a message on channel A, processes it, and the response is sent to channel B. The `ChannelMultiplexer.send()` already routes by channel name — bridging is a routing policy in the agent, not a structural change. A `BridgeRule` type in `blufio-config` controls source→destination channel mapping.
+
+**Config additions:**
+
+```toml
+[channels.discord]
+token = "Bot ..."
+guild_id = "..."
+
+[channels.slack]
+bot_token = "xoxb-..."
+app_token = "xapp-..."
+
+[channels.matrix]
+homeserver = "https://matrix.org"
+access_token = "..."
 ```
 
-This prevents MITM attacks where both binary and signature could be replaced. The key is trusted because it ships with the binary.
-
-#### Library Choice
-
-**Use `minisign-verify` 0.2.x** -- Zero dependencies, verify-only (no signing capability), MIT/Apache-2.0. By Frank Denis (libsodium author).
-
-API:
-```rust
-let pk = PublicKey::from_base64(RELEASE_PUBLIC_KEY)?;
-let sig = Signature::decode(&sig_text)?;
-pk.verify(&binary_bytes, &sig, false)?; // false = allow both standard and prehashed
-```
-
-**Confidence:** HIGH -- docs.rs API verified, zero-dependency crate.
+**Confidence:** HIGH for Discord (serenity well-maintained), MEDIUM for WhatsApp (Meta API stability), LOW for Signal (presage maintenance uncertain).
 
 ---
 
-### 4. Self-Update -- `blufio update` with Rollback
+### Feature 4: Internal Event Bus
 
-**Integration surface:** Binary crate (new `update.rs` module, new CLI subcommand)
-**New crate needed:** No
-**Existing modifications:** `crates/blufio/src/main.rs` (add `Update` command), `crates/blufio/Cargo.toml`
+**Integration surface:** New `blufio-bus` crate, `blufio-agent` (integration), `blufio-gateway` (webhook delivery), `blufio-core` (event type definitions)
+**New crates needed:** `blufio-bus`
 
-#### Architecture
+The event bus is a typed pub/sub system over `tokio::sync::broadcast`. It replaces the current pattern where metrics and logging are the only cross-cutting signals. The bus enables webhook delivery, cross-channel bridging, and future observability extensions.
+
+**`blufio-bus` crate structure:**
 
 ```
-blufio update [--check] [--force]
-  |
-  v
-1. Fetch latest release metadata from GitHub Releases API
-   GET https://api.github.com/repos/{owner}/{repo}/releases/latest
-  |
-  v
-2. Compare semver: current (from Cargo.toml) vs latest
-   current >= latest && !force -> "already up to date", exit
-  |
-  v
-3. Download binary for current platform
-   Filter release assets by target triple (x86_64-unknown-linux-musl)
-  |
-  v
-4. Download .minisig signature
-   GET {binary_url}.minisig
-  |
-  v
-5. Verify signature (Minisign -- Phase 4 dependency)
-   If invalid -> abort, clean up temp files
-  |
-  v
-6. Create rollback backup
-   cp /usr/local/bin/blufio /usr/local/bin/blufio.rollback
-  |
-  v
-7. Replace binary atomically (self-replace)
-   rename() on Linux -- atomic
-  |
-  v
-8. Print: "Updated v{old} -> v{new}. Restart to apply."
-   "Rollback: blufio update --rollback"
+blufio-bus/src/
+├── lib.rs          # EventBus struct, subscribe(), publish()
+├── events.rs       # BlufioEvent enum — all platform events
+└── subscription.rs # Subscriber handle with typed filtering
 ```
 
-#### Rollback Strategy
-
-File-based rollback: before replacing, copy the current binary to `{path}.rollback`.
-
-```bash
-# Manual rollback (if new version has issues)
-cp /usr/local/bin/blufio.rollback /usr/local/bin/blufio
-systemctl restart blufio
-```
-
-Add a `--rollback` flag to automate this:
+**Event type design:**
 
 ```rust
-/// Check for and install binary updates.
-Update {
-    /// Only check for updates, don't install.
-    #[arg(long)]
-    check: bool,
-    /// Force update even if already on latest version.
-    #[arg(long)]
-    force: bool,
-    /// Restore the previous binary version from rollback backup.
-    #[arg(long)]
-    rollback: bool,
-},
+// blufio-core/src/types.rs (add event types)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum BlufioEvent {
+    MessageReceived { session_id: String, channel: String, content: String },
+    MessageSent     { session_id: String, channel: String, content: String },
+    ToolInvoked     { session_id: String, tool_name: String, input: serde_json::Value },
+    ToolCompleted   { session_id: String, tool_name: String, output: String, error: bool },
+    SessionStarted  { session_id: String, channel: String, user_id: String },
+    SessionEnded    { session_id: String },
+    ProviderCall    { session_id: String, model: String, input_tokens: u32 },
+    ProviderResponse{ session_id: String, model: String, output_tokens: u32 },
+    CostExceeded    { budget_type: String, limit_usd: f64, actual_usd: f64 },
+    SkillLoaded     { skill_name: String, version: String },
+    NodeConnected   { node_id: String, peer_addr: String },
+}
 ```
 
-Automatic crash-detection rollback (new version fails to start) would require a supervisor pattern. Out of scope for v1.2 -- manual rollback is sufficient.
-
-#### Library Choices
-
-- **`self-replace` 1.3.x** -- Atomic binary replacement via `rename()`. Pure Rust.
-- **`reqwest` (already in workspace)** -- HTTP downloads. Already used everywhere.
-- **`semver` (already in workspace)** -- Version comparison. Already a dependency.
-
-The higher-level `self_update` crate is NOT needed because it pulls in archive extraction, GitHub API wrappers, and other dependencies. We control the release format (bare binary + .minisig), so a lean implementation using reqwest + minisign-verify + self-replace is simpler and auditable.
-
-#### Where Code Lives
-
-All update logic in `crates/blufio/src/update.rs`. This is binary-distribution-specific logic. Not a library concern.
-
-**Confidence:** MEDIUM -- self-replace crate verified on docs.rs. GitHub Releases API well-known. Specific release asset naming convention (target triple in filename) needs to be established as part of CI/CD.
-
----
-
-### 5. Backup Integrity Verification
-
-**Integration surface:** Binary crate (`crates/blufio/src/backup.rs`, `crates/blufio/src/doctor.rs`)
-**New crate needed:** No
-**Existing modifications:** `backup.rs` (add integrity check), `doctor.rs` (SQLCipher awareness)
-
-#### Where It Fits
-
-The existing `backup.rs` has `run_backup()` and `run_restore()`. Integrity check goes at the end of each, after `backup.run_to_completion()`:
+**EventBus implementation:**
 
 ```rust
-// After backup completes (backup.rs ~line 56)
-verify_integrity(backup_path, encryption_key.as_deref())?;
+// blufio-bus/src/lib.rs
+use tokio::sync::broadcast;
 
-// After restore completes (backup.rs ~line 125)
-verify_integrity(db_path, encryption_key.as_deref())?;
-```
+#[derive(Clone)]
+pub struct EventBus {
+    tx: broadcast::Sender<BlufioEvent>,
+}
 
-#### Implementation
-
-```rust
-/// Run PRAGMA integrity_check on a database file.
-///
-/// When SQLCipher is enabled, applies PRAGMA key first.
-fn verify_integrity(db_path: &str, encryption_key: Option<&str>) -> Result<(), BlufioError> {
-    let conn = Connection::open_with_flags(
-        db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-            | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ).map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
-
-    // PRAGMA key must be first if encrypted
-    if let Some(key) = encryption_key {
-        conn.execute_batch(&format!("PRAGMA key = \"x'{key}'\""))
-            .map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
+impl EventBus {
+    pub fn new(capacity: usize) -> Self {
+        let (tx, _) = broadcast::channel(capacity);
+        Self { tx }
     }
 
-    let mut stmt = conn.prepare("PRAGMA integrity_check")
-        .map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
-    let results: Vec<String> = stmt.query_map([], |row| row.get(0))
-        .map_err(|e| BlufioError::Storage { source: Box::new(e) })?
-        .filter_map(|r| r.ok())
-        .collect();
+    pub fn publish(&self, event: BlufioEvent) {
+        // Drop lagged messages silently (never block the agent loop)
+        let _ = self.tx.send(event);
+    }
 
-    if results.len() == 1 && results[0] == "ok" {
-        eprintln!("Integrity check: OK");
-        Ok(())
-    } else {
-        Err(BlufioError::Storage {
-            source: format!(
-                "Integrity check failed: {}",
-                results.join(", ")
-            ).into(),
-        })
+    pub fn subscribe(&self) -> broadcast::Receiver<BlufioEvent> {
+        self.tx.subscribe()
     }
 }
 ```
 
-Note: This uses synchronous `rusqlite::Connection` (not tokio-rusqlite) because backup.rs already uses synchronous rusqlite for the backup API. The integrity check runs on the same thread.
+**Integration points for the event bus:**
+- `AgentLoop` holds `Arc<EventBus>`, publishes `MessageReceived`, `ToolInvoked`, `ProviderCall`, etc.
+- The webhook delivery system subscribes and filters events matching registered webhook patterns.
+- Cross-channel bridge rules subscribe and forward matching messages.
 
-#### Doctor Integration
+**Backpressure:** The broadcast channel has a fixed capacity (default 1024). Slow webhook consumers get `RecvError::Lagged` and drop events — this is correct behavior. The agent loop is never blocked by slow subscribers.
 
-The existing `check_db_integrity()` in `doctor.rs` (line 373) already runs `PRAGMA integrity_check`. The only change needed is applying `PRAGMA key` first when the encryption key is available. The encryption key should come from the config (which loads from `BLUFIO_DB_KEY` env var).
+**Confidence:** HIGH — tokio broadcast channel is the canonical Rust fan-out pattern. Zero external dependencies needed.
 
-**Confidence:** HIGH -- `PRAGMA integrity_check` is standard SQLite. Already implemented in doctor.rs deep checks.
+---
+
+### Feature 5: Skill Registry / Marketplace
+
+**Integration surface:** New `blufio-registry` crate, `blufio-skill` (modification), `blufio-config` (new section), binary crate (CLI)
+**New crates needed:** `blufio-registry`
+
+The skill registry is a local + optionally remote index of WASM skill packages. Each skill package is:
+1. A WASM binary (`skill.wasm`)
+2. A manifest (`skill.toml` — name, version, description, capabilities, signature)
+3. An Ed25519 signature file (`skill.wasm.sig`) using the existing minisign-verify infrastructure
+
+**Registry architecture:**
+
+```
+blufio-registry/src/
+├── lib.rs          # SkillRegistry: discover, install, verify, list
+├── index.rs        # Registry index: local file + optional remote JSON feed
+├── installer.rs    # Download, verify signature, extract to skills_dir
+├── signing.rs      # Ed25519 sign/verify for skill packages
+└── store.rs        # SQLite-backed installed skill metadata
+```
+
+**Registry index format (JSON):**
+
+```json
+{
+  "version": 1,
+  "skills": [
+    {
+      "name": "weather",
+      "version": "1.2.0",
+      "description": "Fetch weather for any location",
+      "author": "blufio-community",
+      "download_url": "https://registry.blufio.dev/skills/weather-1.2.0.wasm",
+      "signature_url": "https://registry.blufio.dev/skills/weather-1.2.0.wasm.sig",
+      "sha256": "abc123...",
+      "public_key": "RWSomeBase64..."
+    }
+  ]
+}
+```
+
+**CLI commands (added to binary crate):**
+
+```
+blufio skill search [query]     # Search local + remote index
+blufio skill install [name]     # Download, verify, install
+blufio skill uninstall [name]   # Remove from skills_dir
+blufio skill list               # List installed skills + status
+blufio skill verify [name]      # Re-verify signature of installed skill
+blufio skill publish [path]     # Package + sign a skill for publishing
+```
+
+**Code signing:** Uses existing `ed25519-dalek` workspace dependency. The same Ed25519 key pair used for multi-agent delegation can be used for skill signing, or a separate signing key pair. The `minisign-verify` crate already in workspace handles verification.
+
+**Integration with existing `blufio-skill`:** The registry discovers skills installed in `config.skill.skills_dir`. The existing `SkillStore` and `WasmSkillRuntime` load them. Registry only adds install/verify/search — runtime is unchanged.
+
+**Confidence:** HIGH — skill signing uses existing ed25519-dalek. Registry index is a static JSON file. No new complex dependencies.
+
+---
+
+### Feature 6: Node System (Paired Devices)
+
+**Integration surface:** New `blufio-node` crate, binary crate (CLI pairing), `blufio-config` (new section), `blufio-gateway` (node peer routes)
+**New crates needed:** `blufio-node`
+
+The node system creates a trusted mesh of Blufio instances that can share sessions, delegate tasks, and relay channel messages. It is **not** P2P networking — nodes communicate via authenticated HTTPS using the existing gateway pattern.
+
+**Architecture:**
+
+```
+Node A (gateway :3000)          Node B (gateway :3000)
+┌─────────────────────┐         ┌─────────────────────┐
+│  blufio-node        │         │  blufio-node        │
+│  NodeRegistry       │◄──────►│  NodeRegistry       │
+│  peers: {B: pubkey} │  HTTPS  │  peers: {A: pubkey} │
+└─────────────────────┘         └─────────────────────┘
+```
+
+**Trust model:** Nodes authenticate using Ed25519 device keypairs (already implemented in `blufio-auth-keypair`). Pairing is done out-of-band (QR code / token exchange) and stored in the vault.
+
+**Node communication:** Reuses the existing gateway HTTP/WS infrastructure. Nodes exchange messages via a new authenticated endpoint:
+
+```
+POST /v1/nodes/relay     # Relay message to/from peer node
+GET  /v1/nodes           # List paired nodes + status
+POST /v1/nodes/pair      # Initiate pairing (challenge-response)
+DELETE /v1/nodes/{id}    # Unpair node
+```
+
+**`blufio-node` crate structure:**
+
+```
+blufio-node/src/
+├── lib.rs          # NodeSystem: pair, relay, health
+├── peer.rs         # NodePeer: Ed25519 identity, HTTP client
+├── registry.rs     # NodeRegistry: stored peers with pubkeys
+└── relay.rs        # Message relay protocol
+```
+
+**Config:**
+
+```toml
+[node]
+enabled = false
+# Pairing managed via CLI — not static config
+```
+
+**Avoid libp2p:** Full P2P networking (libp2p, hole punching, DHT) is overkill. The "node system" in the PRD describes paired trusted devices — this is a curated mesh, not an open network. The existing HTTPS + Ed25519 auth pattern is sufficient and keeps the dependency surface small.
+
+**Confidence:** MEDIUM — architecture is simple (HTTPS + Ed25519 auth already exists), but exact protocol design needs implementation decisions.
+
+---
+
+### Feature 7: Docker Image
+
+**Integration surface:** New `Dockerfile` + `docker-compose.yml` in `deploy/`, no crate changes
+**New crates needed:** None
+
+**Multi-stage build pattern:**
+
+```dockerfile
+# Stage 1: Build the static musl binary
+FROM clux/muslrust:stable AS builder
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ ./crates/
+# Build with release-musl profile (LTO=true, opt-level=s, strip=symbols)
+RUN cargo build --profile release-musl --target x86_64-unknown-linux-musl \
+    --bin blufio
+
+# Stage 2: Minimal runtime image
+FROM scratch
+# SSL certificates for HTTPS outbound (reqwest uses rustls, but needs root certs)
+COPY --from=alpine:3 /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release-musl/blufio /blufio
+# Data directory mount point
+VOLUME ["/data"]
+ENV BLUFIO_DATA_DIR=/data
+ENTRYPOINT ["/blufio"]
+CMD ["serve"]
+```
+
+**Docker Compose for development/deployment:**
+
+```yaml
+# deploy/docker-compose.yml
+services:
+  blufio:
+    image: blufio:latest
+    volumes:
+      - blufio_data:/data
+      - ./blufio.toml:/etc/blufio/blufio.toml:ro
+    environment:
+      - ANTHROPIC_API_KEY
+      - BLUFIO_DB_KEY
+      - BLUFIO_VAULT_KEY
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["/blufio", "doctor", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  blufio_data:
+```
+
+**Key Docker considerations:**
+- `scratch` base requires static binary — already handled by musl profile
+- `clux/muslrust` image is the canonical Rust musl build environment
+- SQLCipher vendored OpenSSL compiles into the binary — no runtime SSL library needed
+- `BLUFIO_DATA_DIR` env var overrides default XDG paths for containerized paths
+- sd-notify is a no-op in Docker (no NOTIFY_SOCKET) — silent, no change needed
+
+**Multi-instance systemd template:** A `blufio@.service` template with `%i` interpolation for instance name/port, allowing `systemctl start blufio@home blufio@work` for separate instances.
+
+**Confidence:** HIGH — musl static builds are well-established for Rust. clux/muslrust is the standard solution. Docker Compose format stable.
+
+---
+
+### Feature 8: OpenClaw Migration Tool
+
+**Integration surface:** Binary crate (new CLI subcommand `blufio migrate openclaw`), `blufio-storage` (write path, already exists)
+**New crates needed:** None
+
+**OpenClaw data format:**
+
+OpenClaw stores data as:
+- `~/.openclaw/sessions/*.jsonl` — Session transcripts (one file per session)
+- `~/.openclaw/memory/memories.json` — Memory store
+- `~/.openclaw/skills/` — Skill directories (Node.js files)
+- Credentials in environment files or plain TOML
+
+**Migration flow:**
+
+```
+blufio migrate openclaw [--source ~/.openclaw] [--dry-run]
+  |
+  v
+1. Discover OpenClaw data directory
+2. Parse session JSONL files -> normalize to Blufio Message structs
+3. Create sessions in blufio-storage (create_session, insert_message)
+4. Parse memory JSON -> embed and store in blufio-memory (best-effort)
+5. Report skill migration skipped (WASM recompile required)
+6. Report credential migration skipped (manual — security boundary)
+```
+
+**Session JSONL normalization:**
+
+```rust
+// OpenClaw session JSONL entry
+{ "role": "user", "content": "...", "timestamp": 1234567890 }
+{ "role": "assistant", "content": "...", "timestamp": 1234567891, "usage": {...} }
+
+// Blufio Message
+Message { id, session_id, role, content, token_count, metadata, created_at }
+```
+
+**CLI module location:** `crates/blufio/src/migrate.rs`. Same pattern as `update.rs` from v1.2.
+
+**Confidence:** HIGH — OpenClaw JSONL format is public (GitHub repos). Migration is a read-translate-write operation using existing storage API.
+
+---
+
+### Feature 9: CLI Utilities
+
+**Integration surface:** Binary crate only
+**New crates needed:** None
+
+| Command | Location | Implementation |
+|---------|----------|----------------|
+| `blufio bench` | `crates/blufio/src/bench.rs` | Synthetic throughput test: POST to gateway, measure latency percentiles |
+| `blufio privacy evidence-report` | `crates/blufio/src/privacy.rs` | Enumerate: data stored, providers connected, channels active, retention |
+| `blufio config recipe` | `crates/blufio/src/config_cmd.rs` | Generate annotated blufio.toml templates for common scenarios |
+| `blufio uninstall` | `crates/blufio/src/uninstall.rs` | Remove binary, systemd unit, data dir (with confirmation) |
+| `blufio bundle` | `crates/blufio/src/bundle.rs` | Create self-contained air-gapped tarball: binary + DB + skills |
 
 ---
 
 ## Component Dependency Graph
 
 ```
-                  +------------------+
-                  |   blufio (bin)   |
-                  +------------------+
-                  | serve.rs         |  <-- sd_notify Ready + Watchdog
-                  | backup.rs        |  <-- integrity_check post backup/restore
-                  | update.rs (NEW)  |  <-- self-update + minisign verify
-                  | doctor.rs        |  <-- SQLCipher-aware integrity check
-                  | main.rs          |  <-- new Update command, migrate-db command
-                  +--------+---------+
-                           |
-              +------------+-------------+
-              |                          |
-    +---------v--------+      +----------v---------+
-    | blufio-storage   |      | blufio-config      |
-    +------------------+      +--------------------+
-    | database.rs      |      | model.rs           |
-    |  PRAGMA key FIRST|      |  StorageConfig     |
-    |  open_connection()|     |   +encryption_key  |
-    +--------+---------+      +--------------------+
-             |
-             | (shared connection factory used by all DB consumers)
-             |
-    +--------+--------+--------+--------+--------+
-    |        |        |        |        |        |
-    v        v        v        v        v        v
-  vault    cost    memory  mcp-client  skill   backup
+blufio (binary)
+├── blufio-agent          [MODIFIED: event bus, multi-provider selection]
+│   ├── blufio-core       [MODIFIED: new provider/TTS/image traits, event types]
+│   ├── blufio-config     [MODIFIED: providers[], channels[], node, registry sections]
+│   ├── blufio-context
+│   ├── blufio-cost
+│   ├── blufio-memory
+│   ├── blufio-router
+│   └── blufio-skill      [MODIFIED: registry integration]
+│
+├── blufio-gateway        [MODIFIED: OpenAI routes, scoped keys, webhook delivery]
+│   ├── blufio-core
+│   ├── blufio-bus        [NEW: event bus subscription for webhooks]
+│   └── blufio-storage    [NEW dep: API key + webhook store]
+│
+├── blufio-bus            [NEW: tokio broadcast event bus]
+│   └── blufio-core       [event type definitions]
+│
+├── blufio-openai         [NEW: ProviderAdapter for OpenAI]
+│   └── blufio-core
+│
+├── blufio-ollama         [NEW: ProviderAdapter for Ollama]
+│   └── blufio-core
+│
+├── blufio-openrouter     [NEW: ProviderAdapter for OpenRouter]
+│   └── blufio-core
+│
+├── blufio-gemini         [NEW: ProviderAdapter for Google Gemini]
+│   └── blufio-core
+│
+├── blufio-discord        [NEW: ChannelAdapter for Discord]
+│   └── blufio-core
+│
+├── blufio-slack          [NEW: ChannelAdapter for Slack]
+│   └── blufio-core
+│
+├── blufio-whatsapp       [NEW: ChannelAdapter for WhatsApp]
+│   └── blufio-core
+│
+├── blufio-matrix         [NEW: ChannelAdapter for Matrix]
+│   └── blufio-core
+│
+├── blufio-irc            [NEW: ChannelAdapter for IRC]
+│   └── blufio-core
+│
+├── blufio-registry       [NEW: skill registry + signing]
+│   ├── blufio-core
+│   ├── blufio-skill
+│   └── blufio-storage    [NEW dep: registry metadata table]
+│
+├── blufio-node           [NEW: paired-device node system]
+│   ├── blufio-core
+│   ├── blufio-auth-keypair [EXISTING: Ed25519 device identity]
+│   └── blufio-gateway    [EXISTING: HTTP endpoint reuse]
+│
+└── (existing unchanged crates)
+    blufio-anthropic, blufio-auth-keypair, blufio-mcp-client,
+    blufio-mcp-server, blufio-prometheus, blufio-security,
+    blufio-storage, blufio-vault, blufio-verify, blufio-test-utils
 ```
 
-## Suggested Build Order
+---
 
-Features are ordered by dependency chain and risk:
+## Crate Change Classification
 
-### Phase 1: Backup Integrity Verification
+### New Crates (9)
 
-**Scope:** Add `PRAGMA integrity_check` to `run_backup()` and `run_restore()` in `backup.rs`.
-**Dependencies:** None. Zero new crate dependencies.
-**Risk:** Minimal -- modifies existing code with a pure addition.
-**Rationale:** Standalone, no dependencies on other features, validates the pattern for database operations needed by SQLCipher phase.
+| Crate | Purpose | Key Dependencies |
+|-------|---------|-----------------|
+| `blufio-bus` | Internal pub/sub event bus | blufio-core, tokio |
+| `blufio-openai` | OpenAI provider adapter | blufio-core, reqwest |
+| `blufio-ollama` | Ollama local LLM adapter | blufio-core, reqwest |
+| `blufio-openrouter` | OpenRouter multi-model adapter | blufio-core, reqwest |
+| `blufio-gemini` | Google Gemini provider adapter | blufio-core, reqwest |
+| `blufio-discord` | Discord channel adapter | blufio-core, serenity or twilight |
+| `blufio-slack` | Slack channel adapter | blufio-core, slack-morphism |
+| `blufio-matrix` | Matrix channel adapter | blufio-core, matrix-sdk |
+| `blufio-irc` | IRC channel adapter | blufio-core, irc crate |
+| `blufio-registry` | Skill registry + marketplace | blufio-core, blufio-skill, blufio-storage |
+| `blufio-node` | Paired-device node mesh | blufio-core, blufio-auth-keypair |
+| `blufio-whatsapp` | WhatsApp channel adapter | blufio-core, reqwest (Meta API) |
 
-### Phase 2: sd_notify Integration
+Note: WhatsApp may be implemented as a reqwest client against Meta Cloud API rather than a separate crate if the dependency footprint is small enough to fold into `blufio-gateway`.
 
-**Scope:** Add `sd-notify` crate. Insert `NotifyState::Ready` in `serve.rs`. Add `NotifyState::Watchdog` in memory_monitor. Add `NotifyState::Stopping` in shutdown handler. Update service file Type=simple -> Type=notify.
-**Dependencies:** None (sd-notify has zero deps).
-**Risk:** Low -- 3 lines of code in serve.rs, 1 line in service file.
-**Rationale:** Tiny integration surface, no impact on other crates, immediately testable.
+### Modified Crates (6)
 
-### Phase 3: SQLCipher Database Encryption
+| Crate | Change | Why |
+|-------|--------|-----|
+| `blufio-core` | Add TTS/Transcription/Image trait definitions; add `BlufioEvent` type | New provider and bus capabilities |
+| `blufio-config` | Add `[providers]`, `[channels.*]`, `[node]`, `[registry]`, `[api_keys]` sections | New feature configuration |
+| `blufio-gateway` | Add OpenAI route group, scoped API key middleware, webhook delivery, node endpoints | Core API layer expansion |
+| `blufio-agent` | Publish events to `EventBus`, multi-provider selection from config | Event bus integration, provider flexibility |
+| `blufio-skill` | Integrate `blufio-registry` for install/verify; no runtime changes | Registry-backed skill discovery |
+| `blufio` (binary) | Add CLI subcommands: migrate, bench, bundle, privacy-report, config-recipe, uninstall | New CLI utilities |
 
-**Scope:** Highest complexity feature. Touches multiple crates.
-**Dependencies:** Phase 1 (backup integrity needed for safe migration testing).
-**Risk:** HIGH -- modifies the database connection path used by 6+ consumers.
+### Unchanged Crates (15)
 
-Sub-phases within Phase 3:
+`blufio-anthropic`, `blufio-auth-keypair`, `blufio-context`, `blufio-cost`, `blufio-mcp-client`, `blufio-mcp-server`, `blufio-memory`, `blufio-prometheus`, `blufio-router`, `blufio-security`, `blufio-storage`, `blufio-telegram`, `blufio-test-utils`, `blufio-vault`, `blufio-verify`
 
-1. **Config:** Add `encryption_key` field to `StorageConfig` in `blufio-config/src/model.rs`
-2. **Storage core:** Modify `Database::open()` to accept optional key. Add `open_connection()` public helper.
-3. **Connection callers:** Update all raw `tokio_rusqlite::Connection::open()` callsites in `serve.rs` and `main.rs` to use `open_connection()`
-4. **Backup awareness:** Wire encryption key into `backup.rs` integrity check and backup/restore flows
-5. **Feature flag:** Add `encryption` feature that switches `rusqlite` from `bundled` to `bundled-sqlcipher-vendored-openssl`
-6. **Migration CLI:** Add `blufio migrate-db` subcommand for plaintext-to-encrypted migration
-7. **Testing:** All existing tests pass with both encrypted and unencrypted databases
+These crates have clean boundaries and no v1.3 feature crosses into them.
 
-### Phase 4: Minisign Signature Verification
-
-**Scope:** Add `minisign-verify` crate. Create `crates/blufio/src/update.rs` with verification functions. Embed public key constant.
-**Dependencies:** None.
-**Risk:** Low -- new module, no existing code changes.
-**Rationale:** Prerequisite for self-update. Verification logic tested independently before update flow.
-
-### Phase 5: Self-Update with Rollback
-
-**Scope:** Add `self-replace` crate. Complete `update.rs` with download, verify, backup, replace flow. Add `Update` CLI subcommand.
-**Dependencies:** Phase 4 (Minisign verification).
-**Risk:** Medium -- external integration (GitHub API, HTTP downloads, file operations).
-**Rationale:** Last because it depends on Minisign and is the highest external-integration complexity.
-
-### Phase Ordering Rationale
-
-```
-Phase 1 (backup integrity) ---> Phase 3 (SQLCipher needs safe migration)
-Phase 2 (sd_notify)        ---> independent, low risk warm-up
-Phase 4 (minisign)         ---> Phase 5 (self-update needs verification)
-```
-
-- Backup integrity first because SQLCipher migration needs it for safety
-- sd_notify second as easy confidence builder
-- SQLCipher third because it is the highest-risk feature and dominates the milestone
-- Minisign fourth as standalone preparation for self-update
-- Self-update last because it depends on Minisign and has the most external integration
-
-## Crate Modification Summary
-
-| Crate | Modified Files | Change Type | Phase |
-|-------|---------------|-------------|-------|
-| blufio (binary) | backup.rs | Add verify_integrity() call | 1 |
-| blufio (binary) | serve.rs | sd_notify Ready + Watchdog | 2 |
-| blufio (binary) | serve.rs | Pass encryption_key to connections | 3 |
-| blufio (binary) | main.rs | migrate-db subcommand, Update subcommand | 3, 5 |
-| blufio (binary) | doctor.rs | SQLCipher-aware integrity check | 3 |
-| blufio (binary) | update.rs (NEW) | Self-update + Minisign verification | 4, 5 |
-| blufio-storage | database.rs | PRAGMA key ordering, open_connection() helper | 3 |
-| blufio-config | model.rs | encryption_key field in StorageConfig | 3 |
-| blufio-agent | shutdown.rs | NotifyState::Stopping | 2 |
-| deploy/ | blufio.service | Type=notify | 2 |
-
-Crates that are **NOT modified** but whose callsites in serve.rs/main.rs change:
-- blufio-vault (connection opened in serve.rs)
-- blufio-cost (CostLedger::open() called in serve.rs)
-- blufio-memory (connection opened in serve.rs)
-- blufio-mcp-client (PinStore::open() called in serve.rs)
-
-## Anti-Patterns to Avoid
-
-### Anti-Pattern 1: Passphrase-Based SQLCipher Key
-**What:** Using a passphrase for PRAGMA key instead of a raw hex key.
-**Why bad:** SQLCipher runs 256K iterations of PBKDF2-SHA512 per connection open. With 5+ connections at startup, that adds 1+ second. The vault already has its own Argon2id KDF. Double-KDF is wasteful and confusing.
-**Instead:** Raw 32-byte hex key via `BLUFIO_DB_KEY`. SQLCipher skips PBKDF2 for raw keys.
-
-### Anti-Pattern 2: Automatic Plaintext-to-Encrypted Migration
-**What:** Automatically migrating an unencrypted DB to encrypted on first start with a key.
-**Why bad:** If interrupted (power loss, OOM kill), data loss. If the key is wrong or lost, old data gone.
-**Instead:** Explicit `blufio migrate-db` command with confirmation. Keeps old file as backup.
-
-### Anti-Pattern 3: Separate Crate for sd_notify
-**What:** Creating a `blufio-systemd` crate for sd_notify integration.
-**Why bad:** sd_notify is 3 function calls total. A separate crate is over-engineering.
-**Instead:** Direct calls in serve.rs and shutdown.rs.
-
-### Anti-Pattern 4: Self-Update Logic in a Library Crate
-**What:** Creating `blufio-update` as a library crate.
-**Why bad:** Self-update is binary-specific (GitHub releases, platform detection, binary replacement). No other crate needs this.
-**Instead:** `crates/blufio/src/update.rs` module in binary crate.
-
-### Anti-Pattern 5: Skipping PRAGMA key on Any Connection
-**What:** Some connection paths use the helper, others use raw `tokio_rusqlite::Connection::open()`.
-**Why bad:** One skipped connection = runtime "file is not a database" errors. Extremely hard to debug in production.
-**Instead:** CI enforcement: grep for raw `Connection::open()` calls. All must go through the storage helper.
-
-### Anti-Pattern 6: Running Minisign Verification After Binary Replacement
-**What:** Replace binary first, then verify signature.
-**Why bad:** If verification fails, the replaced binary may be malicious and already on disk.
-**Instead:** Always verify BEFORE replacing. Download to temp dir, verify in-place, then atomic replace.
+---
 
 ## Data Flow Changes
 
-### Before (v1.1)
+### New Flow: OpenAI-Compatible Chat Completions
 
 ```
-serve.rs -> SqliteStorage::new(config) -> Database::open(path)
-                                            |-> PRAGMA journal_mode = WAL
-                                            |-> PRAGMA synchronous = NORMAL
-                                            |-> run_migrations()
-
-serve.rs -> tokio_rusqlite::Connection::open(path)  [vault, memory, cost, mcp]
-
-backup.rs -> rusqlite::Backup API -> done (no integrity check)
+Client (curl / SDK)
+    │ POST /v1/chat/completions
+    │ Authorization: Bearer sk-blufio-...
+    ▼
+blufio-gateway (axum)
+    │ ApiKeyMiddleware: validate key, check scope, rate-limit
+    ▼
+openai/chat.rs handler
+    │ translate OpenAI messages[] → ProviderRequest
+    │ OR route through AgentLoop (session-aware mode)
+    ▼
+ProviderAdapter::stream()   (or complete())
+    │ provider selected from config / request model field
+    ▼
+blufio-anthropic / blufio-openai / blufio-ollama / etc.
+    │ SSE stream back
+    ▼
+openai/translate.rs
+    │ Blufio ProviderStreamChunk → OpenAI data: {"choices":[{"delta":{...}}]}
+    ▼
+SSE response to client
 ```
 
-### After (v1.2)
+### New Flow: Event Bus → Webhook Delivery
 
 ```
-serve.rs -> SqliteStorage::new(config) -> Database::open(path, key)
-                                            |-> PRAGMA key = x'...'  (IF key)
-                                            |-> PRAGMA journal_mode = WAL
-                                            |-> PRAGMA synchronous = NORMAL
-                                            |-> run_migrations()
-
-serve.rs -> blufio_storage::open_connection(path, key)  [vault, memory, cost, mcp]
-              |-> PRAGMA key = x'...'  (IF key)
-              |-> PRAGMA journal_mode = WAL
-              |-> standard PRAGMAs
-
-serve.rs -> sd_notify::notify(Ready)     [after mux.connect(), before agent_loop.run()]
-serve.rs -> memory_monitor loop:
-              |-> jemalloc stats
-              |-> sd_notify::notify(Watchdog)  [every 5s tick]
-
-shutdown.rs -> sd_notify::notify(Stopping)  [on SIGTERM/SIGINT, before cancel]
-
-backup.rs -> run_backup() -> verify_integrity(backup_path, key)
-backup.rs -> run_restore() -> verify_integrity(db_path, key)
-
-main.rs -> Commands::Update
-             -> update::check_for_update()       [GitHub API]
-             -> update::download_binary()         [reqwest]
-             -> update::download_signature()      [reqwest]
-             -> update::verify_signature()        [minisign-verify]
-             -> fs::copy(current, current.rollback)
-             -> self_replace::self_replace(new)
+AgentLoop::handle_inbound()
+    │ EventBus::publish(BlufioEvent::MessageSent { ... })
+    ▼
+blufio-bus broadcast channel
+    │ subscriber: WebhookDeliveryTask (running in background)
+    ▼
+WebhookDeliveryTask
+    │ filter events matching webhook pattern
+    │ POST webhook_url with JSON payload
+    │ retry on failure (3x with exponential backoff)
+    ▼
+Operator's webhook receiver
 ```
 
-## New Dependencies Summary
+### New Flow: Cross-Channel Bridge
 
-| Crate | Version | Purpose | Size Impact | Transitive Deps |
-|-------|---------|---------|-------------|-----------------|
-| sd-notify | 0.4.x | systemd readiness + watchdog | ~10 KB | 0 |
-| minisign-verify | 0.2.x | Release signature verification | ~15 KB | 0 |
-| self-replace | 1.3.x | Atomic binary replacement | ~10 KB | 0 |
+```
+ChannelMultiplexer receives InboundMessage from Discord
+    │ channel = "discord", sender_id = "user123"
+    ▼
+EventBus::publish(MessageReceived { channel: "discord", ... })
+    ▼
+BridgeRule subscriber: "discord" → "telegram"
+    │ applies if bridge rule matches
+    │ creates synthetic InboundMessage with channel = "telegram"
+    ▼
+ChannelMultiplexer::send() routes to Telegram channel
+```
 
-**Total new dependencies: 3 crates, 0 transitive dependencies, ~35 KB binary impact.**
+### New Flow: Skill Registry Install
 
-SQLCipher does not add a new crate -- it changes the feature flag on the existing `rusqlite` from `bundled` to `bundled-sqlcipher-vendored-openssl`. This adds vendored OpenSSL (~2-5 MB binary increase, ~30-60s compile time increase).
+```
+blufio skill install weather
+    ▼
+blufio-registry
+    │ fetch index: ~/.blufio/registry/index.json (+ remote if configured)
+    │ find "weather" entry with download_url + signature_url
+    ▼
+reqwest download skill.wasm to temp file
+    ▼
+ed25519-dalek: verify signature with publisher public key
+    │ abort if verification fails
+    ▼
+copy to config.skill.skills_dir/weather/
+write registry metadata to SQLite (name, version, hash, installed_at)
+    ▼
+blufio skill list shows "weather" as active
+AgentLoop picks up new tool on next restart (or hot-reload)
+```
+
+---
+
+## Suggested Build Order
+
+Build order is driven by: (a) crate dependencies, (b) feature dependencies, (c) risk profile (high-risk features last within a group).
+
+### Phase 1: Event Bus + Core Trait Extensions
+**Rationale:** Everything else that is new publishes to the event bus or uses new traits. Build the foundation first.
+- `blufio-bus`: Zero external deps beyond tokio. Establishes the pub/sub contract.
+- `blufio-core` trait additions: TTS/Image/Transcription traits (no implementation, just trait defs). `BlufioEvent` enum.
+- **Duration estimate:** 1-2 days
+
+### Phase 2: New Provider Crates
+**Rationale:** Providers are self-contained and don't depend on new channel or node features. Establishes multi-provider before the gateway API is built on top.
+- `blufio-openai` (OpenAI-compatible format — also used by Ollama/OpenRouter)
+- `blufio-ollama` (subset of OpenAI API, local endpoint)
+- `blufio-openrouter` (OpenAI API + extra headers)
+- `blufio-gemini` (different API format — most complex of the four)
+- `blufio-config` + `blufio-agent` modifications for multi-provider selection
+- **Duration estimate:** 3-4 days
+
+### Phase 3: OpenAI-Compatible Gateway API
+**Rationale:** Depends on Phase 2 (providers must exist to back the API). This is the highest-value external surface.
+- `blufio-gateway` modifications: OpenAI routes, scoped API keys, webhook infrastructure
+- Scoped API key DB table in `blufio-storage` (schema migration via refinery)
+- Rate limiting via `tower_governor`
+- Webhook delivery task using `blufio-bus`
+- **Duration estimate:** 4-5 days
+
+### Phase 4: Multi-Channel Adapters
+**Rationale:** Each channel is independent. Build in order of priority: Discord > Slack > Matrix > IRC > WhatsApp > Signal (if included).
+- `blufio-discord` (serenity/twilight)
+- `blufio-slack` (slack-morphism)
+- `blufio-matrix` (matrix-sdk)
+- `blufio-irc` (irc crate — simplest protocol)
+- `blufio-whatsapp` (Meta API — depends on business account access)
+- Cross-channel bridging config + routing in `blufio-agent`
+- **Duration estimate:** 5-7 days
+
+### Phase 5: Skill Registry + Code Signing
+**Rationale:** Depends on existing `blufio-skill` infrastructure. Registry is standalone.
+- `blufio-registry`: index parsing, download, Ed25519 verify, SQLite metadata
+- CLI commands: `blufio skill search/install/uninstall/verify/publish`
+- **Duration estimate:** 2-3 days
+
+### Phase 6: Node System
+**Rationale:** Depends on existing gateway (HTTP) and auth-keypair (Ed25519). Build after core API is stable.
+- `blufio-node`: pairing protocol, peer registry, relay endpoint
+- Gateway node routes
+- Pairing CLI commands
+- **Duration estimate:** 3-4 days
+
+### Phase 7: Docker + Deployment Infrastructure
+**Rationale:** Depends on binary being feature-complete. No crate changes — pure infrastructure.
+- `Dockerfile` (multi-stage musl build)
+- `docker-compose.yml`
+- `blufio@.service` systemd template for multi-instance
+- **Duration estimate:** 1-2 days
+
+### Phase 8: Migration Tool + CLI Utilities
+**Rationale:** Uses existing storage API. No new dependencies. Batch of independent CLI subcommands.
+- `blufio migrate openclaw`
+- `blufio bench`
+- `blufio privacy evidence-report`
+- `blufio config recipe`
+- `blufio uninstall`
+- `blufio bundle`
+- **Duration estimate:** 3-4 days
+
+### Build Order Rationale Summary
+
+```
+Phase 1 (bus + traits)       ─┐
+Phase 2 (providers)           ├─> Phase 3 (gateway API) ─> Phase 4 (channels)
+                              ┘                          ─> Phase 5 (registry)
+                                                         ─> Phase 6 (node)
+
+Phase 7 (Docker) — after binary is feature-complete
+Phase 8 (migration + CLI) — parallel to Phase 4-6, no deps
+```
+
+Provider crates before gateway because the gateway API needs working providers to back it. Channels before registry because the ChannelMultiplexer is the integration point for testing channel combinations. Node after gateway because it reuses gateway infrastructure. Docker last because it's packaging, not functionality.
+
+---
+
+## Architectural Patterns to Follow
+
+### Pattern 1: Provider Crate Template
+
+**What:** Every new provider crate follows the same 4-file structure as `blufio-anthropic`.
+**When to use:** All four new provider crates.
+**Trade-offs:** Consistent, auditable, easy to add future providers. Slight code duplication in client.rs HTTP boilerplate (acceptable given each provider has different auth/error handling).
+
+```rust
+// blufio-{provider}/src/lib.rs — template
+pub struct {Provider}Provider {
+    client: {Provider}Client,
+    system_prompt: String,
+}
+
+#[async_trait]
+impl PluginAdapter for {Provider}Provider { ... }
+
+#[async_trait]
+impl ProviderAdapter for {Provider}Provider {
+    async fn complete(&self, request: ProviderRequest) -> Result<ProviderResponse, BlufioError> { ... }
+    async fn stream(...) -> Result<Pin<Box<dyn Stream<...>>>, BlufioError> { ... }
+}
+```
+
+### Pattern 2: Channel Crate Template
+
+**What:** Every new channel crate follows the `blufio-telegram` pattern.
+**When to use:** All six new channel crates.
+**Trade-offs:** Platform SDKs have different async models (polling vs webhook vs WebSocket). Each needs careful adaptation to the `receive()` pull model. The channel must normalize platform messages to `InboundMessage`.
+
+```rust
+pub struct {Platform}Channel {
+    config: {Platform}Config,
+    inbound_tx: mpsc::Sender<InboundMessage>,
+    inbound_rx: Mutex<mpsc::Receiver<InboundMessage>>,
+    // platform-specific client
+}
+
+impl ChannelAdapter for {Platform}Channel {
+    async fn connect(&mut self) -> Result<(), BlufioError> {
+        // Start background task: platform SDK -> normalize -> inbound_tx.send()
+    }
+    async fn receive(&self) -> Result<InboundMessage, BlufioError> {
+        // Pull from inbound_rx
+    }
+    async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
+        // Platform SDK send
+    }
+}
+```
+
+### Pattern 3: Event Bus as Side Channel
+
+**What:** The event bus is never in the critical path. All `EventBus::publish()` calls are fire-and-forget.
+**When to use:** Every event emission in the agent loop.
+**Trade-offs:** Events may be dropped if subscribers are slow (broadcast lag). This is acceptable — events are for observability and webhooks, not reliability-critical paths. The agent loop must never `await` on event delivery.
+
+```rust
+// CORRECT: non-blocking publish
+self.event_bus.publish(BlufioEvent::MessageSent { ... });
+
+// WRONG: awaiting event delivery would block the agent loop
+self.event_bus.publish_and_wait(event).await; // Never do this
+```
+
+### Pattern 4: OpenAI Translation Layer
+
+**What:** A dedicated `translate.rs` module in `blufio-gateway/src/openai/` converts between OpenAI and Blufio types.
+**When to use:** All OpenAI-compatible API handlers.
+**Trade-offs:** Centralizes all format conversion. Makes it easy to handle OpenAI API version changes. Some semantic information loss is unavoidable (OpenAI `logprobs` doesn't map to anything in Blufio).
+
+```rust
+// blufio-gateway/src/openai/translate.rs
+pub fn openai_messages_to_provider_request(
+    messages: Vec<OpenAiMessage>,
+    model: &str,
+    max_tokens: Option<u32>,
+    stream: bool,
+) -> ProviderRequest { ... }
+
+pub fn provider_response_to_openai(
+    response: ProviderResponse,
+    model: &str,
+) -> OpenAiChatCompletionResponse { ... }
+
+pub fn stream_chunk_to_openai_delta(
+    chunk: ProviderStreamChunk,
+    model: &str,
+) -> Option<String> { ... } // Returns SSE line or None (skip)
+```
+
+---
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Embedding Provider Logic in the Gateway
+
+**What:** Putting OpenAI API translation logic directly in gateway handlers rather than a translation module.
+**Why bad:** Gateway handlers grow unmanageable. Provider format differences (Anthropic vs OpenAI vs Gemini) cannot be mixed into a single handler. Testing becomes impossible.
+**Instead:** Gateway handlers are thin orchestrators. All format translation goes in `translate.rs`. Actual provider calls go through the `ProviderAdapter` trait.
+
+### Anti-Pattern 2: New Provider Traits Instead of Configuration
+
+**What:** Creating `OpenAIProviderAdapter`, `OllamaProviderAdapter` traits instead of using the existing `ProviderAdapter` trait.
+**Why bad:** Breaks the plugin boundary. The agent loop would need to know about specific providers. Defeats the purpose of adapter traits.
+**Instead:** All providers implement `ProviderAdapter`. Provider selection is a config decision, not a type-system decision.
+
+### Anti-Pattern 3: Synchronous Event Bus
+
+**What:** Using a synchronous channel (std::sync::mpsc) for the event bus.
+**Why bad:** Blocking the agent loop on event delivery under backpressure. The event bus must be non-blocking.
+**Instead:** `tokio::sync::broadcast` with fixed capacity. Slow consumers lag and drop events.
+
+### Anti-Pattern 4: Global Mutable Registry State
+
+**What:** Using a global `Lazy<Mutex<SkillRegistry>>` or similar for the skill registry.
+**Why bad:** Hidden coupling, hard to test, lock contention.
+**Instead:** Registry is an `Arc<SkillRegistry>` passed to components that need it. Same pattern as `Arc<ToolRegistry>` already in the codebase.
+
+### Anti-Pattern 5: Per-Channel Blocking Receive in Multiplexer
+
+**What:** The `ChannelMultiplexer` polling all channels sequentially in a single loop.
+**Why bad:** One slow channel (e.g., IRC reconnect delay) blocks messages from all other channels.
+**Instead:** The existing `ChannelMultiplexer` already spawns a separate `tokio::spawn` background task per channel — this pattern MUST be preserved for all new channel adapters.
+
+### Anti-Pattern 6: Signal Channel in Core Binary
+
+**What:** Adding the Signal (presage, AGPL) channel directly to the main workspace.
+**Why bad:** AGPL license would contaminate the entire workspace. Cannot dual-license as MIT+Apache-2.0.
+**Instead:** `blufio-signal` is either (a) a separate workspace with its own `Cargo.toml` and AGPL license, or (b) implemented as a separate bridge binary that communicates with Blufio via the gateway HTTP API.
+
+### Anti-Pattern 7: OpenAI API Passthrough Without Session Context
+
+**What:** The `/v1/chat/completions` handler bypasses the agent loop entirely and calls providers directly.
+**Why bad:** Loses session management, tool execution, context engine, cost tracking, and all v1.x features. The gateway becomes a dumb LLM proxy.
+**Instead:** Two modes controlled by a query parameter or config: `?session=true` routes through the full agent loop (session-aware, tool-enabled), default mode calls provider directly (stateless, fast).
+
+---
 
 ## Scalability Considerations
 
-| Concern | Impact | Notes |
-|---------|--------|-------|
-| SQLCipher I/O overhead | ~5-15% per page read/write | AES-256 encrypt/decrypt. Negligible for I/O-bound AI agent (LLM latency dwarfs DB latency). |
-| SQLCipher startup cost | Near zero with raw hex key | PBKDF2 completely skipped. No measurable startup difference. |
-| Backup + integrity check | +2-5 seconds per backup | integrity_check reads every DB page. Acceptable for manual CLI operation. |
-| Self-update download | 25-50 MB network transfer | Same as manual download. Not a hot path. |
-| Watchdog overhead | Negligible | One `sendmsg()` syscall every 5s. Unmeasurable. |
+| Concern | Current (v1.2) | With v1.3 |
+|---------|----------------|-----------|
+| Channel count | 2 (Telegram + Gateway) | Up to 8 (6 new channels) — multiplexer handles N channels already |
+| Provider selection | Compile-time (Anthropic only) | Runtime (config-driven, hot-swappable via restart) |
+| Event bus throughput | N/A | Broadcast channel saturates at ~1M events/sec (never the bottleneck) |
+| Webhook delivery | N/A | Async background task — bounded queue, non-blocking |
+| API key lookups | N/A | DashMap in-memory cache with SQLite as source of truth |
+| Skill registry size | Local files only | Index JSON + SQLite metadata — O(1) lookup |
+| Node mesh size | N/A | Designed for 2-10 paired devices, not hundreds |
+| Memory impact | 50-80MB idle | ~10-20MB additional per active channel (SDK connection pools) |
+| Binary size | ~50MB with all official plugins | ~60-70MB with all new crates |
+
+The architecture remains single-process, single-writer SQLite. This is the correct choice for a personal agent platform targeting $4/month VPS deployments. Multi-node sharding remains out of scope per PROJECT.md.
+
+---
+
+## New Dependencies Summary
+
+| Crate | Version | Purpose | Confidence |
+|-------|---------|---------|------------|
+| `serenity` | 0.12.x | Discord gateway + REST | MEDIUM — actively maintained |
+| `slack-morphism` | latest | Slack Web/Events API | MEDIUM — niche but active |
+| `matrix-sdk` | 0.7.x | Matrix protocol client | MEDIUM — stable but large |
+| `irc` | 0.15.x | IRC client (text protocol) | HIGH — simple, stable |
+| `tower_governor` | 0.4.x | Rate limiting middleware | HIGH — production-proven |
+| No new provider deps | — | All providers use reqwest (already in workspace) | HIGH |
+| No new bus deps | — | Event bus uses tokio broadcast (already in workspace) | HIGH |
+| `cargo-chef` | build tool | Layer-cached Docker builds | HIGH — standard Rust Docker pattern |
+
+**Key observation:** Most new features require NO new dependencies. The existing workspace already has:
+- `reqwest` for all new provider HTTP clients
+- `tokio::sync::broadcast` for the event bus
+- `ed25519-dalek` for skill signing and node auth
+- `axum` for all new gateway routes
+- `tower` for new middleware
+- `rusqlite` for API key and registry stores
+
+---
+
+## Integration Points Summary
+
+### External Services
+
+| Service | Integration Pattern | Notes |
+|---------|---------------------|-------|
+| OpenAI API | reqwest HTTP client, SSE streaming | Same pattern as Anthropic |
+| Ollama (local) | reqwest HTTP, no TLS required, localhost:11434 | SSRF bypass needed for localhost |
+| OpenRouter | reqwest HTTP + `HTTP-Referer` header | OpenAI-compatible API |
+| Google Gemini | reqwest HTTP, different JSON schema, `alt=sse` for streaming | Most complex new provider |
+| Discord | serenity WebSocket gateway + REST | Long-lived connection |
+| Slack | slack-morphism: Socket Mode WebSocket OR Events API HTTP webhook | HTTP preferred (simpler) |
+| WhatsApp | Meta Cloud API HTTP webhook + outbound messages | Requires business account |
+| Matrix | matrix-sdk HTTP polling / sync API | Large SDK dependency |
+| IRC | TCP text socket | Simplest protocol |
+
+### Internal Boundaries
+
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| AgentLoop ↔ EventBus | `Arc<EventBus>`, publish() fire-and-forget | Never block agent loop |
+| Gateway ↔ EventBus | broadcast::subscribe() | Webhook delivery subscriber |
+| Gateway ↔ ApiKeyStore | `Arc<ApiKeyStore>` (DashMap + SQLite) | Per-request key validation |
+| Registry ↔ SkillStore | Direct fn calls within same request | Install = write to SkillStore |
+| NodeSystem ↔ Gateway | Gateway mounts node endpoints | Reuses auth infrastructure |
+| NewProviders ↔ AgentLoop | `Arc<dyn ProviderAdapter>` selected at startup | Clean trait boundary |
+
+---
 
 ## Sources
 
-- [sd-notify crate docs](https://docs.rs/sd-notify) -- HIGH confidence
-- [sd-notify on lib.rs](https://lib.rs/crates/sd-notify) -- HIGH confidence
-- [systemd sd_notify(3) man page](https://www.freedesktop.org/software/systemd/man/latest/sd_notify.html) -- HIGH confidence
-- [SQLCipher API documentation (Zetetic)](https://www.zetetic.net/sqlcipher/sqlcipher-api/) -- HIGH confidence
-- [rusqlite SQLCipher issue #219](https://github.com/rusqlite/rusqlite/issues/219) -- MEDIUM confidence
-- [rusqlite 0.37.0 features](https://docs.rs/crate/rusqlite/0.37.0/features) -- HIGH confidence
-- [minisign-verify crate docs](https://docs.rs/minisign-verify/latest/minisign_verify/) -- HIGH confidence
-- [minisign-verify GitHub](https://github.com/jedisct1/rust-minisign-verify) -- HIGH confidence
-- [self-replace crate docs](https://docs.rs/self-replace/latest/self_replace/) -- HIGH confidence
-- [self_update crate](https://github.com/jaemk/self_update) -- MEDIUM confidence (evaluated, not recommended)
-- Blufio codebase analysis (16 crates, serve.rs, backup.rs, database.rs, vault.rs, model.rs examined directly) -- HIGH confidence
+- Blufio codebase: direct analysis of 21 crates (HIGH confidence)
+- [OpenAI Chat Completions API Reference](https://platform.openai.com/docs/api-reference/chat) — HIGH confidence
+- [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) — HIGH confidence
+- [Ollama OpenAI Compatibility](https://docs.ollama.com/api/openai-compatibility) — HIGH confidence
+- [tokio broadcast channel docs](https://docs.rs/tokio/latest/tokio/sync/struct.broadcast.Sender.html) — HIGH confidence
+- [serenity Discord library](https://github.com/serenity-rs/serenity) — MEDIUM confidence
+- [slack-morphism-rust](https://github.com/abdolence/slack-morphism-rust) — MEDIUM confidence
+- [tower_governor rate limiting](https://github.com/benwis/tower-governor) — HIGH confidence
+- [clux/muslrust Docker image](https://github.com/clux/muslrust) — HIGH confidence
+- [wasmsign2 WASM signing](https://github.com/wasm-signatures/wasmsign2) — MEDIUM confidence
+- [openrouter-rs SDK](https://docs.rs/openrouter_api) — MEDIUM confidence
+- [gemini-rust crate](https://crates.io/crates/gemini-rust) — MEDIUM confidence (alternatives may be better)
+
+---
+
+*Architecture research for: v1.3 Ecosystem Expansion — Rust AI agent platform*
+*Researched: 2026-03-05*
