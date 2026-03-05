@@ -483,6 +483,7 @@ enabled = true
                     );
                     m
                 },
+                ..Default::default()
             },
             ..BlufioConfig::default()
         };
@@ -506,6 +507,7 @@ enabled = true
                     );
                     m
                 },
+                ..Default::default()
             },
             ..BlufioConfig::default()
         };
@@ -532,6 +534,7 @@ enabled = true
                     );
                     m
                 },
+                ..Default::default()
             },
             ..BlufioConfig::default()
         };
@@ -558,6 +561,7 @@ enabled = true
                     );
                     m
                 },
+                ..Default::default()
             },
             ..BlufioConfig::default()
         };

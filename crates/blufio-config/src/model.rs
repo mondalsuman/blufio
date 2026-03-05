@@ -988,15 +988,204 @@ fn default_response_size_cap() -> usize {
 
 /// Provider configuration.
 ///
-/// Contains custom provider declarations that enable connecting to
-/// third-party LLM services with OpenAI-compatible APIs.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+/// Contains default provider selection, per-provider config sections,
+/// and custom provider declarations for third-party LLM services.
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProvidersConfig {
+    /// Default provider name. Valid values: "anthropic", "openai", "ollama", "openrouter", "gemini".
+    #[serde(default = "default_provider")]
+    pub default: String,
+
+    /// OpenAI API configuration.
+    #[serde(default)]
+    pub openai: OpenAIConfig,
+
+    /// Ollama (local) provider configuration.
+    #[serde(default)]
+    pub ollama: OllamaConfig,
+
+    /// OpenRouter proxy configuration.
+    #[serde(default)]
+    pub openrouter: OpenRouterConfig,
+
+    /// Google Gemini API configuration.
+    #[serde(default)]
+    pub gemini: GeminiConfig,
+
     /// Custom provider declarations.
     /// Key: provider name (e.g., "together", "groq").
     #[serde(default)]
     pub custom: HashMap<String, CustomProviderConfig>,
+}
+
+impl Default for ProvidersConfig {
+    fn default() -> Self {
+        Self {
+            default: default_provider(),
+            openai: OpenAIConfig::default(),
+            ollama: OllamaConfig::default(),
+            openrouter: OpenRouterConfig::default(),
+            gemini: GeminiConfig::default(),
+            custom: HashMap::new(),
+        }
+    }
+}
+
+fn default_provider() -> String {
+    "anthropic".to_string()
+}
+
+/// OpenAI API configuration.
+///
+/// Configured via `[providers.openai]` in TOML config.
+/// Supports custom `base_url` for Azure OpenAI, Together, Fireworks, etc.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OpenAIConfig {
+    /// OpenAI API key. `None` falls back to `OPENAI_API_KEY` env var.
+    #[serde(default)]
+    pub api_key: Option<String>,
+
+    /// Default model to use for LLM requests.
+    #[serde(default = "default_openai_model")]
+    pub default_model: String,
+
+    /// Base URL for the OpenAI-compatible API.
+    #[serde(default = "default_openai_base_url")]
+    pub base_url: String,
+
+    /// Maximum tokens to generate per response.
+    #[serde(default = "default_openai_max_tokens")]
+    pub max_tokens: u32,
+}
+
+impl Default for OpenAIConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            default_model: default_openai_model(),
+            base_url: default_openai_base_url(),
+            max_tokens: default_openai_max_tokens(),
+        }
+    }
+}
+
+fn default_openai_model() -> String {
+    "gpt-4o".to_string()
+}
+
+fn default_openai_base_url() -> String {
+    "https://api.openai.com/v1".to_string()
+}
+
+fn default_openai_max_tokens() -> u32 {
+    4096
+}
+
+/// Ollama (local) provider configuration.
+///
+/// Configured via `[providers.ollama]` in TOML config.
+/// No API key needed -- Ollama runs locally.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OllamaConfig {
+    /// Base URL for the Ollama API.
+    #[serde(default = "default_ollama_base_url")]
+    pub base_url: String,
+
+    /// Default model. No auto-pick -- user must specify.
+    #[serde(default)]
+    pub default_model: Option<String>,
+}
+
+impl Default for OllamaConfig {
+    fn default() -> Self {
+        Self {
+            base_url: default_ollama_base_url(),
+            default_model: None,
+        }
+    }
+}
+
+fn default_ollama_base_url() -> String {
+    "http://localhost:11434".to_string()
+}
+
+/// OpenRouter proxy configuration.
+///
+/// Configured via `[providers.openrouter]` in TOML config.
+/// Routes requests through OpenRouter's unified API to various providers.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OpenRouterConfig {
+    /// OpenRouter API key. `None` falls back to `OPENROUTER_API_KEY` env var.
+    #[serde(default)]
+    pub api_key: Option<String>,
+
+    /// Default model (provider/model format).
+    #[serde(default = "default_openrouter_model")]
+    pub default_model: String,
+
+    /// Application title sent via X-Title header.
+    #[serde(default = "default_openrouter_x_title")]
+    pub x_title: String,
+
+    /// HTTP Referer header for OpenRouter analytics.
+    #[serde(default)]
+    pub http_referer: Option<String>,
+
+    /// Preferred provider order for model routing.
+    #[serde(default)]
+    pub provider_order: Vec<String>,
+}
+
+impl Default for OpenRouterConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            default_model: default_openrouter_model(),
+            x_title: default_openrouter_x_title(),
+            http_referer: None,
+            provider_order: Vec::new(),
+        }
+    }
+}
+
+fn default_openrouter_model() -> String {
+    "anthropic/claude-sonnet-4".to_string()
+}
+
+fn default_openrouter_x_title() -> String {
+    "Blufio".to_string()
+}
+
+/// Google Gemini API configuration.
+///
+/// Configured via `[providers.gemini]` in TOML config.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GeminiConfig {
+    /// Gemini API key. `None` falls back to `GEMINI_API_KEY` env var.
+    #[serde(default)]
+    pub api_key: Option<String>,
+
+    /// Default Gemini model.
+    #[serde(default = "default_gemini_model")]
+    pub default_model: String,
+}
+
+impl Default for GeminiConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            default_model: default_gemini_model(),
+        }
+    }
+}
+
+fn default_gemini_model() -> String {
+    "gemini-2.0-flash".to_string()
 }
 
 /// Configuration for a custom LLM provider.
