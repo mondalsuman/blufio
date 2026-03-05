@@ -8,7 +8,7 @@ progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 30
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — Phase 30 in progress (1/4 plans complete)
+**Current focus:** v1.3 Ecosystem Expansion — Phase 30 in progress (3/4 plans complete)
 
 ## Current Position
 
 Phase: 30 of 39 (Multi-Provider LLM Support)
-Plan: 1 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: executing
-Last activity: 2026-03-05 — Plan 30-01 completed (OpenAI provider + ProvidersConfig extensions)
+Last activity: 2026-03-05 — Plan 30-03 completed (OpenRouter provider crate)
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [█░░░░░░░░░] 13%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [█░░░░░░░░░] 10%
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 30 | 01 | 11min | 3 | 7 |
+| 30 | 03 | 6min | 2 | 5 |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Key v1.3 constraints:
 - OpenAI system prompt mapped to system role message (not separate field)
 - Used max_completion_tokens for OpenAI (newer API, not deprecated max_tokens)
 - Tool call args accumulated via HashMap<index, (id, name, args)> across SSE deltas
+- OpenRouter wire types independent from OpenAI crate (crate decoupling)
+- OpenRouter provider preferences only included when provider_order non-empty
+- OpenRouter health check deferred to first request (no zero-cost auth endpoint)
 
 ### Pending Todos
 
@@ -86,5 +90,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Plan 30-01 completed (OpenAI provider crate + ProvidersConfig extensions).
-Next action: Execute plan 30-02 (Ollama provider).
+Stopped at: Plan 30-03 completed (OpenRouter provider crate).
+Next action: Execute plan 30-04 (Gemini provider).

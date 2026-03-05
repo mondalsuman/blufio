@@ -35,8 +35,8 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 - [x] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
 - [ ] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
 - [ ] **PROV-05**: Ollama auto-discovers local models via /api/tags
-- [ ] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
-- [ ] **PROV-07**: OpenRouter supports provider fallback ordering
+- [x] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
+- [x] **PROV-07**: OpenRouter supports provider fallback ordering
 - [ ] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
 - [ ] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
 - [ ] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
@@ -155,8 +155,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROV-03 | Phase 30 | Complete |
 | PROV-04 | Phase 30 | Pending |
 | PROV-05 | Phase 30 | Pending |
-| PROV-06 | Phase 30 | Pending |
-| PROV-07 | Phase 30 | Pending |
+| PROV-06 | Phase 30 | Complete |
+| PROV-07 | Phase 30 | Complete |
 | PROV-08 | Phase 30 | Pending |
 | PROV-09 | Phase 30 | Pending |
 | API-01 | Phase 31 | Pending |
