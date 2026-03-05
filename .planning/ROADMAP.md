@@ -59,7 +59,7 @@
 
 **Milestone Goal:** Expand the platform ecosystem with OpenAI-compatible APIs, multi-provider LLM support, multi-channel adapters, Docker deployment, event bus, skill marketplace, node system, and migration tooling.
 
-- [ ] **Phase 29: Event Bus & Core Trait Extensions** — Internal pub/sub backbone and provider-agnostic ToolDefinition
+- [x] **Phase 29: Event Bus & Core Trait Extensions** — Internal pub/sub backbone and provider-agnostic ToolDefinition
 - [ ] **Phase 30: Multi-Provider LLM Support** — OpenAI, Ollama, OpenRouter, and Gemini provider plugins
 - [ ] **Phase 31: OpenAI-Compatible Gateway API** — /v1/chat/completions, /v1/responses, /v1/tools endpoints
 - [ ] **Phase 32: Scoped API Keys, Webhooks & Batch** — API key management, webhook delivery, and batch operations
@@ -86,8 +86,8 @@
 **Plans**: TBD
 
 Plans:
-- [ ] 29-01: Event bus crate (blufio-bus)
-- [ ] 29-02: Core trait extensions (ToolDefinition, media traits, custom provider config)
+- [x] 29-01: Event bus crate (blufio-bus)
+- [x] 29-02: Core trait extensions (ToolDefinition, media traits, custom provider config)
 
 ### Phase 30: Multi-Provider LLM Support
 **Goal**: Users can select OpenAI, Ollama, OpenRouter, or Gemini as their LLM backend with streaming and tool calling
@@ -286,7 +286,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 26. Minisign Signature Verification | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 27. Self-Update with Rollback | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 28. Close Audit Gaps | v1.2 | 2/2 | Complete | 2026-03-04 |
-| 29. Event Bus & Core Trait Extensions | v1.3 | 0/2 | Not started | - |
+| 29. Event Bus & Core Trait Extensions | v1.3 | 2/2 | Complete | 2026-03-05 |
 | 30. Multi-Provider LLM Support | v1.3 | 0/4 | Not started | - |
 | 31. OpenAI-Compatible Gateway API | v1.3 | 0/3 | Not started | - |
 | 32. Scoped API Keys, Webhooks & Batch | v1.3 | 0/3 | Not started | - |
@@ -300,4 +300,4 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-05 after v1.3 roadmap created*
+*Last updated: 2026-03-05 after Phase 29 completed*
