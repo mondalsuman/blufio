@@ -5,6 +5,7 @@
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-02)
 - ✅ **v1.1 MCP Integration** — Phases 15-22 (shipped 2026-03-03)
 - ✅ **v1.2 Production Hardening** — Phases 23-28 (shipped 2026-03-04)
+- 🚧 **v1.3 Ecosystem Expansion** — Phases 29-39 (in progress)
 
 ## Phases
 
@@ -54,7 +55,206 @@
 
 </details>
 
+### 🚧 v1.3 Ecosystem Expansion (In Progress)
+
+**Milestone Goal:** Expand the platform ecosystem with OpenAI-compatible APIs, multi-provider LLM support, multi-channel adapters, Docker deployment, event bus, skill marketplace, node system, and migration tooling.
+
+- [x] **Phase 29: Event Bus & Core Trait Extensions** — Internal pub/sub backbone and provider-agnostic ToolDefinition
+- [ ] **Phase 30: Multi-Provider LLM Support** — OpenAI, Ollama, OpenRouter, and Gemini provider plugins
+- [ ] **Phase 31: OpenAI-Compatible Gateway API** — /v1/chat/completions, /v1/responses, /v1/tools endpoints
+- [ ] **Phase 32: Scoped API Keys, Webhooks & Batch** — API key management, webhook delivery, and batch operations
+- [ ] **Phase 33: Discord & Slack Channel Adapters** — Two highest-value channel integrations
+- [ ] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** — Remaining channel adapters with cross-channel bridging
+- [ ] **Phase 35: Skill Registry & Code Signing** — Local skill marketplace with Ed25519 verification
+- [ ] **Phase 36: Docker Image & Deployment** — Multi-stage Dockerfile, docker-compose, multi-instance systemd
+- [ ] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication
+- [ ] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle
+- [ ] **Phase 39: Integration Verification** — End-to-end validation across all v1.3 features
+
+## Phase Details
+
+### Phase 29: Event Bus & Core Trait Extensions
+**Goal**: Establish the internal pub/sub backbone that unblocks webhooks, bridging, nodes, and batch; extend blufio-core with provider-agnostic types and media provider traits
+**Depends on**: Phase 28 (v1.2 complete)
+**Requirements**: INFRA-01, INFRA-02, INFRA-03, PROV-10, PROV-11, PROV-12, PROV-13, PROV-14
+**Success Criteria** (what must be TRUE):
+  1. Any component can publish typed events (session, channel, skill, node, webhook, batch) via Arc<EventBus> and subscribers receive them
+  2. Critical subscribers (webhook delivery, audit) use mpsc and never silently drop events; fire-and-forget subscribers use broadcast with logged lag warnings
+  3. A provider-agnostic ToolDefinition type exists in blufio-core that each provider can serialize to its own wire format independently
+  4. TTS, Transcription, and Image provider trait interfaces are defined in blufio-core (no implementations required yet)
+  5. Custom providers can be declared via TOML config with base_url, wire_protocol, and api_key_env
+**Plans**: TBD
+
+Plans:
+- [x] 29-01: Event bus crate (blufio-bus)
+- [x] 29-02: Core trait extensions (ToolDefinition, media traits, custom provider config)
+
+### Phase 30: Multi-Provider LLM Support
+**Goal**: Users can select OpenAI, Ollama, OpenRouter, or Gemini as their LLM backend with streaming and tool calling
+**Depends on**: Phase 29 (provider-agnostic ToolDefinition required)
+**Requirements**: PROV-01, PROV-02, PROV-03, PROV-04, PROV-05, PROV-06, PROV-07, PROV-08, PROV-09
+**Success Criteria** (what must be TRUE):
+  1. User can set `providers.default = "openai"` in config and chat via Blufio with OpenAI models including vision and structured outputs
+  2. User can set `providers.default = "ollama"` and chat with locally-running Ollama models discovered via /api/tags, using native /api/chat (not OpenAI compat shim)
+  3. User can set `providers.default = "openrouter"` and chat via OpenRouter with provider fallback ordering and correct X-Title/HTTP-Referer headers
+  4. User can set `providers.default = "gemini"` and chat via Google Gemini with function calling mapped to provider-agnostic ToolDefinition
+  5. Tool calling works correctly with streaming enabled across all four providers (no silent tool call drops)
+**Plans**: TBD
+
+Plans:
+- [ ] 30-01: OpenAI provider (blufio-openai)
+- [ ] 30-02: Ollama provider (blufio-ollama)
+- [ ] 30-03: OpenRouter provider (blufio-openrouter)
+- [ ] 30-04: Gemini provider (blufio-gemini)
+
+### Phase 31: OpenAI-Compatible Gateway API
+**Goal**: External callers can use Blufio as a drop-in OpenAI-compatible server via standard API endpoints
+**Depends on**: Phase 30 (providers must exist to serve completions)
+**Requirements**: API-01, API-02, API-03, API-04, API-05, API-06, API-07, API-08, API-09, API-10
+**Success Criteria** (what must be TRUE):
+  1. User can POST to /v1/chat/completions with an OpenAI SDK and receive a valid response with finish_reason (not stop_reason), usage stats, and correct tool_calls format
+  2. SSE streaming works with standard OpenAI clients (data: [DONE] termination, delta chunks with finish_reason)
+  3. User can POST to /v1/responses and receive semantic streaming events (response.created, output_text.delta, response.completed)
+  4. User can GET /v1/tools to list available tools with JSON schemas and POST /v1/tools/invoke to execute a tool directly
+  5. OpenAI wire types (OpenAiChatResponse) are completely separate from internal ProviderResponse -- no Anthropic-specific field names leak to external callers
+**Plans**: TBD
+
+Plans:
+- [ ] 31-01: OpenAI-compatible /v1/chat/completions with wire type separation
+- [ ] 31-02: OpenResponses /v1/responses API
+- [ ] 31-03: Tools API (/v1/tools, /v1/tools/invoke)
+
+### Phase 32: Scoped API Keys, Webhooks & Batch
+**Goal**: Multi-user and multi-service deployments are secure with scoped keys, async event delivery via webhooks, and cost-efficient batch processing
+**Depends on**: Phase 31 (API endpoints must exist before access control)
+**Requirements**: API-11, API-12, API-13, API-14, API-15, API-16, API-17, API-18
+**Success Criteria** (what must be TRUE):
+  1. User can create scoped API keys via POST /v1/api-keys with scope restrictions (chat.completions, tools.invoke, admin) and per-key rate limits
+  2. API keys can be expired and revoked; revoked keys are immediately rejected on all endpoints
+  3. User can register webhooks via POST /v1/webhooks; events are delivered with HMAC-SHA256 signatures and exponential backoff retry on failure
+  4. User can submit batch requests via POST /v1/batch and retrieve per-item results with success/error status
+**Plans**: TBD
+
+Plans:
+- [ ] 32-01: Scoped API key management and rate limiting
+- [ ] 32-02: Webhook registration and event delivery
+- [ ] 32-03: Batch operations API
+
+### Phase 33: Discord & Slack Channel Adapters
+**Goal**: Users can interact with Blufio through Discord servers and Slack workspaces
+**Depends on**: Phase 29 (event bus for bridging foundation)
+**Requirements**: CHAN-01, CHAN-02, CHAN-03, CHAN-04, CHAN-05, CHAN-11, CHAN-12
+**Success Criteria** (what must be TRUE):
+  1. User can add Blufio as a Discord bot and chat in channels/DMs with full message content (MESSAGE_CONTENT privileged intent correctly handled with startup warning if missing)
+  2. Discord slash commands work and ephemeral responses are used where appropriate
+  3. User can add Blufio to a Slack workspace and chat via Events API or Socket Mode with Block Kit formatted messages
+  4. Slack slash commands route to Blufio and responses render correctly
+  5. Both adapters implement ChannelAdapter trait with capabilities manifest and format degradation pipeline works across channel capabilities
+**Plans**: TBD
+
+Plans:
+- [ ] 33-01: Discord adapter (blufio-discord)
+- [ ] 33-02: Slack adapter (blufio-slack)
+
+### Phase 34: WhatsApp, Signal, IRC & Matrix Adapters
+**Goal**: Users can interact with Blufio through WhatsApp, Signal, IRC, and Matrix, and messages can bridge across any combination of channels
+**Depends on**: Phase 33 (adapter patterns established), Phase 29 (event bus for bridging)
+**Requirements**: CHAN-06, CHAN-07, CHAN-08, CHAN-09, CHAN-10, INFRA-06
+**Success Criteria** (what must be TRUE):
+  1. User can chat with Blufio via WhatsApp Cloud API (official Meta Business API) with the WhatsApp Web experimental adapter available behind a feature flag
+  2. User can chat with Blufio via Signal using signal-cli JSON-RPC sidecar bridge
+  3. User can chat with Blufio via IRC with TLS and NickServ authentication
+  4. User can chat with Blufio via Matrix with room join and messaging (matrix-sdk 0.11 pinned)
+  5. Cross-channel bridging works with configurable bridge rules in TOML between any combination of active channels
+**Plans**: TBD
+
+Plans:
+- [ ] 34-01: WhatsApp adapter (blufio-whatsapp, Cloud API + Web feature flag)
+- [ ] 34-02: Signal adapter (signal-cli sidecar bridge)
+- [ ] 34-03: IRC adapter (blufio-irc)
+- [ ] 34-04: Matrix adapter (blufio-matrix, pinned to 0.11)
+- [ ] 34-05: Cross-channel bridging (INFRA-06)
+
+### Phase 35: Skill Registry & Code Signing
+**Goal**: Users can install, manage, and trust WASM skills with cryptographic verification at every execution boundary
+**Depends on**: Phase 29 (event bus for skill events)
+**Requirements**: SKILL-01, SKILL-02, SKILL-03, SKILL-04, SKILL-05
+**Success Criteria** (what must be TRUE):
+  1. User can run blufio skill install/list/remove/update to manage skills from a local registry
+  2. Registry stores skill manifests with SHA-256 content hashes and verifies integrity on every load
+  3. Ed25519 code signatures are verified at install time AND before every WASM execution
+  4. Capability enforcement is checked at every WASM host function call site (not just at install time)
+**Plans**: TBD
+
+Plans:
+- [ ] 35-01: Local skill registry (blufio-registry)
+- [ ] 35-02: Ed25519 code signing and capability enforcement
+
+### Phase 36: Docker Image & Deployment
+**Goal**: Users can deploy Blufio via Docker with a single command and run multiple instances via systemd templates
+**Depends on**: Phase 29 (event bus injected into container)
+**Requirements**: INFRA-04, INFRA-05, INFRA-07
+**Success Criteria** (what must be TRUE):
+  1. docker build produces a minimal image (distroless/static-debian12:nonroot base) with TLS and SQLCipher working
+  2. docker-compose up starts Blufio with volume mounts for data/config/plugins, env injection for secrets, and health check passing
+  3. Multi-instance systemd template (blufio@.service) allows running N instances with per-instance config directories
+**Plans**: TBD
+
+Plans:
+- [ ] 36-01: Multi-stage Dockerfile and docker-compose
+- [ ] 36-02: Multi-instance systemd template
+
+### Phase 37: Node System
+**Goal**: Users can pair multiple Blufio instances as a trusted device mesh for session sharing and coordinated approvals
+**Depends on**: Phase 29 (event bus for node sync), Phase 32 (scoped keys for node auth)
+**Requirements**: NODE-01, NODE-02, NODE-03, NODE-04, NODE-05
+**Success Criteria** (what must be TRUE):
+  1. User can pair two Blufio instances via QR code or shared token with Ed25519 mutual authentication (pairing tokens expire in 15 minutes and are single-use)
+  2. Paired nodes connect via WebSocket with capability declaration (camera, screen, location, exec) and maintain heartbeat monitoring
+  3. Node fleet is manageable via blufio nodes list/group/exec CLI commands with battery, memory, and connectivity status
+  4. Approval routing broadcasts to all connected operator devices and any device can approve
+**Plans**: TBD
+
+Plans:
+- [ ] 37-01: Node pairing and mutual authentication (blufio-node)
+- [ ] 37-02: Node WebSocket connection, heartbeat, and fleet CLI
+- [ ] 37-03: Approval routing broadcast
+
+### Phase 38: Migration & CLI Utilities
+**Goal**: Users migrating from OpenClaw have a clear path, and operators have essential CLI tools for benchmarking, privacy auditing, config generation, cleanup, and air-gapped deployment
+**Depends on**: Phase 30 (providers needed for config translation), Phase 33 (channels needed for migration coverage)
+**Requirements**: MIGR-01, MIGR-02, MIGR-03, MIGR-04, MIGR-05, CLI-01, CLI-02, CLI-03, CLI-04, CLI-05
+**Success Criteria** (what must be TRUE):
+  1. User can run blufio migrate --from-openclaw and have session history, cost records, and personality files (SOUL.md, AGENTS.md, USER.md, etc.) imported to Blufio storage
+  2. blufio migrate preview shows a dry-run report listing what translates, what needs manual attention, and estimated cost comparison
+  3. blufio config translate converts OpenClaw JSON config to Blufio TOML
+  4. blufio bench runs built-in benchmarks (startup, context assembly, WASM, SQLite) and reports results
+  5. blufio privacy evidence-report, blufio config recipe, blufio uninstall, and blufio bundle all work as documented
+**Plans**: TBD
+
+Plans:
+- [ ] 38-01: OpenClaw migration tool (migrate, preview, config translate)
+- [ ] 38-02: CLI utilities (bench, privacy, recipe, uninstall, bundle)
+
+### Phase 39: Integration Verification
+**Goal**: All 69 v1.3 requirements are verified end-to-end with cross-feature integration validated
+**Depends on**: All previous v1.3 phases (29-38)
+**Requirements**: (verification phase -- validates all requirements from phases 29-38)
+**Success Criteria** (what must be TRUE):
+  1. All 69 v1.3 requirements have formal verification evidence in VERIFICATION.md
+  2. Cross-feature flows work: OpenAI SDK -> chat completions -> OpenRouter provider -> Discord channel -> webhook delivery
+  3. Docker deployment passes full integration: docker-compose up -> API key create -> chat completion -> webhook fires
+  4. Traceability is complete: every requirement maps to a phase, every phase has verification evidence
+**Plans**: TBD
+
+Plans:
+- [ ] 39-01: Requirement verification and traceability audit
+- [ ] 39-02: Cross-feature integration testing
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -86,7 +286,18 @@
 | 26. Minisign Signature Verification | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 27. Self-Update with Rollback | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 28. Close Audit Gaps | v1.2 | 2/2 | Complete | 2026-03-04 |
+| 29. Event Bus & Core Trait Extensions | v1.3 | 2/2 | Complete | 2026-03-05 |
+| 30. Multi-Provider LLM Support | v1.3 | 0/4 | Not started | - |
+| 31. OpenAI-Compatible Gateway API | v1.3 | 0/3 | Not started | - |
+| 32. Scoped API Keys, Webhooks & Batch | v1.3 | 0/3 | Not started | - |
+| 33. Discord & Slack Channel Adapters | v1.3 | 0/2 | Not started | - |
+| 34. WhatsApp, Signal, IRC & Matrix Adapters | v1.3 | 0/5 | Not started | - |
+| 35. Skill Registry & Code Signing | v1.3 | 0/2 | Not started | - |
+| 36. Docker Image & Deployment | v1.3 | 0/2 | Not started | - |
+| 37. Node System | v1.3 | 0/3 | Not started | - |
+| 38. Migration & CLI Utilities | v1.3 | 0/2 | Not started | - |
+| 39. Integration Verification | v1.3 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-04 after v1.2 milestone archived*
+*Last updated: 2026-03-05 after Phase 29 completed*

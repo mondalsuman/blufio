@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Production Hardening
-status: complete
-last_updated: "2026-03-04"
+milestone: v1.3
+milestone_name: Ecosystem Expansion
+status: executing
+last_updated: "2026-03-05"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 11
+  completed_phases: 1
+  total_plans: 30
+  completed_plans: 2
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-04)
+See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.2 Production Hardening — SHIPPED 2026-03-04. Planning next milestone.
+**Current focus:** v1.3 Ecosystem Expansion — Phase 29 complete, Phase 30 next
 
 ## Current Position
 
-Phase: 28 of 28 (Close Audit Gaps) — ALL COMPLETE
-Plan: 2 of 2 in current phase (final)
-Status: v1.2 archived. 3 milestones shipped (v1.0, v1.1, v1.2). 148 requirements verified.
-Last activity: 2026-03-04 - Milestone v1.2 archived
+Phase: 30 of 39 (Multi-Provider LLM Support)
+Plan: 0 of 4 in current phase
+Status: Ready to plan
+Last activity: 2026-03-05 — Phase 29 completed (2/2 plans: event bus + core trait extensions)
 
-Progress: [####################] 100%
+Progress: [█░░░░░░░░░] 9%
 
 ## Performance Metrics
 
@@ -51,6 +51,14 @@ Progress: [####################] 100%
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+Key v1.3 constraints:
+- Event bus must come first (unblocks webhooks, bridging, nodes, batch)
+- Provider-agnostic ToolDefinition must exist before non-Anthropic providers
+- OpenAI wire types MUST be separate from internal ProviderResponse
+- Ollama must use native /api/chat (not OpenAI compat shim)
+- matrix-sdk must pin to 0.11.0 (0.12+ requires Rust 1.88)
+- Signal uses signal-cli sidecar (no native Rust library)
+- WhatsApp Web is experimental/feature-flagged
 
 ### Pending Todos
 
@@ -58,7 +66,7 @@ None.
 
 ### Blockers/Concerns
 
-None — all milestones complete.
+None.
 
 ### Quick Tasks Completed
 
@@ -68,6 +76,6 @@ None — all milestones complete.
 
 ## Session Continuity
 
-Last session: 2026-03-04
-Stopped at: Milestone v1.2 archived. All documentation updated.
-Next action: `/gsd:new-milestone` for v1.3 planning.
+Last session: 2026-03-05
+Stopped at: Phase 29 completed (event bus crate + core trait extensions).
+Next action: `/gsd:plan-phase 30` to plan Multi-Provider LLM Support.

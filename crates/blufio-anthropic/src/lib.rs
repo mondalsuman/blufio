@@ -124,19 +124,16 @@ impl AnthropicProvider {
             text.map(SystemContent::Text)
         };
 
-        // Convert tool definitions from serde_json::Value to ToolDefinition structs.
-        let tools = request
-            .tools
-            .as_ref()
-            .map(|tool_values| {
-                tool_values
-                    .iter()
-                    .filter_map(|v| {
-                        serde_json::from_value::<crate::types::ToolDefinition>(v.clone()).ok()
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .and_then(|v| if v.is_empty() { None } else { Some(v) });
+        // Convert provider-agnostic ToolDefinition to Anthropic wire format.
+        let tools = request.tools.as_ref().map(|defs| {
+            defs.iter()
+                .map(|td| crate::types::ToolDefinition {
+                    name: td.name.clone(),
+                    description: td.description.clone(),
+                    input_schema: td.input_schema.clone(),
+                })
+                .collect::<Vec<_>>()
+        });
 
         MessageRequest {
             model: request.model.clone(),

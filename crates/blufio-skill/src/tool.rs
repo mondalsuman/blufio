@@ -237,38 +237,23 @@ impl ToolRegistry {
         entries
     }
 
-    /// Returns Anthropic-format tool definitions for all registered tools.
+    /// Returns provider-agnostic tool definitions for all registered tools.
     ///
-    /// Each definition has the shape:
-    /// ```json
-    /// {
-    ///   "name": "tool_name",
-    ///   "description": "What the tool does",
-    ///   "input_schema": { ... JSON Schema ... }
-    /// }
-    /// ```
-    ///
+    /// Each definition contains name, description, and input_schema fields.
     /// For namespaced tools, the `name` field uses the registry key
     /// (`namespace__tool`) rather than the tool's own `name()`, ensuring
     /// the LLM sees the namespaced identifier.
-    pub fn tool_definitions(&self) -> Vec<serde_json::Value> {
-        let mut defs: Vec<serde_json::Value> = self
+    pub fn tool_definitions(&self) -> Vec<blufio_core::types::ToolDefinition> {
+        let mut defs: Vec<blufio_core::types::ToolDefinition> = self
             .tools
             .iter()
-            .map(|(registry_name, t)| {
-                serde_json::json!({
-                    "name": registry_name,
-                    "description": t.description(),
-                    "input_schema": t.parameters_schema(),
-                })
+            .map(|(registry_name, t)| blufio_core::types::ToolDefinition {
+                name: registry_name.clone(),
+                description: t.description().to_string(),
+                input_schema: t.parameters_schema(),
             })
             .collect();
-        defs.sort_by(|a, b| {
-            a["name"]
-                .as_str()
-                .unwrap_or("")
-                .cmp(b["name"].as_str().unwrap_or(""))
-        });
+        defs.sort_by(|a, b| a.name.cmp(&b.name));
         defs
     }
 
@@ -404,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn tool_registry_tool_definitions_produces_valid_json() {
+    fn tool_registry_tool_definitions_produces_valid_structs() {
         let mut registry = ToolRegistry::new();
         registry.register(Arc::new(EchoTool)).unwrap();
 
@@ -412,10 +397,10 @@ mod tests {
         assert_eq!(defs.len(), 1);
 
         let def = &defs[0];
-        assert_eq!(def["name"], "echo");
-        assert_eq!(def["description"], "Echoes the input back");
-        assert!(def["input_schema"]["properties"]["message"].is_object());
-        assert_eq!(def["input_schema"]["type"], "object");
+        assert_eq!(def.name, "echo");
+        assert_eq!(def.description, "Echoes the input back");
+        assert!(def.input_schema["properties"]["message"].is_object());
+        assert_eq!(def.input_schema["type"], "object");
     }
 
     #[test]
@@ -426,8 +411,8 @@ mod tests {
 
         let defs = registry.tool_definitions();
         assert_eq!(defs.len(), 2);
-        assert_eq!(defs[0]["name"], "add");
-        assert_eq!(defs[1]["name"], "echo");
+        assert_eq!(defs[0].name, "add");
+        assert_eq!(defs[1].name, "echo");
     }
 
     #[test]
@@ -630,7 +615,7 @@ mod tests {
         let defs = registry.tool_definitions();
         assert_eq!(defs.len(), 1);
         // The definition name should be the namespaced key, not the tool's own name.
-        assert_eq!(defs[0]["name"], "github__echo");
+        assert_eq!(defs[0].name, "github__echo");
     }
 
     // ── Annotation default tests ──────────────────────────────────
@@ -716,8 +701,8 @@ mod tests {
             .unwrap();
         let defs = registry.tool_definitions();
         assert_eq!(defs.len(), 2);
-        assert_eq!(defs[0]["name"], "echo");
-        assert_eq!(defs[1]["name"], "github__add");
+        assert_eq!(defs[0].name, "echo");
+        assert_eq!(defs[1].name, "github__add");
     }
 
     // ── Unregister tests ─────────────────────────────────────────────

@@ -1,588 +1,491 @@
-# Domain Pitfalls: v1.2 Production Hardening
+# Pitfalls Research: v1.3 Ecosystem Expansion
 
-**Domain:** Adding sd_notify, SQLCipher, Minisign, self-update, and backup integrity to existing Rust AI agent platform
-**Researched:** 2026-03-03
-**Confidence:** HIGH (official SQLCipher docs, rusqlite crate features, sd_notify crate source, self-replace crate docs, minisign specification, systemd man pages)
+**Domain:** Adding OpenAI-compatible API, multi-provider LLM, multi-channel adapters, Docker, event bus, skill registry, node system, and migration tooling to existing Rust AI agent platform (39K LOC, 21 crates)
+**Researched:** 2026-03-05
+**Confidence:** HIGH for Rust/axum/SQLite specifics (verified against existing codebase); MEDIUM for provider format differences (official docs + community); MEDIUM for channel platform specifics (official rate limit docs + known issues)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause data loss, broken deployments, or require rewrites.
+Mistakes that cause rewrites, data loss, broken integrations, or security incidents.
 
 ---
 
-### Pitfall 1: SQLCipher Migration Destroys Existing Plaintext Data
+### Pitfall 1: OpenAI stop_reason vs finish_reason Field Name Mismatch Breaks Every Client
 
 **What goes wrong:**
-Developers attempt to "encrypt in place" by opening the existing plaintext `blufio.db` and calling `PRAGMA key = 'mypassword'`. SQLCipher interprets this as "open an already-encrypted database with this key," fails to decrypt (because the DB is plaintext), and returns error code 26: "file is encrypted or is not a database." The developer, confused, deletes the "corrupted" database and starts fresh -- losing all sessions, conversation history, cost ledger data, vault credentials, memory embeddings, skill registry, and MCP pin store. On a production VPS that has been running for months, this is catastrophic.
+The existing Blufio `ProviderResponse` type uses `stop_reason: Option<String>` (Anthropic's field name). The OpenAI `/v1/chat/completions` specification uses `finish_reason` (not `stop_reason`) in the response body. When implementing the OpenAI-compatible endpoint, developers copy-paste the existing response struct and rename it, but forget to change the JSON field name — so clients receive `stop_reason` where they expect `finish_reason`. Every OpenAI-compatible client that uses the stop condition (LangChain, LlamaIndex, OpenWebUI, most SDKs) silently treats responses as incomplete or loops forever.
+
+Additionally, the OpenAI spec uses `"tool_calls"` as the stop reason string value while Anthropic uses `"tool_use"`. An OpenAI-compatible client sending a request expecting `finish_reason: "tool_calls"` will receive `finish_reason: "tool_use"` from a naively proxied Anthropic response, causing infinite retries or silent tool-call drops.
 
 **Why it happens:**
-`PRAGMA key` and `sqlite3_key()` can ONLY be used when opening a brand-new database (first time) or when opening an already-encrypted database. They cannot retroactively encrypt an existing plaintext database. This is the single most documented SQLCipher misunderstanding -- Zetetic (the SQLCipher maintainers) have a dedicated FAQ page for this exact error. The correct procedure requires `ATTACH DATABASE` + `sqlcipher_export()` to copy data to a new encrypted file.
+The existing `ProviderResponse` and `ProviderStreamChunk` types in `blufio-core/src/types.rs` are designed around Anthropic's format. When adding the OpenAI shim layer in `blufio-gateway`, developers reuse these types rather than defining a separate OpenAI wire format, leaking Anthropic field names into the external API surface.
 
-**Consequences:**
-- Complete data loss if the operator mistakes the error for corruption and deletes the database.
-- Blufio stores everything in one SQLite file: sessions, messages, cost ledger, vault (AES-256-GCM encrypted credentials), memory embeddings, skill registry, MCP tool hashes, refinery migration history. Losing the DB means losing ALL of this.
-- The vault master key is derived via Argon2id from the operator's passphrase, but the encrypted vault entries are IN the SQLite file. No DB = no vault recovery.
-- Even if the operator has a backup, restoring a plaintext backup into a now-SQLCipher-expecting application creates the same error in reverse.
+**How to avoid:**
+Define completely separate wire types for the OpenAI-compatible response in the gateway crate. Never expose internal `ProviderResponse` directly — always translate through an explicit `OpenAiChatResponse` struct with `#[serde(rename = "finish_reason")]` and value mapping: `"tool_use"` → `"tool_calls"`, `"end_turn"` → `"stop"`, `"max_tokens"` → `"length"`. Write a test that sends an OpenAI-format request and asserts the response contains `finish_reason` (not `stop_reason`).
 
-**Prevention:**
-- Implement a dedicated `blufio migrate-db --encrypt` CLI command that performs the migration as a multi-step atomic process:
-  1. Verify the source DB is valid plaintext SQLite (`PRAGMA integrity_check`).
-  2. Create encrypted destination file using `ATTACH DATABASE 'encrypted.db' AS encrypted KEY 'key'` + `SELECT sqlcipher_export('encrypted')`.
-  3. Run `PRAGMA integrity_check` on the encrypted database to verify completeness.
-  4. Compare row counts on every table between source and destination.
-  5. Rename: `blufio.db` -> `blufio.db.plaintext-backup`, `encrypted.db` -> `blufio.db`.
-  6. Print clear instructions: "Migration complete. Plaintext backup at blufio.db.plaintext-backup. Delete it after verifying the encrypted database works."
-- NEVER delete the original plaintext file automatically. The operator decides when to shred it.
-- The migration command must be idempotent: if interrupted, it can be re-run safely because the original file is untouched until the final rename.
-- Add a `blufio doctor` check that detects when the config expects SQLCipher but the database file header is plaintext SQLite (bytes 0-15 are "SQLite format 3\0" for plaintext; encrypted databases have random bytes at offset 0).
+**Warning signs:**
+- Client SDKs loop or hang after receiving a response
+- Tool invocations never trigger even when LLM requests them
+- `grep "stop_reason"` appears in OpenAI response JSON in integration tests
 
-**Detection:**
-- Error "file is encrypted or is not a database" on startup after enabling SQLCipher in config.
-- Database file size drops to 0 bytes after a failed migration attempt.
-- `blufio doctor` reports "database format mismatch: config expects encrypted, file is plaintext."
-
-**Phase to address:** This must be a standalone migration phase, executed before any other SQLCipher work. The migration command ships first, tested thoroughly, before the main application switches to SQLCipher mode.
+**Phase to address:**
+OpenAI-compatible API layer phase (first phase of v1.3). Must be defined before any provider is wired up.
 
 ---
 
-### Pitfall 2: SQLCipher Migration Interrupted Mid-Export Leaves Corrupted State
+### Pitfall 2: Ollama Streaming + Tool Calls Silently Drops Tool Invocations
 
 **What goes wrong:**
-The `sqlcipher_export()` function copies the entire database schema and data to the attached encrypted database. If the process is killed, the machine loses power, or disk space runs out during export, the destination encrypted database is incomplete. It may have some tables but not others, or partial data in tables. If the application then tries to open this partial file, it either fails (best case) or opens successfully but is missing data (worst case -- silent data loss).
+Ollama's OpenAI compatibility layer (`/v1/chat/completions` with `stream: true`) does not correctly forward tool call data when streaming is enabled. The model decides to call a tool, but the streaming response returns an empty content block with `finish_reason: "stop"` — the tool call is silently lost. This was confirmed as an active issue in Ollama's GitHub tracker (issue #12557). Blufio always streams by default for latency reasons. When the Ollama provider is wired with stream enabled, tool-augmented conversations stop working without any error surfaced to the user.
 
 **Why it happens:**
-`sqlcipher_export()` is NOT atomic at the filesystem level. It executes a series of CREATE TABLE and INSERT statements internally. While SQLite's transaction mechanism protects individual statements, the export function's behavior on interruption is not guaranteed to leave the destination in a consistent state. Power failure during any write to the encrypted destination file can corrupt it because the encrypted file's WAL may not be fully flushed. Furthermore, Blufio's existing database has 6 migration versions worth of tables across sessions, messages, queue, cost_ledger, memory, skills, MCP wiring, and vault -- the export of all this data takes non-trivial time for a large database.
+Ollama's OpenAI compatibility layer is partial. The native Ollama API (`/api/chat`) supports streaming + tool calling since May 2025, but the OpenAI shim does not. Developers assume "OpenAI-compatible" means fully compatible. It does not.
 
-**Consequences:**
-- Encrypted destination file is partial or corrupted.
-- If the migration script assumed success and renamed files, the original is now gone and the encrypted version is broken.
-- Refinery migration history (`refinery_schema_history` table) may be missing from the encrypted copy, causing refinery to re-run all migrations on next startup, which fails because some tables already exist.
+**How to avoid:**
+For the Ollama provider crate (`blufio-ollama`), use Ollama's native API (`/api/chat`) rather than the OpenAI shim. Implement a separate response parser for Ollama's native format. Add a specific integration test that verifies tool calls are received when `stream: true` — this will fail immediately if you accidentally use the shim endpoint. Document clearly in code comments that the native endpoint must be used.
 
-**Prevention:**
-- Wrap the entire `sqlcipher_export()` in a transaction on the destination database: `BEGIN EXCLUSIVE` before export, `COMMIT` after. If interrupted, the destination file's incomplete transaction is rolled back on next open.
-- After export but before any renaming, run `PRAGMA integrity_check` on the destination AND verify row counts match the source for every table.
-- Use a three-file strategy: original stays untouched, export writes to a `.tmp` file, only after verification does `.tmp` get renamed to the final name. `rename()` is atomic on the same filesystem.
-- Check available disk space before starting: the encrypted database will be roughly the same size as the original (possibly slightly larger due to per-page encryption overhead and the default 4096-byte page size).
-- Log progress: "Migrating table sessions (1/8)... Migrating table messages (2/8)..." so operators can see where it stopped if interrupted.
+**Warning signs:**
+- Agent responds as if it received no tool results when Ollama is active provider
+- No `ToolUse` events appear in `ProviderStreamChunk` stream with Ollama
+- Provider health check passes but tool invocations never execute
 
-**Detection:**
-- Encrypted destination file exists but is smaller than expected.
-- `PRAGMA integrity_check` fails on the destination.
-- Table count or row count mismatch between source and destination.
-- Refinery migration history table missing from destination.
-
-**Phase to address:** Same migration phase as Pitfall 1. The migration CLI command must implement all these safety checks.
+**Phase to address:**
+Multi-provider LLM phase. Ollama crate must explicitly test tool calling with streaming before being considered complete.
 
 ---
 
-### Pitfall 3: SQLCipher Changes rusqlite Feature Flags and Breaks the Build
+### Pitfall 3: Provider Trait Tool Format Leaks Anthropic-Specific Structure
 
 **What goes wrong:**
-Blufio currently uses `rusqlite = { version = "0.37", features = ["bundled"] }` which compiles vanilla SQLite from source. Switching to SQLCipher requires replacing the `bundled` feature with `bundled-sqlcipher` (or `bundled-sqlcipher-vendored-openssl` for static builds). This is a workspace-wide change because `rusqlite` is a workspace dependency used by 8 crates (blufio-storage, blufio-vault, blufio-cost, blufio-memory, blufio-skill, blufio-mcp-server, blufio-mcp-client, blufio binary). The feature change also pulls in OpenSSL (or requires a system crypto library), which dramatically changes the build process, CI pipeline, and binary size.
+The existing `ProviderRequest.tools` field is `Option<Vec<serde_json::Value>>` with the comment "Anthropic format." When implementing OpenAI, Ollama, or Gemini providers, developers pass these Anthropic-format tool definitions through unchanged, or attempt to serialize them and hit provider-specific schema rejections. Gemini's native API requires `FunctionDeclaration` objects with a different schema shape. OpenAI requires `{"type": "function", "function": {...}}` wrapping. Anthropic uses bare `{"name": ..., "description": ..., "input_schema": ...}` without the `"function"` key wrapper.
 
 **Why it happens:**
-The `bundled-sqlcipher` feature compiles SQLCipher (a fork of SQLite) from C source and links it statically. SQLCipher requires a crypto backend. Two options exist:
-1. `bundled-sqlcipher`: Links against system-installed OpenSSL/LibreSSL. Works on dev machines but breaks `musl` static builds because there is no "system" crypto on a musl target.
-2. `bundled-sqlcipher-vendored-openssl`: Bundles OpenSSL source and compiles it. Works everywhere but adds significant compile time (OpenSSL takes 2-5 minutes to compile) and binary size (estimated 2-5 MB increase for the OpenSSL symbols).
+The `ProviderRequest` type was designed for Anthropic. The `tools` field as `serde_json::Value` appears flexible, but each provider requires a completely different JSON schema for tool definitions. Developers assume "it's just JSON, it'll work" and test only with Anthropic-style definitions.
 
-**Consequences:**
-- Binary size increases from ~25MB to ~27-30MB due to statically linked OpenSSL. This is within the 50MB constraint but notable.
-- Compile time increases significantly (OpenSSL C compilation on every clean build).
-- The `release-musl` profile (used for production static binary) must use `bundled-sqlcipher-vendored-openssl` because there is no system OpenSSL to link against.
-- CI must install OpenSSL dev headers (or use vendored) -- the existing CI pipeline that just runs `cargo build` will break.
-- The `refinery` crate's `rusqlite` feature must also be compatible with SQLCipher. Refinery runs migrations via raw `rusqlite::Connection` -- it must receive the connection AFTER `PRAGMA key` has been set, not before.
-- tokio-rusqlite wraps `rusqlite::Connection` in a background thread. The `PRAGMA key` must be the FIRST operation on the connection, before any migration or PRAGMA setup. The current `database.rs` applies PRAGMAs (WAL mode, synchronous, busy_timeout, foreign_keys, cache_size, temp_store) immediately after open. With SQLCipher, `PRAGMA key` must come before ALL of these.
+**How to avoid:**
+Define a provider-agnostic `ToolDefinition` type in `blufio-core` with fields: `name: String`, `description: String`, `parameters: serde_json::Value` (JSON Schema). Each provider adapter crate implements its own serialization to the provider's wire format. The Anthropic adapter wraps it in `{input_schema: ...}`, the OpenAI adapter in `{type: "function", function: {name, description, parameters}}`, the Gemini adapter in `{functionDeclarations: [{name, description, parameters}]}`. Add a test in each provider crate asserting the wire format matches the provider's documented spec.
 
-**Prevention:**
-- Use `bundled-sqlcipher-vendored-openssl` for all builds (dev and production). This eliminates the "works on dev, breaks in CI" problem. Accept the compile time cost.
-- Modify the workspace Cargo.toml to change the feature: `rusqlite = { version = "0.37", features = ["bundled-sqlcipher-vendored-openssl"] }`.
-- In `blufio-storage/src/database.rs`, restructure PRAGMA ordering:
-  ```rust
-  // MUST be first -- before ANY other PRAGMA or query
-  conn.execute_batch(&format!("PRAGMA key = '{}';", key))?;
-  // Now WAL mode and other PRAGMAs
-  conn.execute_batch("PRAGMA journal_mode = WAL;")?;
-  conn.execute_batch("PRAGMA synchronous = NORMAL; ...")?;
-  // Now migrations
-  crate::migrations::run_migrations(conn)?;
-  ```
-- Make the encryption key available to the database initialization code. Currently `Database::open()` takes only a path. It must also accept an optional encryption key.
-- Add a feature flag `encryption` to blufio-storage that gates the `PRAGMA key` call, so development and testing can still use plaintext SQLite without the SQLCipher overhead if desired.
+**Warning signs:**
+- Provider returns 400 Bad Request when tools are passed
+- Tool calls work with Anthropic but not OpenAI or Gemini provider
+- JSON deserialization errors on provider responses mentioning unknown fields
 
-**Detection:**
-- Build failure: "error: linking with `cc` failed" due to missing OpenSSL headers.
-- Runtime: "file is encrypted or is not a database" because `PRAGMA key` was called after another PRAGMA touched the database.
-- Runtime: refinery migrations fail because they ran before `PRAGMA key`.
-
-**Phase to address:** This is the foundational build change that must happen first, before any SQLCipher feature code. All other SQLCipher work depends on the feature flags compiling correctly.
+**Phase to address:**
+Multi-provider LLM phase. Must fix the trait before implementing any non-Anthropic provider.
 
 ---
 
-### Pitfall 4: Self-Update Replaces Binary While Service Is Running -- Partial Write Corruption
+### Pitfall 4: SQLite Single-Writer Becomes Latency Bottleneck Under Concurrent API Load
 
 **What goes wrong:**
-`blufio update` downloads a new binary and attempts to replace the running executable. On Unix, replacing a running binary with `rename()` is technically safe because the old file's inode stays valid as long as the process has it open. But if the download is interrupted (network failure, disk full, timeout), the partially downloaded file is written next to the running binary as a temp file. If the replacement logic uses `write()` + `rename()` but the `write()` is incomplete, the temp file contains a truncated binary. If the code doesn't verify the download before renaming, the replacement overwrites the working binary with a broken one.
+The existing system uses `tokio-rusqlite` with a dedicated single-writer thread — correct for the current single-channel, sequential conversation model. When the OpenAI-compatible API is exposed, callers can send concurrent requests (multiple clients, batch operations, webhook triggers). Each API request needs to write session/message data. All writes queue behind the single writer. At 5-10 concurrent requests, P99 latency climbs above the 120-second gateway timeout. The system appears to work in testing (sequential requests) but fails under real concurrent load.
 
 **Why it happens:**
-HTTP downloads are unreliable. A 25MB binary download on a $4/month VPS with limited bandwidth can easily be interrupted. The `self-replace` crate handles the atomic swap correctly (temp file + rename), but it trusts the caller to provide a valid replacement binary. If the caller (Blufio's update logic) passes an incomplete download to `self_replace::self_replace()`, the crate will dutifully swap it in.
+The single-writer pattern is correct for SQLite WAL mode and was a deliberate decision. The failure is not the pattern itself, but the assumption that it scales to concurrent write loads introduced by an API layer. The gateway currently has a 120s response timeout; if writes queue, LLM calls succeed but response routing times out, leaving orphaned oneshot channels in `response_map`.
 
-**Consequences:**
-- The running binary continues to work (Unix keeps the old inode open), but after restart, the corrupted binary fails to execute.
-- On a remote VPS with no other access method, this bricks the deployment. The operator must SSH in and manually restore from backup.
-- If the systemd service has `Restart=on-failure`, it will repeatedly try to start the corrupted binary and fail, filling logs.
+**How to avoid:**
+Add a write queue depth Prometheus gauge metric. Add a write latency histogram. Set an alert threshold at 50% queue depth. Audit all database write paths triggered by API requests and identify which can be deferred (async queue rather than synchronous write). For example: cost tracking writes can be batched and written every N seconds rather than per-request. Session creation writes are on the critical path and cannot be deferred — keep them fast by minimizing schema joins.
 
-**Prevention:**
-- Download to a temp file first (`blufio-update.XXXX.tmp` in the same directory as the binary).
-- Verify the download BEFORE calling self-replace:
-  1. Check file size matches the expected size from the release manifest.
-  2. Verify the Minisign signature of the downloaded file (this is why Minisign must be implemented before self-update).
-  3. On Linux, attempt to verify the binary is a valid ELF: check magic bytes `\x7fELF` at offset 0.
-- Only after all verification passes, call `self_replace::self_replace()` with the verified temp file.
-- If verification fails, delete the temp file and report the error. The running binary is untouched.
-- Create a rollback mechanism: before replacing, copy the current binary to `blufio.rollback`. If the new binary fails to start (detected by a health check within 30 seconds), restore from rollback.
-- Implement download resume: if the download is interrupted, keep the partial file and resume with HTTP Range headers on retry.
+**Warning signs:**
+- P99 latency grows with concurrent client count
+- `response_map` accumulates entries that never get consumed (memory leak symptom)
+- Gateway timeout errors appear under load but not sequential testing
 
-**Detection:**
-- Downloaded file size does not match expected size from release manifest.
-- Minisign signature verification fails.
-- Binary fails to start after update (exit code non-zero within 1 second).
-- systemd shows rapid restart cycling after an update.
-
-**Phase to address:** Self-update phase. Minisign verification must be implemented before self-update so that download integrity can be verified.
+**Phase to address:**
+OpenAI-compatible API layer phase (concurrent request testing must be in acceptance criteria) and event bus phase (event bus should drain writes asynchronously where possible).
 
 ---
 
-### Pitfall 5: Self-Update on Cross-Filesystem Mounts Fails with EXDEV
+### Pitfall 5: Event Bus Broadcast Receiver Lag Causes Silent Message Loss
 
 **What goes wrong:**
-The `self-replace` crate places the new binary as a temp file next to the current executable and performs an atomic `rename()`. On Unix, `rename()` only works within the same filesystem. If `/usr/local/bin/blufio` is on one filesystem and `/tmp` (where downloads go) is on another, and the update logic tries to rename from `/tmp/blufio-new` to `/usr/local/bin/blufio`, the kernel returns `EXDEV` (Invalid cross-device link). The update fails.
-
-More subtly: Docker containers, snap packages, and some VPS providers mount `/usr/local/bin` as a read-only overlay filesystem. `rename()` fails even if the source and destination appear to be on the same path.
+`tokio::sync::broadcast` is the natural choice for an internal event bus — it supports multiple receivers and is already in the dependency tree. However, if any receiver is slow (e.g., a metrics aggregator blocked on a Prometheus scrape, or a webhook dispatcher waiting for an HTTP round-trip), the broadcast channel's ring buffer fills. Tokio's broadcast channel returns `RecvError::Lagged` — not an error that panics or logs visibly by default. The receiver that lagged misses events silently. If the webhook dispatcher misses 50 events and never logs, operators have no idea until they notice missing webhooks.
 
 **Why it happens:**
-`rename(2)` is a filesystem-level operation that moves a directory entry. It cannot move data between filesystems -- that requires copy + delete. The `self-replace` crate's documentation notes that temporary files are placed "right next to the current executable," which should avoid EXDEV in normal cases. But if the download temp file is created elsewhere (e.g., in `/tmp` or a user-specified directory), EXDEV occurs.
+`tokio::sync::broadcast` trades reliability for low latency. It does not block senders when receivers lag — it drops the oldest messages and records a lag count. New Rust developers familiar with mpsc channels (which apply backpressure) assume broadcast does the same. It does not.
 
-**Consequences:**
-- Update fails with an obscure OS error that most operators will not understand.
-- If the code catches EXDEV and falls back to copy + delete, the copy is NOT atomic. A crash during copy leaves a partially written binary.
+**How to avoid:**
+Treat `RecvError::Lagged(n)` as an observable error — log it as `tracing::warn!` with the receiver name and lag count, and emit a Prometheus counter. Set broadcast channel capacity generously (1024+ for event bus). For receivers that must not miss events (webhook dispatcher, audit log), use mpsc instead: the event bus sends to a dedicated mpsc channel per critical subscriber, maintaining per-subscriber backpressure. Use broadcast only for fire-and-forget subscribers (metrics, debug logging).
 
-**Prevention:**
-- Always create the download temp file in the same directory as the current executable, not in `/tmp`. Use `tempfile::NamedTempFile::new_in(executable_dir)`.
-- If the temp file creation fails (read-only filesystem), fall back to a different strategy: download to `/tmp`, verify, then use `std::fs::copy()` + `std::fs::rename()` where the copy goes to a temp file in the same directory, then rename replaces the original.
-- Handle EXDEV explicitly: if `rename()` returns EXDEV, fall back to copy-then-rename within the same directory.
-- Detect read-only filesystems at update start: attempt to create a test file in the executable's directory. If it fails with EROFS/EPERM, tell the operator they need to update manually or remount.
+**Warning signs:**
+- Webhook delivery counts don't match published event counts
+- No errors logged but downstream systems report gaps
+- `RecvError::Lagged` appears in traces only when searching explicitly
 
-**Detection:**
-- Error message containing "Invalid cross-device link" or "EXDEV" or "errno 18".
-- Error message containing "Read-only file system" or "EROFS".
-
-**Phase to address:** Self-update phase. Test on Docker containers and various VPS configurations.
+**Phase to address:**
+Event bus phase. Must be designed with lag handling from day one — retrofitting is harder than preventing.
 
 ---
 
-## Moderate Pitfalls
-
----
-
-### Pitfall 6: sd_notify on Non-Systemd Systems Causes Compile or Runtime Failure
+### Pitfall 6: WhatsApp Unofficial Library Results in Account Ban
 
 **What goes wrong:**
-The `sd-notify` Rust crate depends on `libc` and uses Unix domain sockets to communicate with systemd via the `NOTIFY_SOCKET` environment variable. On macOS (the development platform), there is no systemd. Two failure modes:
-1. **Compile failure on macOS**: If the crate uses Linux-specific socket types (e.g., `SOCK_CLOEXEC`), it won't compile on macOS.
-2. **Runtime no-op confusion**: The underlying `sd_notify(3)` specification says if `NOTIFY_SOCKET` is not set, the function returns 0 (not an error). But the Rust crate's `notify()` function returns `Result<(), Error>` and its behavior when `NOTIFY_SOCKET` is absent may return `Ok(())` silently or `Err(...)` depending on the implementation.
-
-The service file currently has `Type=simple` with `WatchdogSec=300`. Changing to `Type=notify` without implementing sd_notify means systemd will wait for the `READY=1` notification forever, then kill the service after the startup timeout (default 90 seconds). The service appears to hang on startup.
+Implementing a WhatsApp adapter using an unofficial Rust library (reverse-engineered protocol) appears to work in development. In production, Meta's anti-abuse systems detect the non-standard client within days to weeks and permanently ban the phone number. The number loses WhatsApp access entirely. There is no appeal process for numbers banned for TOS violations. Operators who invested in a WhatsApp-first deployment lose their business number.
 
 **Why it happens:**
-Developers add `sd-notify` to dependencies, change the service file to `Type=notify`, deploy to production, and the binary never sends `READY=1` because the sd_notify call silently fails or was gated behind a compile-time feature that isn't enabled in the production build.
+Meta aggressively monitors for unofficial clients in 2025. The WhatsApp Business API requires going through a BSP (Business Solution Provider) or official Meta Tech Partner. Unofficial libraries like `whatsapp-web.rs` or `baileys` ports mimic the WhatsApp Web protocol and are detectable. The risk is categorically different from Telegram (open Bot API) or Discord (open developer API).
 
-**Consequences:**
-- Service fails to start on production systemd (Type=notify but no READY=1 sent).
-- Watchdog kills the service every 300 seconds because no `WATCHDOG=1` pings are sent.
-- On macOS development, the sd_notify calls either don't compile or are silent no-ops, so the developer never tests the actual notification path.
+**How to avoid:**
+Use only the official WhatsApp Business API (`graph.facebook.com/v22.0/{phone-number-id}/messages`). This requires Meta Business account, WhatsApp Business App setup, and BSP approval. Accept that unverified business portfolios start at 250 messages/24h. Do not ship a WhatsApp adapter using unofficial libraries even for local testing — the ban risk applies to any number used. Document the official API requirement prominently in the adapter's README and in the TOML config validation.
 
-**Prevention:**
-- Gate sd_notify behind a Cargo feature flag: `systemd` feature on the `blufio` crate. Only enabled in production builds.
-  ```toml
-  [features]
-  systemd = ["dep:sd-notify"]
-  ```
-- The `blufio serve` startup code checks `std::env::var("NOTIFY_SOCKET")` before calling sd_notify. If absent, skip all sd_notify calls and log "sd_notify: NOTIFY_SOCKET not set, skipping (not running under systemd)".
-- Update the service file from `Type=simple` to `Type=notify` ONLY in the same commit that adds the `READY=1` notification. Never change one without the other.
-- Implement watchdog pinging in the heartbeat runner: since Blufio already has `HeartbeatRunner` that ticks periodically, add `sd_notify::notify(false, &[NotifyState::Watchdog])` to the heartbeat tick. This reuses existing infrastructure.
-- Add a `blufio doctor` check: if `NOTIFY_SOCKET` is set, verify that the service file uses `Type=notify` and `WatchdogSec` is configured.
-- On macOS, use `#[cfg(target_os = "linux")]` to compile-gate the sd_notify calls entirely. On non-Linux, the functions are no-ops.
+**Warning signs:**
+- Library uses WebSocket to `web.whatsapp.com` rather than `graph.facebook.com`
+- Library documentation mentions "multi-device" session scanning
+- No mention of official Meta developer approval in the library's documentation
 
-**Detection:**
-- systemd journal shows "blufio.service: State 'start' timed out. Killing."
-- `systemctl status blufio` shows "activating (start)" indefinitely.
-- Watchdog-triggered restarts every `WatchdogSec` seconds in the journal.
-
-**Phase to address:** sd_notify phase. The feature flag and NOTIFY_SOCKET check are trivial but missing either one causes production outage.
+**Phase to address:**
+Multi-channel adapter phase (Discord/WhatsApp/Slack). WhatsApp must use official API or be deferred to a future milestone when official API integration is resourced.
 
 ---
 
-### Pitfall 7: SQLCipher PRAGMA Key Ordering Breaks Existing PRAGMA Chain
+### Pitfall 7: Discord Message Content Intent Not Requested Silently Breaks Text Reception
 
 **What goes wrong:**
-Blufio's `database.rs` currently applies PRAGMAs in this order after opening the connection:
-```rust
-conn.execute_batch("PRAGMA journal_mode = WAL;")?;
-conn.execute_batch("PRAGMA synchronous = NORMAL;
-                     PRAGMA busy_timeout = 5000;
-                     PRAGMA foreign_keys = ON;
-                     PRAGMA cache_size = -16000;
-                     PRAGMA temp_store = MEMORY;")?;
-```
-
-With SQLCipher, `PRAGMA key` MUST be the absolute first operation on the connection. SQLCipher uses "just-in-time" key derivation -- the key is applied when the database is first touched. If `PRAGMA journal_mode = WAL` runs before `PRAGMA key`, SQLCipher attempts to read the database header without the key, fails, and the connection is in an error state. All subsequent operations fail with "file is encrypted or is not a database."
+Discord bots created after April 2022 must explicitly request the `MESSAGE_CONTENT` privileged intent to read message content in servers. Without this intent, `message.content` is always an empty string for messages not directed at the bot via mention or DM. A Blufio Discord adapter that does not request this intent appears to work in DMs (bots always see DM content) but silently receives empty strings for all server messages. Operators report "bot not responding" without any error in logs.
 
 **Why it happens:**
-The developer adds `PRAGMA key` to the PRAGMA chain but places it after `journal_mode = WAL` (because WAL mode "must be set outside any transaction" per the existing comment in the code). With SQLCipher, the ordering constraint is even stricter: key FIRST, then everything else.
+The intent is not enabled by default in the Discord Developer Portal, and many Discord library wrappers don't fail loudly when content is empty — they simply process an empty string as if it were a valid message. Developers test in DMs, find it working, and only discover the problem in production server deployments.
 
-**Consequences:**
-- Database connection fails on every open attempt after migration to SQLCipher.
-- The error message is identical to Pitfall 1 ("file is encrypted or is not a database"), making debugging confusing -- is the DB not encrypted, or is the key wrong, or is the PRAGMA ordering wrong?
-- tokio-rusqlite runs the PRAGMA setup on a background thread via `call()`. If the call fails, the error propagates as a generic storage error that may not clearly indicate the PRAGMA ordering issue.
+**How to avoid:**
+Enable `MESSAGE_CONTENT` in the Discord Developer Portal at bot creation time. In the adapter code, assert the intent is present in the gateway connection, and add a startup check: if the bot is in any guild and receives a non-DM message with empty content, emit a `tracing::error!` with explicit guidance to enable the intent. Add a Discord-specific integration test that verifies content is received from guild messages.
 
-**Prevention:**
-- Restructure `Database::open()` to accept an optional encryption key parameter:
-  ```rust
-  pub async fn open(path: &str, encryption_key: Option<&str>) -> Result<Self, BlufioError>
-  ```
-- In the connection setup closure, enforce strict ordering:
-  1. `PRAGMA key = '...'` (if encryption_key is Some)
-  2. `PRAGMA journal_mode = WAL`
-  3. All other PRAGMAs
-  4. Migrations
-- Add an integration test that opens an encrypted database with the wrong PRAGMA order and verifies it fails, then opens with the correct order and verifies it succeeds.
-- Add a comment block in the code:
-  ```rust
-  // CRITICAL: SQLCipher requires PRAGMA key as the FIRST operation.
-  // Do NOT add any PRAGMA or query before this line.
-  // See: https://discuss.zetetic.net/t/...
-  ```
+**Warning signs:**
+- Bot responds to DMs but not server messages
+- Incoming messages always have empty content in logs
+- No errors — just empty string processing
 
-**Detection:**
-- "file is encrypted or is not a database" error on startup after enabling SQLCipher.
-- Works in tests (which may use plaintext) but fails in production (which uses encrypted).
-
-**Phase to address:** SQLCipher implementation phase, immediately after the build change (Pitfall 3).
+**Phase to address:**
+Multi-channel adapter phase. This check must be in the adapter's `connect()` implementation.
 
 ---
 
-### Pitfall 8: Refinery Migrations Cannot Run Before PRAGMA key
+### Pitfall 8: Slack Rate Limit Tier Mismatch Causes Invisible Throttling
 
 **What goes wrong:**
-Blufio uses the `refinery` crate with `embed_migrations!` to run database migrations automatically on startup. Refinery's `runner().run()` method takes a `&mut rusqlite::Connection` and immediately queries the `refinery_schema_history` table to determine which migrations have been applied. With SQLCipher, this query happens BEFORE the developer has a chance to set `PRAGMA key` if the migration call is in the wrong position.
-
-Additionally, the migration export during `sqlcipher_export()` copies the `refinery_schema_history` table along with everything else. But if the migration runner is invoked on the encrypted database and the key derivation has already been performed, refinery sees an up-to-date history and does nothing. If the key derivation fails silently, refinery tries to create its history table in an unkeyed connection and gets "file is encrypted or is not a database."
+Slack's Web API has tiered rate limits per method. As of May 2025, `conversations.history` and `conversations.replies` are limited to 1 request/minute for non-Marketplace apps. A Blufio Slack adapter that polls these endpoints for conversation context hits the limit within seconds of startup, causing subsequent calls to return HTTP 429. If the adapter treats 429 as a transient error and retries without exponential backoff + jitter, it enters a retry storm that worsens rate limiting. Messages are delayed or dropped. Operators see the bot responding but slowly and incompletely.
 
 **Why it happens:**
-The current `Database::open()` flow is: open connection -> apply PRAGMAs -> run migrations. With SQLCipher, the flow must be: open connection -> PRAGMA key -> apply PRAGMAs -> run migrations. But refinery's API takes the raw connection, and developers may call it before PRAGMA key if they refactor the initialization code carelessly.
+Most developers test Slack adapters with lightweight usage that doesn't trigger rate limits. The 1 req/min limit for conversation history feels impossibly low until you have multiple active sessions all trying to load context simultaneously.
 
-**Consequences:**
-- Startup crashes with an opaque refinery error that wraps the SQLCipher error.
-- If refinery somehow runs against an unkeyed encrypted database, it may create a separate unencrypted `refinery_schema_history` table in a temp area, leading to state confusion.
+**How to avoid:**
+Design the Slack adapter to use push-based event delivery (Slack Events API or Socket Mode) rather than polling. Cache conversation history locally in SQLite and only fetch from Slack on cache miss. Implement per-method rate limit tracking using the `Retry-After` header Slack returns on 429. Add a `slack_api_calls` Prometheus counter with method label so operators can see approach to limits.
 
-**Prevention:**
-- The `Database::open()` method is the single point of control. The sequence must be enforced in one function, not spread across modules:
-  ```
-  open -> PRAGMA key -> PRAGMAs -> run_migrations -> return Database
-  ```
-- Refinery never gets a connection that hasn't had `PRAGMA key` applied.
-- Add a guard: after `PRAGMA key`, execute `SELECT count(*) FROM sqlite_master` as a canary. If this fails, the key is wrong -- abort with a clear error message BEFORE running migrations.
-- Unit test: call `run_migrations()` on an encrypted connection without PRAGMA key first and verify the error is caught and reported clearly.
+**Warning signs:**
+- HTTP 429 responses in Slack adapter logs
+- Message processing latency grows over the session lifetime
+- Bot falls behind in responding to busy channels
 
-**Detection:**
-- refinery error: "Migration error: file is encrypted or is not a database"
-- `refinery_schema_history` table exists in destination but shows 0 migrations applied (migration state lost during export).
-
-**Phase to address:** SQLCipher implementation phase, same as Pitfall 7.
+**Phase to address:**
+Multi-channel adapter phase (Slack specifically). Rate limit strategy must be in the adapter design, not retrofitted.
 
 ---
 
-### Pitfall 9: Minisign Public Key Embedded in Binary Creates Update Chicken-and-Egg
+### Pitfall 9: Signal Adapter Has No Stable Rust Library
 
 **What goes wrong:**
-Minisign verification requires a public key to verify signatures. If the public key is compiled into the binary (the most secure approach -- no TOML config tampering), then rotating the key requires releasing a new binary. But the new binary is signed with the NEW key, and the old binary only knows the OLD key. The old binary cannot verify the new binary's signature, so the self-update mechanism refuses to install it. The operator is stuck on the old version forever unless they manually download and replace the binary.
+Signal has no official bot API. All Rust Signal integrations rely on reverse-engineered protocols or brittle bridges to `signal-cli` (a Java process). Signal protocol updates can break all unofficial clients simultaneously with no warning. A `signal-cli` subprocess dependency violates the single-binary constraint and introduces a Java runtime dependency. Matrix bridges exist but require a running Matrix homeserver.
 
 **Why it happens:**
-Key rotation is an inherent challenge with embedded public keys. Hardware security modules and certificate chains solve this in TLS, but Minisign is simpler -- it has no certificate chain, no key hierarchy, and no built-in rotation mechanism. The key ID in the signature identifies which key was used, but the verifier must have the corresponding public key already.
+Signal is not a developer-friendly platform. The organization's position is that bots and automation are not supported use cases, and they actively resist unofficial API access.
 
-**Consequences:**
-- Key rotation permanently breaks the self-update mechanism for all deployed binaries.
-- Operators must manually update, defeating the purpose of self-update.
-- If the signing private key is compromised, there is no way to revoke it and switch to a new key via the normal update path.
+**How to avoid:**
+Do not implement a direct Signal adapter for v1.3. The only viable path is through `signal-cli` as a subprocess (Java dependency, violates single-binary) or a Matrix bridge (homeserver dependency). Defer Signal to a future milestone when/if an official API exists, or implement as a plugin that accepts the subprocess dependency explicitly. Document this as an ecosystem gap in the v1.3 release notes.
 
-**Prevention:**
-- Embed MULTIPLE public keys in the binary: the current key and one or two "next" keys. The verification logic tries each key until one succeeds.
-  ```rust
-  const SIGNING_KEYS: &[&str] = &[
-      "RWQ...", // current key (2026)
-      "RWR...", // next key (pre-generated, private key stored offline)
-  ];
-  ```
-- When a new key is needed, the transitional binary (signed with the old key, but containing the new key in its embedded list) is released first. All deployed instances update to the transitional version. Then subsequent releases are signed with the new key, and all instances can verify because they have the transitional binary with both keys.
-- Add a TOML config option `[update] trusted_keys = ["RWQ...", "RWR..."]` as an escape hatch. If the embedded keys cannot verify, check the config file. This is less secure (config can be tampered) but provides a recovery path.
-- Print a warning when the signature was verified with a non-primary key: "Update verified with backup key. A key rotation may be in progress."
-- Document the key rotation procedure in the operator guide.
+**Warning signs:**
+- Any Rust Signal crate that hasn't been updated in 3+ months
+- Library documentation mentions running `signal-cli` or registering a phone number via a third-party relay
+- No official Signal developer documentation referenced
 
-**Detection:**
-- Self-update reports "signature verification failed" after a key rotation.
-- All deployed instances stop updating simultaneously.
-
-**Phase to address:** Minisign phase. The multi-key strategy must be designed before the first public key is embedded. Changing the key embedding strategy after release is a breaking change for all deployed instances.
+**Phase to address:**
+Multi-channel adapter phase. Signal should be removed from v1.3 scope or explicitly scoped as `signal-cli` bridge with documented Java dependency.
 
 ---
 
-### Pitfall 10: Backup Integrity Check Blocks Backup Operation for Large Databases
+### Pitfall 10: Skill Registry Code Signing Does Not Prevent Capability Escalation
 
 **What goes wrong:**
-Adding `PRAGMA integrity_check` after every backup sounds like a good idea, but it is a FULL TABLE SCAN of every page in the database. For a 100MB database (realistic after months of operation with memory embeddings), `integrity_check` takes 1-5 seconds. During this time, the backup operation holds the database connection, and on a single-writer architecture (tokio-rusqlite with one background thread), ALL database writes are blocked. On a busy agent handling multiple sessions, this causes visible latency spikes -- the agent stops responding for several seconds during backup.
+Ed25519 signatures verify that a skill package was signed by a known key — they do not verify that the skill's manifest accurately describes its actual capabilities. A malicious skill author signs a WASM module that calls host functions not declared in its capability manifest. If the WASM sandbox only checks declared capabilities at install time rather than at each host function call, the skill bypasses the sandbox. The existing `wasmtime` sandbox with fuel/memory/epoch limits is correct, but the host function dispatch must validate the calling skill's declared capabilities on every call.
 
 **Why it happens:**
-`PRAGMA integrity_check` verifies every B-tree page, every index, every overflow page. It is O(n) in database size. The existing `blufio doctor --deep` already runs `integrity_check` but it runs manually and infrequently. Running it on every backup (which may happen on a cron schedule, e.g., every hour) turns a manual diagnostic into a recurring performance hit.
+Signature verification is conflated with capability verification. Developers implement signing as a separate pre-install step and assume that a signed skill is trusted to run with its declared capabilities unchecked. The attack vector is: publish v1.0 with minimal capabilities and earn user trust, then publish v1.1 signed by the same key but with a manifest that declares no new capabilities while the WASM binary actually calls `network_fetch` — if dispatch doesn't check per-call, the call succeeds.
 
-**Consequences:**
-- Backup takes seconds instead of milliseconds for large databases.
-- During integrity check, the single-writer thread is occupied, so all `INSERT`, `UPDATE`, and `DELETE` operations queue up. Agent loop stalls.
-- On a $4/month VPS with slow storage, integrity check on a 500MB database could take 10-30 seconds, causing Telegram API timeouts (30-second long-polling timeout).
-- The watchdog timer (WatchdogSec=300) is unlikely to trigger, but accumulated backup latency over time degrades the operator experience.
+**How to avoid:**
+In `blufio-skill`'s WASM host function dispatch, check the calling skill's capability manifest on every host function invocation (not just at install time). The manifest is loaded once and cached in the sandbox context. Host functions that require network capability must verify `manifest.capabilities.network.is_some()` before executing. This is enforcement, not just declaration. Add a test that installs a skill without network capability and verifies that attempting a `network_fetch` host call returns a sandbox error rather than succeeding.
 
-**Prevention:**
-- Use `PRAGMA quick_check` instead of `PRAGMA integrity_check` for post-backup verification. `quick_check` verifies page-level consistency without checking index ordering -- it is significantly faster (10-100x) for large databases.
-- Run the integrity check on the BACKUP FILE, not the source database. Open a separate read-only connection to the backup file and run `integrity_check` there. This does not block the main writer thread.
-- Make integrity checking configurable: `[backup] verify = "quick"` (default), `"full"`, or `"none"`.
-- Run full integrity check only on restore operations (where correctness is critical and a one-time delay is acceptable).
-- For scheduled backups, run `quick_check` on the backup file in a separate tokio task, not on the main writer thread. Report the result asynchronously.
+**Warning signs:**
+- Host function dispatch uses a single global "is skill trusted?" boolean rather than per-function capability check
+- Skills can make network calls regardless of their declared capabilities
+- Capability checks only run at `blufio skill install` time
 
-**Detection:**
-- Backup operation takes >1 second (previously took <100ms).
-- Agent response times spike during backup windows.
-- `blufio doctor` shows elevated writer thread queue depth during backup.
-
-**Phase to address:** Backup integrity phase. The check must run on the backup file, not the source, and use `quick_check` by default.
+**Phase to address:**
+Skill registry phase. Must be verified before code signing is advertised as a security feature.
 
 ---
 
-### Pitfall 11: SQLCipher KDF Adds Startup Latency
+### Pitfall 11: Docker Image for SQLCipher Binary Requires Non-Scratch Base
 
 **What goes wrong:**
-SQLCipher uses PBKDF2-HMAC-SHA512 with 256,000 iterations by default (SQLCipher 4.x). Every time the database is opened and `PRAGMA key` is executed, the KDF runs to derive the encryption key. On a $4/month VPS with a low-end CPU, this takes 200-500ms. Blufio already has 2-5 second cold start time (embedding model load + TLS initialization). Adding 200-500ms per database open is noticeable. Worse, Blufio opens the database connection on EVERY `blufio` CLI invocation, including `blufio status`, `blufio doctor`, and `blufio backup` -- not just `blufio serve`. Quick commands that currently take <100ms now take 500ms+ due to KDF.
+The standard advice for static Rust binaries is to use `FROM scratch` — the most minimal base. However, Blufio uses SQLCipher which requires the `libsqlcipher` shared library unless the crate is built with the `bundled` feature. More critically, the binary makes HTTPS connections to LLM APIs and needs CA certificates. A `FROM scratch` image has no `/etc/ssl/certs/ca-certificates.crt`, causing all outbound TLS connections to fail with certificate validation errors. The binary starts, reports healthy, but every LLM call fails.
 
 **Why it happens:**
-The high iteration count is intentional -- it makes brute-force key attacks expensive. Reducing iterations weakens security. But the performance cost is paid on every connection open, not just once.
+The "use scratch for static Rust binaries" advice is correct for pure-Rust binaries with no system library dependencies and no TLS. Blufio has both: SQLCipher (via rusqlite's SQLCipher feature) links to libsqlcipher unless bundled, and reqwest's TLS stack needs CA certs regardless of static/dynamic linking.
 
-**Consequences:**
-- `blufio serve` cold start goes from 2-5s to 2.5-5.5s. Acceptable but visible.
-- `blufio status` (quick check) goes from <100ms to 500ms+. Feels sluggish.
-- `blufio doctor` opens the database twice (once for config, once for deep checks). KDF runs twice: 1 second overhead.
-- In tests, every test that opens a database gets 200-500ms slower. A test suite with 50 database tests adds 10-25 seconds.
+**How to avoid:**
+Use `gcr.io/distroless/static-debian12:nonroot` as the final stage base. It provides CA certificates, `/etc/passwd` for the non-root user, and timezone data — nothing else. Alternatively, use `FROM scratch` and explicitly COPY the CA bundle: `COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/`. Build SQLCipher with the `bundled` feature (`RUSQLITE_BUNDLED_SQLCIPHER=1`) to eliminate the shared library dependency. Verify the image works by running `docker run blufio blufio doctor` in CI before tagging a release.
 
-**Prevention:**
-- For CLI commands that only read (status, doctor), consider using a cached derived key stored in memory-mapped state (e.g., a Unix domain socket to the running `blufio serve` process).
-- For tests, use a raw key (`PRAGMA key = "x'..."` with a hex key) instead of a passphrase, bypassing KDF entirely. Or use `PRAGMA kdf_iter = 1` in test builds (compile-time feature flag, NEVER in production).
-- Accept the startup latency for `blufio serve` -- it runs once and stays up for months.
-- For `blufio backup` and `blufio restore`, the KDF cost is acceptable because these are infrequent operations.
-- Document the latency impact in the changelog so operators are not surprised.
-- Consider offering `PRAGMA cipher_memory_security = OFF` for non-sensitive deployments (disables memory scrubbing, improves performance slightly).
+**Warning signs:**
+- `docker run blufio blufio doctor` reports LLM provider unhealthy
+- reqwest errors mentioning certificate validation failure
+- Binary works on host (has system certs) but not in container
 
-**Detection:**
-- Startup time regression measured in CI benchmarks.
-- Operator complaints about CLI responsiveness.
-
-**Phase to address:** SQLCipher implementation phase. Accepted tradeoff, not a bug. But test performance must be addressed with raw keys.
+**Phase to address:**
+Docker image phase. The Dockerfile must be validated with an actual LLM call, not just a health endpoint check.
 
 ---
 
-### Pitfall 12: Minisign Verify-Only Crate Does Not Support Trusted Comments
+### Pitfall 12: Node Pairing Token Has No Expiry — Leaked Token = Permanent Access
 
 **What goes wrong:**
-There are two Minisign Rust crates: `minisign` (full implementation, sign + verify) and `minisign-verify` (verify only, zero dependencies). The verify-only crate is attractive for a small binary, but it may not support all features needed for production use. Specifically, trusted comments in Minisign signatures can carry metadata like version numbers (for downgrade attack prevention), timestamps, and intended filenames. If the verify-only crate does not validate trusted comments or expose them for inspection, the self-update mechanism cannot use them for version checking.
+A node pairing system typically involves generating a one-time or short-lived pairing token. If the pairing token does not expire, an operator who accidentally logs or displays the token during setup provides an attacker with permanent ability to pair a malicious node. Paired nodes receive the gateway's Ed25519 public key and can issue signed inter-agent messages. A malicious node could flood the agent with crafted messages, extract session data, or trigger tool invocations with operator-level trust.
 
 **Why it happens:**
-The `minisign-verify` crate is intentionally minimal -- "A small Rust crate to verify Minisign signatures." It handles the core Ed25519 signature verification but may not parse or validate the trusted comment's global signature (which is a separate signature over the signature + trusted comment concatenation).
+Pairing tokens are often implemented as a UUID stored in SQLite with no `expires_at` column. Adding expiry is easy to defer ("we'll add it later") and the system works without it during development.
 
-**Consequences:**
-- Self-update cannot use trusted comments for downgrade protection (e.g., refusing to "update" to an older version).
-- If trusted comments are not validated, an attacker could modify the trusted comment (changing the version number) without detection.
-- The full `minisign` crate is heavier (includes signing code and keygen code that Blufio doesn't need), increasing binary size unnecessarily.
+**How to avoid:**
+All pairing tokens must have an `expires_at` timestamp, default 15 minutes. Store tokens in a `node_pairing_tokens` table with columns: `token TEXT PRIMARY KEY`, `created_at TEXT`, `expires_at TEXT`, `used BOOLEAN`. Mark token as used after successful pairing (one-time use). Add a Prometheus counter for expired tokens and failed pairings. Reject any token older than its `expires_at` at the cryptographic verification layer — not just at the API layer.
 
-**Prevention:**
-- Use the `minisign-verify` crate and verify that it validates the trusted comment's global signature (the second signature that covers the trusted comment). Check the crate's source code or test this explicitly.
-- If `minisign-verify` does not validate trusted comments: either use the full `minisign` crate, or implement trusted comment validation manually (it is just another Ed25519 signature verification over `signature || trusted comment`).
-- Parse the trusted comment in Blufio's update logic to extract version metadata. Use it for downgrade protection: refuse to install a binary whose trusted comment version is less than or equal to the current version.
-- Add integration tests that tamper with trusted comments and verify that verification fails.
+**Warning signs:**
+- Pairing token has no time component in its data
+- Token table has no `expires_at` column
+- Same token can be used multiple times
 
-**Detection:**
-- Trusted comment modification goes undetected in tests.
-- Self-update installs an older version (downgrade attack succeeds).
-
-**Phase to address:** Minisign phase. Evaluate both crates before choosing. The crate choice determines whether trusted comment validation is automatic or manual.
+**Phase to address:**
+Node system phase. Expiry and single-use enforcement must be in the initial implementation.
 
 ---
 
-## Minor Pitfalls
-
----
-
-### Pitfall 13: sd_notify Watchdog Interval Miscalculated
+### Pitfall 13: OpenClaw Migration Loses Daily Memory and Long-Term Context Files
 
 **What goes wrong:**
-The systemd service file has `WatchdogSec=300` (5 minutes). The `sd_notify` watchdog protocol requires pinging BEFORE half the watchdog interval elapses (i.e., every 150 seconds or less). If Blufio's heartbeat runner ticks every 60 seconds, this is fine. But if the heartbeat interval is configurable and an operator sets it to 180 seconds (for cost saving on Haiku heartbeats), the watchdog ping exceeds the half-interval, and systemd kills the service thinking it's hung.
+OpenClaw stores agent personality and memory in `~/.openclaw/` as flat files: `config.json`, `MEMORY.md` (long-term memory), `LESSONS.md` (learned behaviors), `CONTEXT.md` (active discussion), and per-day `workspace/YYYY-MM-DD.md` files. A migration tool that only exports `config.json` and database records misses the MEMORY.md, LESSONS.md, and workspace files entirely. After migration, the agent in Blufio has no memory of anything that happened in OpenClaw. Users who valued their agent's personalization lose months of accumulated context.
 
-**Prevention:**
-- Read `WATCHDOG_USEC` from the environment (set by systemd) and calculate the ping interval as `WATCHDOG_USEC / 2 / 1_000_000` seconds. Do NOT rely on the heartbeat runner's interval.
-- Spawn a dedicated watchdog task (lightweight, no LLM calls) that pings at the calculated interval, independent of the heartbeat runner.
-- If `WATCHDOG_USEC` is not set, skip watchdog pinging entirely.
-- Validate that `WatchdogSec` in the service file and the calculated ping interval are compatible. Log a warning if the ping interval would exceed the half-interval.
+**Why it happens:**
+The migration tool developer focuses on structured data (sessions, messages, credentials) and overlooks the unstructured flat files that represent the "personality" of an OpenClaw agent. The tool passes its own integration tests (which don't include memory file migration) but fails the operator's actual use case.
 
-**Phase to address:** sd_notify phase. Simple but easy to get wrong.
+**How to avoid:**
+The OpenClaw migration tool must explicitly enumerate and export: `config.yaml`, `credentials.json` (if present, with encryption), `MEMORY.md`, `LESSONS.md`, `CONTEXT.md`, all `workspace/YYYY-MM-DD.md` files, and session/message data. Import these into Blufio's memory system by injecting MEMORY.md and LESSONS.md as static context zone entries (read-only, high-priority). Add a migration dry-run mode that lists all files that will be migrated before executing. Add a post-migration verification that confirms the count of migrated items against the source.
+
+**Warning signs:**
+- Migration tool documentation mentions only "config and sessions"
+- No memory file enumeration in the export step
+- Post-migration agent has no knowledge of past conversations
+
+**Phase to address:**
+OpenClaw migration phase (last phase of v1.3). Must include a detailed checklist of OpenClaw artifacts to migrate.
 
 ---
 
-### Pitfall 14: Self-Update Leaves Stale .tmp Files on Failure
+### Pitfall 14: OpenAI-Compatible API Exposes Internal Session IDs to External Callers
 
 **What goes wrong:**
-The `self-replace` crate creates temporary files with dot-prefixed, randomly-suffixed names next to the current executable. If the update process fails (download error, verification failure, permission denied), these temp files are not cleaned up. Over multiple failed update attempts, the directory accumulates stale temp files. On a VPS with limited disk space, this wastes storage. More importantly, the stale temp files may contain partially downloaded (and thus unsigned) binaries that could be confused with legitimate files.
+The OpenAI chat completions spec includes an optional `user` field and returns a `system_fingerprint` and response `id`. Developers mapping these to Blufio internals often expose the internal SQLite session UUID as the `id` or attach it to the OpenAI response. This leaks the internal session identifier to API callers, which then use it to directly query `GET /v1/sessions/{id}`, bypassing any access control that would normally scope session access to the originating channel's user. A caller who receives another session's ID can read that session's messages.
 
-**Prevention:**
-- After any update failure, explicitly delete the temp file in the error handling path.
-- At update start, scan for and delete any existing `blufio-update.*.tmp` files from previous failed attempts.
-- Use `tempfile::NamedTempFile` which auto-deletes on drop, rather than manual temp file management.
-- Set a maximum age for temp files: delete any `.tmp` files in the executable's directory that are older than 1 hour.
+**Why it happens:**
+It's convenient to return the internal session ID as the OpenAI response ID. The IDs are UUIDs — they look random and non-guessable — so developers assume they're safe to expose. But any caller who receives their own session ID might use it to guess neighboring session IDs.
 
-**Phase to address:** Self-update phase.
+**How to avoid:**
+Return opaque, externally-scoped IDs for all OpenAI-compatible responses. Never expose the internal SQLite `session_id` directly. Use a separate `external_id` column in the sessions table that is a different UUID, generated fresh at session creation, distinct from the internal primary key. The `/v1/sessions` list endpoint should be scoped by the authenticated API key's scope — a scoped key for caller X should only see sessions created by caller X.
 
----
+**Warning signs:**
+- OpenAI response `id` matches the internal SQLite `session_id` in the database
+- Any caller can list all sessions via GET /v1/sessions without filtering
+- No per-API-key session scoping in the sessions query
 
-### Pitfall 15: SQLCipher Encrypted Database Cannot Be Inspected with Standard sqlite3 CLI
-
-**What goes wrong:**
-After migrating to SQLCipher, the standard `sqlite3` command-line tool cannot open the encrypted database. It shows "file is encrypted or is not a database." Operators who use `sqlite3` for debugging, data inspection, or manual queries lose this capability. This affects operational workflows: checking session counts, inspecting cost ledger, verifying migration state, manual data fixes.
-
-**Prevention:**
-- Document this clearly in the migration guide: "After encryption, use `sqlcipher` CLI instead of `sqlite3`."
-- Enhance `blufio doctor` to report key database statistics (session count, message count, cost total, migration version) so operators do not need to open the database manually.
-- Add a `blufio db query <sql>` command that opens the encrypted database with the correct key and runs a read-only SQL query. This provides the debugging capability without requiring operators to install `sqlcipher`.
-- In development builds (feature flag), optionally keep the database unencrypted for easier debugging.
-
-**Phase to address:** SQLCipher phase. Documentation and tooling must ship with the encryption feature.
+**Phase to address:**
+OpenAI-compatible API layer phase and scoped API key phase. Both must be designed together.
 
 ---
 
-### Pitfall 16: Backup of Encrypted Database Produces Encrypted Backup
+## Technical Debt Patterns
 
-**What goes wrong:**
-The current `backup.rs` uses `rusqlite::backup::Backup` to create an atomic copy of the database. When the source database is encrypted with SQLCipher, the backup will also be encrypted. The backup can only be opened with the same encryption key. If the operator loses the key, both the live database and all backups are unrecoverable. Additionally, the backup verification (`PRAGMA integrity_check` on the backup file) requires opening the backup with `PRAGMA key` first -- the verification code must also know the encryption key.
+Shortcuts that seem reasonable during v1.3 but create long-term problems.
 
-**Prevention:**
-- Document that backups of encrypted databases are also encrypted and require the same key.
-- Store key metadata (not the key itself) alongside backups: a key hint, key derivation parameters, or a hash of the key for verification.
-- The `run_backup()` function must be updated to open both source and destination with `PRAGMA key` when encryption is enabled.
-- Consider offering an option to export decrypted backups for archival: `blufio backup --decrypt /path/to/backup.db`. This would use `sqlcipher_export()` in reverse (encrypted -> plaintext). Must require explicit confirmation and the backup file should be marked as sensitive.
-- Add the encryption key to the backup verification path: the integrity check on the backup file must open it with the correct key.
-
-**Phase to address:** Backup integrity phase, which must come after or alongside SQLCipher implementation.
-
----
-
-## Phase-Specific Warnings
-
-| Phase Topic | Likely Pitfall | Mitigation |
-|---|---|---|
-| SQLCipher build change | Feature flag change breaks CI and musl static builds | Use `bundled-sqlcipher-vendored-openssl` for all targets. Test musl cross-compilation in CI first. |
-| SQLCipher migration CLI | Data loss during plaintext-to-encrypted migration | Three-file strategy: original untouched, export to .tmp, verify, rename. NEVER auto-delete original. |
-| SQLCipher PRAGMA ordering | `PRAGMA key` must be first operation, before WAL mode and other PRAGMAs | Restructure `Database::open()` to accept optional key. Enforce ordering in one function. |
-| SQLCipher + refinery | Migration runner queries DB before `PRAGMA key` is set | Ensure `run_migrations()` is called AFTER `PRAGMA key` in the initialization sequence. Add canary query after key. |
-| SQLCipher + tokio-rusqlite | Background thread setup must include PRAGMA key in the initialization closure | Pass encryption key into the `call()` closure that sets up PRAGMAs. |
-| SQLCipher + backup.rs | Backup/restore must know the encryption key to open source and destination | Thread encryption key through `run_backup()` and `run_restore()` function signatures. |
-| SQLCipher + tests | KDF slows every test by 200-500ms | Use raw hex key (`PRAGMA key = "x'...'"``) or low KDF iterations in test builds only. |
-| sd_notify + service file | Changing to Type=notify without implementing READY=1 bricks the service | Change service file and code in the same commit. Feature-flag sd_notify for Linux only. |
-| sd_notify + macOS dev | sd_notify calls on macOS either fail to compile or are silent no-ops | `#[cfg(target_os = "linux")]` gate. Check `NOTIFY_SOCKET` env var before calling. |
-| sd_notify + watchdog | Watchdog ping interval derived from heartbeat interval may be too slow | Read `WATCHDOG_USEC` from env. Spawn dedicated watchdog task independent of heartbeat. |
-| Minisign + key rotation | Embedded public key cannot be rotated without breaking old binaries | Embed multiple keys (current + next). Release transitional binary signed with old key but containing new key. |
-| Minisign + trusted comments | verify-only crate may not validate trusted comment signature | Test explicitly. Implement manual validation if needed. Use trusted comments for downgrade protection. |
-| Self-update + download | Partial download passed to self-replace corrupts the binary | Verify size + Minisign signature + ELF magic BEFORE calling self-replace. |
-| Self-update + cross-filesystem | `rename()` fails with EXDEV on different mounts (Docker, snap) | Create temp file in same directory as executable. Handle EXDEV with copy fallback. |
-| Self-update + rollback | New binary crashes on startup with no way to recover | Save current binary as `.rollback`. Health check within 30s. Auto-restore on failure. |
-| Backup integrity + latency | `integrity_check` on source DB blocks single-writer thread | Run `quick_check` on backup file (not source). Separate read-only connection. Async task. |
-| Backup + encryption | Encrypted backup requires same key to verify and restore | Thread encryption key through backup/restore/verify code paths. Document key management. |
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Reuse `ProviderRequest` for all providers | Avoids defining new types | Anthropic-specific fields leak into all providers; every new provider requires hacks | Never — define a provider-agnostic request type now |
+| Use `CorsLayer::permissive()` on OpenAI endpoints | Fastest to ship | Any website can call your API endpoints with user's credentials via browser | Only acceptable on endpoints that require API key auth (bearer token) |
+| Blocking write to SQLite per API request | Simplest implementation | Write queue depth grows with concurrent callers; P99 latency spikes | Acceptable for writes that are on the critical path; defer all others |
+| Single Ed25519 signing key for skill registry | One key to manage | Key compromise invalidates all skills; no rotation path | Acceptable if key rotation is planned within 2 phases |
+| `DashMap` for event bus subscriber state | Simple, fast | Subscribers that die leave stale entries; memory grows indefinitely | Acceptable if subscribers have explicit deregistration and health checks |
+| Skip WhatsApp official API and use unofficial | Faster development | Account ban within weeks; no recovery | Never — TOS violation with irreversible consequences |
+| Hardcode provider base URLs | Avoids config complexity | No air-gap support, no proxy support, no testing against local mocks | Acceptable only if URLs are in TOML config with documented override mechanism |
+| Broadcast channel for all event types | Single simple API | Slow subscribers cause lag for all; hard to add per-event backpressure | Acceptable for pure fire-and-forget events; not for reliable delivery |
 
 ---
 
-## Integration Anti-Patterns
+## Integration Gotchas
 
-### Anti-Pattern 1: Making Encryption Always-On from Day One
+Common mistakes when connecting to external services or wiring internal components.
 
-**What it looks like:** Switching the default build to SQLCipher and requiring encryption for all database opens, including development, testing, and CI.
-
-**Why it is wrong:** Breaks every existing deployment on upgrade (databases are plaintext). Forces every developer to deal with encryption key management for local development. Slows test suite by 200-500ms per database open.
-
-**Instead:** Ship SQLCipher as opt-in (`[storage] encryption = true` in config). Plaintext remains the default. Provide a migration command. Only make encryption the default in a future major version after all operators have had time to migrate.
-
-### Anti-Pattern 2: Implementing Self-Update Before Minisign
-
-**What it looks like:** Building the download-and-replace mechanism first, planning to add signature verification "later."
-
-**Why it is wrong:** Every update between now and "later" is an unsigned binary replacement. An attacker who compromises the release server (or performs a MITM on the download) can distribute a malicious binary that the update mechanism will happily install. Even HTTPS does not protect against a compromised release server.
-
-**Instead:** Implement Minisign verification first. The self-update mechanism's FIRST feature is "verify before replace." There is no version of self-update that does not verify.
-
-### Anti-Pattern 3: Running sd_notify in the Agent Loop
-
-**What it looks like:** Sending `WATCHDOG=1` pings from within the agent's message processing loop because "that proves the agent is actually processing messages."
-
-**Why it is wrong:** If no messages arrive for 5 minutes (normal for a low-traffic agent), no watchdog pings are sent, and systemd kills the service. The watchdog proves the PROCESS is alive, not that messages are being processed. Message processing health is checked by the heartbeat (which calls the LLM to verify the full stack works).
-
-**Instead:** Watchdog pings go in a dedicated lightweight task (or the existing heartbeat runner). The ping says "I am alive." The heartbeat says "the full stack (LLM + DB + context engine) is working."
-
-### Anti-Pattern 4: Using the Vault Key as the SQLCipher Encryption Key
-
-**What it looks like:** Reusing the Argon2id-derived vault master key as the SQLCipher database encryption key because "it's already derived and in memory."
-
-**Why it is wrong:** The vault key protects vault entries (AES-256-GCM encrypted credentials). The database encryption key protects the entire database at rest. These are different threat models with different rotation requirements. If the vault key is rotated (passphrase change), the entire database would need to be re-encrypted. If the database key leaks, all vault entries are also compromised (double exposure).
-
-**Instead:** Derive separate keys. Use the operator's passphrase with Argon2id but with different salt/context for vault key vs. database key. Or use a random database key stored in the config (less secure but operationally simpler) and keep the vault key passphrase-derived.
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Ollama provider | Using `/v1/chat/completions` shim with stream+tools | Use native `/api/chat` endpoint for tool support |
+| OpenRouter | Not forwarding `X-Title` and `X-HTTP-Referer` headers | Include these headers for OpenRouter leaderboard and rate limiting |
+| Gemini API | Sending OpenAI-format `{type: "function", function: {...}}` tool definitions | Translate to Gemini native `{functionDeclarations: [...]}` format |
+| Discord adapter | Testing only in DMs | Test in a guild server with MESSAGE_CONTENT intent explicitly enabled |
+| Slack adapter | Polling `conversations.history` per session | Use Slack Events API webhooks or Socket Mode for push delivery |
+| WhatsApp | Using unofficial library | Use only official Meta Graph API; document BSP requirement |
+| Matrix SDK | Calling `/sync` in a busy loop | Use `matrix-sdk`'s built-in sync loop; manual sync bypasses sync token management |
+| IRC adapter | Not handling server PING/PONG | The `irc` crate handles this automatically; do not implement manually |
+| axum OpenAI routes | Applying permissive CORS globally | Apply permissive CORS only to non-authenticated routes; API key routes need restrictive CORS |
+| Event bus | Using `tokio::sync::broadcast` for all subscribers | Use mpsc for reliable delivery, broadcast only for fire-and-forget |
+| Scoped API keys | Using global rate limiter instance | Each API key needs an independent rate limit bucket (use `tower-governor` or `DashMap<key_id, bucket>`) |
+| Node pairing | Storing pairing token as plain UUID | Store with `expires_at` + `used` flag; reject expired/used tokens at verification |
 
 ---
 
-## Dependency Ordering
+## Performance Traps
 
-Based on the pitfalls above, the implementation order matters critically:
+Patterns that work at small scale but degrade as usage grows.
 
-```
-1. SQLCipher build change (feature flags, Cargo.toml) -- foundation for everything else
-2. SQLCipher PRAGMA ordering + Database::open() refactor -- before any SQLCipher usage
-3. SQLCipher migration CLI (blufio migrate-db --encrypt) -- before enabling encryption
-4. Minisign verification -- before self-update can ship
-5. sd_notify -- independent, can be parallel with 1-4
-6. Self-update (requires Minisign from step 4)
-7. Backup integrity (requires SQLCipher awareness from step 2)
-```
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Synchronous SQLite write per API request | P99 latency grows with concurrent callers | Defer non-critical writes (cost tracking, audit log) to async queue | 5+ concurrent API callers |
+| No rate limiting on `/v1/chat/completions` | Runaway LLM cost; provider rate limit bans | Implement per-key token bucket rate limiting before exposing API | First external caller who scripts the endpoint |
+| DashMap `response_map` with no TTL cleanup | Memory grows on timeout (orphaned oneshot senders) | Add a background task that sweeps entries older than 130s | 50+ concurrent requests with frequent timeouts |
+| Loading all sessions for `GET /v1/sessions` | Full table scan on large session table | Add pagination (`?limit=50&cursor=...`) from day one | 1000+ sessions |
+| Event bus with all subscribers on same tokio thread pool | Slow subscriber (HTTP webhook) blocks all events | Run webhook dispatch on a dedicated thread pool or spawn per-event | First slow external webhook receiver |
+| Compiling all channel adapters into single binary | 50MB+ binary; 10+ second cold start | Use feature flags per adapter (`cargo build --features discord,slack`) | When adding 6 channel adapters simultaneously |
+| Broadcasting every internal event to all subscribers | Broadcast channel fills when any subscriber is slow | Use mpsc per subscriber for reliable delivery | First subscriber that does IO (webhook, metrics flush) |
+| No connection pooling for LLM provider HTTP clients | New TCP connection per LLM request | Use `reqwest::Client` as a long-lived singleton (already done for Anthropic; do same for all providers) | >1 req/sec per provider |
 
-Violating this order (e.g., self-update before Minisign, or encryption enablement before migration CLI) creates the pitfalls described above.
+---
+
+## Security Mistakes
+
+Domain-specific security issues beyond general web security.
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Exposing internal session IDs via OpenAI response `id` | Session enumeration — callers can probe neighboring sessions | Use separate external UUID distinct from internal primary key |
+| Scoped API key stored as plaintext in SQLite | Key theft from DB compromise grants full API access | Store SHA-256 hash of key in DB; verify hash on each request |
+| Skill registry key embedded in binary without rotation mechanism | Single key compromise invalidates all skills permanently | Implement key ID + version in signatures; support multiple active public keys |
+| Node pairing tokens without expiry | Leaked token = permanent node compromise | Enforce 15-minute expiry and single-use; use time-based HMAC |
+| Permissive CORS on OpenAI API endpoints | Browser-based CSRF attacks using operator's API key | Apply restrictive CORS on key-authenticated routes; use `CorsLayer::new()` with explicit allowed origins |
+| Docker container running as root | Container escape gives host root access | Use `distroless/static-debian12:nonroot`; add `USER nonroot` in Dockerfile |
+| Provider API keys in container environment without secrets management | Plaintext keys visible in `docker inspect` | Use Docker secrets or environment injection from vault; never bake keys into image layers |
+| Skill WASM capability check only at install time | Malicious v1.1 update bypasses sandbox | Check capabilities per host function call, not once at install |
+| WhatsApp unofficial library | Account ban + potential TOS legal risk | Official Meta Graph API only |
+| No webhook signature verification | Fake webhooks trigger agent actions | Verify webhook signatures (HMAC-SHA256 for Slack/Discord, Meta signature for WhatsApp) |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **OpenAI-compatible endpoint:** Test it with an actual OpenAI SDK client (not just curl) — SDK clients parse response fields differently than raw HTTP callers. Verify `finish_reason` appears in streaming chunks and in final response.
+
+- [ ] **Ollama provider with tools:** Test tool calling with `stream: true` explicitly — silent failure mode means manual tests without streaming look fine while the real usage pattern is broken.
+
+- [ ] **Discord adapter:** Deploy to a test guild server (not just DMs) and verify `message.content` is non-empty. Check `MESSAGE_CONTENT` intent is enabled in Developer Portal.
+
+- [ ] **Scoped API keys:** Verify that Key A cannot list sessions created by Key B. Verify rate limiting applies per-key independently, not globally.
+
+- [ ] **Skill code signing:** Verify that a skill with no network capability cannot make a `network_fetch` call (test the enforcement, not just the signing ceremony).
+
+- [ ] **Docker image:** Run `docker run blufio blufio doctor` and verify the Anthropic provider reports healthy (actual TLS certificate validation with CA bundle).
+
+- [ ] **Node pairing:** Attempt to reuse an already-used pairing token — verify it is rejected. Attempt to use a token after 15 minutes — verify it is rejected.
+
+- [ ] **Event bus:** Subscribe a slow consumer (sleep 5s in handler) and verify the fast consumer on the same broadcast does not lag. Verify `RecvError::Lagged` is logged as a warning metric.
+
+- [ ] **OpenClaw migration:** Run migration on an OpenClaw instance with 90 days of `workspace/` files and verify all files appear in Blufio's static context zone.
+
+- [ ] **WhatsApp adapter:** Confirm it uses `graph.facebook.com` (official API), not `web.whatsapp.com` or `ws.web.whatsapp.net` (unofficial). Document BSP setup requirement in config validation error.
+
+- [ ] **Multi-provider routing:** Send a request that triggers tool use with each provider independently (Anthropic, OpenAI, Ollama, Gemini). Verify tool result appears in conversation history.
+
+- [ ] **Rate limiting on `/v1/chat/completions`:** Verify that a burst of 100 requests from one API key is throttled, and a burst from a different API key is independently throttled without affecting the first key.
+
+---
+
+## Recovery Strategies
+
+When pitfalls occur despite prevention, how to recover.
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| OpenAI field name mismatch in production | MEDIUM | Deploy corrected wire types, no data migration needed; bump API version if clients cached schema |
+| Ollama tool call silent drops | LOW | Switch provider crate to native `/api/chat` endpoint; redeploy without data changes |
+| WhatsApp account banned | HIGH | Phone number permanently lost; obtain new number + new Meta Business verification; no automated recovery |
+| SQLite write queue saturation under load | MEDIUM | Enable async write deferral for non-critical paths; restart to clear queue backlog |
+| Skill capability bypass discovered | HIGH | Emergency revoke of signing key; re-audit all installed skills; push patched runtime; notify all users |
+| Docker image TLS failure in prod | LOW | Rebuild with correct base image (distroless or with CA bundle); 5-minute fix once identified |
+| Leaked pairing token exploited | HIGH | Revoke all pairing tokens; audit paired nodes for unauthorized entries; rotate gateway keypair |
+| Event bus subscriber lag causing dropped webhooks | MEDIUM | Switch affected subscriber from broadcast to dedicated mpsc channel; replay missed events from SQLite audit log |
+| OpenClaw migration missing memory files | MEDIUM | Re-run migration with updated tool that includes memory file enumeration; inject into context zone |
+| Node pairing token no-expiry exploited | HIGH | Force re-pairing all nodes; rotate signing key; audit all signed messages from the pairing window |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| OpenAI field name mismatch (stop_reason vs finish_reason) | Phase 1: OpenAI-compatible API | Integration test with actual OpenAI SDK client |
+| Provider tool format leaks Anthropic structure | Phase 1: Before any non-Anthropic provider | Compile-time type check + per-provider wire format test |
+| SQLite single-writer bottleneck under concurrent API load | Phase 1 + concurrent load test | P99 latency stays <2s under 10 concurrent callers |
+| Ollama streaming + tools silent drop | Phase 2: Multi-provider LLM | Tool-call integration test with stream: true for Ollama |
+| Gemini native tool format differences | Phase 2: Multi-provider LLM | Wire format unit test for Gemini tool schema translation |
+| Discord MESSAGE_CONTENT intent | Phase 3: Multi-channel adapters | Guild message reception test (not DM-only test) |
+| WhatsApp unofficial library ban risk | Phase 3: Multi-channel adapters | Verify `graph.facebook.com` in adapter; block unofficial library in cargo-deny |
+| Slack rate limit tier throttling | Phase 3: Multi-channel adapters | Verify Events API or Socket Mode (not polling) in adapter design |
+| Signal no stable Rust library | Phase 3: Multi-channel adapters | Document as deferred in phase acceptance criteria |
+| Docker CA bundle missing | Phase 4: Docker image | CI runs `docker run blufio blufio doctor` with LLM health check |
+| Docker root user | Phase 4: Docker image | CI verifies `whoami` returns `nonroot` inside container |
+| Event bus broadcast receiver lag | Phase 5: Event bus | Slow subscriber test verifies `RecvError::Lagged` is logged |
+| Skill capability bypass (signing != sandbox enforcement) | Phase 6: Skill registry | Unit test: skill without network capability cannot call network host function |
+| Code signing key without rotation mechanism | Phase 6: Skill registry | Key ID versioning in signature format from day one |
+| Node pairing token no-expiry | Phase 7: Node system | Token expiry test: token rejected after 15 minutes |
+| Node pairing token reuse | Phase 7: Node system | Token single-use test: second use of valid token rejected |
+| Internal session ID exposure via OpenAI response | Phase 1: OpenAI-compatible API | Verify `response.id` != internal SQLite `session_id` |
+| Scoped API key session cross-access | Phase 1: Scoped API keys | Key A cannot list Key B's sessions (authorization test) |
+| OpenClaw missing memory file migration | Phase 8: Migration tooling | Migration dry-run output includes MEMORY.md, LESSONS.md, workspace/ files |
+| Cargo workspace feature unification surprises | Every phase with new crates | Run `cargo build --features X` per adapter; check for unexpected feature unification |
 
 ---
 
 ## Sources
 
-- [SQLCipher Plaintext to Encrypted Migration - Zetetic FAQ](https://discuss.zetetic.net/t/how-to-encrypt-a-plaintext-sqlite-database-to-use-sqlcipher-and-avoid-file-is-encrypted-or-is-not-a-database-errors/868) -- Official migration procedure and "file is encrypted" error explanation
-- [SQLCipher API Reference - Zetetic](https://www.zetetic.net/sqlcipher/sqlcipher-api/) -- PRAGMA key ordering, sqlcipher_export, cipher_migrate, KDF settings, WAL mode interaction
-- [rusqlite bundled-sqlcipher Issue #765](https://github.com/rusqlite/rusqlite/issues/765) -- Feature flag discussion and implementation
-- [rusqlite Crate Documentation](https://docs.rs/crate/rusqlite/latest) -- Feature flags: bundled-sqlcipher, bundled-sqlcipher-vendored-openssl
-- [sd-notify Crate - crates.io](https://crates.io/crates/sd-notify) -- Pure Rust sd_notify implementation
-- [sd-notify GitHub Repository](https://github.com/lnicola/sd-notify) -- Source code and API
-- [sd_notify(3) Linux Man Page](https://man7.org/linux/man-pages/man3/sd_notify.3.html) -- NOTIFY_SOCKET behavior when absent (returns 0, no-op)
-- [systemd Type=notify Documentation](https://www.freedesktop.org/software/systemd/man/latest/sd_notify.html) -- Type=notify semantics, WATCHDOG_USEC protocol
-- [self-replace Crate Documentation](https://docs.rs/self-replace/) -- Unix atomic rename, Windows workarounds, temp file handling
-- [self_update Crate - GitHub](https://github.com/jaemk/self_update) -- Self-update patterns, download handling
-- [std::fs::rename - Rust](https://doc.rust-lang.org/std/fs/fn.rename.html) -- EXDEV behavior on cross-filesystem rename
-- [Minisign Specification](https://jedisct1.github.io/minisign/) -- Key format, trusted comments, key ID, signature structure
-- [minisign-verify Crate - GitHub](https://github.com/jedisct1/rust-minisign-verify) -- Verify-only implementation, zero dependencies
-- [minisign Full Crate - GitHub](https://github.com/jedisct1/rust-minisign) -- Complete Minisign implementation in Rust
-- [SQLCipher Data Loss After Migration - Zetetic Forum](https://discuss.zetetic.net/t/data-is-lost-after-successful-room-migration-when-using-sqlcipher/6165) -- Real-world data loss report
-- [SQLCipher WAL Mode Discussion](https://discuss.zetetic.net/t/can-i-use-pragma-journal-mode-wal-with-an-sqliteconnection/770) -- WAL compatibility with SQLCipher
+- Ollama tool calling + streaming issue: https://github.com/ollama/ollama/issues/12557
+- Ollama OpenAI compatibility documentation: https://docs.ollama.com/api/openai-compatibility
+- OpenAI Chat Completions `finish_reason` spec: https://platform.openai.com/docs/api-reference/chat/create
+- OpenAI Responses API vs Chat Completions: https://platform.openai.com/docs/guides/responses-vs-chat-completions
+- OpenAI Responses API tool schema differences: https://medium.com/@laurentkubaski/openai-tool-schema-differences-between-the-response-api-and-the-chat-completion-api-8f99ce8a9371
+- WhatsApp Business API unofficial vs official risk: https://wisemelon.ai/blog/whatsapp-business-api-vs-unofficial-whatsapp-tools
+- WhatsApp messaging limits (October 2025 portfolio-level): https://chatarmin.com/en/blog/whats-app-messaging-limits
+- Discord rate limits: https://docs.discord.com/developers/topics/rate-limits
+- Slack rate limit changes (May 2025, 1 req/min for non-Marketplace): https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps/
+- Tokio broadcast channel lag behavior: https://docs.rs/tokio/latest/tokio/sync/broadcast/index.html
+- Event bus implementation in Tokio (lag handling): https://blog.digital-horror.com/blog/event-bus-in-tokio/
+- Docker static Rust binary with CA certs: https://dev.to/abhishekpareek/build-statically-linked-rust-binary-with-musl-and-avoid-a-common-pitfall-ahc
+- SQLite single-writer bottleneck under concurrent load: https://www.bugsink.com/blog/database-transactions/
+- Gemini OpenAI compatibility and function calling: https://ai.google.dev/gemini-api/docs/openai
+- Gemini function calling schema format: https://ai.google.dev/gemini-api/docs/function-calling
+- Cargo workspace feature unification pitfall: https://nickb.dev/blog/cargo-workspace-and-the-feature-unification-pitfall/
+- OpenClaw migration broken state (issue #5103): https://github.com/openclaw/openclaw/issues/5103
+- Axum rate limiting with tower-governor: https://github.com/benwis/tower-governor
+- IRC Rust crate (active): https://crates.io/crates/irc
+- Matrix SDK Rust crate: https://crates.io/crates/matrix-sdk
+- Blufio codebase: existing `ProviderRequest.tools` in `blufio-core/src/types.rs` (Anthropic-format comment)
+- Blufio codebase: `GatewayState.response_map` DashMap with no TTL cleanup in `blufio-gateway/src/server.rs`
+- Blufio codebase: `ChannelCapabilities` in `blufio-core/src/types.rs` (format degradation surface)
+
+---
+*Pitfalls research for: v1.3 Ecosystem Expansion — adding OpenAI-compatible API, multi-provider LLM, multi-channel adapters, Docker, event bus, skill registry, node system, migration tooling to existing 39K LOC Rust AI agent platform*
+*Researched: 2026-03-05*
