@@ -8,7 +8,7 @@ progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 30
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — Phase 29 complete, Phase 30 next
+**Current focus:** v1.3 Ecosystem Expansion — Phase 30 in progress (1/4 plans complete)
 
 ## Current Position
 
 Phase: 30 of 39 (Multi-Provider LLM Support)
-Plan: 0 of 4 in current phase
-Status: Ready to plan
-Last activity: 2026-03-05 — Phase 29 completed (2/2 plans: event bus + core trait extensions)
+Plan: 1 of 4 in current phase
+Status: executing
+Last activity: 2026-03-05 — Plan 30-01 completed (OpenAI provider + ProvidersConfig extensions)
 
-Progress: [█░░░░░░░░░] 9%
+Progress: [█░░░░░░░░░] 10%
 
 ## Performance Metrics
 
@@ -46,6 +46,12 @@ Progress: [█░░░░░░░░░] 9%
 - Total execution time: ~1 day
 - Average: ~13 plans/day
 
+**Velocity (v1.3):**
+
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| 30 | 01 | 11min | 3 | 7 |
+
 ## Accumulated Context
 
 ### Decisions
@@ -59,6 +65,9 @@ Key v1.3 constraints:
 - matrix-sdk must pin to 0.11.0 (0.12+ requires Rust 1.88)
 - Signal uses signal-cli sidecar (no native Rust library)
 - WhatsApp Web is experimental/feature-flagged
+- OpenAI system prompt mapped to system role message (not separate field)
+- Used max_completion_tokens for OpenAI (newer API, not deprecated max_tokens)
+- Tool call args accumulated via HashMap<index, (id, name, args)> across SSE deltas
 
 ### Pending Todos
 
@@ -77,5 +86,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 29 completed (event bus crate + core trait extensions).
-Next action: `/gsd:plan-phase 30` to plan Multi-Provider LLM Support.
+Stopped at: Plan 30-01 completed (OpenAI provider crate + ProvidersConfig extensions).
+Next action: Execute plan 30-02 (Ollama provider).

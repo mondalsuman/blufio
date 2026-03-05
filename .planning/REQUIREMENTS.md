@@ -30,9 +30,9 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Providers
 
-- [ ] **PROV-01**: OpenAI provider with streaming and tool calling
-- [ ] **PROV-02**: OpenAI provider supports vision and structured outputs
-- [ ] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
+- [x] **PROV-01**: OpenAI provider with streaming and tool calling
+- [x] **PROV-02**: OpenAI provider supports vision and structured outputs
+- [x] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
 - [ ] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
 - [ ] **PROV-05**: Ollama auto-discovers local models via /api/tags
 - [ ] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
@@ -150,9 +150,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROV-12 | Phase 29 | Pending |
 | PROV-13 | Phase 29 | Pending |
 | PROV-14 | Phase 29 | Pending |
-| PROV-01 | Phase 30 | Pending |
-| PROV-02 | Phase 30 | Pending |
-| PROV-03 | Phase 30 | Pending |
+| PROV-01 | Phase 30 | Complete |
+| PROV-02 | Phase 30 | Complete |
+| PROV-03 | Phase 30 | Complete |
 | PROV-04 | Phase 30 | Pending |
 | PROV-05 | Phase 30 | Pending |
 | PROV-06 | Phase 30 | Pending |
