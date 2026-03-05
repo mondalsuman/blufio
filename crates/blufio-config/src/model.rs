@@ -1105,6 +1105,190 @@ default_model = "llama3-70b-8192"
         let config = BlufioConfig::default();
         assert!(config.providers.custom.is_empty());
     }
+
+    #[test]
+    fn test_empty_toml_defaults_provider_to_anthropic() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert_eq!(config.providers.default, "anthropic");
+    }
+
+    #[test]
+    fn test_providers_default_field_parses() {
+        let toml_str = r#"
+[providers]
+default = "openai"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.default, "openai");
+    }
+
+    #[test]
+    fn test_openai_config_parses() {
+        let toml_str = r#"
+[providers.openai]
+api_key = "sk-test"
+default_model = "gpt-4o"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.openai.api_key.as_deref(), Some("sk-test"));
+        assert_eq!(config.providers.openai.default_model, "gpt-4o");
+    }
+
+    #[test]
+    fn test_openai_config_custom_base_url() {
+        let toml_str = r#"
+[providers.openai]
+base_url = "https://custom.azure.com"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.openai.base_url, "https://custom.azure.com");
+    }
+
+    #[test]
+    fn test_openai_config_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.providers.openai.api_key.is_none());
+        assert_eq!(config.providers.openai.default_model, "gpt-4o");
+        assert_eq!(
+            config.providers.openai.base_url,
+            "https://api.openai.com/v1"
+        );
+        assert_eq!(config.providers.openai.max_tokens, 4096);
+    }
+
+    #[test]
+    fn test_ollama_config_parses() {
+        let toml_str = r#"
+[providers.ollama]
+base_url = "http://localhost:11434"
+default_model = "llama3.2"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.ollama.base_url, "http://localhost:11434");
+        assert_eq!(
+            config.providers.ollama.default_model.as_deref(),
+            Some("llama3.2")
+        );
+    }
+
+    #[test]
+    fn test_ollama_config_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert_eq!(
+            config.providers.ollama.base_url,
+            "http://localhost:11434"
+        );
+        assert!(config.providers.ollama.default_model.is_none());
+    }
+
+    #[test]
+    fn test_openrouter_config_parses() {
+        let toml_str = r#"
+[providers.openrouter]
+api_key = "or-test"
+default_model = "anthropic/claude-sonnet-4"
+x_title = "MyApp"
+http_referer = "https://myapp.com"
+provider_order = ["Anthropic", "Google"]
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.providers.openrouter.api_key.as_deref(),
+            Some("or-test")
+        );
+        assert_eq!(
+            config.providers.openrouter.default_model,
+            "anthropic/claude-sonnet-4"
+        );
+        assert_eq!(config.providers.openrouter.x_title, "MyApp");
+        assert_eq!(
+            config.providers.openrouter.http_referer.as_deref(),
+            Some("https://myapp.com")
+        );
+        assert_eq!(
+            config.providers.openrouter.provider_order,
+            vec!["Anthropic", "Google"]
+        );
+    }
+
+    #[test]
+    fn test_openrouter_config_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.providers.openrouter.api_key.is_none());
+        assert_eq!(
+            config.providers.openrouter.default_model,
+            "anthropic/claude-sonnet-4"
+        );
+        assert_eq!(config.providers.openrouter.x_title, "Blufio");
+        assert!(config.providers.openrouter.http_referer.is_none());
+        assert!(config.providers.openrouter.provider_order.is_empty());
+    }
+
+    #[test]
+    fn test_gemini_config_parses() {
+        let toml_str = r#"
+[providers.gemini]
+api_key = "gem-test"
+default_model = "gemini-2.0-flash"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.providers.gemini.api_key.as_deref(),
+            Some("gem-test")
+        );
+        assert_eq!(config.providers.gemini.default_model, "gemini-2.0-flash");
+    }
+
+    #[test]
+    fn test_gemini_config_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.providers.gemini.api_key.is_none());
+        assert_eq!(config.providers.gemini.default_model, "gemini-2.0-flash");
+    }
+
+    #[test]
+    fn test_openai_config_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.openai]
+api_key = "sk-test"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ollama_config_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.ollama]
+base_url = "http://localhost:11434"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_openrouter_config_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.openrouter]
+api_key = "test"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_gemini_config_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.gemini]
+api_key = "test"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
 }
 
 #[cfg(test)]
