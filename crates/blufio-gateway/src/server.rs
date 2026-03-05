@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use axum::{
     Router, middleware as axum_middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use blufio_core::BlufioError;
 use blufio_core::ProviderRegistry;
@@ -20,9 +20,13 @@ use dashmap::DashMap;
 use tokio::sync::{RwLock, mpsc, oneshot};
 use tower_http::cors::CorsLayer;
 
+use crate::api_keys;
 use crate::auth::{AuthConfig, auth_middleware};
+use crate::batch;
 use crate::handlers;
 use crate::openai_compat;
+use crate::rate_limit::rate_limit_middleware;
+use crate::webhooks;
 use crate::ws;
 
 /// Health state for unauthenticated health/metrics endpoints.
@@ -55,6 +59,14 @@ pub struct GatewayState {
     pub tools: Option<Arc<RwLock<ToolRegistry>>>,
     /// Allowlist of tool names accessible via the Tools API (API-10).
     pub api_tools_allowlist: Vec<String>,
+    /// Maximum batch size for POST /v1/batch (API-17).
+    pub max_batch_size: usize,
+    /// Webhook store for webhook CRUD (API-15).
+    pub webhook_store: Option<Arc<webhooks::store::WebhookStore>>,
+    /// Batch store for batch processing (API-17).
+    pub batch_store: Option<Arc<batch::store::BatchStore>>,
+    /// Event bus for publishing events to webhooks and batch processor.
+    pub event_bus: Option<Arc<blufio_bus::EventBus>>,
 }
 
 /// Gateway server configuration (mirrors GatewayConfig from blufio-config).
@@ -74,6 +86,7 @@ pub struct ServerConfig {
 /// - POST /v1/messages (with auth)
 /// - GET /v1/sessions (with auth)
 /// - GET /v1/health (with auth)
+/// - POST /v1/api-keys, GET /v1/api-keys, DELETE /v1/api-keys/:id (API-11 through API-14)
 /// - GET /ws (auth via query params, not middleware)
 /// - /mcp/* (MCP Streamable HTTP, if `mcp_router` is Some)
 ///
@@ -95,6 +108,8 @@ pub async fn start_server(
         .with_state(state.clone());
 
     // Routes requiring authentication.
+    // Layer order matters: axum applies layers bottom-up, so rate_limit runs
+    // AFTER auth (auth inserts AuthContext, rate_limit reads it).
     let api_routes = Router::new()
         .route("/v1/messages", post(handlers::post_messages))
         .route("/v1/sessions", get(handlers::get_sessions))
@@ -114,6 +129,35 @@ pub async fn start_server(
             "/v1/tools/invoke",
             post(openai_compat::tools::post_tool_invoke),
         )
+        // API key management endpoints (API-11 through API-14).
+        .route(
+            "/v1/api-keys",
+            post(api_keys::handlers::post_create_api_key)
+                .get(api_keys::handlers::get_list_api_keys),
+        )
+        .route(
+            "/v1/api-keys/:id",
+            delete(api_keys::handlers::delete_api_key),
+        )
+        // Webhook management endpoints (API-15, API-16).
+        .route(
+            "/v1/webhooks",
+            post(webhooks::handlers::post_create_webhook)
+                .get(webhooks::handlers::get_list_webhooks),
+        )
+        .route(
+            "/v1/webhooks/:id",
+            delete(webhooks::handlers::delete_webhook),
+        )
+        // Batch processing endpoints (API-17, API-18).
+        .route("/v1/batch", post(batch::handlers::post_create_batch))
+        .route("/v1/batch/:id", get(batch::handlers::get_batch_status))
+        // Rate limiting middleware (runs after auth, reads AuthContext from extensions).
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ))
+        // Auth middleware (runs first, inserts AuthContext into extensions).
         .route_layer(axum_middleware::from_fn_with_state(
             auth_state.clone(),
             auth_middleware,
@@ -184,6 +228,7 @@ mod tests {
             auth: AuthConfig {
                 bearer_token: None,
                 keypair_public_key: None,
+                key_store: None,
             },
             health: HealthState {
                 start_time: std::time::Instant::now(),
@@ -193,6 +238,10 @@ mod tests {
             providers: None,
             tools: None,
             api_tools_allowlist: vec![],
+            max_batch_size: 100,
+            webhook_store: None,
+            batch_store: None,
+            event_bus: None,
         };
         let _cloned = state.clone();
     }

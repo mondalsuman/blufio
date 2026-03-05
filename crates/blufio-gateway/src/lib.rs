@@ -7,11 +7,15 @@
 //! By implementing the same ChannelAdapter trait as Telegram, the gateway
 //! reuses the entire agent loop, session management, and tool pipeline.
 
+pub mod api_keys;
 pub mod auth;
+pub mod batch;
 pub mod handlers;
 pub mod openai_compat;
+pub mod rate_limit;
 pub mod server;
 pub mod sse;
+pub mod webhooks;
 pub mod ws;
 
 use std::sync::Arc;
@@ -232,6 +236,7 @@ impl ChannelAdapter for GatewayChannel {
             auth: AuthConfig {
                 bearer_token: self.config.bearer_token.clone(),
                 keypair_public_key: self.config.keypair_public_key,
+                key_store: None,
             },
             health: HealthState {
                 start_time: std::time::Instant::now(),
@@ -241,6 +246,10 @@ impl ChannelAdapter for GatewayChannel {
             providers,
             tools,
             api_tools_allowlist: self.api_tools_allowlist.clone(),
+            max_batch_size: 100,
+            webhook_store: None,
+            batch_store: None,
+            event_bus: None,
         };
 
         // Take the MCP router (if set) to pass to the server.
