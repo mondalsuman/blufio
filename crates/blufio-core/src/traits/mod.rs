@@ -10,17 +10,23 @@ pub mod adapter;
 pub mod auth;
 pub mod channel;
 pub mod embedding;
+pub mod image;
 pub mod observability;
 pub mod provider;
 pub mod skill;
 pub mod storage;
+pub mod transcription;
+pub mod tts;
 
 // Re-export all traits at the traits module level for convenience.
 pub use adapter::PluginAdapter;
 pub use auth::AuthAdapter;
 pub use channel::ChannelAdapter;
 pub use embedding::EmbeddingAdapter;
+pub use image::ImageAdapter;
 pub use observability::ObservabilityAdapter;
 pub use provider::ProviderAdapter;
 pub use skill::SkillRuntimeAdapter;
 pub use storage::StorageAdapter;
+pub use transcription::TranscriptionAdapter;
+pub use tts::TtsAdapter;

@@ -91,6 +91,10 @@ pub struct BlufioConfig {
     /// MCP (Model Context Protocol) settings.
     #[serde(default)]
     pub mcp: McpConfig,
+
+    /// Provider configuration including custom provider declarations.
+    #[serde(default)]
+    pub providers: ProvidersConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -980,6 +984,127 @@ fn default_connect_timeout_secs() -> u64 {
 
 fn default_response_size_cap() -> usize {
     4096
+}
+
+/// Provider configuration.
+///
+/// Contains custom provider declarations that enable connecting to
+/// third-party LLM services with OpenAI-compatible APIs.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProvidersConfig {
+    /// Custom provider declarations.
+    /// Key: provider name (e.g., "together", "groq").
+    #[serde(default)]
+    pub custom: HashMap<String, CustomProviderConfig>,
+}
+
+/// Configuration for a custom LLM provider.
+///
+/// Declared via `[providers.custom.<name>]` in TOML config.
+///
+/// # Example
+/// ```toml
+/// [providers.custom.together]
+/// base_url = "https://api.together.xyz/v1"
+/// wire_protocol = "openai-compat"
+/// api_key_env = "TOGETHER_API_KEY"
+/// default_model = "meta-llama/Llama-3-70b-chat-hf"
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CustomProviderConfig {
+    /// Base URL for the provider's API (e.g., "https://api.example.com/v1").
+    pub base_url: String,
+
+    /// Wire protocol for API communication.
+    /// Currently supported: "openai-compat".
+    pub wire_protocol: String,
+
+    /// Environment variable name containing the API key.
+    pub api_key_env: String,
+
+    /// Default model identifier for this provider.
+    #[serde(default)]
+    pub default_model: Option<String>,
+}
+
+#[cfg(test)]
+mod providers_config_tests {
+    use super::*;
+
+    #[test]
+    fn test_custom_provider_config_parses() {
+        let toml_str = r#"
+[providers.custom.together]
+base_url = "https://api.together.xyz/v1"
+wire_protocol = "openai-compat"
+api_key_env = "TOGETHER_API_KEY"
+default_model = "meta-llama/Llama-3-70b-chat-hf"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.custom.len(), 1);
+        let together = &config.providers.custom["together"];
+        assert_eq!(together.base_url, "https://api.together.xyz/v1");
+        assert_eq!(together.wire_protocol, "openai-compat");
+        assert_eq!(together.api_key_env, "TOGETHER_API_KEY");
+        assert_eq!(
+            together.default_model.as_deref(),
+            Some("meta-llama/Llama-3-70b-chat-hf")
+        );
+    }
+
+    #[test]
+    fn test_custom_provider_empty_is_valid() {
+        let toml_str = r#"
+[providers]
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.providers.custom.is_empty());
+    }
+
+    #[test]
+    fn test_custom_provider_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.custom.bad]
+base_url = "https://api.example.com"
+wire_protocol = "openai-compat"
+api_key_env = "KEY"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_custom_provider_multiple_providers() {
+        let toml_str = r#"
+[providers.custom.together]
+base_url = "https://api.together.xyz/v1"
+wire_protocol = "openai-compat"
+api_key_env = "TOGETHER_API_KEY"
+
+[providers.custom.groq]
+base_url = "https://api.groq.com/openai/v1"
+wire_protocol = "openai-compat"
+api_key_env = "GROQ_API_KEY"
+default_model = "llama3-70b-8192"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.custom.len(), 2);
+        assert!(config.providers.custom.contains_key("together"));
+        assert!(config.providers.custom.contains_key("groq"));
+        assert_eq!(
+            config.providers.custom["groq"].default_model.as_deref(),
+            Some("llama3-70b-8192")
+        );
+    }
+
+    #[test]
+    fn test_default_config_has_empty_providers() {
+        let config = BlufioConfig::default();
+        assert!(config.providers.custom.is_empty());
+    }
 }
 
 #[cfg(test)]

@@ -35,6 +35,9 @@ pub enum AdapterType {
     Observability,
     Auth,
     SkillRuntime,
+    Tts,
+    Transcription,
+    ImageGen,
 }
 
 // --- Channel types ---
@@ -174,9 +177,9 @@ pub struct ProviderRequest {
     pub max_tokens: u32,
     /// Whether to stream the response.
     pub stream: bool,
-    /// Tool definitions to send to the provider (Anthropic format).
+    /// Tool definitions to send to the provider.
     /// When present, the LLM may respond with tool_use content blocks.
-    pub tools: Option<Vec<serde_json::Value>>,
+    pub tools: Option<Vec<ToolDefinition>>,
 }
 
 /// Token usage statistics from a provider response.
@@ -220,6 +223,31 @@ pub enum StreamEventType {
     MessageStop,
     Ping,
     Error,
+}
+
+/// Provider-agnostic tool definition.
+///
+/// Each LLM provider serializes this to its own wire format.
+/// Replaces the previous `serde_json::Value` tool representation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    /// Tool name (unique identifier).
+    pub name: String,
+    /// Human-readable description of what the tool does.
+    pub description: String,
+    /// JSON Schema describing the tool's input parameters.
+    pub input_schema: serde_json::Value,
+}
+
+impl ToolDefinition {
+    /// Convert to a raw JSON value for backward compatibility or generic serialization.
+    pub fn to_json_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+        })
+    }
 }
 
 /// Data for a tool_use content block parsed from a streaming response.
@@ -490,4 +518,78 @@ pub struct QueueEntry {
     pub updated_at: String,
     /// ISO 8601 timestamp until which this entry is locked for processing.
     pub locked_until: Option<String>,
+}
+
+// --- TTS types ---
+
+/// A request to a text-to-speech provider.
+#[derive(Debug, Clone)]
+pub struct TtsRequest {
+    /// Text to synthesize to audio.
+    pub text: String,
+    /// Voice identifier (provider-specific).
+    pub voice: String,
+    /// Output audio format (e.g., "mp3", "wav", "opus").
+    pub output_format: String,
+    /// Speaking speed multiplier (1.0 = normal).
+    pub speed: f32,
+}
+
+/// A response from a text-to-speech provider.
+#[derive(Debug, Clone)]
+pub struct TtsResponse {
+    /// Raw audio bytes in the requested format.
+    pub audio_data: Vec<u8>,
+    /// MIME type of the audio (e.g., "audio/mpeg").
+    pub content_type: String,
+    /// Duration of the generated audio in seconds.
+    pub duration_secs: Option<f32>,
+}
+
+// --- Transcription types ---
+
+/// A request to a transcription (speech-to-text) provider.
+#[derive(Debug, Clone)]
+pub struct TranscriptionRequest {
+    /// Raw audio bytes to transcribe.
+    pub audio_data: Vec<u8>,
+    /// MIME type of the audio (e.g., "audio/wav", "audio/mpeg").
+    pub content_type: String,
+    /// Optional language hint (ISO 639-1 code, e.g., "en").
+    pub language: Option<String>,
+}
+
+/// A response from a transcription provider.
+#[derive(Debug, Clone)]
+pub struct TranscriptionResponse {
+    /// Transcribed text.
+    pub text: String,
+    /// Detected language (ISO 639-1 code).
+    pub language: Option<String>,
+    /// Duration of the audio in seconds.
+    pub duration_secs: Option<f32>,
+}
+
+// --- Image generation types ---
+
+/// A request to an image generation provider.
+#[derive(Debug, Clone)]
+pub struct ImageRequest {
+    /// Text prompt describing the image to generate.
+    pub prompt: String,
+    /// Image dimensions (width x height).
+    pub size: (u32, u32),
+    /// Number of images to generate.
+    pub n: u32,
+    /// Output format (e.g., "png", "jpeg").
+    pub output_format: String,
+}
+
+/// A response from an image generation provider.
+#[derive(Debug, Clone)]
+pub struct ImageResponse {
+    /// Generated images as raw bytes.
+    pub images: Vec<Vec<u8>>,
+    /// MIME type of the images (e.g., "image/png").
+    pub content_type: String,
 }

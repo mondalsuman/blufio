@@ -143,6 +143,37 @@ pub fn validate_config(config: &BlufioConfig) -> Result<(), Vec<ConfigError>> {
         }
     }
 
+    // Validate custom provider configurations
+    for (name, provider) in &config.providers.custom {
+        // wire_protocol must be a known value
+        if provider.wire_protocol != "openai-compat" {
+            errors.push(ConfigError::Validation {
+                message: format!(
+                    "providers.custom.{name}.wire_protocol must be 'openai-compat', got '{}'",
+                    provider.wire_protocol
+                ),
+            });
+        }
+        // base_url must start with http:// or https://
+        if !provider.base_url.starts_with("http://") && !provider.base_url.starts_with("https://")
+        {
+            errors.push(ConfigError::Validation {
+                message: format!(
+                    "providers.custom.{name}.base_url must start with 'http://' or 'https://', got '{}'",
+                    provider.base_url
+                ),
+            });
+        }
+        // api_key_env must not be empty
+        if provider.api_key_env.trim().is_empty() {
+            errors.push(ConfigError::Validation {
+                message: format!(
+                    "providers.custom.{name}.api_key_env must not be empty"
+                ),
+            });
+        }
+    }
+
     // Validate no duplicate agent names
     let mut seen_names = HashSet::new();
     for agent in &config.agents {
@@ -436,6 +467,107 @@ enabled = true
             ..BlufioConfig::default()
         };
         assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn custom_provider_valid_config_passes_validation() {
+        let config = BlufioConfig {
+            providers: crate::model::ProvidersConfig {
+                custom: {
+                    let mut m = std::collections::HashMap::new();
+                    m.insert(
+                        "together".to_string(),
+                        crate::model::CustomProviderConfig {
+                            base_url: "https://api.together.xyz/v1".to_string(),
+                            wire_protocol: "openai-compat".to_string(),
+                            api_key_env: "TOGETHER_API_KEY".to_string(),
+                            default_model: None,
+                        },
+                    );
+                    m
+                },
+            },
+            ..BlufioConfig::default()
+        };
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn custom_provider_invalid_wire_protocol_fails_validation() {
+        let config = BlufioConfig {
+            providers: crate::model::ProvidersConfig {
+                custom: {
+                    let mut m = std::collections::HashMap::new();
+                    m.insert(
+                        "bad".to_string(),
+                        crate::model::CustomProviderConfig {
+                            base_url: "https://api.example.com".to_string(),
+                            wire_protocol: "graphql".to_string(),
+                            api_key_env: "KEY".to_string(),
+                            default_model: None,
+                        },
+                    );
+                    m
+                },
+            },
+            ..BlufioConfig::default()
+        };
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("wire_protocol"))
+        ));
+    }
+
+    #[test]
+    fn custom_provider_invalid_base_url_fails_validation() {
+        let config = BlufioConfig {
+            providers: crate::model::ProvidersConfig {
+                custom: {
+                    let mut m = std::collections::HashMap::new();
+                    m.insert(
+                        "bad".to_string(),
+                        crate::model::CustomProviderConfig {
+                            base_url: "ftp://example.com".to_string(),
+                            wire_protocol: "openai-compat".to_string(),
+                            api_key_env: "KEY".to_string(),
+                            default_model: None,
+                        },
+                    );
+                    m
+                },
+            },
+            ..BlufioConfig::default()
+        };
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("base_url"))
+        ));
+    }
+
+    #[test]
+    fn custom_provider_empty_api_key_env_fails_validation() {
+        let config = BlufioConfig {
+            providers: crate::model::ProvidersConfig {
+                custom: {
+                    let mut m = std::collections::HashMap::new();
+                    m.insert(
+                        "bad".to_string(),
+                        crate::model::CustomProviderConfig {
+                            base_url: "https://api.example.com".to_string(),
+                            wire_protocol: "openai-compat".to_string(),
+                            api_key_env: "".to_string(),
+                            default_model: None,
+                        },
+                    );
+                    m
+                },
+            },
+            ..BlufioConfig::default()
+        };
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(
+            |e| matches!(e, ConfigError::Validation { message } if message.contains("api_key_env"))
+        ));
     }
 
     #[test]
