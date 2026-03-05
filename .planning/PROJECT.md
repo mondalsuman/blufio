@@ -48,6 +48,11 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ Minisign Ed25519 signature verification with embedded public key — v1.2
 - ✓ Self-update with download, Minisign verify, atomic swap, health check, rollback — v1.2
 - ✓ All 30 v1.2 requirements verified with VERIFICATION.md reports — v1.2
+- ✓ Event bus (internal pub/sub) — Phase 29
+- ✓ OpenAI provider plugin — Phase 30
+- ✓ Ollama provider plugin — Phase 30
+- ✓ OpenRouter provider plugin — Phase 30
+- ✓ Google/Gemini provider plugin — Phase 30
 
 ### Active
 
@@ -59,10 +64,6 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - [ ] Scoped API keys with rate limiting
 - [ ] Webhook management
 - [ ] Batch operations API
-- [ ] OpenAI provider plugin
-- [ ] Ollama provider plugin
-- [ ] OpenRouter provider plugin
-- [ ] Google/Gemini provider plugin
 - [ ] TTS/Transcription/Image provider traits
 - [ ] Discord channel adapter
 - [ ] WhatsApp channel adapter
@@ -70,7 +71,6 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - [ ] Signal channel adapter
 - [ ] IRC channel adapter
 - [ ] Matrix channel adapter
-- [ ] Event bus (internal pub/sub)
 - [ ] Docker image (Dockerfile + compose)
 - [ ] Skill registry / marketplace
 - [ ] Code signing (Ed25519) for skills
@@ -118,11 +118,11 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.2 with 39,168 LOC Rust across 21 crates. 148 requirements verified across 3 milestones.
+Shipped v1.2 with 39,168 LOC Rust across 21 crates, now expanding to 25 crates with v1.3. 148 requirements verified across 3 milestones, 9 more validated in v1.3 so far (phases 29-30).
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower.
 
-**Architecture:** 21-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-gateway, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-skill, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, plus blufio (binary).
+**Architecture:** 25-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-gateway, blufio-gemini, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-skill, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, plus blufio (binary).
 
 **Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). v1.2 introduced no new tech debt.
 
@@ -185,6 +185,11 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | self-replace for atomic binary swap | Cross-platform atomic file replacement for running binary | ✓ Good — handles Windows locking, Unix atomic rename |
 | Health check via child process | Spawn `blufio doctor` after swap rather than in-process check | ✓ Good — tests actual new binary, 30s timeout with auto-rollback |
 | sd-notify best-effort wrapper | Silent no-op on non-systemd platforms, never blocks or errors | ✓ Good — zero-impact on macOS/Docker development |
+| OpenAI wire types separate from internal | OpenAI request/response types in blufio-openai, internal types in blufio-core | ✓ Good — clean boundary, no leaky abstractions |
+| Ollama native /api/chat (not compat shim) | Full feature access including tool calling and model discovery | ✓ Good — NDJSON streaming works cleanly |
+| Gemini native API (not OpenAI shim) | systemInstruction, functionDeclarations, inlineData — best feature support | ✓ Good — brace-depth JSON parser handles chunked stream |
+| Provider crate decoupling | Each provider owns its wire types independently (no cross-crate deps) | ✓ Good — providers can evolve independently |
+| Query-param auth for Gemini | ?key= per Google convention (not Authorization header) | ✓ Good — matches Gemini API docs exactly |
 
 ---
-*Last updated: 2026-03-05 after v1.3 milestone started*
+*Last updated: 2026-03-05 after Phase 30*
