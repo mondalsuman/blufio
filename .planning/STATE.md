@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
-status: defining_requirements
+status: ready_to_plan
 last_updated: "2026-03-05"
 progress:
-  total_phases: 0
+  total_phases: 11
   completed_phases: 0
-  total_plans: 0
+  total_plans: 30
   completed_plans: 0
 ---
 
@@ -18,14 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — defining requirements
+**Current focus:** v1.3 Ecosystem Expansion — Phase 29 ready to plan
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-05 — Milestone v1.3 started
+Phase: 29 of 39 (Event Bus & Core Trait Extensions)
+Plan: 0 of 2 in current phase
+Status: Ready to plan
+Last activity: 2026-03-05 — Roadmap created for v1.3 (11 phases, 71 requirements, 30 plans)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -49,6 +51,14 @@ Last activity: 2026-03-05 — Milestone v1.3 started
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+Key v1.3 constraints:
+- Event bus must come first (unblocks webhooks, bridging, nodes, batch)
+- Provider-agnostic ToolDefinition must exist before non-Anthropic providers
+- OpenAI wire types MUST be separate from internal ProviderResponse
+- Ollama must use native /api/chat (not OpenAI compat shim)
+- matrix-sdk must pin to 0.11.0 (0.12+ requires Rust 1.88)
+- Signal uses signal-cli sidecar (no native Rust library)
+- WhatsApp Web is experimental/feature-flagged
 
 ### Pending Todos
 
@@ -67,5 +77,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Milestone v1.3 started, defining requirements.
-Next action: Complete requirements definition, then roadmap.
+Stopped at: v1.3 roadmap created with 11 phases covering 71 requirements.
+Next action: `/gsd:plan-phase 29` to plan Event Bus & Core Trait Extensions.

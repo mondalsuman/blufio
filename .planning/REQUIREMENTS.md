@@ -142,13 +142,83 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmapper) | | |
+| INFRA-01 | Phase 29 | Pending |
+| INFRA-02 | Phase 29 | Pending |
+| INFRA-03 | Phase 29 | Pending |
+| PROV-10 | Phase 29 | Pending |
+| PROV-11 | Phase 29 | Pending |
+| PROV-12 | Phase 29 | Pending |
+| PROV-13 | Phase 29 | Pending |
+| PROV-14 | Phase 29 | Pending |
+| PROV-01 | Phase 30 | Pending |
+| PROV-02 | Phase 30 | Pending |
+| PROV-03 | Phase 30 | Pending |
+| PROV-04 | Phase 30 | Pending |
+| PROV-05 | Phase 30 | Pending |
+| PROV-06 | Phase 30 | Pending |
+| PROV-07 | Phase 30 | Pending |
+| PROV-08 | Phase 30 | Pending |
+| PROV-09 | Phase 30 | Pending |
+| API-01 | Phase 31 | Pending |
+| API-02 | Phase 31 | Pending |
+| API-03 | Phase 31 | Pending |
+| API-04 | Phase 31 | Pending |
+| API-05 | Phase 31 | Pending |
+| API-06 | Phase 31 | Pending |
+| API-07 | Phase 31 | Pending |
+| API-08 | Phase 31 | Pending |
+| API-09 | Phase 31 | Pending |
+| API-10 | Phase 31 | Pending |
+| API-11 | Phase 32 | Pending |
+| API-12 | Phase 32 | Pending |
+| API-13 | Phase 32 | Pending |
+| API-14 | Phase 32 | Pending |
+| API-15 | Phase 32 | Pending |
+| API-16 | Phase 32 | Pending |
+| API-17 | Phase 32 | Pending |
+| API-18 | Phase 32 | Pending |
+| CHAN-01 | Phase 33 | Pending |
+| CHAN-02 | Phase 33 | Pending |
+| CHAN-03 | Phase 33 | Pending |
+| CHAN-04 | Phase 33 | Pending |
+| CHAN-05 | Phase 33 | Pending |
+| CHAN-11 | Phase 33 | Pending |
+| CHAN-12 | Phase 33 | Pending |
+| CHAN-06 | Phase 34 | Pending |
+| CHAN-07 | Phase 34 | Pending |
+| CHAN-08 | Phase 34 | Pending |
+| CHAN-09 | Phase 34 | Pending |
+| CHAN-10 | Phase 34 | Pending |
+| INFRA-06 | Phase 34 | Pending |
+| SKILL-01 | Phase 35 | Pending |
+| SKILL-02 | Phase 35 | Pending |
+| SKILL-03 | Phase 35 | Pending |
+| SKILL-04 | Phase 35 | Pending |
+| SKILL-05 | Phase 35 | Pending |
+| INFRA-04 | Phase 36 | Pending |
+| INFRA-05 | Phase 36 | Pending |
+| INFRA-07 | Phase 36 | Pending |
+| NODE-01 | Phase 37 | Pending |
+| NODE-02 | Phase 37 | Pending |
+| NODE-03 | Phase 37 | Pending |
+| NODE-04 | Phase 37 | Pending |
+| NODE-05 | Phase 37 | Pending |
+| MIGR-01 | Phase 38 | Pending |
+| MIGR-02 | Phase 38 | Pending |
+| MIGR-03 | Phase 38 | Pending |
+| MIGR-04 | Phase 38 | Pending |
+| MIGR-05 | Phase 38 | Pending |
+| CLI-01 | Phase 38 | Pending |
+| CLI-02 | Phase 38 | Pending |
+| CLI-03 | Phase 38 | Pending |
+| CLI-04 | Phase 38 | Pending |
+| CLI-05 | Phase 38 | Pending |
 
 **Coverage:**
-- v1.3 requirements: 69 total
-- Mapped to phases: 0
-- Unmapped: 69 ⚠️
+- v1.3 requirements: 71 total
+- Mapped to phases: 71
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-05 after initial definition*
+*Last updated: 2026-03-05 after roadmap creation (traceability populated)*
