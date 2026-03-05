@@ -107,5 +107,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 31 complete, ready for Phase 32
-Resume file: .planning/phases/31-openai-compatible-gateway-api/31-CONTEXT.md
+Stopped at: Phase 32 context gathered, ready to plan
+Resume file: .planning/phases/32-scoped-api-keys-webhooks-batch/32-CONTEXT.md
