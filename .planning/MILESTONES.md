@@ -1,5 +1,30 @@
 # Milestones
 
+## v1.2 Production Hardening (Shipped: 2026-03-04)
+
+**Delivered:** Production hardening -- systemd readiness, database encryption at rest, supply chain integrity via Minisign signatures, self-update with rollback, and backup integrity verification.
+
+**Phases completed:** 6 phases, 13 plans
+**Timeline:** 1 day (2026-03-03 -> 2026-03-04)
+**Commits:** 58 total
+**Lines added:** ~2,706 (total Rust LOC: 39,168 across 21 crates)
+**Git range:** b412b6d -> bd25dee
+**Requirements:** 30/30 satisfied (all formally verified)
+
+**Key accomplishments:**
+1. Backup integrity verification with PRAGMA integrity_check post-backup/restore and corruption auto-cleanup
+2. sd_notify integration with Type=notify readiness, watchdog pings, and status reporting (silent no-op on non-systemd)
+3. SQLCipher database encryption at rest with centralized key management, three-file safe migration, and doctor reporting
+4. Minisign binary signature verification with embedded public key and CLI verify command
+5. Self-update with rollback: version check, download, Minisign verify, atomic swap, health check, rollback
+6. Audit gap closure: all 30 requirements verified, traceability complete, SUMMARY frontmatter populated
+
+### Known Tech Debt
+- Carry-forward from v1.1: 5 deferred MCP integration items, 4 human verification items
+- No new tech debt introduced in v1.2
+
+---
+
 ## v1.1 MCP Integration (Shipped: 2026-03-03)
 
 **Delivered:** Full MCP citizen — Blufio exposes skills/memory as MCP tools and consumes external MCP servers, with security hardening across every layer.

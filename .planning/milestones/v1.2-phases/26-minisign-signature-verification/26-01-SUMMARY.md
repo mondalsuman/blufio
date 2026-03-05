@@ -1,3 +1,14 @@
+---
+phase: 26-minisign-signature-verification
+plan: 01
+subsystem: security
+tags: [minisign, signature, verification, embedded-key]
+
+requirements-completed: [SIGN-01, SIGN-02, SIGN-03]
+
+completed: 2026-03-03
+---
+
 # Plan 26-01 Summary
 
 **Status:** Complete

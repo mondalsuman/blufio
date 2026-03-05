@@ -97,6 +97,50 @@
 
 ---
 
+## Milestone: v1.2 -- Production Hardening
+
+**Shipped:** 2026-03-04
+**Phases:** 6 | **Plans:** 13
+
+### What Was Built
+- Backup integrity verification: PRAGMA integrity_check post-backup/restore, auto-delete corrupt backups
+- sd_notify integration: Type=notify readiness, watchdog pings, STATUS= progress, silent no-op on non-systemd
+- SQLCipher database encryption at rest: centralized key management, three-file safe migration, doctor reporting
+- Minisign binary signature verification: embedded public key, blufio verify CLI
+- Self-update with rollback: version check via GitHub Releases, download + Minisign verify + atomic swap + health check + rollback
+- 1 new crate (blufio-verify), ~2,706 lines added
+
+### What Worked
+- **Milestone audit pattern**: v1.2-MILESTONE-AUDIT.md caught the CIPH-01 feature flag issue, missing VERIFICATION.md files, and SUMMARY frontmatter gaps before declaring done. Three milestones of evidence that pre-ship audit pays for itself.
+- **Phase velocity improvement**: 13 plans in ~1 day (~13 plans/day), consistent with v1.1 velocity (~16/day). Structured approach is mature.
+- **Single gap-closure phase**: Only 1 gap-closure phase (28) out of 6 total (17%), down from 28% (v1.0) and 37% (v1.1). Integration verification during execution is working better.
+- **Feature flag discipline**: Using Cargo feature flags for SQLCipher conditional compilation kept the build clean and testable on both paths.
+- **Three-file safety strategy**: The encrypt migration (original -> .encrypting temp -> verify -> swap) prevented data loss risk during a destructive operation.
+
+### What Was Inefficient
+- **SUMMARY frontmatter still required retroactive fix**: Phases 26 and 27 shipped without requirements-completed in SUMMARY frontmatter, requiring Phase 28 to backfill. This is the third milestone with the same issue.
+- **Phase Detail plan lists left as TBD**: ROADMAP Phase Details for 24, 25, 26, 27 still said "Plans: TBD" after execution. Plan lists should be updated during plan-phase, not left stale.
+- **Progress table column drift**: Phases 23, 24, 26, 27, 28 had malformed progress table rows (missing v1.2 milestone column). Manual table editing is error-prone.
+
+### Patterns Established
+- **SQLCipher centralized opener**: All database consumers use open_connection() factory from blufio-storage, ensuring PRAGMA key is always first statement
+- **Minisign embedded key**: Public key as compile-time constant, no external key file distribution needed
+- **Self-update atomic swap**: Backup current -> download new -> verify signature -> swap -> health check -> rollback if needed
+- **sd_notify as no-op on non-systemd**: Platform-conditional code that compiles cleanly on macOS/Docker
+
+### Key Lessons
+1. **SUMMARY frontmatter must be filled during execution** -- three milestones of the same lesson. This should be enforced by tooling (gsd-tools reject empty requirements_completed).
+2. **ROADMAP plan lists must be updated during plan-phase** -- "TBD" should never persist after plans are created. Add to plan-phase workflow checklist.
+3. **Gap-closure overhead is trending down** -- v1.0: 28%, v1.1: 37%, v1.2: 17%. Integration checks during execution are reducing the audit delta.
+4. **Milestone audit is a non-negotiable gate** -- every milestone has found real issues. Budget for it, do not skip it.
+
+### Cost Observations
+- Commits: 58 total (10 feat, 6 fix, 31 docs, 3 chore)
+- Timeline: ~1 calendar day (2026-03-03 evening to 2026-03-04 morning)
+- Notable: Gap-closure phase was 1 of 6 (17%), lowest ratio yet. Only 1 code fix needed (feature flag).
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -105,6 +149,7 @@
 |-----------|--------|-------|----------|------------|
 | v1.0 | 14 | 43 | ~10/day | Initial structured approach with GSD workflow |
 | v1.1 | 8 | 32 | ~16/day | Security-per-phase, dual audit, gap closure phases |
+| v1.2 | 6 | 13 | ~13/day | Lowest gap-closure ratio (17%), mature audit pattern |
 
 ### Cumulative Quality
 
@@ -112,10 +157,11 @@
 |-----------|-----|--------|-------------|----------|-----------------|
 | v1.0 | 28,790 | 14 | 70 | 70/70 | 10 |
 | v1.1 | 36,462 | 16 | 48 (118 total) | 48/48 | 12 |
+| v1.2 | 39,168 | 21 | 30 (148 total) | 30/30 | 12 (carry-forward) |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. **Wire integration at phase boundaries** — both milestones had wiring gaps caught only at audit. Must be enforced as a phase gate, not just advice.
 2. **Milestone audit before completion catches gaps** — v1.0 found 33 stale requirements; v1.1 found 26 orphaned requirements. Always audit.
 3. **SUMMARY frontmatter must be filled during execution** — both milestones had empty/missing frontmatter. Consider tooling enforcement.
-4. **Gap-closure phases are ~25-37% overhead** — v1.0: 4/14 phases (28%), v1.1: 3/8 phases (37%). Worth the investment but reducible with earlier verification.
+4. **Gap-closure phases are trending down** — v1.0: 4/14 (28%), v1.1: 3/8 (37%), v1.2: 1/6 (17%). Trending down. Worth the investment but reducible with earlier verification.

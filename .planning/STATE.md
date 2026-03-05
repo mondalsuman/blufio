@@ -2,32 +2,32 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Production Hardening
-status: unknown
-last_updated: "2026-03-03T23:36:57.675Z"
+status: complete
+last_updated: "2026-03-04"
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 11
-  completed_plans: 11
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 13
+  completed_plans: 13
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-03)
+See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.2 Production Hardening -- Phase 25 SQLCipher Database Encryption complete
+**Current focus:** v1.2 Production Hardening — SHIPPED 2026-03-04. Planning next milestone.
 
 ## Current Position
 
-Phase: 25 of 27 (SQLCipher Database Encryption)
-Plan: 4 of 4 in current phase
-Status: Phase 25 complete, ready to plan Phase 26
-Last activity: 2026-03-03 -- Phase 25 complete (4/4 plans)
+Phase: 28 of 28 (Close Audit Gaps) — ALL COMPLETE
+Plan: 2 of 2 in current phase (final)
+Status: v1.2 archived. 3 milestones shipped (v1.0, v1.1, v1.2). 148 requirements verified.
+Last activity: 2026-03-04 - Milestone v1.2 archived
 
-Progress: [######..............] 60%
+Progress: [####################] 100%
 
 ## Performance Metrics
 
@@ -41,20 +41,16 @@ Progress: [######..............] 60%
 - Total execution time: ~2 days
 - Average: ~16 plans/day
 
+**Velocity (v1.2):**
+- Total plans completed: 13
+- Total execution time: ~1 day
+- Average: ~13 plans/day
+
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
-
-- Phase 23: Kept integrity check in backup.rs (not shared with doctor.rs) due to sync/async mismatch
-- Phase 23: Used PRAGMA integrity_check(1) for single-error detection performance
-- Phase 23: Rollback uses fs::copy from .pre-restore (not Backup API)
-- Phase 25: BLUFIO_DB_KEY env var for encryption key (consistent with BLUFIO_VAULT_KEY)
-- Phase 25: Auto-detect hex vs passphrase keys: 64 hex chars = raw hex, else passphrase
-- Phase 25: Three-file safety strategy for encrypt migration: .encrypting temp -> verify -> swap
-- Phase 25: Empty/small files treated as plaintext by is_plaintext_sqlite()
-- Phase 25: Added db_key to config env_provider ignore list
 
 ### Pending Todos
 
@@ -62,10 +58,16 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 27 (Self-Update): Integration testing depends on GitHub Releases API conventions (asset naming, tag format)
+None — all milestones complete.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Update all documentation according to current states | 2026-03-04 | f559572 | [1-update-all-documentation-according-to-cu](./quick/1-update-all-documentation-according-to-cu/) |
 
 ## Session Continuity
 
-Last session: 2026-03-03
-Stopped at: Completed Phase 25 (4/4 plans)
-Next action: Plan Phase 26
+Last session: 2026-03-04
+Stopped at: Milestone v1.2 archived. All documentation updated.
+Next action: `/gsd:new-milestone` for v1.3 planning.

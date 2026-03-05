@@ -1,3 +1,14 @@
+---
+phase: 26-minisign-signature-verification
+plan: 02
+subsystem: security
+tags: [minisign, cli, verify-command]
+
+requirements-completed: [SIGN-04]
+
+completed: 2026-03-04
+---
+
 # Plan 26-02 Summary
 
 **Status:** Complete

@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude, with Telegram messaging, SQLite persistence (WAL mode, ACID), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox, plugin system with 7 adapter traits, HTTP/WebSocket gateway, model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, Prometheus observability, and full MCP integration (server + client). 36,462 LOC Rust across 16 crates, 118 requirements verified across 2 milestones.
+Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude, with Telegram messaging, SQLite persistence (WAL mode, ACID), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox, plugin system with 7 adapter traits, HTTP/WebSocket gateway, model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, Prometheus observability, and full MCP integration (server + client). 39,168 LOC Rust across 21 crates, 148 requirements verified across 3 milestones.
 
 ## Core Value
 
@@ -41,24 +41,23 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ MCP security: namespace enforcement, export allowlist, SHA-256 hash pinning, description sanitization, trust zone labeling — v1.1
 - ✓ MCP resources: memory search/lookup, session history, prompt templates — v1.1
 - ✓ Critical v1.0 tech debt resolved (GET /v1/sessions, systemd file, SessionActor refactor) — v1.1
+- ✓ Backup integrity verification with PRAGMA integrity_check and corruption auto-cleanup — v1.2
+- ✓ systemd Type=notify with READY/STOPPING/watchdog/STATUS lifecycle — v1.2
+- ✓ SQLCipher database encryption at rest with centralized connection factory — v1.2
+- ✓ Database encryption migration CLI with three-file safety strategy — v1.2
+- ✓ Minisign Ed25519 signature verification with embedded public key — v1.2
+- ✓ Self-update with download, Minisign verify, atomic swap, health check, rollback — v1.2
+- ✓ All 30 v1.2 requirements verified with VERIFICATION.md reports — v1.2
 
 ### Active
 
-## Current Milestone: v1.2 Production Hardening
-
-**Goal:** Close critical PRD gaps — systemd readiness, database encryption at rest, supply chain integrity, self-update, and backup verification.
-
-**Target features:**
-- sd_notify integration (systemd Type=notify, watchdog pings)
-- SQLCipher database encryption at rest
-- Minisign binary signature verification
-- blufio update with rollback (self-update mechanism)
-- Backup integrity verification (PRAGMA integrity_check post-backup/restore)
+None -- all milestones shipped.
 
 ## Shipped Milestones
 
-- **v1.0 MVP** — 14 phases, 43 plans, 70 requirements (2026-02-28 → 2026-03-02)
+- **v1.2 Production Hardening** -- 6 phases, 13 plans, 30 requirements (2026-03-03 -> 2026-03-04)
 - **v1.1 MCP Integration** — 8 phases, 32 plans, 48 requirements (2026-03-02 → 2026-03-03)
+- **v1.0 MVP** — 14 phases, 43 plans, 70 requirements (2026-02-28 → 2026-03-02)
 
 ### Out of Scope
 
@@ -77,13 +76,13 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.1 with 36,462 LOC Rust across 16 crates. 118 requirements verified across 2 milestones.
+Shipped v1.2 with 39,168 LOC Rust across 21 crates. 148 requirements verified across 3 milestones.
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower.
 
-**Architecture:** 16-crate workspace — blufio-core (traits), blufio-config, blufio-storage, blufio-vault, blufio-security, blufio-anthropic, blufio-telegram, blufio-agent, blufio-context, blufio-cost, blufio-memory, blufio-router, blufio-skill, blufio-prometheus, blufio-plugin, blufio-gateway, blufio-mcp-server, blufio-mcp-client, blufio-test-utils, blufio (binary).
+**Architecture:** 21-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-gateway, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-skill, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, plus blufio (binary).
 
-**Known tech debt:** 12 items documented in MILESTONES.md v1.1 section (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps).
+**Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). v1.2 introduced no new tech debt.
 
 ### The Kill Shot
 
@@ -137,6 +136,13 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Security embedded per phase | Namespace (15), allowlist (16), CORS/auth (17), hash pinning (18) — never deferred | ✓ Good — complete security chain from day one |
 | SHA-256 hash pinning for tools | Detect tool definition mutations (rug pulls) at discovery time | ✓ Good — PinStore in SQLite, graceful fallback |
 | Trust zone labeling | External tools labeled separately in prompt context | ✓ Good — factual tone, no alarmist language |
+| SQLCipher over custom encryption | Whole-file encryption, industry standard, single PRAGMA key statement | ✓ Good — transparent encryption, zero code changes for consumers |
+| BLUFIO_DB_KEY env var | Consistent with BLUFIO_VAULT_KEY pattern, never stored on disk | ✓ Good — auto-detect hex vs passphrase keys |
+| Three-file safety for encrypt migration | Original untouched until verified copy passes integrity check | ✓ Good — zero data loss risk during migration |
+| Minisign over GPG | Simpler, Ed25519-only, single embedded key fits single-binary model | ✓ Good — compile-time constant, no key distribution problem |
+| self-replace for atomic binary swap | Cross-platform atomic file replacement for running binary | ✓ Good — handles Windows locking, Unix atomic rename |
+| Health check via child process | Spawn `blufio doctor` after swap rather than in-process check | ✓ Good — tests actual new binary, 30s timeout with auto-rollback |
+| sd-notify best-effort wrapper | Silent no-op on non-systemd platforms, never blocks or errors | ✓ Good — zero-impact on macOS/Docker development |
 
 ---
-*Last updated: 2026-03-03 after v1.2 milestone started*
+*Last updated: 2026-03-04 after v1.2 milestone archived*
