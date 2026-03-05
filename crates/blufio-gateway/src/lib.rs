@@ -9,6 +9,7 @@
 
 pub mod auth;
 pub mod handlers;
+pub mod openai_compat;
 pub mod server;
 pub mod sse;
 pub mod ws;
@@ -20,12 +21,15 @@ use dashmap::DashMap;
 use tokio::sync::{Mutex, mpsc};
 
 use blufio_core::BlufioError;
+use blufio_core::ProviderRegistry;
 use blufio_core::StorageAdapter;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
 };
+use blufio_skill::ToolRegistry;
+use tokio::sync::RwLock;
 
 use crate::auth::AuthConfig;
 use crate::server::{GatewayState, HealthState, ServerConfig};
@@ -90,6 +94,14 @@ pub struct GatewayChannel {
     /// Optional storage adapter for session queries (DEBT-01).
     /// Set via [`set_storage`] before calling `connect()`.
     storage: Mutex<Option<Arc<dyn StorageAdapter + Send + Sync>>>,
+    /// Optional provider registry for OpenAI-compatible API (API-01).
+    /// Set via [`set_providers`] before calling `connect()`.
+    providers: Mutex<Option<Arc<dyn ProviderRegistry + Send + Sync>>>,
+    /// Optional tool registry for Tools API (API-09).
+    /// Set via [`set_tools`] before calling `connect()`.
+    tools: Mutex<Option<Arc<RwLock<ToolRegistry>>>>,
+    /// Allowlist of tool names accessible via the Tools API (API-10).
+    api_tools_allowlist: Vec<String>,
 }
 
 impl GatewayChannel {
@@ -105,6 +117,9 @@ impl GatewayChannel {
             server_handle: Mutex::new(None),
             mcp_router: Mutex::new(None),
             storage: Mutex::new(None),
+            providers: Mutex::new(None),
+            tools: Mutex::new(None),
+            api_tools_allowlist: Vec::new(),
         }
     }
 
@@ -124,6 +139,32 @@ impl GatewayChannel {
     pub async fn set_storage(&self, storage: Arc<dyn StorageAdapter + Send + Sync>) {
         let mut s = self.storage.lock().await;
         *s = Some(storage);
+    }
+
+    /// Sets the provider registry for OpenAI-compatible API endpoints.
+    ///
+    /// Must be called before `connect()`. Enables /v1/chat/completions,
+    /// /v1/models, and /v1/responses endpoints.
+    pub async fn set_providers(&self, providers: Arc<dyn ProviderRegistry + Send + Sync>) {
+        let mut p = self.providers.lock().await;
+        *p = Some(providers);
+    }
+
+    /// Sets the tool registry for the Tools API endpoints.
+    ///
+    /// Must be called before `connect()`. Enables /v1/tools and
+    /// /v1/tools/invoke endpoints.
+    pub async fn set_tools(&self, tools: Arc<RwLock<ToolRegistry>>) {
+        let mut t = self.tools.lock().await;
+        *t = Some(tools);
+    }
+
+    /// Sets the allowlist of tool names accessible via the Tools API.
+    ///
+    /// Must be called before `connect()`. Tools not in this list will
+    /// receive 403 responses when invoked via the API.
+    pub fn set_api_tools_allowlist(&mut self, allowlist: Vec<String>) {
+        self.api_tools_allowlist = allowlist;
     }
 }
 
@@ -179,8 +220,10 @@ impl ChannelAdapter for GatewayChannel {
             bearer_token: self.config.bearer_token.clone(),
         };
 
-        // Take optional storage adapter (if set) for session queries.
+        // Take optional adapters (if set).
         let storage = self.storage.lock().await.take();
+        let providers = self.providers.lock().await.take();
+        let tools = self.tools.lock().await.take();
 
         let state = GatewayState {
             inbound_tx: self.inbound_tx.clone(),
@@ -195,6 +238,9 @@ impl ChannelAdapter for GatewayChannel {
                 prometheus_render: self.config.prometheus_render.clone(),
             },
             storage,
+            providers,
+            tools,
+            api_tools_allowlist: self.api_tools_allowlist.clone(),
         };
 
         // Take the MCP router (if set) to pass to the server.

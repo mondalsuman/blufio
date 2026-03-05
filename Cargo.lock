@@ -601,6 +601,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "blufio-core",
+ "blufio-skill",
  "chrono",
  "dashmap",
  "ed25519-dalek",

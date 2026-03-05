@@ -710,6 +710,10 @@ pub struct GatewayConfig {
     /// Bearer token for API authentication. If empty, auth is disabled.
     #[serde(default)]
     pub bearer_token: Option<String>,
+    /// Allowlist of tool names accessible via the /v1/tools API.
+    /// Empty = no tools accessible externally (secure default).
+    #[serde(default)]
+    pub api_tools_allowlist: Vec<String>,
 }
 
 impl Default for GatewayConfig {
@@ -719,6 +723,7 @@ impl Default for GatewayConfig {
             host: default_gateway_host(),
             port: default_gateway_port(),
             bearer_token: None,
+            api_tools_allowlist: Vec::new(),
         }
     }
 }

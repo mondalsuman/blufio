@@ -12,14 +12,17 @@ use axum::{
     routing::{get, post},
 };
 use blufio_core::BlufioError;
+use blufio_core::ProviderRegistry;
 use blufio_core::StorageAdapter;
 use blufio_core::types::InboundMessage;
+use blufio_skill::ToolRegistry;
 use dashmap::DashMap;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{RwLock, mpsc, oneshot};
 use tower_http::cors::CorsLayer;
 
 use crate::auth::{AuthConfig, auth_middleware};
 use crate::handlers;
+use crate::openai_compat;
 use crate::ws;
 
 /// Health state for unauthenticated health/metrics endpoints.
@@ -46,6 +49,12 @@ pub struct GatewayState {
     pub health: HealthState,
     /// Storage adapter for querying sessions (DEBT-01).
     pub storage: Option<Arc<dyn StorageAdapter + Send + Sync>>,
+    /// Provider registry for /v1/chat/completions and /v1/models (API-01).
+    pub providers: Option<Arc<dyn ProviderRegistry + Send + Sync>>,
+    /// Tool registry for /v1/tools and /v1/tools/invoke (API-09).
+    pub tools: Option<Arc<RwLock<ToolRegistry>>>,
+    /// Allowlist of tool names accessible via the Tools API (API-10).
+    pub api_tools_allowlist: Vec<String>,
 }
 
 /// Gateway server configuration (mirrors GatewayConfig from blufio-config).
@@ -90,6 +99,21 @@ pub async fn start_server(
         .route("/v1/messages", post(handlers::post_messages))
         .route("/v1/sessions", get(handlers::get_sessions))
         .route("/v1/health", get(handlers::get_health))
+        // OpenAI-compatible API endpoints (API-01 through API-10).
+        .route(
+            "/v1/chat/completions",
+            post(openai_compat::handlers::post_chat_completions),
+        )
+        .route("/v1/models", get(openai_compat::handlers::get_models))
+        .route(
+            "/v1/responses",
+            post(openai_compat::responses::post_responses),
+        )
+        .route("/v1/tools", get(openai_compat::tools::get_tools))
+        .route(
+            "/v1/tools/invoke",
+            post(openai_compat::tools::post_tool_invoke),
+        )
         .route_layer(axum_middleware::from_fn_with_state(
             auth_state.clone(),
             auth_middleware,
@@ -166,6 +190,9 @@ mod tests {
                 prometheus_render: None,
             },
             storage: None,
+            providers: None,
+            tools: None,
+            api_tools_allowlist: vec![],
         };
         let _cloned = state.clone();
     }

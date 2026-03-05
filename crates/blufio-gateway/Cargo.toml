@@ -10,6 +10,7 @@ description = "HTTP/WebSocket gateway implementing ChannelAdapter for the Blufio
 
 [dependencies]
 blufio-core = { path = "../blufio-core" }
+blufio-skill = { path = "../blufio-skill" }
 async-trait.workspace = true
 axum.workspace = true
 axum-extra.workspace = true
