@@ -352,7 +352,10 @@ mod tests {
             provider: None,
         };
         let json = serde_json::to_value(&req).unwrap();
-        assert!(json.get("provider").is_none(), "provider should be omitted when None");
+        assert!(
+            json.get("provider").is_none(),
+            "provider should be omitted when None"
+        );
         assert!(json.get("max_completion_tokens").is_none());
     }
 

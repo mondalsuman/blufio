@@ -181,10 +181,13 @@ impl ProviderAdapter for OpenAIProvider {
         let response = self.client.complete_chat(&api_request).await?;
 
         // Extract text content from the first choice.
-        let choice = response.choices.first().ok_or_else(|| BlufioError::Provider {
-            message: "OpenAI response contained no choices".into(),
-            source: None,
-        })?;
+        let choice = response
+            .choices
+            .first()
+            .ok_or_else(|| BlufioError::Provider {
+                message: "OpenAI response contained no choices".into(),
+                source: None,
+            })?;
 
         let content = match &choice.message.content {
             Some(ChatContent::Text(t)) => t.clone(),
@@ -205,12 +208,14 @@ impl ProviderAdapter for OpenAIProvider {
             .as_deref()
             .map(|r| map_finish_reason(r).to_string());
 
-        let usage = response.usage.map_or_else(TokenUsage::default, |u| TokenUsage {
-            input_tokens: u.prompt_tokens,
-            output_tokens: u.completion_tokens,
-            cache_read_tokens: 0,
-            cache_creation_tokens: 0,
-        });
+        let usage = response
+            .usage
+            .map_or_else(TokenUsage::default, |u| TokenUsage {
+                input_tokens: u.prompt_tokens,
+                output_tokens: u.completion_tokens,
+                cache_read_tokens: 0,
+                cache_creation_tokens: 0,
+            });
 
         Ok(ProviderResponse {
             id: response.id,
@@ -239,11 +244,7 @@ impl ProviderAdapter for OpenAIProvider {
         let mapped = chunk_stream.filter_map(move |result| {
             let chunks = match result {
                 Ok(sse_chunk) => {
-                    map_sse_chunk_to_provider_chunks(
-                        sse_chunk,
-                        &mut tool_calls,
-                        &mut is_first,
-                    )
+                    map_sse_chunk_to_provider_chunks(sse_chunk, &mut tool_calls, &mut is_first)
                 }
                 Err(e) => vec![Err(e)],
             };
@@ -305,16 +306,17 @@ fn map_sse_chunk_to_provider_chunks(
     for delta in &sse_chunk.choices {
         // Text content delta.
         if let Some(ref text) = delta.delta.content
-            && !text.is_empty() {
-                chunks.push(Ok(ProviderStreamChunk {
-                    event_type: StreamEventType::ContentBlockDelta,
-                    text: Some(text.clone()),
-                    usage: None,
-                    error: None,
-                    tool_use: None,
-                    stop_reason: None,
-                }));
-            }
+            && !text.is_empty()
+        {
+            chunks.push(Ok(ProviderStreamChunk {
+                event_type: StreamEventType::ContentBlockDelta,
+                text: Some(text.clone()),
+                usage: None,
+                error: None,
+                tool_use: None,
+                stop_reason: None,
+            }));
+        }
 
         // Tool call deltas -- accumulate.
         if let Some(ref tcs) = delta.delta.tool_calls {
@@ -570,8 +572,8 @@ async fn load_system_prompt(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blufio_core::types::ToolDefinition;
     use blufio_core::ProviderMessage;
+    use blufio_core::types::ToolDefinition;
 
     fn test_provider() -> OpenAIProvider {
         let client = OpenAIClient::new(
@@ -758,7 +760,10 @@ mod tests {
         // Message 0: system, Message 1: tool result
         assert_eq!(chat_req.messages.len(), 2);
         assert_eq!(chat_req.messages[1].role, "tool");
-        assert_eq!(chat_req.messages[1].tool_call_id.as_deref(), Some("call_abc"));
+        assert_eq!(
+            chat_req.messages[1].tool_call_id.as_deref(),
+            Some("call_abc")
+        );
         match &chat_req.messages[1].content {
             Some(ChatContent::Text(t)) => assert_eq!(t, "hello\n"),
             other => panic!("expected Text, got {other:?}"),
@@ -963,8 +968,7 @@ mod tests {
             }),
         };
 
-        let results =
-            map_sse_chunk_to_provider_chunks(chunk, &mut tool_calls, &mut is_first);
+        let results = map_sse_chunk_to_provider_chunks(chunk, &mut tool_calls, &mut is_first);
         // Should emit: MessageDelta + MessageStop = 2
         assert_eq!(results.len(), 2);
 

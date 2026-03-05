@@ -317,7 +317,10 @@ mod tests {
             .await;
 
         let client = test_client(&server.uri());
-        let result = client.generate_content(&test_request(), None).await.unwrap();
+        let result = client
+            .generate_content(&test_request(), None)
+            .await
+            .unwrap();
 
         assert_eq!(result.candidates.len(), 1);
         let usage = result.usage_metadata.as_ref().unwrap();
@@ -346,17 +349,15 @@ mod tests {
 
         let client = test_client(&server.uri());
         let result = client.generate_content(&test_request(), None).await;
-        assert!(result.is_ok(), "API key should be in query param: {result:?}");
+        assert!(
+            result.is_ok(),
+            "API key should be in query param: {result:?}"
+        );
     }
 
     #[tokio::test]
     async fn correct_generate_content_url() {
-        let client = GeminiClient::new(
-            "my-key".into(),
-            "gemini-2.0-flash".into(),
-            None,
-        )
-        .unwrap();
+        let client = GeminiClient::new("my-key".into(), "gemini-2.0-flash".into(), None).unwrap();
 
         let url = client.generate_content_url("gemini-2.0-flash");
         assert!(url.contains("/models/gemini-2.0-flash:generateContent"));
@@ -365,12 +366,7 @@ mod tests {
 
     #[tokio::test]
     async fn correct_stream_url() {
-        let client = GeminiClient::new(
-            "my-key".into(),
-            "gemini-2.0-flash".into(),
-            None,
-        )
-        .unwrap();
+        let client = GeminiClient::new("my-key".into(), "gemini-2.0-flash".into(), None).unwrap();
 
         let url = client.stream_generate_content_url("gemini-2.0-flash");
         assert!(url.contains("/models/gemini-2.0-flash:streamGenerateContent"));
@@ -409,7 +405,10 @@ mod tests {
             .await;
 
         let client = test_client(&server.uri());
-        let result = client.generate_content(&test_request(), None).await.unwrap();
+        let result = client
+            .generate_content(&test_request(), None)
+            .await
+            .unwrap();
         match &result.candidates[0].content.parts[0] {
             GeminiPart::Text(tp) => assert_eq!(tp.text, "After retry"),
             other => panic!("expected Text, got {other:?}"),
@@ -444,7 +443,10 @@ mod tests {
             .await;
 
         let client = test_client(&server.uri());
-        let result = client.generate_content(&test_request(), None).await.unwrap();
+        let result = client
+            .generate_content(&test_request(), None)
+            .await
+            .unwrap();
         match &result.candidates[0].content.parts[0] {
             GeminiPart::Text(tp) => assert_eq!(tp.text, "recovered"),
             other => panic!("expected Text, got {other:?}"),
@@ -479,7 +481,10 @@ mod tests {
             .await;
 
         let client = test_client(&server.uri());
-        let result = client.generate_content(&test_request(), None).await.unwrap();
+        let result = client
+            .generate_content(&test_request(), None)
+            .await
+            .unwrap();
         match &result.candidates[0].content.parts[0] {
             GeminiPart::Text(tp) => assert_eq!(tp.text, "back up"),
             other => panic!("expected Text, got {other:?}"),
@@ -536,9 +541,7 @@ mod tests {
         let response_body = r#"{"candidates":[{"content":{"role":"model","parts":[{"text":"Hello"}]},"finishReason":"STOP"}]}"#;
 
         Mock::given(method("POST"))
-            .and(path(
-                "/models/gemini-2.0-flash:streamGenerateContent",
-            ))
+            .and(path("/models/gemini-2.0-flash:streamGenerateContent"))
             .and(query_param("key", "test-api-key"))
             .respond_with(
                 ResponseTemplate::new(200)
@@ -554,7 +557,10 @@ mod tests {
             .await
             .unwrap();
 
-        let chunk = futures::StreamExt::next(&mut stream).await.unwrap().unwrap();
+        let chunk = futures::StreamExt::next(&mut stream)
+            .await
+            .unwrap()
+            .unwrap();
         match &chunk.candidates[0].content.parts[0] {
             GeminiPart::Text(tp) => assert_eq!(tp.text, "Hello"),
             other => panic!("expected Text, got {other:?}"),
@@ -574,7 +580,10 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/models/gemini-2.0-flash:generateContent"))
-            .and(wiremock::matchers::header("content-type", "application/json"))
+            .and(wiremock::matchers::header(
+                "content-type",
+                "application/json",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(&response_body))
             .mount(&server)
             .await;

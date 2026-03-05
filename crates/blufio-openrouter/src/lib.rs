@@ -210,10 +210,13 @@ impl ProviderAdapter for OpenRouterProvider {
         let response = self.client.complete_chat(&api_request).await?;
 
         // Extract text content from the first choice.
-        let choice = response.choices.first().ok_or_else(|| BlufioError::Provider {
-            message: "OpenRouter response contained no choices".into(),
-            source: None,
-        })?;
+        let choice = response
+            .choices
+            .first()
+            .ok_or_else(|| BlufioError::Provider {
+                message: "OpenRouter response contained no choices".into(),
+                source: None,
+            })?;
 
         let content = match &choice.message.content {
             Some(ChatContent::Text(t)) => t.clone(),
@@ -592,8 +595,8 @@ async fn load_system_prompt(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blufio_core::types::ToolDefinition;
     use blufio_core::ProviderMessage;
+    use blufio_core::types::ToolDefinition;
 
     fn test_provider() -> OpenRouterProvider {
         let client = OpenRouterClient::new(

@@ -351,8 +351,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/api/tags"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"models": []})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"models": []})),
             )
             .mount(&server)
             .await;
@@ -365,8 +364,7 @@ mod tests {
     #[tokio::test]
     async fn health_check_fails_when_unreachable() {
         // Point to a port that nothing is listening on.
-        let client =
-            OllamaClient::new("http://127.0.0.1:19999".into(), "llama3.2".into()).unwrap();
+        let client = OllamaClient::new("http://127.0.0.1:19999".into(), "llama3.2".into()).unwrap();
         let result = client.health_check().await;
         assert!(result.is_err());
     }

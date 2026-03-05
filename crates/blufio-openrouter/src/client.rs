@@ -135,7 +135,10 @@ impl OpenRouterClient {
 
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
-                warn!(attempt, "retrying OpenRouter completion request after transient error");
+                warn!(
+                    attempt,
+                    "retrying OpenRouter completion request after transient error"
+                );
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
 
@@ -211,7 +214,10 @@ impl OpenRouterClient {
 
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
-                warn!(attempt, "retrying OpenRouter streaming request after transient error");
+                warn!(
+                    attempt,
+                    "retrying OpenRouter streaming request after transient error"
+                );
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
 
@@ -360,7 +366,10 @@ mod tests {
 
         let client = test_client(&server.uri());
         let result = client.complete_chat(&test_request()).await;
-        assert!(result.is_ok(), "authorization header should match: {result:?}");
+        assert!(
+            result.is_ok(),
+            "authorization header should match: {result:?}"
+        );
     }
 
     #[tokio::test]
@@ -414,7 +423,10 @@ mod tests {
 
         let client = test_client(&server.uri());
         let result = client.complete_chat(&test_request()).await;
-        assert!(result.is_ok(), "HTTP-Referer header should match: {result:?}");
+        assert!(
+            result.is_ok(),
+            "HTTP-Referer header should match: {result:?}"
+        );
     }
 
     #[tokio::test]
@@ -449,14 +461,9 @@ mod tests {
 
     #[tokio::test]
     async fn default_base_url_is_openrouter() {
-        let client = OpenRouterClient::new(
-            "key".into(),
-            "model".into(),
-            "Title".into(),
-            None,
-            None,
-        )
-        .unwrap();
+        let client =
+            OpenRouterClient::new("key".into(), "model".into(), "Title".into(), None, None)
+                .unwrap();
         assert_eq!(client.base_url(), "https://openrouter.ai/api/v1");
     }
 

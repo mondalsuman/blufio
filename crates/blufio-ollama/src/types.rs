@@ -227,7 +227,10 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0]["type"], "function");
         assert_eq!(tools[0]["function"]["name"], "bash");
-        assert_eq!(tools[0]["function"]["description"], "Execute a bash command");
+        assert_eq!(
+            tools[0]["function"]["description"],
+            "Execute a bash command"
+        );
     }
 
     #[test]

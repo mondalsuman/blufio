@@ -108,10 +108,7 @@ impl OpenAIClient {
     /// Sends a non-streaming request and returns the full response.
     ///
     /// On transient errors (429, 500, 503), retries once after a 1-second delay.
-    pub async fn complete_chat(
-        &self,
-        request: &ChatRequest,
-    ) -> Result<ChatResponse, BlufioError> {
+    pub async fn complete_chat(&self, request: &ChatRequest) -> Result<ChatResponse, BlufioError> {
         let mut last_error = None;
 
         for attempt in 0..=self.max_retries {

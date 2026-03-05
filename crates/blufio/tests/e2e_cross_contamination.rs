@@ -37,6 +37,9 @@ fn build_test_router() -> Router {
             prometheus_render: None,
         },
         storage: None,
+        providers: None,
+        tools: None,
+        api_tools_allowlist: Vec::new(),
     };
 
     // Build routes matching the gateway server setup (without auth middleware for testing).

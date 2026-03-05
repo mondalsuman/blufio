@@ -1368,10 +1368,7 @@ default_model = "llama3.2"
     #[test]
     fn test_ollama_config_defaults() {
         let config: BlufioConfig = toml::from_str("").unwrap();
-        assert_eq!(
-            config.providers.ollama.base_url,
-            "http://localhost:11434"
-        );
+        assert_eq!(config.providers.ollama.base_url, "http://localhost:11434");
         assert!(config.providers.ollama.default_model.is_none());
     }
 
@@ -1426,10 +1423,7 @@ api_key = "gem-test"
 default_model = "gemini-2.0-flash"
 "#;
         let config: BlufioConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(
-            config.providers.gemini.api_key.as_deref(),
-            Some("gem-test")
-        );
+        assert_eq!(config.providers.gemini.api_key.as_deref(), Some("gem-test"));
         assert_eq!(config.providers.gemini.default_model, "gemini-2.0-flash");
     }
 

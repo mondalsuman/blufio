@@ -329,7 +329,10 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0]["type"], "function");
         assert_eq!(tools[0]["function"]["name"], "bash");
-        assert_eq!(tools[0]["function"]["description"], "Execute a bash command");
+        assert_eq!(
+            tools[0]["function"]["description"],
+            "Execute a bash command"
+        );
         assert!(tools[0]["function"]["parameters"]["properties"]["command"].is_object());
     }
 
@@ -475,10 +478,7 @@ mod tests {
             "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
         }"#;
         let chunk: SseChunk = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            chunk.choices[0].finish_reason.as_deref(),
-            Some("stop")
-        );
+        assert_eq!(chunk.choices[0].finish_reason.as_deref(), Some("stop"));
         let usage = chunk.usage.as_ref().unwrap();
         assert_eq!(usage.prompt_tokens, 10);
         assert_eq!(usage.completion_tokens, 20);
@@ -519,19 +519,23 @@ mod tests {
 
         // Simulate accumulator
         let mut accumulated = String::new();
-        if let Some(tc) = &chunk1.choices[0].delta.tool_calls {
-            if let Some(func) = &tc[0].function {
-                if let Some(args) = &func.arguments {
-                    accumulated.push_str(args);
-                }
-            }
+        if let Some(args) = chunk1.choices[0]
+            .delta
+            .tool_calls
+            .as_ref()
+            .and_then(|tc| tc[0].function.as_ref())
+            .and_then(|f| f.arguments.as_ref())
+        {
+            accumulated.push_str(args);
         }
-        if let Some(tc) = &chunk2.choices[0].delta.tool_calls {
-            if let Some(func) = &tc[0].function {
-                if let Some(args) = &func.arguments {
-                    accumulated.push_str(args);
-                }
-            }
+        if let Some(args) = chunk2.choices[0]
+            .delta
+            .tool_calls
+            .as_ref()
+            .and_then(|tc| tc[0].function.as_ref())
+            .and_then(|f| f.arguments.as_ref())
+        {
+            accumulated.push_str(args);
         }
 
         assert_eq!(accumulated, "{\"command\": \"echo hello\"}");

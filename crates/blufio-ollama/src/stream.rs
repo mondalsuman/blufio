@@ -11,8 +11,8 @@ use std::pin::Pin;
 
 use blufio_core::BlufioError;
 use bytes::BytesMut;
-use futures::stream::Stream;
 use futures::StreamExt;
+use futures::stream::Stream;
 
 use crate::types::OllamaResponse;
 
@@ -128,14 +128,15 @@ mod tests {
     #[test]
     fn partial_lines_across_chunks() {
         // First chunk: partial line (split mid-JSON, before "content" key)
-        let mut buffer =
-            BytesMut::from(r#"{"model":"llama3.2","message":{"role":"assistant","#);
+        let mut buffer = BytesMut::from(r#"{"model":"llama3.2","message":{"role":"assistant","#);
         let results1 = parse_complete_lines(&mut buffer);
         assert!(results1.is_empty());
 
         // Second chunk: completes the line
-        buffer.extend_from_slice(br#""content":"Hi"},"done":false}
-"#);
+        buffer.extend_from_slice(
+            br#""content":"Hi"},"done":false}
+"#,
+        );
         let results2 = parse_complete_lines(&mut buffer);
         assert_eq!(results2.len(), 1);
         let resp = results2[0].as_ref().unwrap();
@@ -145,14 +146,12 @@ mod tests {
 
     #[test]
     fn empty_lines_skipped() {
-        let mut buffer = BytesMut::from(
-            concat!(
-                "\n",
-                r#"{"model":"llama3.2","message":{"role":"assistant","content":"Hi"},"done":false}"#,
-                "\n",
-                "\n",
-            )
-        );
+        let mut buffer = BytesMut::from(concat!(
+            "\n",
+            r#"{"model":"llama3.2","message":{"role":"assistant","content":"Hi"},"done":false}"#,
+            "\n",
+            "\n",
+        ));
         let results = parse_complete_lines(&mut buffer);
         assert_eq!(results.len(), 1);
         let resp = results[0].as_ref().unwrap();
@@ -171,17 +170,15 @@ mod tests {
 
     #[test]
     fn mixed_valid_and_empty_lines() {
-        let mut buffer = BytesMut::from(
-            concat!(
-                "\n",
-                r#"{"model":"m","message":{"role":"assistant","content":"A"},"done":false}"#,
-                "\n",
-                "\n",
-                r#"{"model":"m","message":{"role":"assistant","content":"B"},"done":false}"#,
-                "\n",
-                "   \n",
-            )
-        );
+        let mut buffer = BytesMut::from(concat!(
+            "\n",
+            r#"{"model":"m","message":{"role":"assistant","content":"A"},"done":false}"#,
+            "\n",
+            "\n",
+            r#"{"model":"m","message":{"role":"assistant","content":"B"},"done":false}"#,
+            "\n",
+            "   \n",
+        ));
         let results = parse_complete_lines(&mut buffer);
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].as_ref().unwrap().message.content, "A");

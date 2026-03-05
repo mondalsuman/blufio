@@ -31,8 +31,8 @@ use tracing::{debug, info, warn};
 
 use crate::client::OllamaClient;
 use crate::types::{
-    OllamaFunction, OllamaFunctionCall, OllamaMessage, OllamaRequest, OllamaResponse,
-    OllamaTool, OllamaToolCall,
+    OllamaFunction, OllamaFunctionCall, OllamaMessage, OllamaRequest, OllamaResponse, OllamaTool,
+    OllamaToolCall,
 };
 
 /// Ollama provider implementing [`ProviderAdapter`].
@@ -81,10 +81,7 @@ impl OllamaProvider {
             })?
             .clone();
 
-        let client = OllamaClient::new(
-            config.providers.ollama.base_url.clone(),
-            default_model,
-        )?;
+        let client = OllamaClient::new(config.providers.ollama.base_url.clone(), default_model)?;
 
         // Health check: verify Ollama is reachable.
         client.health_check().await.map_err(|_| {
@@ -102,7 +99,12 @@ impl OllamaProvider {
         .await;
 
         info!(
-            model = config.providers.ollama.default_model.as_deref().unwrap_or("unset"),
+            model = config
+                .providers
+                .ollama
+                .default_model
+                .as_deref()
+                .unwrap_or("unset"),
             base_url = config.providers.ollama.base_url,
             "Ollama provider initialized"
         );
@@ -199,9 +201,7 @@ impl PluginAdapter for OllamaProvider {
     async fn health_check(&self) -> Result<HealthStatus, BlufioError> {
         match self.client.health_check().await {
             Ok(()) => Ok(HealthStatus::Healthy),
-            Err(e) => Ok(HealthStatus::Unhealthy(format!(
-                "Ollama unreachable: {e}"
-            ))),
+            Err(e) => Ok(HealthStatus::Unhealthy(format!("Ollama unreachable: {e}"))),
         }
     }
 
@@ -257,9 +257,7 @@ impl ProviderAdapter for OllamaProvider {
 
         let mapped = ndjson_stream.filter_map(move |result| {
             let chunk = match result {
-                Ok(ollama_resp) => {
-                    map_ollama_response_to_chunks(&ollama_resp, &mut is_first)
-                }
+                Ok(ollama_resp) => map_ollama_response_to_chunks(&ollama_resp, &mut is_first),
                 Err(e) => vec![Err(e)],
             };
             async move {
@@ -396,7 +394,9 @@ fn convert_provider_message(msg: &blufio_core::ProviderMessage) -> Vec<OllamaMes
                 text_parts.push(text.clone());
             }
             ContentBlock::Image { .. } => {
-                warn!("Ollama image content blocks are model-dependent and not universally supported; skipping");
+                warn!(
+                    "Ollama image content blocks are model-dependent and not universally supported; skipping"
+                );
             }
             ContentBlock::ToolUse { id, name, input } => {
                 tool_uses.push((id.clone(), name.clone(), input.clone()));
@@ -499,15 +499,11 @@ async fn load_system_prompt(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blufio_core::types::ToolDefinition;
     use blufio_core::ProviderMessage;
+    use blufio_core::types::ToolDefinition;
 
     fn test_provider() -> OllamaProvider {
-        let client = OllamaClient::new(
-            "http://localhost:11434".into(),
-            "llama3.2".into(),
-        )
-        .unwrap();
+        let client = OllamaClient::new("http://localhost:11434".into(), "llama3.2".into()).unwrap();
         OllamaProvider::with_client(client, "Test system prompt.".into())
     }
 
@@ -891,15 +887,14 @@ default_model = "llama3.2"
             .mount(&server)
             .await;
 
-        let client = OllamaClient::new(
-            server.uri(),
-            "llama3.2".into(),
-        )
-        .unwrap();
+        let client = OllamaClient::new(server.uri(), "llama3.2".into()).unwrap();
         let provider = OllamaProvider::with_client(client, "test".into());
 
         let models = provider.list_local_models().await.unwrap();
-        assert_eq!(models, vec!["llama3.2:latest", "mistral:7b", "codellama:13b"]);
+        assert_eq!(
+            models,
+            vec!["llama3.2:latest", "mistral:7b", "codellama:13b"]
+        );
     }
 
     #[tokio::test]

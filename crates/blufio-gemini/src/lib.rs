@@ -35,8 +35,8 @@ use uuid::Uuid;
 use crate::client::GeminiClient;
 use crate::types::{
     FunctionCall, FunctionCallPart, FunctionDeclaration, FunctionResponse, FunctionResponsePart,
-    GenerateContentRequest, GenerateContentResponse, GenerationConfig, GeminiContent, GeminiPart,
-    GeminiSystemInstruction, GeminiTool, InlineData, InlineDataPart, TextPart,
+    GeminiContent, GeminiPart, GeminiSystemInstruction, GeminiTool, GenerateContentRequest,
+    GenerateContentResponse, GenerationConfig, InlineData, InlineDataPart, TextPart,
 };
 
 /// Google Gemini provider implementing [`ProviderAdapter`].
@@ -114,9 +114,7 @@ impl GeminiProvider {
             .unwrap_or_else(|| self.system_prompt.clone());
 
         let system_instruction = Some(GeminiSystemInstruction {
-            parts: vec![GeminiPart::Text(TextPart {
-                text: system_text,
-            })],
+            parts: vec![GeminiPart::Text(TextPart { text: system_text })],
         });
 
         // Convert messages.
@@ -206,9 +204,7 @@ impl ProviderAdapter for GeminiProvider {
 
         let mapped = chunk_stream.flat_map(move |result| {
             let chunks = match result {
-                Ok(response) => {
-                    map_stream_response_to_chunks(&response, &mut is_first)
-                }
+                Ok(response) => map_stream_response_to_chunks(&response, &mut is_first),
                 Err(e) => vec![Err(e)],
             };
             futures::stream::iter(chunks)
@@ -223,10 +219,13 @@ fn map_response_to_provider(
     response: GenerateContentResponse,
     model: &str,
 ) -> Result<ProviderResponse, BlufioError> {
-    let candidate = response.candidates.first().ok_or_else(|| BlufioError::Provider {
-        message: "Gemini response contained no candidates".into(),
-        source: None,
-    })?;
+    let candidate = response
+        .candidates
+        .first()
+        .ok_or_else(|| BlufioError::Provider {
+            message: "Gemini response contained no candidates".into(),
+            source: None,
+        })?;
 
     // Extract text and function calls from parts.
     let mut text_parts = Vec::new();
@@ -341,9 +340,11 @@ fn map_stream_response_to_chunks(
 
         // Handle finish reason.
         if let Some(ref reason) = candidate.finish_reason {
-            let has_function_call = candidate.content.parts.iter().any(|p| {
-                matches!(p, GeminiPart::FunctionCall(_))
-            });
+            let has_function_call = candidate
+                .content
+                .parts
+                .iter()
+                .any(|p| matches!(p, GeminiPart::FunctionCall(_)));
 
             let stop_reason = if has_function_call {
                 "tool_use".to_string()
@@ -414,9 +415,7 @@ fn convert_messages(messages: &[blufio_core::ProviderMessage]) -> Vec<GeminiCont
         for block in &msg.content {
             match block {
                 ContentBlock::Text { text } => {
-                    regular_parts.push(GeminiPart::Text(TextPart {
-                        text: text.clone(),
-                    }));
+                    regular_parts.push(GeminiPart::Text(TextPart { text: text.clone() }));
                 }
                 ContentBlock::Image {
                     media_type, data, ..
@@ -556,12 +555,11 @@ async fn load_system_prompt(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blufio_core::types::ToolDefinition;
     use blufio_core::ProviderMessage;
+    use blufio_core::types::ToolDefinition;
 
     fn test_provider() -> GeminiProvider {
-        let client =
-            GeminiClient::new("test-key".into(), "gemini-2.0-flash".into(), None).unwrap();
+        let client = GeminiClient::new("test-key".into(), "gemini-2.0-flash".into(), None).unwrap();
         GeminiProvider::with_client(client, "Test system prompt.".into())
     }
 
@@ -934,9 +932,7 @@ mod tests {
             candidates: vec![crate::types::Candidate {
                 content: GeminiContent {
                     role: "model".into(),
-                    parts: vec![GeminiPart::Text(TextPart {
-                        text: "hi".into(),
-                    })],
+                    parts: vec![GeminiPart::Text(TextPart { text: "hi".into() })],
                 },
                 finish_reason: Some("STOP".into()),
             }],
@@ -1135,10 +1131,7 @@ mod tests {
         assert!(json["tools"][0].get("functionDeclarations").is_some());
 
         // Verify system instruction is separate from contents.
-        assert_eq!(
-            json["systemInstruction"]["parts"][0]["text"],
-            "Be helpful."
-        );
+        assert_eq!(json["systemInstruction"]["parts"][0]["text"], "Be helpful.");
         // Contents should only have the user message, not the system prompt.
         assert_eq!(json["contents"].as_array().unwrap().len(), 1);
         assert_eq!(json["contents"][0]["role"], "user");
