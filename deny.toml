@@ -18,7 +18,7 @@ wildcards = "deny"
 allow-wildcard-paths = true
 deny = [
     { crate = "openssl", use-instead = "rustls" },
-    { crate = "openssl-sys", use-instead = "rustls" },
+    # openssl-sys is allowed: needed by libsqlite3-sys for SQLCipher encryption at rest (not for TLS)
 ]
 
 [sources]
