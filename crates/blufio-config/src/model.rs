@@ -710,6 +710,10 @@ pub struct GatewayConfig {
     /// Bearer token for API authentication. If empty, auth is disabled.
     #[serde(default)]
     pub bearer_token: Option<String>,
+    /// Allowlist of tool names accessible via the /v1/tools API.
+    /// Empty = no tools accessible externally (secure default).
+    #[serde(default)]
+    pub api_tools_allowlist: Vec<String>,
 }
 
 impl Default for GatewayConfig {
@@ -719,6 +723,7 @@ impl Default for GatewayConfig {
             host: default_gateway_host(),
             port: default_gateway_port(),
             bearer_token: None,
+            api_tools_allowlist: Vec::new(),
         }
     }
 }
@@ -988,15 +993,204 @@ fn default_response_size_cap() -> usize {
 
 /// Provider configuration.
 ///
-/// Contains custom provider declarations that enable connecting to
-/// third-party LLM services with OpenAI-compatible APIs.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+/// Contains default provider selection, per-provider config sections,
+/// and custom provider declarations for third-party LLM services.
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProvidersConfig {
+    /// Default provider name. Valid values: "anthropic", "openai", "ollama", "openrouter", "gemini".
+    #[serde(default = "default_provider")]
+    pub default: String,
+
+    /// OpenAI API configuration.
+    #[serde(default)]
+    pub openai: OpenAIConfig,
+
+    /// Ollama (local) provider configuration.
+    #[serde(default)]
+    pub ollama: OllamaConfig,
+
+    /// OpenRouter proxy configuration.
+    #[serde(default)]
+    pub openrouter: OpenRouterConfig,
+
+    /// Google Gemini API configuration.
+    #[serde(default)]
+    pub gemini: GeminiConfig,
+
     /// Custom provider declarations.
     /// Key: provider name (e.g., "together", "groq").
     #[serde(default)]
     pub custom: HashMap<String, CustomProviderConfig>,
+}
+
+impl Default for ProvidersConfig {
+    fn default() -> Self {
+        Self {
+            default: default_provider(),
+            openai: OpenAIConfig::default(),
+            ollama: OllamaConfig::default(),
+            openrouter: OpenRouterConfig::default(),
+            gemini: GeminiConfig::default(),
+            custom: HashMap::new(),
+        }
+    }
+}
+
+fn default_provider() -> String {
+    "anthropic".to_string()
+}
+
+/// OpenAI API configuration.
+///
+/// Configured via `[providers.openai]` in TOML config.
+/// Supports custom `base_url` for Azure OpenAI, Together, Fireworks, etc.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OpenAIConfig {
+    /// OpenAI API key. `None` falls back to `OPENAI_API_KEY` env var.
+    #[serde(default)]
+    pub api_key: Option<String>,
+
+    /// Default model to use for LLM requests.
+    #[serde(default = "default_openai_model")]
+    pub default_model: String,
+
+    /// Base URL for the OpenAI-compatible API.
+    #[serde(default = "default_openai_base_url")]
+    pub base_url: String,
+
+    /// Maximum tokens to generate per response.
+    #[serde(default = "default_openai_max_tokens")]
+    pub max_tokens: u32,
+}
+
+impl Default for OpenAIConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            default_model: default_openai_model(),
+            base_url: default_openai_base_url(),
+            max_tokens: default_openai_max_tokens(),
+        }
+    }
+}
+
+fn default_openai_model() -> String {
+    "gpt-4o".to_string()
+}
+
+fn default_openai_base_url() -> String {
+    "https://api.openai.com/v1".to_string()
+}
+
+fn default_openai_max_tokens() -> u32 {
+    4096
+}
+
+/// Ollama (local) provider configuration.
+///
+/// Configured via `[providers.ollama]` in TOML config.
+/// No API key needed -- Ollama runs locally.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OllamaConfig {
+    /// Base URL for the Ollama API.
+    #[serde(default = "default_ollama_base_url")]
+    pub base_url: String,
+
+    /// Default model. No auto-pick -- user must specify.
+    #[serde(default)]
+    pub default_model: Option<String>,
+}
+
+impl Default for OllamaConfig {
+    fn default() -> Self {
+        Self {
+            base_url: default_ollama_base_url(),
+            default_model: None,
+        }
+    }
+}
+
+fn default_ollama_base_url() -> String {
+    "http://localhost:11434".to_string()
+}
+
+/// OpenRouter proxy configuration.
+///
+/// Configured via `[providers.openrouter]` in TOML config.
+/// Routes requests through OpenRouter's unified API to various providers.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OpenRouterConfig {
+    /// OpenRouter API key. `None` falls back to `OPENROUTER_API_KEY` env var.
+    #[serde(default)]
+    pub api_key: Option<String>,
+
+    /// Default model (provider/model format).
+    #[serde(default = "default_openrouter_model")]
+    pub default_model: String,
+
+    /// Application title sent via X-Title header.
+    #[serde(default = "default_openrouter_x_title")]
+    pub x_title: String,
+
+    /// HTTP Referer header for OpenRouter analytics.
+    #[serde(default)]
+    pub http_referer: Option<String>,
+
+    /// Preferred provider order for model routing.
+    #[serde(default)]
+    pub provider_order: Vec<String>,
+}
+
+impl Default for OpenRouterConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            default_model: default_openrouter_model(),
+            x_title: default_openrouter_x_title(),
+            http_referer: None,
+            provider_order: Vec::new(),
+        }
+    }
+}
+
+fn default_openrouter_model() -> String {
+    "anthropic/claude-sonnet-4".to_string()
+}
+
+fn default_openrouter_x_title() -> String {
+    "Blufio".to_string()
+}
+
+/// Google Gemini API configuration.
+///
+/// Configured via `[providers.gemini]` in TOML config.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GeminiConfig {
+    /// Gemini API key. `None` falls back to `GEMINI_API_KEY` env var.
+    #[serde(default)]
+    pub api_key: Option<String>,
+
+    /// Default Gemini model.
+    #[serde(default = "default_gemini_model")]
+    pub default_model: String,
+}
+
+impl Default for GeminiConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            default_model: default_gemini_model(),
+        }
+    }
+}
+
+fn default_gemini_model() -> String {
+    "gemini-2.0-flash".to_string()
 }
 
 /// Configuration for a custom LLM provider.
@@ -1104,6 +1298,184 @@ default_model = "llama3-70b-8192"
     fn test_default_config_has_empty_providers() {
         let config = BlufioConfig::default();
         assert!(config.providers.custom.is_empty());
+    }
+
+    #[test]
+    fn test_empty_toml_defaults_provider_to_anthropic() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert_eq!(config.providers.default, "anthropic");
+    }
+
+    #[test]
+    fn test_providers_default_field_parses() {
+        let toml_str = r#"
+[providers]
+default = "openai"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.default, "openai");
+    }
+
+    #[test]
+    fn test_openai_config_parses() {
+        let toml_str = r#"
+[providers.openai]
+api_key = "sk-test"
+default_model = "gpt-4o"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.openai.api_key.as_deref(), Some("sk-test"));
+        assert_eq!(config.providers.openai.default_model, "gpt-4o");
+    }
+
+    #[test]
+    fn test_openai_config_custom_base_url() {
+        let toml_str = r#"
+[providers.openai]
+base_url = "https://custom.azure.com"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.openai.base_url, "https://custom.azure.com");
+    }
+
+    #[test]
+    fn test_openai_config_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.providers.openai.api_key.is_none());
+        assert_eq!(config.providers.openai.default_model, "gpt-4o");
+        assert_eq!(
+            config.providers.openai.base_url,
+            "https://api.openai.com/v1"
+        );
+        assert_eq!(config.providers.openai.max_tokens, 4096);
+    }
+
+    #[test]
+    fn test_ollama_config_parses() {
+        let toml_str = r#"
+[providers.ollama]
+base_url = "http://localhost:11434"
+default_model = "llama3.2"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.ollama.base_url, "http://localhost:11434");
+        assert_eq!(
+            config.providers.ollama.default_model.as_deref(),
+            Some("llama3.2")
+        );
+    }
+
+    #[test]
+    fn test_ollama_config_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert_eq!(config.providers.ollama.base_url, "http://localhost:11434");
+        assert!(config.providers.ollama.default_model.is_none());
+    }
+
+    #[test]
+    fn test_openrouter_config_parses() {
+        let toml_str = r#"
+[providers.openrouter]
+api_key = "or-test"
+default_model = "anthropic/claude-sonnet-4"
+x_title = "MyApp"
+http_referer = "https://myapp.com"
+provider_order = ["Anthropic", "Google"]
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.providers.openrouter.api_key.as_deref(),
+            Some("or-test")
+        );
+        assert_eq!(
+            config.providers.openrouter.default_model,
+            "anthropic/claude-sonnet-4"
+        );
+        assert_eq!(config.providers.openrouter.x_title, "MyApp");
+        assert_eq!(
+            config.providers.openrouter.http_referer.as_deref(),
+            Some("https://myapp.com")
+        );
+        assert_eq!(
+            config.providers.openrouter.provider_order,
+            vec!["Anthropic", "Google"]
+        );
+    }
+
+    #[test]
+    fn test_openrouter_config_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.providers.openrouter.api_key.is_none());
+        assert_eq!(
+            config.providers.openrouter.default_model,
+            "anthropic/claude-sonnet-4"
+        );
+        assert_eq!(config.providers.openrouter.x_title, "Blufio");
+        assert!(config.providers.openrouter.http_referer.is_none());
+        assert!(config.providers.openrouter.provider_order.is_empty());
+    }
+
+    #[test]
+    fn test_gemini_config_parses() {
+        let toml_str = r#"
+[providers.gemini]
+api_key = "gem-test"
+default_model = "gemini-2.0-flash"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.providers.gemini.api_key.as_deref(), Some("gem-test"));
+        assert_eq!(config.providers.gemini.default_model, "gemini-2.0-flash");
+    }
+
+    #[test]
+    fn test_gemini_config_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.providers.gemini.api_key.is_none());
+        assert_eq!(config.providers.gemini.default_model, "gemini-2.0-flash");
+    }
+
+    #[test]
+    fn test_openai_config_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.openai]
+api_key = "sk-test"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ollama_config_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.ollama]
+base_url = "http://localhost:11434"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_openrouter_config_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.openrouter]
+api_key = "test"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_gemini_config_rejects_unknown_fields() {
+        let toml_str = r#"
+[providers.gemini]
+api_key = "test"
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
     }
 }
 

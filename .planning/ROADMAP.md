@@ -60,8 +60,8 @@
 **Milestone Goal:** Expand the platform ecosystem with OpenAI-compatible APIs, multi-provider LLM support, multi-channel adapters, Docker deployment, event bus, skill marketplace, node system, and migration tooling.
 
 - [x] **Phase 29: Event Bus & Core Trait Extensions** — Internal pub/sub backbone and provider-agnostic ToolDefinition
-- [ ] **Phase 30: Multi-Provider LLM Support** — OpenAI, Ollama, OpenRouter, and Gemini provider plugins
-- [ ] **Phase 31: OpenAI-Compatible Gateway API** — /v1/chat/completions, /v1/responses, /v1/tools endpoints
+- [x] **Phase 30: Multi-Provider LLM Support** — OpenAI, Ollama, OpenRouter, and Gemini provider plugins (completed 2026-03-05)
+- [x] **Phase 31: OpenAI-Compatible Gateway API** (3/3 plans) — completed 2026-03-05
 - [ ] **Phase 32: Scoped API Keys, Webhooks & Batch** — API key management, webhook delivery, and batch operations
 - [ ] **Phase 33: Discord & Slack Channel Adapters** — Two highest-value channel integrations
 - [ ] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** — Remaining channel adapters with cross-channel bridging
@@ -287,7 +287,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 27. Self-Update with Rollback | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 28. Close Audit Gaps | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 29. Event Bus & Core Trait Extensions | v1.3 | 2/2 | Complete | 2026-03-05 |
-| 30. Multi-Provider LLM Support | v1.3 | 0/4 | Not started | - |
+| 30. Multi-Provider LLM Support | 4/4 | Complete    | 2026-03-05 | - |
 | 31. OpenAI-Compatible Gateway API | v1.3 | 0/3 | Not started | - |
 | 32. Scoped API Keys, Webhooks & Batch | v1.3 | 0/3 | Not started | - |
 | 33. Discord & Slack Channel Adapters | v1.3 | 0/2 | Not started | - |

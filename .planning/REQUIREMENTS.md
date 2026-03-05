@@ -30,15 +30,15 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Providers
 
-- [ ] **PROV-01**: OpenAI provider with streaming and tool calling
-- [ ] **PROV-02**: OpenAI provider supports vision and structured outputs
-- [ ] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
-- [ ] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
-- [ ] **PROV-05**: Ollama auto-discovers local models via /api/tags
-- [ ] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
-- [ ] **PROV-07**: OpenRouter supports provider fallback ordering
-- [ ] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
-- [ ] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
+- [x] **PROV-01**: OpenAI provider with streaming and tool calling
+- [x] **PROV-02**: OpenAI provider supports vision and structured outputs
+- [x] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
+- [x] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
+- [x] **PROV-05**: Ollama auto-discovers local models via /api/tags
+- [x] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
+- [x] **PROV-07**: OpenRouter supports provider fallback ordering
+- [x] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
+- [x] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
 - [ ] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
 - [ ] **PROV-11**: TTS provider trait (AudioProvider) defined with reference interface
 - [ ] **PROV-12**: Transcription provider trait defined with reference interface
@@ -150,15 +150,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROV-12 | Phase 29 | Pending |
 | PROV-13 | Phase 29 | Pending |
 | PROV-14 | Phase 29 | Pending |
-| PROV-01 | Phase 30 | Pending |
-| PROV-02 | Phase 30 | Pending |
-| PROV-03 | Phase 30 | Pending |
-| PROV-04 | Phase 30 | Pending |
-| PROV-05 | Phase 30 | Pending |
-| PROV-06 | Phase 30 | Pending |
-| PROV-07 | Phase 30 | Pending |
-| PROV-08 | Phase 30 | Pending |
-| PROV-09 | Phase 30 | Pending |
+| PROV-01 | Phase 30 | Complete |
+| PROV-02 | Phase 30 | Complete |
+| PROV-03 | Phase 30 | Complete |
+| PROV-04 | Phase 30 | Complete |
+| PROV-05 | Phase 30 | Complete |
+| PROV-06 | Phase 30 | Complete |
+| PROV-07 | Phase 30 | Complete |
+| PROV-08 | Phase 30 | Complete |
+| PROV-09 | Phase 30 | Complete |
 | API-01 | Phase 31 | Pending |
 | API-02 | Phase 31 | Pending |
 | API-03 | Phase 31 | Pending |

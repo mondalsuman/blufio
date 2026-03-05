@@ -23,9 +23,9 @@ pub use types::{
 
 // Re-export all adapter traits at crate root.
 pub use traits::{
-    AuthAdapter, ChannelAdapter, EmbeddingAdapter, ImageAdapter, ObservabilityAdapter,
-    PluginAdapter, ProviderAdapter, SkillRuntimeAdapter, StorageAdapter, TranscriptionAdapter,
-    TtsAdapter,
+    AuthAdapter, ChannelAdapter, EmbeddingAdapter, ImageAdapter, ModelInfo, ObservabilityAdapter,
+    PluginAdapter, ProviderAdapter, ProviderRegistry, SkillRuntimeAdapter, StorageAdapter,
+    TranscriptionAdapter, TtsAdapter,
 };
 
 #[cfg(test)]

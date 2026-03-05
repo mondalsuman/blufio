@@ -601,6 +601,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "blufio-core",
+ "blufio-skill",
  "chrono",
  "dashmap",
  "ed25519-dalek",
@@ -614,6 +615,26 @@ dependencies = [
  "tower-http",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "blufio-gemini"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-config",
+ "blufio-core",
+ "blufio-security",
+ "bytes",
+ "futures",
+ "reqwest 0.13.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
 ]
 
 [[package]]
@@ -689,6 +710,64 @@ dependencies = [
  "tokio-rusqlite",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "blufio-ollama"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-config",
+ "blufio-core",
+ "bytes",
+ "futures",
+ "reqwest 0.13.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "blufio-openai"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-config",
+ "blufio-core",
+ "blufio-security",
+ "eventsource-stream",
+ "futures",
+ "reqwest 0.13.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "wiremock",
+]
+
+[[package]]
+name = "blufio-openrouter"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-config",
+ "blufio-core",
+ "blufio-security",
+ "eventsource-stream",
+ "futures",
+ "reqwest 0.13.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "wiremock",
 ]
 
 [[package]]
