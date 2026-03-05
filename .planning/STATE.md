@@ -1,33 +1,31 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Production Hardening
-status: complete
-last_updated: "2026-03-04"
+milestone: v1.3
+milestone_name: Ecosystem Expansion
+status: defining_requirements
+last_updated: "2026-03-05"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-04)
+See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.2 Production Hardening — SHIPPED 2026-03-04. Planning next milestone.
+**Current focus:** v1.3 Ecosystem Expansion — defining requirements
 
 ## Current Position
 
-Phase: 28 of 28 (Close Audit Gaps) — ALL COMPLETE
-Plan: 2 of 2 in current phase (final)
-Status: v1.2 archived. 3 milestones shipped (v1.0, v1.1, v1.2). 148 requirements verified.
-Last activity: 2026-03-04 - Milestone v1.2 archived
-
-Progress: [####################] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-05 — Milestone v1.3 started
 
 ## Performance Metrics
 
@@ -58,7 +56,7 @@ None.
 
 ### Blockers/Concerns
 
-None — all milestones complete.
+None.
 
 ### Quick Tasks Completed
 
@@ -68,6 +66,6 @@ None — all milestones complete.
 
 ## Session Continuity
 
-Last session: 2026-03-04
-Stopped at: Milestone v1.2 archived. All documentation updated.
-Next action: `/gsd:new-milestone` for v1.3 planning.
+Last session: 2026-03-05
+Stopped at: Milestone v1.3 started, defining requirements.
+Next action: Complete requirements definition, then roadmap.

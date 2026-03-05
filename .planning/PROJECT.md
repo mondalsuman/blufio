@@ -51,7 +51,49 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Active
 
-None -- all milestones shipped.
+<!-- Current scope: v1.3 Ecosystem Expansion -->
+
+- [ ] OpenAI-compatible /v1/chat/completions API
+- [ ] OpenResponses /v1/responses API
+- [ ] Tools Invoke API (/v1/tools/invoke)
+- [ ] Scoped API keys with rate limiting
+- [ ] Webhook management
+- [ ] Batch operations API
+- [ ] OpenAI provider plugin
+- [ ] Ollama provider plugin
+- [ ] OpenRouter provider plugin
+- [ ] Google/Gemini provider plugin
+- [ ] TTS/Transcription/Image provider traits
+- [ ] Discord channel adapter
+- [ ] WhatsApp channel adapter
+- [ ] Slack channel adapter
+- [ ] Signal channel adapter
+- [ ] IRC channel adapter
+- [ ] Matrix channel adapter
+- [ ] Event bus (internal pub/sub)
+- [ ] Docker image (Dockerfile + compose)
+- [ ] Skill registry / marketplace
+- [ ] Code signing (Ed25519) for skills
+- [ ] Node system (paired devices)
+- [ ] OpenClaw migration tool
+- [ ] Cross-channel bridging
+- [ ] Multi-instance systemd template
+- [ ] blufio bundle (air-gapped deployment)
+- [ ] blufio bench (built-in benchmarks)
+- [ ] blufio privacy evidence-report
+- [ ] blufio config recipe + blufio uninstall
+
+## Current Milestone: v1.3 Ecosystem Expansion
+
+**Goal:** Expand the platform ecosystem with OpenAI-compatible APIs, multi-provider LLM support, multi-channel adapters, Docker deployment, event bus, skill marketplace, node system, and migration tooling — delivering all remaining PRD Phase 3+ features.
+
+**Target features:**
+- OpenAI-compatible API layer (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch)
+- Multi-provider LLM (OpenAI, Ollama, OpenRouter, Google/Gemini, TTS/Transcription/Image)
+- Multi-channel adapters (Discord, WhatsApp, Slack, Signal, IRC, Matrix)
+- Infrastructure (Docker image, event bus, cross-channel bridging, multi-instance)
+- Ecosystem (skill registry, code signing, node system, OpenClaw migration)
+- CLI utilities (bench, privacy report, config recipe, uninstall, bundle)
 
 ## Shipped Milestones
 
@@ -145,4 +187,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | sd-notify best-effort wrapper | Silent no-op on non-systemd platforms, never blocks or errors | ✓ Good — zero-impact on macOS/Docker development |
 
 ---
-*Last updated: 2026-03-04 after v1.2 milestone archived*
+*Last updated: 2026-03-05 after v1.3 milestone started*
