@@ -150,11 +150,12 @@ Plans:
   3. User can add Blufio to a Slack workspace and chat via Events API or Socket Mode with Block Kit formatted messages
   4. Slack slash commands route to Blufio and responses render correctly
   5. Both adapters implement ChannelAdapter trait with capabilities manifest and format degradation pipeline works across channel capabilities
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 33-01: Discord adapter (blufio-discord)
-- [ ] 33-02: Slack adapter (blufio-slack)
+- [ ] 33-01: Shared infrastructure (FormatPipeline, StreamingEditorOps trait, ChannelCapabilities extension, config structs)
+- [ ] 33-02: Discord adapter (blufio-discord) + serve.rs wiring
+- [ ] 33-03: Slack adapter (blufio-slack) + serve.rs wiring
 
 ### Phase 34: WhatsApp, Signal, IRC & Matrix Adapters
 **Goal**: Users can interact with Blufio through WhatsApp, Signal, IRC, and Matrix, and messages can bridge across any combination of channels
