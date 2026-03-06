@@ -658,9 +658,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             // Wire WhatsApp webhook routes into gateway (unauthenticated public routes).
             #[cfg(feature = "whatsapp")]
             if let Some(ref webhook_state) = _whatsapp_webhook_state {
-                let whatsapp_routes = blufio_whatsapp::webhook::whatsapp_webhook_routes(
-                    webhook_state.clone(),
-                );
+                let whatsapp_routes =
+                    blufio_whatsapp::webhook::whatsapp_webhook_routes(webhook_state.clone());
                 gateway.set_extra_public_routes(whatsapp_routes).await;
                 info!("whatsapp webhook routes mounted on gateway at /webhooks/whatsapp");
             }

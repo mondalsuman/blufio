@@ -275,8 +275,14 @@ impl ChannelAdapter for GatewayChannel {
         let extra_public_routes = self.extra_public_routes.lock().await.take();
 
         let handle = tokio::spawn(async move {
-            if let Err(e) =
-                server::start_server(&server_config, state, mcp_router, mcp_max_connections, extra_public_routes).await
+            if let Err(e) = server::start_server(
+                &server_config,
+                state,
+                mcp_router,
+                mcp_max_connections,
+                extra_public_routes,
+            )
+            .await
             {
                 tracing::error!("gateway server error: {e}");
             }
