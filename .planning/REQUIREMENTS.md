@@ -57,8 +57,8 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 - [ ] **CHAN-08**: Signal adapter via signal-cli JSON-RPC sidecar bridge
 - [ ] **CHAN-09**: IRC adapter with TLS and NickServ authentication via irc crate
 - [ ] **CHAN-10**: Matrix adapter with room join and messaging via matrix-sdk 0.11
-- [ ] **CHAN-11**: All new adapters implement ChannelAdapter trait with capabilities manifest
-- [ ] **CHAN-12**: Format degradation pipeline works across all new channel capabilities
+- [x] **CHAN-11**: All new adapters implement ChannelAdapter trait with capabilities manifest
+- [x] **CHAN-12**: Format degradation pipeline works across all new channel capabilities
 
 ### Infrastructure
 
@@ -182,8 +182,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHAN-03 | Phase 33 | Pending |
 | CHAN-04 | Phase 33 | Pending |
 | CHAN-05 | Phase 33 | Pending |
-| CHAN-11 | Phase 33 | Pending |
-| CHAN-12 | Phase 33 | Pending |
+| CHAN-11 | Phase 33 | Complete |
+| CHAN-12 | Phase 33 | Complete |
 | CHAN-06 | Phase 34 | Pending |
 | CHAN-07 | Phase 34 | Pending |
 | CHAN-08 | Phase 34 | Pending |
