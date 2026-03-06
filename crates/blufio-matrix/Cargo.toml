@@ -1,0 +1,25 @@
+[package]
+name = "blufio-matrix"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Matrix channel adapter for the Blufio agent framework"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+async-trait.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
+serde.workspace = true
+serde_json = "1"
+tracing.workspace = true
+semver.workspace = true
+uuid.workspace = true
+matrix-sdk = { version = "=0.11.0", default-features = false, features = ["rustls-tls"] }
+ruma = "0.12"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

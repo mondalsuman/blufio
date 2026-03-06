@@ -1,0 +1,23 @@
+[package]
+name = "blufio-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Cross-channel message bridge for the Blufio agent framework"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-bus = { path = "../blufio-bus" }
+blufio-config = { path = "../blufio-config" }
+async-trait.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
+serde.workspace = true
+serde_json = "1"
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

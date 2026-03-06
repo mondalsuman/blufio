@@ -41,6 +41,18 @@ use blufio_discord::DiscordChannel;
 #[cfg(feature = "slack")]
 use blufio_slack::SlackChannel;
 
+#[cfg(feature = "whatsapp")]
+use blufio_whatsapp::{WhatsAppCloudChannel, webhook::WhatsAppWebhookState};
+
+#[cfg(feature = "signal")]
+use blufio_signal::SignalChannel;
+
+#[cfg(feature = "irc")]
+use blufio_irc::IrcChannel;
+
+#[cfg(feature = "matrix")]
+use blufio_matrix::MatrixChannel;
+
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
@@ -407,6 +419,114 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     }
 
+    // Add WhatsApp channel (if enabled and configured).
+    #[cfg(feature = "whatsapp")]
+    let _whatsapp_webhook_state: Option<WhatsAppWebhookState> = {
+        if config.whatsapp.phone_number_id.is_some() {
+            let whatsapp = WhatsAppCloudChannel::new(config.whatsapp.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize WhatsApp channel");
+                e
+            })?;
+
+            // Capture inbound_tx and webhook state before moving the adapter.
+            let inbound_tx = whatsapp.inbound_tx();
+            let webhook_state = WhatsAppWebhookState {
+                inbound_tx,
+                verify_token: config.whatsapp.verify_token.clone().unwrap_or_default(),
+                app_secret: config.whatsapp.app_secret.clone().unwrap_or_default(),
+            };
+
+            mux.add_channel("whatsapp".to_string(), Box::new(whatsapp));
+            info!("whatsapp channel added to multiplexer");
+
+            // Redact access token in logs.
+            if let Some(ref token) = config.whatsapp.access_token {
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    token.clone(),
+                );
+            }
+
+            Some(webhook_state)
+        } else {
+            info!("whatsapp channel skipped (no phone_number_id configured)");
+            None
+        }
+    };
+
+    // Add Signal channel (if enabled and configured).
+    #[cfg(feature = "signal")]
+    {
+        if config.signal.socket_path.is_some() || config.signal.host.is_some() {
+            let signal = SignalChannel::new(config.signal.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize Signal channel");
+                eprintln!(
+                    "error: Signal requires a running signal-cli daemon. \
+                     Configure socket_path or host:port in [signal] config section"
+                );
+                e
+            })?;
+            mux.add_channel("signal".to_string(), Box::new(signal));
+            info!("signal channel added to multiplexer");
+        } else {
+            info!("signal channel skipped (no socket_path or host configured)");
+        }
+    }
+
+    // Add IRC channel (if enabled and configured).
+    #[cfg(feature = "irc")]
+    {
+        if config.irc.server.is_some() {
+            let irc = IrcChannel::new(config.irc.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize IRC channel");
+                eprintln!(
+                    "error: IRC server configuration required. \
+                     Set server and nickname in [irc] config section"
+                );
+                e
+            })?;
+            mux.add_channel("irc".to_string(), Box::new(irc));
+            info!("irc channel added to multiplexer");
+
+            // Redact IRC password in logs.
+            if let Some(ref password) = config.irc.password {
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    password.clone(),
+                );
+            }
+        } else {
+            info!("irc channel skipped (no server configured)");
+        }
+    }
+
+    // Add Matrix channel (if enabled and configured).
+    #[cfg(feature = "matrix")]
+    {
+        if config.matrix.homeserver_url.is_some() {
+            let matrix = MatrixChannel::new(config.matrix.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize Matrix channel");
+                eprintln!(
+                    "error: Matrix homeserver URL, username, and password required. \
+                     Set in [matrix] config section"
+                );
+                e
+            })?;
+            mux.add_channel("matrix".to_string(), Box::new(matrix));
+            info!("matrix channel added to multiplexer");
+
+            // Redact Matrix password in logs.
+            if let Some(ref password) = config.matrix.password {
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    password.clone(),
+                );
+            }
+        } else {
+            info!("matrix channel skipped (no homeserver_url configured)");
+        }
+    }
+
     // Install signal handler early so the cancellation token is available
     // for MCP HTTP transport and gateway startup.
     let cancel = shutdown::install_signal_handler();
@@ -533,6 +653,15 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                     notifications = true,
                     "MCP HTTP transport enabled at /mcp with resource access",
                 );
+            }
+
+            // Wire WhatsApp webhook routes into gateway (unauthenticated public routes).
+            #[cfg(feature = "whatsapp")]
+            if let Some(ref webhook_state) = _whatsapp_webhook_state {
+                let whatsapp_routes =
+                    blufio_whatsapp::webhook::whatsapp_webhook_routes(webhook_state.clone());
+                gateway.set_extra_public_routes(whatsapp_routes).await;
+                info!("whatsapp webhook routes mounted on gateway at /webhooks/whatsapp");
             }
 
             mux.add_channel("gateway".to_string(), Box::new(gateway));

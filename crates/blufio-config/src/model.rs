@@ -32,6 +32,26 @@ pub struct BlufioConfig {
     #[serde(default)]
     pub slack: SlackConfig,
 
+    /// WhatsApp channel integration settings.
+    #[serde(default)]
+    pub whatsapp: WhatsAppConfig,
+
+    /// Signal channel integration settings.
+    #[serde(default)]
+    pub signal: SignalConfig,
+
+    /// IRC channel integration settings.
+    #[serde(default)]
+    pub irc: IrcConfig,
+
+    /// Matrix channel integration settings.
+    #[serde(default)]
+    pub matrix: MatrixConfig,
+
+    /// Cross-channel bridge configuration.
+    #[serde(default)]
+    pub bridge: std::collections::HashMap<String, BridgeGroupConfig>,
+
     /// Anthropic API settings.
     #[serde(default)]
     pub anthropic: AnthropicConfig,
@@ -200,6 +220,157 @@ pub struct SlackConfig {
     /// List of allowed Slack user IDs.
     #[serde(default)]
     pub allowed_users: Vec<String>,
+}
+
+/// WhatsApp channel integration configuration.
+///
+/// Supports two variants: Cloud API (production) and Web (experimental).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WhatsAppConfig {
+    /// Variant: "cloud" (default) or "web" (experimental).
+    #[serde(default)]
+    pub variant: Option<String>,
+    /// WhatsApp Business phone number ID (Cloud API).
+    #[serde(default)]
+    pub phone_number_id: Option<String>,
+    /// Meta Graph API access token (Cloud API).
+    #[serde(default)]
+    pub access_token: Option<String>,
+    /// Webhook verify token for subscription validation (Cloud API).
+    #[serde(default)]
+    pub verify_token: Option<String>,
+    /// App secret for HMAC-SHA256 webhook signature verification (Cloud API).
+    #[serde(default)]
+    pub app_secret: Option<String>,
+    /// Path to WhatsApp Web session data (Web variant).
+    #[serde(default)]
+    pub session_data_path: Option<String>,
+    /// List of allowed phone numbers or user IDs.
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
+}
+
+/// Signal channel integration configuration.
+///
+/// Connects to an externally managed signal-cli JSON-RPC daemon.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SignalConfig {
+    /// Unix domain socket path for signal-cli daemon. Takes priority over TCP.
+    #[serde(default)]
+    pub socket_path: Option<String>,
+    /// TCP host for signal-cli daemon (default: 127.0.0.1).
+    #[serde(default)]
+    pub host: Option<String>,
+    /// TCP port for signal-cli daemon (default: 7583).
+    #[serde(default)]
+    pub port: Option<u16>,
+    /// Bot's own phone number (for @mention detection in groups).
+    #[serde(default)]
+    pub phone_number: Option<String>,
+    /// List of allowed sender phone numbers.
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
+}
+
+/// IRC channel integration configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IrcConfig {
+    /// IRC server hostname.
+    #[serde(default)]
+    pub server: Option<String>,
+    /// IRC server port (default: 6697 for TLS, 6667 without).
+    #[serde(default)]
+    pub port: Option<u16>,
+    /// Bot nickname.
+    #[serde(default)]
+    pub nickname: Option<String>,
+    /// Channels to join (e.g., ["#blufio", "#support"]).
+    #[serde(default)]
+    pub channels: Vec<String>,
+    /// Enable TLS (default: true).
+    #[serde(default = "default_true")]
+    pub tls: bool,
+    /// Authentication method: "sasl" or "nickserv".
+    #[serde(default)]
+    pub auth_method: Option<String>,
+    /// Password for SASL or NickServ authentication.
+    #[serde(default)]
+    pub password: Option<String>,
+    /// Rate limit between messages in milliseconds (default: 2000).
+    #[serde(default = "default_irc_rate_limit")]
+    pub rate_limit_ms: u64,
+    /// List of allowed user nicks.
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
+}
+
+impl Default for IrcConfig {
+    fn default() -> Self {
+        Self {
+            server: None,
+            port: None,
+            nickname: None,
+            channels: vec![],
+            tls: true,
+            auth_method: None,
+            password: None,
+            rate_limit_ms: default_irc_rate_limit(),
+            allowed_users: vec![],
+        }
+    }
+}
+
+fn default_irc_rate_limit() -> u64 {
+    2000
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Matrix channel integration configuration.
+///
+/// Uses matrix-sdk 0.11.0 (pinned). E2E encryption is deferred to EXT-06.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatrixConfig {
+    /// Matrix homeserver URL (e.g., "https://matrix.org").
+    #[serde(default)]
+    pub homeserver_url: Option<String>,
+    /// Matrix username (localpart, e.g., "blufio-bot").
+    #[serde(default)]
+    pub username: Option<String>,
+    /// Matrix password.
+    #[serde(default)]
+    pub password: Option<String>,
+    /// Rooms to auto-join on startup (room IDs or aliases).
+    #[serde(default)]
+    pub rooms: Vec<String>,
+    /// Display name for the bot.
+    #[serde(default)]
+    pub display_name: Option<String>,
+    /// List of allowed Matrix user IDs (@user:server).
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
+}
+
+/// Cross-channel bridge group configuration.
+///
+/// Defines a group of channels that should have messages bridged between them.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BridgeGroupConfig {
+    /// Channels in this bridge group (e.g., ["telegram", "discord", "slack"]).
+    pub channels: Vec<String>,
+    /// Exclude bot messages from bridging (default: true).
+    #[serde(default = "default_true")]
+    pub exclude_bots: bool,
+    /// Only bridge messages from these users (empty = all users).
+    #[serde(default)]
+    pub include_users: Vec<String>,
 }
 
 /// Anthropic API configuration.

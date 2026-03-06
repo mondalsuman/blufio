@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: unknown
-last_updated: "2026-03-05T17:00:00.000Z"
+last_updated: "2026-03-06T20:00:00.000Z"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 17
+  completed_plans: 17
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — Phase 32 (Scoped API Keys, Webhooks & Batch)
+**Current focus:** v1.3 Ecosystem Expansion — Phase 35 (Skill Registry & Code Signing)
 
 ## Current Position
 
-Phase: 32 of 39 (Scoped API Keys, Webhooks & Batch)
+Phase: 35 of 39 (Skill Registry & Code Signing)
 Plan: 0 of 0 in current phase
 Status: Ready to plan
-Last activity: 2026-03-05 — Phase 31 complete (3/3 plans, OpenAI-compatible gateway API)
+Last activity: 2026-03-06 — Phase 34 complete (5/5 plans, WhatsApp/Signal/IRC/Matrix adapters + cross-channel bridge)
 
-Progress: [███░░░░░░░] 27%
+Progress: [████░░░░░░] 45%
 
 ## Performance Metrics
 
@@ -57,6 +57,14 @@ Progress: [███░░░░░░░] 27%
 | 31 | 01 | ~15min | 2 | 10 |
 | 31 | 02 | ~10min | 2 | 3 |
 | 31 | 03 | ~10min | 2 | 4 |
+| 33 | 01 | ~15min | 2 | 8 |
+| 33 | 02 | ~10min | 2 | 5 |
+| 33 | 03 | ~8min | 2 | 4 |
+| 34 | 01 | ~20min | 2 | 8 |
+| 34 | 02 | ~15min | 2 | 5 |
+| 34 | 03 | ~15min | 2 | 6 |
+| 34 | 04 | ~15min | 2 | 4 |
+| 34 | 05 | ~10min | 2 | 5 |
 
 ## Accumulated Context
 
@@ -106,6 +114,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05
-Stopped at: Phase 32 context gathered, ready to plan
-Resume file: .planning/phases/32-scoped-api-keys-webhooks-batch/32-CONTEXT.md
+Last session: 2026-03-06
+Stopped at: Phase 34 complete, ready for Phase 35
+Resume file: .planning/ROADMAP.md
