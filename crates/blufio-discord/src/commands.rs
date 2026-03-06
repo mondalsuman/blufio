@@ -21,12 +21,16 @@ const BLURPLE: u32 = 0x5865F2;
 pub async fn register_commands(ctx: &Context) {
     let command = CreateCommand::new("blufio")
         .description("Interact with Blufio AI assistant")
-        .add_option(
-            CreateCommandOption::new(CommandOptionType::SubCommand, "status", "Show bot status"),
-        )
-        .add_option(
-            CreateCommandOption::new(CommandOptionType::SubCommand, "help", "Show help information"),
-        )
+        .add_option(CreateCommandOption::new(
+            CommandOptionType::SubCommand,
+            "status",
+            "Show bot status",
+        ))
+        .add_option(CreateCommandOption::new(
+            CommandOptionType::SubCommand,
+            "help",
+            "Show help information",
+        ))
         .add_option(
             CreateCommandOption::new(CommandOptionType::SubCommand, "chat", "Chat with Blufio")
                 .add_sub_option(
@@ -99,16 +103,8 @@ async fn handle_help(ctx: &Context, cmd: &CommandInteraction) {
             "Check if Blufio is online and ready",
             false,
         )
-        .field(
-            "/blufio help",
-            "Show this help message",
-            false,
-        )
-        .field(
-            "/blufio chat <message>",
-            "Send a message to Blufio",
-            false,
-        )
+        .field("/blufio help", "Show this help message", false)
+        .field("/blufio chat <message>", "Send a message to Blufio", false)
         .field(
             "@Blufio <message>",
             "Mention Blufio in a channel to chat",

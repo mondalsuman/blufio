@@ -158,12 +158,12 @@ impl ChannelAdapter for SlackChannel {
             .to_string();
 
         // Create Slack client.
-        let client = Arc::new(SlackClient::new(
-            SlackClientHyperConnector::new().map_err(|e| BlufioError::Channel {
+        let client = Arc::new(SlackClient::new(SlackClientHyperConnector::new().map_err(
+            |e| BlufioError::Channel {
                 message: format!("failed to create Slack HTTP connector: {e}"),
                 source: None,
-            })?,
-        ));
+            },
+        )?));
 
         let token = SlackApiToken::new(SlackApiTokenValue::from(bot_token_str));
 
@@ -237,10 +237,13 @@ impl ChannelAdapter for SlackChannel {
             message: "Slack not connected".into(),
             source: None,
         })?;
-        let token = self.bot_token.as_ref().ok_or_else(|| BlufioError::Channel {
-            message: "Slack not connected".into(),
-            source: None,
-        })?;
+        let token = self
+            .bot_token
+            .as_ref()
+            .ok_or_else(|| BlufioError::Channel {
+                message: "Slack not connected".into(),
+                source: None,
+            })?;
 
         let channel_id = extract_channel_id(&msg)?;
         let formatted = markdown::markdown_to_mrkdwn(&msg.content);
@@ -281,10 +284,13 @@ impl ChannelAdapter for SlackChannel {
             message: "Slack not connected".into(),
             source: None,
         })?;
-        let token = self.bot_token.as_ref().ok_or_else(|| BlufioError::Channel {
-            message: "Slack not connected".into(),
-            source: None,
-        })?;
+        let token = self
+            .bot_token
+            .as_ref()
+            .ok_or_else(|| BlufioError::Channel {
+                message: "Slack not connected".into(),
+                source: None,
+            })?;
 
         let channel_id = SlackChannelId::new(chat_id.to_string());
         let ts: SlackTs = message_id.to_string().into();
@@ -297,10 +303,13 @@ impl ChannelAdapter for SlackChannel {
             ts,
         );
 
-        session.chat_update(&req).await.map_err(|e| BlufioError::Channel {
-            message: format!("failed to edit Slack message: {e}"),
-            source: None,
-        })?;
+        session
+            .chat_update(&req)
+            .await
+            .map_err(|e| BlufioError::Channel {
+                message: format!("failed to edit Slack message: {e}"),
+                source: None,
+            })?;
 
         Ok(())
     }
@@ -375,7 +384,8 @@ async fn push_events_callback(
         let ts = msg_event.origin.ts.to_string();
         let team_id = event.team_id.to_string();
 
-        let inbound = handler::to_inbound_message(&ts, &user_id, &channel_id, Some(&team_id), content);
+        let inbound =
+            handler::to_inbound_message(&ts, &user_id, &channel_id, Some(&team_id), content);
 
         if state.inbound_tx.send(inbound).await.is_err() {
             warn!("inbound channel closed, dropping Slack message");
@@ -439,9 +449,7 @@ fn extract_channel_id(msg: &OutboundMessage) -> Result<SlackChannelId, BlufioErr
     }
 
     // Fallback: try channel field.
-    if msg.channel.starts_with('C')
-        || msg.channel.starts_with('D')
-        || msg.channel.starts_with('G')
+    if msg.channel.starts_with('C') || msg.channel.starts_with('D') || msg.channel.starts_with('G')
     {
         return Ok(SlackChannelId::new(msg.channel.clone()));
     }

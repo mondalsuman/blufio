@@ -166,9 +166,7 @@ impl PluginAdapter for DiscordChannel {
                     "Discord API unreachable: {e}"
                 ))),
             },
-            None => Ok(HealthStatus::Unhealthy(
-                "Discord not connected".to_string(),
-            )),
+            None => Ok(HealthStatus::Unhealthy("Discord not connected".to_string())),
         }
     }
 

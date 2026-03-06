@@ -121,7 +121,13 @@ mod tests {
 
     #[test]
     fn to_inbound_message_correct_fields() {
-        let msg = to_inbound_message("1234567890.123456", "U123", "C456", Some("T789"), "hello".to_string());
+        let msg = to_inbound_message(
+            "1234567890.123456",
+            "U123",
+            "C456",
+            Some("T789"),
+            "hello".to_string(),
+        );
         assert_eq!(msg.id, "1234567890.123456");
         assert_eq!(msg.channel, "slack");
         assert_eq!(msg.sender_id, "U123");

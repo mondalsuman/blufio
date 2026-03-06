@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn split_threshold_is_reasonable() {
-        assert!(SPLIT_THRESHOLD < 2000);
-        assert!(SPLIT_THRESHOLD > 1500);
+        const { assert!(SPLIT_THRESHOLD < 2000) };
+        const { assert!(SPLIT_THRESHOLD > 1500) };
     }
 }

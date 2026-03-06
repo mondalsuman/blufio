@@ -28,7 +28,7 @@ pub fn is_authorized(msg: &Message, allowed_users: &[String]) -> bool {
         return true;
     }
     let sender_id = msg.author.id.to_string();
-    allowed_users.iter().any(|u| *u == sender_id)
+    allowed_users.contains(&sender_id)
 }
 
 /// Strips the bot @mention from message content.
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn is_authorized_checks_id() {
-        let allowed = vec!["111".to_string(), "222".to_string()];
+        let allowed = ["111".to_string(), "222".to_string()];
         assert!(allowed.contains(&"111".to_string()));
         assert!(!allowed.contains(&"333".to_string()));
     }

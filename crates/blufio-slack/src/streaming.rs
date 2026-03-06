@@ -5,11 +5,11 @@
 
 use std::time::Duration;
 
+use crate::markdown;
 use async_trait::async_trait;
 use blufio_core::error::BlufioError;
 use blufio_core::streaming::{StreamingBuffer, StreamingEditorOps};
 use slack_morphism::prelude::*;
-use crate::markdown;
 
 /// Slack-specific split threshold.
 /// Slack's limit is 40000, but individual text sections in blocks have
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn split_threshold_is_reasonable() {
-        assert!(SPLIT_THRESHOLD < 40000);
-        assert!(SPLIT_THRESHOLD > 2000);
+        const { assert!(SPLIT_THRESHOLD < 40000) };
+        const { assert!(SPLIT_THRESHOLD > 2000) };
     }
 }

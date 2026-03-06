@@ -22,7 +22,10 @@ pub enum RichContent {
         color: Option<u32>,
     },
     /// Image reference with optional caption.
-    Image { url: String, caption: Option<String> },
+    Image {
+        url: String,
+        caption: Option<String>,
+    },
     /// Code block with optional language tag.
     CodeBlock {
         language: Option<String>,
@@ -43,7 +46,10 @@ pub enum FormattedOutput {
         color: Option<u32>,
     },
     /// Image reference.
-    Image { url: String, caption: Option<String> },
+    Image {
+        url: String,
+        caption: Option<String>,
+    },
 }
 
 /// Centralized content formatter that degrades rich content based on channel capabilities.

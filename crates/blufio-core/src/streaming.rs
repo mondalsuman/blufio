@@ -70,8 +70,7 @@ impl StreamingBuffer {
 
         // Check if we need to split the message
         if self.buffer.len() > self.split_threshold {
-            let (first, rest) =
-                split_at_paragraph_boundary(&self.buffer, self.split_threshold);
+            let (first, rest) = split_at_paragraph_boundary(&self.buffer, self.split_threshold);
             let first = first.to_string();
             let rest = rest.to_string();
 
