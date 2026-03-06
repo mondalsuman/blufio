@@ -714,6 +714,12 @@ pub struct GatewayConfig {
     /// Empty = no tools accessible externally (secure default).
     #[serde(default)]
     pub api_tools_allowlist: Vec<String>,
+    /// Default rate limit for new API keys (requests per minute).
+    #[serde(default = "default_rate_limit")]
+    pub default_rate_limit: i64,
+    /// Maximum number of items allowed in a single batch request.
+    #[serde(default = "default_max_batch_size")]
+    pub max_batch_size: usize,
 }
 
 impl Default for GatewayConfig {
@@ -724,8 +730,18 @@ impl Default for GatewayConfig {
             port: default_gateway_port(),
             bearer_token: None,
             api_tools_allowlist: Vec::new(),
+            default_rate_limit: default_rate_limit(),
+            max_batch_size: default_max_batch_size(),
         }
     }
+}
+
+fn default_rate_limit() -> i64 {
+    60
+}
+
+fn default_max_batch_size() -> usize {
+    100
 }
 
 fn default_gateway_enabled() -> bool {

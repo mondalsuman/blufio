@@ -10,6 +10,7 @@ description = "HTTP/WebSocket gateway implementing ChannelAdapter for the Blufio
 
 [dependencies]
 blufio-core = { path = "../blufio-core" }
+blufio-bus = { path = "../blufio-bus" }
 blufio-skill = { path = "../blufio-skill" }
 async-trait.workspace = true
 axum.workspace = true
@@ -27,6 +28,12 @@ ed25519-dalek.workspace = true
 hex.workspace = true
 dashmap.workspace = true
 futures.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+tokio-rusqlite.workspace = true
+rusqlite.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }

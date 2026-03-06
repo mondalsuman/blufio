@@ -31,6 +31,7 @@ fn build_test_router() -> Router {
         auth: AuthConfig {
             bearer_token: None,
             keypair_public_key: None,
+            key_store: None,
         },
         health: HealthState {
             start_time: std::time::Instant::now(),
@@ -40,6 +41,10 @@ fn build_test_router() -> Router {
         providers: None,
         tools: None,
         api_tools_allowlist: Vec::new(),
+        max_batch_size: 100,
+        webhook_store: None,
+        batch_store: None,
+        event_bus: None,
     };
 
     // Build routes matching the gateway server setup (without auth middleware for testing).
