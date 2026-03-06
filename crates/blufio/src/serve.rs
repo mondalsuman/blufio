@@ -35,6 +35,9 @@ use blufio_storage::SqliteStorage;
 #[cfg(feature = "telegram")]
 use blufio_telegram::TelegramChannel;
 
+#[cfg(feature = "discord")]
+use blufio_discord::DiscordChannel;
+
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
@@ -339,6 +342,32 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             info!("telegram channel added to multiplexer");
         } else {
             info!("telegram channel skipped (no bot_token configured)");
+        }
+    }
+
+    // Add Discord channel (if enabled and configured).
+    #[cfg(feature = "discord")]
+    {
+        if config.discord.bot_token.is_some() {
+            let discord = DiscordChannel::new(config.discord.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize Discord channel");
+                eprintln!(
+                    "error: Discord bot token required. Set via: config or `blufio config set-secret discord.bot_token`"
+                );
+                e
+            })?;
+            mux.add_channel("discord".to_string(), Box::new(discord));
+            info!("discord channel added to multiplexer");
+
+            // Redact Discord token in logs.
+            if let Some(ref token) = config.discord.bot_token {
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    token.clone(),
+                );
+            }
+        } else {
+            info!("discord channel skipped (no bot_token configured)");
         }
     }
 
