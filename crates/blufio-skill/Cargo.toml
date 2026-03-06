@@ -26,6 +26,10 @@ anyhow = "1"
 regex.workspace = true
 chrono.workspace = true
 rusqlite.workspace = true
+sha2.workspace = true
+ed25519-dalek.workspace = true
+hex.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
