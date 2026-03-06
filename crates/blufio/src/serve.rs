@@ -38,6 +38,9 @@ use blufio_telegram::TelegramChannel;
 #[cfg(feature = "discord")]
 use blufio_discord::DiscordChannel;
 
+#[cfg(feature = "slack")]
+use blufio_slack::SlackChannel;
+
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
@@ -368,6 +371,39 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             }
         } else {
             info!("discord channel skipped (no bot_token configured)");
+        }
+    }
+
+    // Add Slack channel (if enabled and configured).
+    #[cfg(feature = "slack")]
+    {
+        if config.slack.bot_token.is_some() && config.slack.app_token.is_some() {
+            let slack = SlackChannel::new(config.slack.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize Slack channel");
+                eprintln!(
+                    "error: Slack bot_token and app_token required for Socket Mode. \
+                     Set via: config or `blufio config set-secret slack.bot_token`"
+                );
+                e
+            })?;
+            mux.add_channel("slack".to_string(), Box::new(slack));
+            info!("slack channel added to multiplexer");
+
+            // Redact Slack tokens in logs.
+            if let Some(ref token) = config.slack.bot_token {
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    token.clone(),
+                );
+            }
+            if let Some(ref token) = config.slack.app_token {
+                blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                    &vault_values,
+                    token.clone(),
+                );
+            }
+        } else {
+            info!("slack channel skipped (bot_token and/or app_token not configured)");
         }
     }
 

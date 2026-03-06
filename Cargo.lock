@@ -442,6 +442,7 @@ dependencies = [
  "blufio-router",
  "blufio-security",
  "blufio-skill",
+ "blufio-slack",
  "blufio-storage",
  "blufio-telegram",
  "blufio-test-utils",

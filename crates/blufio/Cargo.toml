@@ -13,9 +13,10 @@ name = "blufio"
 path = "src/main.rs"
 
 [features]
-default = ["telegram", "discord", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client"]
+default = ["telegram", "discord", "slack", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client"]
 telegram = ["dep:blufio-telegram"]
 discord = ["dep:blufio-discord"]
+slack = ["dep:blufio-slack"]
 anthropic = ["dep:blufio-anthropic"]
 sqlite = ["dep:blufio-storage"]
 onnx = []
@@ -42,6 +43,7 @@ blufio-verify = { path = "../blufio-verify" }
 blufio-storage = { path = "../blufio-storage", optional = true }
 blufio-telegram = { path = "../blufio-telegram", optional = true }
 blufio-discord = { path = "../blufio-discord", optional = true }
+blufio-slack = { path = "../blufio-slack", optional = true }
 blufio-anthropic = { path = "../blufio-anthropic", optional = true }
 blufio-memory = { path = "../blufio-memory" }
 blufio-gateway = { path = "../blufio-gateway", optional = true }
