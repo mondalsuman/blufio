@@ -6,17 +6,25 @@
 //! Implements the streaming response pattern: send an initial message,
 //! then edit it as tokens arrive, throttled to avoid Telegram rate limits.
 //! Long responses are split at paragraph boundaries when exceeding 4096 chars.
+//!
+//! Uses the shared [`StreamingEditorOps`] trait and [`StreamingBuffer`] from
+//! `blufio-core` for cross-adapter consistency.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use async_trait::async_trait;
 use blufio_core::error::BlufioError;
+use blufio_core::streaming::{StreamingBuffer, StreamingEditorOps};
 use teloxide::prelude::*;
-use teloxide::types::{ChatAction, ChatId, MessageId, ParseMode};
+use teloxide::types::{ChatAction, ChatId, ParseMode};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 use crate::markdown;
+
+// Re-export the shared split function so existing users can still find it here.
+pub use blufio_core::streaming::split_at_paragraph_boundary;
 
 /// Leave margin below the max (4096) to account for escaping overhead.
 const SPLIT_THRESHOLD: usize = 3800;
@@ -24,32 +32,121 @@ const SPLIT_THRESHOLD: usize = 3800;
 /// Default throttle interval between message edits.
 const DEFAULT_THROTTLE: Duration = Duration::from_millis(1500);
 
+/// Telegram-specific streaming operations.
+///
+/// Wraps a teloxide `Bot` and `ChatId` to provide MarkdownV2 send/edit
+/// with plain text fallback.
+struct TelegramStreamOps {
+    bot: Bot,
+    chat_id: ChatId,
+}
+
+#[async_trait]
+impl StreamingEditorOps for TelegramStreamOps {
+    async fn send_initial(&mut self, text: &str) -> Result<String, BlufioError> {
+        let escaped = markdown::format_for_telegram(text);
+
+        // Try MarkdownV2 first
+        let sent = self
+            .bot
+            .send_message(self.chat_id, &escaped)
+            .parse_mode(ParseMode::MarkdownV2)
+            .await
+            .map_err(|e| {
+                debug!(error = %e, "MarkdownV2 send failed, will retry as plain text");
+                BlufioError::Channel {
+                    message: format!("failed to send message: {e}"),
+                    source: Some(Box::new(e)),
+                }
+            });
+
+        match sent {
+            Ok(msg) => Ok(msg.id.0.to_string()),
+            Err(_) => {
+                // Fallback: send as plain text
+                let sent = self
+                    .bot
+                    .send_message(self.chat_id, text)
+                    .await
+                    .map_err(|e| BlufioError::Channel {
+                        message: format!("failed to send plain text message: {e}"),
+                        source: Some(Box::new(e)),
+                    })?;
+                Ok(sent.id.0.to_string())
+            }
+        }
+    }
+
+    async fn edit_message(&mut self, msg_id: &str, text: &str) -> Result<(), BlufioError> {
+        let msg_id: i32 = msg_id.parse().map_err(|e| BlufioError::Channel {
+            message: format!("invalid message_id: {e}"),
+            source: None,
+        })?;
+        let msg_id = teloxide::types::MessageId(msg_id);
+
+        let escaped = markdown::format_for_telegram(text);
+
+        let result = self
+            .bot
+            .edit_message_text(self.chat_id, msg_id, &escaped)
+            .parse_mode(ParseMode::MarkdownV2)
+            .await;
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("message is not modified") {
+                    debug!("message unchanged, skipping edit");
+                    Ok(())
+                } else if err_str.contains("can't parse entities") {
+                    // Fallback: edit as plain text
+                    warn!(error = %e, "MarkdownV2 edit failed, retrying as plain text");
+                    self.bot
+                        .edit_message_text(self.chat_id, msg_id, text)
+                        .await
+                        .map_err(|e| BlufioError::Channel {
+                            message: format!("failed to edit message: {e}"),
+                            source: Some(Box::new(e)),
+                        })?;
+                    Ok(())
+                } else {
+                    Err(BlufioError::Channel {
+                        message: format!("failed to edit message: {e}"),
+                        source: Some(Box::new(e)),
+                    })
+                }
+            }
+        }
+    }
+
+    fn max_message_length(&self) -> usize {
+        4096
+    }
+
+    fn throttle_interval(&self) -> Duration {
+        DEFAULT_THROTTLE
+    }
+}
+
 /// Manages streaming response delivery via edit-in-place.
 ///
 /// Accumulates text chunks and periodically edits the Telegram message.
 /// When the buffer exceeds [`SPLIT_THRESHOLD`] characters, the message is
 /// split at a paragraph boundary and a new message is started.
+///
+/// Uses [`StreamingBuffer`] from `blufio-core` for shared buffering logic.
 pub struct StreamingEditor {
-    bot: Bot,
-    chat_id: ChatId,
-    message_id: Option<MessageId>,
-    buffer: String,
-    last_edit: Instant,
-    throttle: Duration,
-    messages_sent: Vec<MessageId>,
+    ops: TelegramStreamOps,
+    buffer: StreamingBuffer,
 }
 
 impl StreamingEditor {
     /// Creates a new streaming editor for the given chat.
     pub fn new(bot: Bot, chat_id: ChatId) -> Self {
         Self {
-            bot,
-            chat_id,
-            message_id: None,
-            buffer: String::new(),
-            last_edit: Instant::now() - DEFAULT_THROTTLE, // Allow immediate first send
-            throttle: DEFAULT_THROTTLE,
-            messages_sent: Vec::new(),
+            ops: TelegramStreamOps { bot, chat_id },
+            buffer: StreamingBuffer::new(SPLIT_THRESHOLD),
         }
     }
 
@@ -59,171 +156,20 @@ impl StreamingEditor {
     /// buffer is sent to Telegram. If the buffer exceeds the split
     /// threshold, the message is finalized and a new one is started.
     pub async fn push_chunk(&mut self, text: &str) -> Result<(), BlufioError> {
-        self.buffer.push_str(text);
-
-        // Check if we need to split the message
-        if self.buffer.len() > SPLIT_THRESHOLD {
-            let (first, rest) = split_at_paragraph_boundary(&self.buffer, SPLIT_THRESHOLD);
-            let first = first.to_string();
-            let rest = rest.to_string();
-
-            // Finalize the current message with the first part
-            self.buffer = first;
-            self.do_send_or_edit().await?;
-
-            // Start a new message with the remainder
-            if let Some(mid) = self.message_id.take() {
-                self.messages_sent.push(mid);
-            }
-            self.buffer = rest;
-            return Ok(());
-        }
-
-        // Check throttle
-        if self.last_edit.elapsed() >= self.throttle {
-            self.do_send_or_edit().await?;
-        }
-
-        Ok(())
+        self.buffer.push_chunk(&mut self.ops, text).await
     }
 
     /// Sends the final version of the accumulated text.
     ///
     /// Must be called after the last chunk to ensure all content is delivered.
     pub async fn finalize(&mut self) -> Result<(), BlufioError> {
-        if self.buffer.is_empty() {
-            return Ok(());
-        }
-
-        self.do_send_or_edit().await?;
-
-        if let Some(mid) = self.message_id.take() {
-            self.messages_sent.push(mid);
-        }
-
-        Ok(())
+        self.buffer.finalize(&mut self.ops).await
     }
 
     /// Returns the IDs of all messages sent during this streaming session.
-    pub fn message_ids(&self) -> &[MessageId] {
-        &self.messages_sent
+    pub fn message_ids(&self) -> &[String] {
+        self.buffer.message_ids()
     }
-
-    /// Internal: sends or edits the message with the current buffer content.
-    async fn do_send_or_edit(&mut self) -> Result<(), BlufioError> {
-        if self.buffer.is_empty() {
-            return Ok(());
-        }
-
-        let escaped = markdown::format_for_telegram(&self.buffer);
-
-        match self.message_id {
-            None => {
-                // First send
-                let sent = self
-                    .bot
-                    .send_message(self.chat_id, &escaped)
-                    .parse_mode(ParseMode::MarkdownV2)
-                    .await
-                    .map_err(|e| {
-                        // If MarkdownV2 parsing fails, retry without parse mode
-                        debug!(error = %e, "MarkdownV2 send failed, will retry as plain text");
-                        BlufioError::Channel {
-                            message: format!("failed to send message: {e}"),
-                            source: Some(Box::new(e)),
-                        }
-                    });
-
-                match sent {
-                    Ok(msg) => {
-                        self.message_id = Some(msg.id);
-                        self.last_edit = Instant::now();
-                    }
-                    Err(_) => {
-                        // Fallback: send as plain text
-                        let sent = self
-                            .bot
-                            .send_message(self.chat_id, &self.buffer)
-                            .await
-                            .map_err(|e| BlufioError::Channel {
-                                message: format!("failed to send plain text message: {e}"),
-                                source: Some(Box::new(e)),
-                            })?;
-                        self.message_id = Some(sent.id);
-                        self.last_edit = Instant::now();
-                    }
-                }
-            }
-            Some(msg_id) => {
-                // Edit existing message
-                let result = self
-                    .bot
-                    .edit_message_text(self.chat_id, msg_id, &escaped)
-                    .parse_mode(ParseMode::MarkdownV2)
-                    .await;
-
-                match result {
-                    Ok(_) => {
-                        self.last_edit = Instant::now();
-                    }
-                    Err(e) => {
-                        // Telegram may return "message is not modified" if content hasn't changed
-                        let err_str = e.to_string();
-                        if err_str.contains("message is not modified") {
-                            debug!("message unchanged, skipping edit");
-                        } else if err_str.contains("can't parse entities") {
-                            // Fallback: edit as plain text
-                            warn!(error = %e, "MarkdownV2 edit failed, retrying as plain text");
-                            self.bot
-                                .edit_message_text(self.chat_id, msg_id, &self.buffer)
-                                .await
-                                .map_err(|e| BlufioError::Channel {
-                                    message: format!("failed to edit message: {e}"),
-                                    source: Some(Box::new(e)),
-                                })?;
-                            self.last_edit = Instant::now();
-                        } else {
-                            return Err(BlufioError::Channel {
-                                message: format!("failed to edit message: {e}"),
-                                source: Some(Box::new(e)),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// Splits text at a paragraph boundary before `max_len`.
-///
-/// Priority: double newline > single newline > space > hard split.
-pub fn split_at_paragraph_boundary(text: &str, max_len: usize) -> (&str, &str) {
-    if text.len() <= max_len {
-        return (text, "");
-    }
-
-    let search_region = &text[..max_len];
-
-    // Try to find last paragraph boundary (double newline)
-    if let Some(pos) = search_region.rfind("\n\n") {
-        return (&text[..pos], text[pos + 2..].trim_start());
-    }
-
-    // Try to find last single newline
-    if let Some(pos) = search_region.rfind('\n') {
-        return (&text[..pos], text[pos + 1..].trim_start());
-    }
-
-    // Try to find last space
-    if let Some(pos) = search_region.rfind(' ') {
-        return (&text[..pos], &text[pos + 1..]);
-    }
-
-    // Hard split at max_len
-    (&text[..max_len], &text[max_len..])
 }
 
 /// Starts a background task that sends typing indicators every 5 seconds.

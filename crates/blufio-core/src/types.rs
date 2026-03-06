@@ -117,6 +117,12 @@ pub struct ChannelCapabilities {
     pub supports_voice: bool,
     /// Maximum message length in characters (None = unlimited).
     pub max_message_length: Option<usize>,
+    /// Whether the channel supports rich embeds (Discord embeds, Slack blocks).
+    pub supports_embeds: bool,
+    /// Whether the channel supports emoji reactions.
+    pub supports_reactions: bool,
+    /// Whether the channel supports threaded replies.
+    pub supports_threads: bool,
 }
 
 // --- Provider types ---

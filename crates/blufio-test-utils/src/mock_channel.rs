@@ -103,6 +103,9 @@ impl ChannelAdapter for MockChannel {
             supports_documents: false,
             supports_voice: false,
             max_message_length: None,
+            supports_embeds: false,
+            supports_reactions: false,
+            supports_threads: false,
         }
     }
 

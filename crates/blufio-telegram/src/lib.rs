@@ -114,6 +114,9 @@ impl ChannelAdapter for TelegramChannel {
             supports_documents: true,
             supports_voice: true,
             max_message_length: Some(4096),
+            supports_embeds: false,
+            supports_reactions: false,
+            supports_threads: false,
         }
     }
 

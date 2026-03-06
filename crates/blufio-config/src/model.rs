@@ -24,6 +24,14 @@ pub struct BlufioConfig {
     #[serde(default)]
     pub telegram: TelegramConfig,
 
+    /// Discord bot integration settings.
+    #[serde(default)]
+    pub discord: DiscordConfig,
+
+    /// Slack app integration settings.
+    #[serde(default)]
+    pub slack: SlackConfig,
+
     /// Anthropic API settings.
     #[serde(default)]
     pub anthropic: AnthropicConfig,
@@ -156,6 +164,40 @@ pub struct TelegramConfig {
     pub bot_token: Option<String>,
 
     /// List of allowed Telegram user IDs or usernames.
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
+}
+
+/// Discord bot integration configuration.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiscordConfig {
+    /// Discord bot token. `None` disables Discord integration.
+    #[serde(default)]
+    pub bot_token: Option<String>,
+
+    /// Discord application ID (for slash command registration).
+    #[serde(default)]
+    pub application_id: Option<u64>,
+
+    /// List of allowed Discord user IDs.
+    #[serde(default)]
+    pub allowed_users: Vec<String>,
+}
+
+/// Slack app integration configuration.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SlackConfig {
+    /// Slack bot token (xoxb-*). `None` disables Slack integration.
+    #[serde(default)]
+    pub bot_token: Option<String>,
+
+    /// Slack app-level token (xapp-*) for Socket Mode.
+    #[serde(default)]
+    pub app_token: Option<String>,
+
+    /// List of allowed Slack user IDs.
     #[serde(default)]
     pub allowed_users: Vec<String>,
 }
