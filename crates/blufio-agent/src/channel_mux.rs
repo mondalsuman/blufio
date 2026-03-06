@@ -130,6 +130,9 @@ impl ChannelAdapter for ChannelMultiplexer {
             supports_documents: false,
             supports_voice: false,
             max_message_length: None,
+            supports_embeds: false,
+            supports_reactions: false,
+            supports_threads: false,
         };
 
         for (_, channel) in self.connected_channels.iter() {
@@ -139,6 +142,9 @@ impl ChannelAdapter for ChannelMultiplexer {
             caps.supports_images = caps.supports_images || child_caps.supports_images;
             caps.supports_documents = caps.supports_documents || child_caps.supports_documents;
             caps.supports_voice = caps.supports_voice || child_caps.supports_voice;
+            caps.supports_embeds = caps.supports_embeds || child_caps.supports_embeds;
+            caps.supports_reactions = caps.supports_reactions || child_caps.supports_reactions;
+            caps.supports_threads = caps.supports_threads || child_caps.supports_threads;
             // Use the minimum max_message_length across all channels.
             caps.max_message_length = match (caps.max_message_length, child_caps.max_message_length)
             {

@@ -8,11 +8,13 @@
 //! implement traits defined here.
 
 pub mod error;
+pub mod format;
 pub mod traits;
 pub mod types;
 
 // Re-export key items at crate root for ergonomic imports.
 pub use error::BlufioError;
+pub use format::{FormatPipeline, FormattedOutput, RichContent};
 pub use types::{
     AdapterType, ChannelCapabilities, ContentBlock, HealthStatus, ImageRequest, ImageResponse,
     InboundMessage, Message, MessageContent, MessageId, OutboundMessage, ProviderMessage,
