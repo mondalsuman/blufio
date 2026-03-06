@@ -167,14 +167,14 @@ Plans:
   3. User can chat with Blufio via IRC with TLS and NickServ authentication
   4. User can chat with Blufio via Matrix with room join and messaging (matrix-sdk 0.11 pinned)
   5. Cross-channel bridging works with configurable bridge rules in TOML between any combination of active channels
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 34-01: WhatsApp adapter (blufio-whatsapp, Cloud API + Web feature flag)
-- [ ] 34-02: Signal adapter (signal-cli sidecar bridge)
-- [ ] 34-03: IRC adapter (blufio-irc)
-- [ ] 34-04: Matrix adapter (blufio-matrix, pinned to 0.11)
-- [ ] 34-05: Cross-channel bridging (INFRA-06)
+- [ ] 34-01: WhatsApp Cloud API + Web adapter (blufio-whatsapp crate, webhook handlers, gateway integration)
+- [ ] 34-02: Signal adapter via signal-cli JSON-RPC sidecar (blufio-signal crate, TCP/Unix auto-detect, exponential backoff)
+- [ ] 34-03: IRC adapter (blufio-irc crate, SASL PLAIN + NickServ, flood protection, message splitting)
+- [ ] 34-04: Matrix adapter (blufio-matrix crate, matrix-sdk =0.11.0 pinned, room join, invite auto-accept)
+- [ ] 34-05: Cross-channel bridging (blufio-bridge crate, event bus subscription, attribution formatting, loop prevention)
 
 ### Phase 35: Skill Registry & Code Signing
 **Goal**: Users can install, manage, and trust WASM skills with cryptographic verification at every execution boundary
