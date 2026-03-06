@@ -63,7 +63,7 @@
 - [x] **Phase 30: Multi-Provider LLM Support** — OpenAI, Ollama, OpenRouter, and Gemini provider plugins (completed 2026-03-05)
 - [x] **Phase 31: OpenAI-Compatible Gateway API** (3/3 plans) — completed 2026-03-05
 - [ ] **Phase 32: Scoped API Keys, Webhooks & Batch** — API key management, webhook delivery, and batch operations
-- [ ] **Phase 33: Discord & Slack Channel Adapters** — Two highest-value channel integrations
+- [x] **Phase 33: Discord & Slack Channel Adapters** (3/3 plans) — completed 2026-03-06
 - [ ] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** — Remaining channel adapters with cross-channel bridging
 - [ ] **Phase 35: Skill Registry & Code Signing** — Local skill marketplace with Ed25519 verification
 - [ ] **Phase 36: Docker Image & Deployment** — Multi-stage Dockerfile, docker-compose, multi-instance systemd
@@ -153,9 +153,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 33-01: Shared infrastructure (FormatPipeline, StreamingEditorOps trait, ChannelCapabilities extension, config structs)
-- [ ] 33-02: Discord adapter (blufio-discord) + serve.rs wiring
-- [ ] 33-03: Slack adapter (blufio-slack) + serve.rs wiring
+- [x] 33-01: Shared infrastructure (FormatPipeline, StreamingEditorOps trait, ChannelCapabilities extension, config structs)
+- [x] 33-02: Discord adapter (blufio-discord) + serve.rs wiring
+- [x] 33-03: Slack adapter (blufio-slack) + serve.rs wiring
 
 ### Phase 34: WhatsApp, Signal, IRC & Matrix Adapters
 **Goal**: Users can interact with Blufio through WhatsApp, Signal, IRC, and Matrix, and messages can bridge across any combination of channels
@@ -291,7 +291,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 30. Multi-Provider LLM Support | 4/4 | Complete    | 2026-03-05 | - |
 | 31. OpenAI-Compatible Gateway API | v1.3 | 0/3 | Not started | - |
 | 32. Scoped API Keys, Webhooks & Batch | v1.3 | 0/3 | Not started | - |
-| 33. Discord & Slack Channel Adapters | 1/3 | In Progress|  | - |
+| 33. Discord & Slack Channel Adapters | v1.3 | 3/3 | Complete | 2026-03-06 |
 | 34. WhatsApp, Signal, IRC & Matrix Adapters | v1.3 | 0/5 | Not started | - |
 | 35. Skill Registry & Code Signing | v1.3 | 0/2 | Not started | - |
 | 36. Docker Image & Deployment | v1.3 | 0/2 | Not started | - |
@@ -301,4 +301,4 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-05 after Phase 29 completed*
+*Last updated: 2026-03-06 after Phase 33 completed*
