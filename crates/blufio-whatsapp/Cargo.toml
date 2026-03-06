@@ -1,0 +1,33 @@
+[package]
+name = "blufio-whatsapp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "WhatsApp channel adapter for the Blufio agent framework"
+
+[features]
+default = []
+whatsapp-web = []
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+async-trait.workspace = true
+tokio = { workspace = true, features = ["sync", "macros"] }
+serde.workspace = true
+serde_json = "1"
+reqwest = { workspace = true }
+tracing.workspace = true
+semver.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+hex.workspace = true
+uuid.workspace = true
+axum = { workspace = true }
+http = "1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

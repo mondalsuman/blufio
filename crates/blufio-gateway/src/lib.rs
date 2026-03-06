@@ -106,6 +106,9 @@ pub struct GatewayChannel {
     tools: Mutex<Option<Arc<RwLock<ToolRegistry>>>>,
     /// Allowlist of tool names accessible via the Tools API (API-10).
     api_tools_allowlist: Vec<String>,
+    /// Optional extra public routes (e.g., WhatsApp webhook routes).
+    /// Set via [`set_extra_public_routes`] before calling `connect()`.
+    extra_public_routes: Mutex<Option<axum::Router>>,
 }
 
 impl GatewayChannel {
@@ -124,7 +127,18 @@ impl GatewayChannel {
             providers: Mutex::new(None),
             tools: Mutex::new(None),
             api_tools_allowlist: Vec::new(),
+            extra_public_routes: Mutex::new(None),
         }
+    }
+
+    /// Sets extra public (unauthenticated) routes to merge into the gateway.
+    ///
+    /// Used for webhook endpoints that must be unauthenticated, such as
+    /// WhatsApp webhooks (Meta sends without Bearer tokens).
+    /// Must be called before `connect()`.
+    pub async fn set_extra_public_routes(&self, routes: axum::Router) {
+        let mut r = self.extra_public_routes.lock().await;
+        *r = Some(routes);
     }
 
     /// Sets the MCP HTTP router to mount at `/mcp` on the gateway.
@@ -258,10 +272,11 @@ impl ChannelAdapter for GatewayChannel {
         // Take the MCP router (if set) to pass to the server.
         let mcp_router = self.mcp_router.lock().await.take();
         let mcp_max_connections = self.config.mcp_max_connections;
+        let extra_public_routes = self.extra_public_routes.lock().await.take();
 
         let handle = tokio::spawn(async move {
             if let Err(e) =
-                server::start_server(&server_config, state, mcp_router, mcp_max_connections).await
+                server::start_server(&server_config, state, mcp_router, mcp_max_connections, extra_public_routes).await
             {
                 tracing::error!("gateway server error: {e}");
             }

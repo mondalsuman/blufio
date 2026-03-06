@@ -98,6 +98,7 @@ pub async fn start_server(
     state: GatewayState,
     mcp_router: Option<Router>,
     mcp_max_connections: usize,
+    extra_public_routes: Option<Router>,
 ) -> Result<(), BlufioError> {
     let auth_state = state.auth.clone();
 
@@ -173,6 +174,11 @@ pub async fn start_server(
         .merge(public_routes)
         .merge(api_routes)
         .merge(ws_routes);
+
+    // Merge extra public routes (e.g., WhatsApp webhook routes).
+    if let Some(extra) = extra_public_routes {
+        app = app.merge(extra);
+    }
 
     // Mount MCP Streamable HTTP routes at /mcp (if enabled).
     // The MCP router includes its own restricted CORS and auth layers,

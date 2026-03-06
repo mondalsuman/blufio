@@ -80,6 +80,15 @@ pub enum ChannelEvent {
         channel: String,
         /// Sender identifier from the channel.
         sender_id: String,
+        /// Message content (for bridging). None if not applicable.
+        #[serde(default)]
+        content: Option<String>,
+        /// Human-readable sender name (for bridging attribution).
+        #[serde(default)]
+        sender_name: Option<String>,
+        /// Whether this message was forwarded by the bridge (loop prevention).
+        #[serde(default)]
+        is_bridged: bool,
     },
     /// A message was sent through a channel.
     MessageSent {
@@ -228,6 +237,9 @@ mod tests {
             timestamp: now_timestamp(),
             channel: "gateway".into(),
             sender_id: "user-1".into(),
+            content: None,
+            sender_name: None,
+            is_bridged: false,
         });
 
         let _skill = BusEvent::Skill(SkillEvent::Invoked {

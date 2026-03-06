@@ -13,10 +13,15 @@ name = "blufio"
 path = "src/main.rs"
 
 [features]
-default = ["telegram", "discord", "slack", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client"]
+default = ["telegram", "discord", "slack", "whatsapp", "signal", "irc", "matrix", "bridge", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client"]
 telegram = ["dep:blufio-telegram"]
 discord = ["dep:blufio-discord"]
 slack = ["dep:blufio-slack"]
+whatsapp = ["dep:blufio-whatsapp", "blufio-gateway/whatsapp"]
+signal = ["dep:blufio-signal"]
+irc = ["dep:blufio-irc"]
+matrix = ["dep:blufio-matrix"]
+bridge = ["dep:blufio-bridge"]
 anthropic = ["dep:blufio-anthropic"]
 sqlite = ["dep:blufio-storage"]
 onnx = []
@@ -44,6 +49,12 @@ blufio-storage = { path = "../blufio-storage", optional = true }
 blufio-telegram = { path = "../blufio-telegram", optional = true }
 blufio-discord = { path = "../blufio-discord", optional = true }
 blufio-slack = { path = "../blufio-slack", optional = true }
+blufio-whatsapp = { path = "../blufio-whatsapp", optional = true }
+blufio-signal = { path = "../blufio-signal", optional = true }
+blufio-irc = { path = "../blufio-irc", optional = true }
+blufio-matrix = { path = "../blufio-matrix", optional = true }
+blufio-bridge = { path = "../blufio-bridge", optional = true }
+blufio-bus = { path = "../blufio-bus" }
 blufio-anthropic = { path = "../blufio-anthropic", optional = true }
 blufio-memory = { path = "../blufio-memory" }
 blufio-gateway = { path = "../blufio-gateway", optional = true }

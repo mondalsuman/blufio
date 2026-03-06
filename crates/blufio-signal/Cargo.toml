@@ -1,0 +1,23 @@
+[package]
+name = "blufio-signal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Signal channel adapter for the Blufio agent framework (via signal-cli JSON-RPC)"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+async-trait.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "sync", "time", "macros", "rt"] }
+serde.workspace = true
+serde_json = "1"
+tracing.workspace = true
+semver.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

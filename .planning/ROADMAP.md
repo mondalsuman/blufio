@@ -64,7 +64,7 @@
 - [x] **Phase 31: OpenAI-Compatible Gateway API** (3/3 plans) — completed 2026-03-05
 - [ ] **Phase 32: Scoped API Keys, Webhooks & Batch** — API key management, webhook delivery, and batch operations
 - [x] **Phase 33: Discord & Slack Channel Adapters** (3/3 plans) — completed 2026-03-06
-- [ ] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** — Remaining channel adapters with cross-channel bridging
+- [x] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** (5/5 plans) — completed 2026-03-06
 - [ ] **Phase 35: Skill Registry & Code Signing** — Local skill marketplace with Ed25519 verification
 - [ ] **Phase 36: Docker Image & Deployment** — Multi-stage Dockerfile, docker-compose, multi-instance systemd
 - [ ] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication
@@ -170,11 +170,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 34-01: WhatsApp Cloud API + Web adapter (blufio-whatsapp crate, webhook handlers, gateway integration)
-- [ ] 34-02: Signal adapter via signal-cli JSON-RPC sidecar (blufio-signal crate, TCP/Unix auto-detect, exponential backoff)
-- [ ] 34-03: IRC adapter (blufio-irc crate, SASL PLAIN + NickServ, flood protection, message splitting)
-- [ ] 34-04: Matrix adapter (blufio-matrix crate, matrix-sdk =0.11.0 pinned, room join, invite auto-accept)
-- [ ] 34-05: Cross-channel bridging (blufio-bridge crate, event bus subscription, attribution formatting, loop prevention)
+- [x] 34-01: WhatsApp Cloud API + Web adapter (blufio-whatsapp crate, webhook handlers, gateway integration)
+- [x] 34-02: Signal adapter via signal-cli JSON-RPC sidecar (blufio-signal crate, TCP/Unix auto-detect, exponential backoff)
+- [x] 34-03: IRC adapter (blufio-irc crate, SASL PLAIN + NickServ, flood protection, message splitting)
+- [x] 34-04: Matrix adapter (blufio-matrix crate, matrix-sdk =0.11.0 pinned, room join, invite auto-accept)
+- [x] 34-05: Cross-channel bridging (blufio-bridge crate, event bus subscription, attribution formatting, loop prevention)
 
 ### Phase 35: Skill Registry & Code Signing
 **Goal**: Users can install, manage, and trust WASM skills with cryptographic verification at every execution boundary

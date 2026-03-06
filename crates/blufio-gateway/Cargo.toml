@@ -34,6 +34,11 @@ rand.workspace = true
 reqwest.workspace = true
 tokio-rusqlite.workspace = true
 rusqlite.workspace = true
+blufio-whatsapp = { path = "../blufio-whatsapp", optional = true }
+
+[features]
+default = []
+whatsapp = ["dep:blufio-whatsapp"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
