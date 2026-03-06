@@ -9,12 +9,14 @@
 
 pub mod error;
 pub mod format;
+pub mod streaming;
 pub mod traits;
 pub mod types;
 
 // Re-export key items at crate root for ergonomic imports.
 pub use error::BlufioError;
 pub use format::{FormatPipeline, FormattedOutput, RichContent};
+pub use streaming::{StreamingBuffer, StreamingEditorOps, split_at_paragraph_boundary};
 pub use types::{
     AdapterType, ChannelCapabilities, ContentBlock, HealthStatus, ImageRequest, ImageResponse,
     InboundMessage, Message, MessageContent, MessageId, OutboundMessage, ProviderMessage,
