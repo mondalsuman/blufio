@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: completed
-stopped_at: Completed 39-05-PLAN.md
-last_updated: "2026-03-07T17:03:00Z"
-last_activity: "2026-03-07 -- Plan 39-05 complete (Phases 37+38 re-verification: 17/19 + 13/13, 15 requirements verified)"
+stopped_at: Completed 39-06-PLAN.md
+last_updated: "2026-03-07T17:16:00Z"
+last_activity: "2026-03-07 -- Plan 39-06 complete (4/4 cross-feature integration flows passing, 39-INTEGRATION.md produced)"
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 36
-  completed_plans: 32
-  percent: 97
+  completed_plans: 33
+  percent: 98
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 ## Current Position
 
 Phase: 39 of 39 (Integration Verification)
-Plan: 6 of 7 in current phase
-Status: Plan 39-05 complete
-Last activity: 2026-03-07 -- Plan 39-05 complete (Phases 37+38 re-verification: 17/19 + 13/13, 15 requirements verified)
+Plan: 7 of 7 in current phase
+Status: Plan 39-06 complete
+Last activity: 2026-03-07 -- Plan 39-06 complete (4/4 cross-feature integration flows passing, 39-INTEGRATION.md produced)
 
-Progress: [█████████░] 97%
+Progress: [█████████░] 98%
 
 ## Performance Metrics
 
@@ -82,6 +82,7 @@ Progress: [█████████░] 97%
 | Phase 39 P02 | 20min | 2 tasks | 2 files |
 | Phase 39 P01 | 21min | 2 tasks | 2 files |
 | 39 | 05 | ~21min | 2 | 2 |
+| 39 | 06 | ~9min | 2 | 3 |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Key v1.3 constraints:
 - [Phase 39]: Phase 30 re-verification confirmed 9/9 -- no regressions, test counts unchanged at 209
 - [Phase 39]: Phase 37 re-verification confirmed 17/19 -- 2 gaps are implementation gaps (approval wiring), NODE-05 core satisfied
 - [Phase 39]: Phase 38 re-verification confirmed 13/13 -- no regressions, 142 tests pass
+- [Phase 39]: Integration flow tests in blufio-test-utils/tests/ (not unit tests) -- uses wiremock + TestHarness for cross-crate E2E
+- [Phase 39]: Gateway tested via TestHarness pipeline, not actual server binding -- avoids port allocation in CI
 
 ### Pending Todos
 
@@ -158,6 +161,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T17:03:00Z
-Stopped at: Completed 39-05-PLAN.md
+Last session: 2026-03-07T17:16:00Z
+Stopped at: Completed 39-06-PLAN.md
 Resume file: None
