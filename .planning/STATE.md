@@ -6,9 +6,9 @@ status: unknown
 last_updated: "2026-03-07T00:00:00.000Z"
 progress:
   total_phases: 6
-  completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
+  completed_phases: 7
+  total_plans: 21
+  completed_plans: 21
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — Phase 36 (Docker Image & Deployment)
+**Current focus:** v1.3 Ecosystem Expansion — Phase 37 (Node System)
 
 ## Current Position
 
-Phase: 36 of 39 (Docker Image & Deployment)
+Phase: 37 of 39 (Node System)
 Plan: 0 of 0 in current phase
 Status: Ready to plan
-Last activity: 2026-03-06 — Phase 35 complete (2/2 plans, Skill Registry & Code Signing with Ed25519 verification)
+Last activity: 2026-03-07 — Phase 36 complete (2/2 plans, Docker Image & Deployment with multi-stage Dockerfile, docker-compose, systemd template)
 
-Progress: [████░░░░░░] 45%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -67,6 +67,8 @@ Progress: [████░░░░░░] 45%
 | 34 | 05 | ~10min | 2 | 5 |
 | 35 | 01 | ~25min | 2 | 7 |
 | 35 | 02 | ~20min | 2 | 1 |
+| 36 | 01 | ~10min | 2 | 6 |
+| 36 | 02 | ~5min | 2 | 2 |
 
 ## Accumulated Context
 
@@ -103,6 +105,10 @@ Key v1.3 constraints:
 - Tool source detection uses name pattern: `__` separator = namespaced (mcp/wasm), else builtin
 - GatewayConfig api_tools_allowlist: empty = no tools accessible (secure default)
 - OpenResponses streaming-only (no store/async); stream=false returns 400
+- Docker uses gcr.io/distroless/cc-debian12:nonroot (not static-debian12) because ONNX Runtime ships glibc-linked .so files
+- Single full-featured Docker image with all adapters compiled in; users enable/disable via config.toml
+- Docker health check uses `blufio healthcheck` subcommand (no shell/curl needed in distroless)
+- Multi-instance systemd template uses /etc/blufio/instances/%i/ for config, /var/lib/blufio/instances/%i/ for data
 
 ### Pending Todos
 
@@ -120,6 +126,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-06
-Stopped at: Phase 35 complete, ready for Phase 36
+Last session: 2026-03-07
+Stopped at: Phase 36 complete, ready for Phase 37
 Resume file: .planning/ROADMAP.md

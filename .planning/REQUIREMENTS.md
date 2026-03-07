@@ -65,10 +65,10 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 - [ ] **INFRA-01**: Internal event bus using tokio broadcast with lag handling
 - [ ] **INFRA-02**: Event bus publishes typed events (session, channel, skill, node, webhook, batch)
 - [ ] **INFRA-03**: Event bus uses mpsc for reliable subscribers (webhook delivery)
-- [ ] **INFRA-04**: Docker multi-stage build producing minimal image (distroless or scratch)
-- [ ] **INFRA-05**: docker-compose.yml with volume mounts, env injection, and health check
+- [x] **INFRA-04**: Docker multi-stage build producing minimal image (distroless or scratch)
+- [x] **INFRA-05**: docker-compose.yml with volume mounts, env injection, and health check
 - [ ] **INFRA-06**: Cross-channel bridging with configurable bridge rules in TOML
-- [ ] **INFRA-07**: Multi-instance systemd template (blufio@.service) with per-instance config
+- [x] **INFRA-07**: Multi-instance systemd template (blufio@.service) with per-instance config
 
 ### Skills
 
@@ -195,9 +195,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SKILL-03 | Phase 35 | Pending |
 | SKILL-04 | Phase 35 | Pending |
 | SKILL-05 | Phase 35 | Pending |
-| INFRA-04 | Phase 36 | Pending |
-| INFRA-05 | Phase 36 | Pending |
-| INFRA-07 | Phase 36 | Pending |
+| INFRA-04 | Phase 36 | Complete |
+| INFRA-05 | Phase 36 | Complete |
+| INFRA-07 | Phase 36 | Complete |
 | NODE-01 | Phase 37 | Pending |
 | NODE-02 | Phase 37 | Pending |
 | NODE-03 | Phase 37 | Pending |
