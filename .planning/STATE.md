@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: unknown
-last_updated: "2026-03-07T00:00:00.000Z"
+last_updated: "2026-03-07T11:22:56.194Z"
 progress:
-  total_phases: 6
+  total_phases: 9
   completed_phases: 7
-  total_plans: 21
-  completed_plans: 21
+  total_plans: 27
+  completed_plans: 23
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 ## Current Position
 
 Phase: 37 of 39 (Node System)
-Plan: 1 of 1 in current phase
-Status: Plan 37-01 complete
-Last activity: 2026-03-07 — Plan 37-01 complete (blufio-node crate with Ed25519 pairing, QR code, SQLite store, config integration)
+Plan: 2 of 3 in current phase
+Status: Plan 37-02 complete
+Last activity: 2026-03-07 — Plan 37-02 complete (ConnectionManager, HeartbeatMonitor, fleet CLI, serve.rs wiring)
 
 Progress: [█████░░░░░] 50%
 
@@ -70,6 +70,7 @@ Progress: [█████░░░░░] 50%
 | 36 | 01 | ~10min | 2 | 6 |
 | 36 | 02 | ~5min | 2 | 2 |
 | 37 | 01 | ~12min | 2 | 11 |
+| 37 | 02 | ~11min | 2 | 7 |
 
 ## Accumulated Context
 
@@ -113,6 +114,7 @@ Key v1.3 constraints:
 - Node config structs defined in blufio-config to avoid circular dependency; re-exported from blufio-node/config.rs
 - Pairing fingerprint: SHA-256 of sorted concatenated public keys, formatted as XXXX-XXXX-XXXX-XXXX
 - tokio-rusqlite errors need explicit type annotation: |e: tokio_rusqlite::Error<rusqlite::Error>|
+- [Phase 37]: register_connection/remove_connection async because EventBus::publish is async
 
 ### Pending Todos
 
@@ -131,5 +133,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Completed 37-01-PLAN.md
+Stopped at: Completed 37-02-PLAN.md
 Resume file: .planning/ROADMAP.md

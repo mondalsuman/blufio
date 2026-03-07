@@ -81,9 +81,9 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 ### Node System
 
 - [x] **NODE-01**: Node pairing via Ed25519 mutual authentication (QR or shared token)
-- [ ] **NODE-02**: Node connection via WebSocket with capability declaration (camera, screen, location, exec)
-- [ ] **NODE-03**: Node heartbeat monitoring (battery, memory, connectivity, stale detection)
-- [ ] **NODE-04**: Node fleet management CLI (blufio nodes list/group/exec)
+- [x] **NODE-02**: Node connection via WebSocket with capability declaration (camera, screen, location, exec)
+- [x] **NODE-03**: Node heartbeat monitoring (battery, memory, connectivity, stale detection)
+- [x] **NODE-04**: Node fleet management CLI (blufio nodes list/group/exec)
 - [ ] **NODE-05**: Approval routing broadcasts to all connected operator devices
 
 ### Migration
@@ -199,9 +199,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-05 | Phase 36 | Complete |
 | INFRA-07 | Phase 36 | Complete |
 | NODE-01 | Phase 37 | Complete |
-| NODE-02 | Phase 37 | Pending |
-| NODE-03 | Phase 37 | Pending |
-| NODE-04 | Phase 37 | Pending |
+| NODE-02 | Phase 37 | Complete |
+| NODE-03 | Phase 37 | Complete |
+| NODE-04 | Phase 37 | Complete |
 | NODE-05 | Phase 37 | Pending |
 | MIGR-01 | Phase 38 | Pending |
 | MIGR-02 | Phase 38 | Pending |
