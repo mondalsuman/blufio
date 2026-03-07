@@ -674,6 +674,23 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             gateway.set_event_bus(event_bus.clone()).await;
             info!("gateway stores wired (api_keys, webhooks, batch, event_bus)");
 
+            // Spawn webhook delivery background loop (API-16).
+            // Subscribes to EventBus, matches events to registered webhooks,
+            // delivers with HMAC-SHA256 signing and exponential backoff retry.
+            {
+                let delivery_bus = event_bus.clone();
+                let delivery_store = webhook_store;
+                tokio::spawn(async move {
+                    blufio_gateway::webhooks::delivery::run_webhook_delivery(
+                        delivery_bus,
+                        delivery_store,
+                        reqwest::Client::new(),
+                    )
+                    .await;
+                });
+                info!("webhook delivery engine spawned");
+            }
+
             // Wire MCP HTTP transport onto the gateway (if enabled).
             #[cfg(feature = "mcp-server")]
             if config.mcp.enabled {
