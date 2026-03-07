@@ -654,6 +654,26 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 "api tools allowlist configured"
             );
 
+            // Open a dedicated connection for gateway stores (API-11..18).
+            // V7 migration tables already created by SqliteStorage::initialize().
+            let store_conn =
+                blufio_storage::open_connection(&config.storage.database_path).await?;
+
+            let api_key_store = Arc::new(blufio_gateway::api_keys::store::ApiKeyStore::new(
+                store_conn.clone(),
+            ));
+            let webhook_store = Arc::new(blufio_gateway::webhooks::store::WebhookStore::new(
+                store_conn.clone(),
+            ));
+            let batch_store =
+                Arc::new(blufio_gateway::batch::store::BatchStore::new(store_conn));
+
+            gateway.set_api_key_store(api_key_store).await;
+            gateway.set_webhook_store(webhook_store.clone()).await;
+            gateway.set_batch_store(batch_store).await;
+            gateway.set_event_bus(event_bus.clone()).await;
+            info!("gateway stores wired (api_keys, webhooks, batch, event_bus)");
+
             // Wire MCP HTTP transport onto the gateway (if enabled).
             #[cfg(feature = "mcp-server")]
             if config.mcp.enabled {
