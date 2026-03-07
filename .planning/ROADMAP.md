@@ -66,7 +66,7 @@
 - [x] **Phase 33: Discord & Slack Channel Adapters** (3/3 plans) — completed 2026-03-06
 - [x] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** (5/5 plans) — completed 2026-03-06
 - [x] **Phase 35: Skill Registry & Code Signing** (2/2 plans) — completed 2026-03-06
-- [ ] **Phase 36: Docker Image & Deployment** — Multi-stage Dockerfile, docker-compose, multi-instance systemd
+- [x] **Phase 36: Docker Image & Deployment** (2/2 plans) — completed 2026-03-07
 - [ ] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication
 - [ ] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle
 - [ ] **Phase 39: Integration Verification** — End-to-end validation across all v1.3 features
@@ -199,11 +199,11 @@ Plans:
   1. docker build produces a minimal image (distroless/static-debian12:nonroot base) with TLS and SQLCipher working
   2. docker-compose up starts Blufio with volume mounts for data/config/plugins, env injection for secrets, and health check passing
   3. Multi-instance systemd template (blufio@.service) allows running N instances with per-instance config directories
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 36-01: Multi-stage Dockerfile and docker-compose
-- [ ] 36-02: Multi-instance systemd template
+- [x] 36-01: Multi-stage Dockerfile, docker-compose, healthcheck CLI subcommand
+- [x] 36-02: Multi-instance systemd template and instance setup helper
 
 ### Phase 37: Node System
 **Goal**: Users can pair multiple Blufio instances as a trusted device mesh for session sharing and coordinated approvals

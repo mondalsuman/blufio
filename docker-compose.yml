@@ -1,0 +1,39 @@
+# Blufio Docker Compose — single-command deployment.
+#
+# Usage:
+#   1. Copy deploy/.env.example to .env and fill in secrets
+#   2. Create config/config.toml (or use defaults)
+#   3. docker compose up -d
+#
+# Volumes:
+#   blufio-data: Database, ONNX models, plugins (persistent)
+#   ./config:    config.toml (read-only bind mount)
+
+services:
+  blufio:
+    image: blufio:latest
+    # Uncomment to build locally instead of using a pre-built image:
+    # build: .
+    container_name: blufio
+    restart: unless-stopped
+    ports:
+      - "${BLUFIO_PORT:-3000}:3000"
+    volumes:
+      - blufio-data:/data
+      - ./config:/config:ro
+    environment:
+      - BLUFIO_CONFIG=/config/config.toml
+      - RUST_LOG=${RUST_LOG:-blufio=info}
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test: ["/blufio", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  blufio-data:
+    driver: local

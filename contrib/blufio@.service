@@ -1,0 +1,60 @@
+# Blufio AI Agent - multi-instance systemd template
+#
+# Usage:
+#   1. Run contrib/blufio-instance-setup.sh <instance-name>
+#   2. Edit /etc/blufio/instances/<instance-name>/config.toml
+#   3. systemctl enable blufio@<instance-name>
+#   4. systemctl start blufio@<instance-name>
+#
+# Examples:
+#   systemctl start blufio@personal
+#   systemctl start blufio@work
+#   systemctl status blufio@personal
+#   journalctl -u blufio@personal -f
+
+[Unit]
+Description=Blufio AI Agent (%i)
+Documentation=https://github.com/blufio/blufio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStartPre=-/var/lib/blufio/instances/%i/hooks/pre-start.sh
+ExecStart=/usr/local/bin/blufio serve
+ExecStopPost=-/var/lib/blufio/instances/%i/hooks/post-stop.sh
+Restart=on-failure
+RestartSec=5s
+StartLimitBurst=3
+StartLimitIntervalSec=60
+TimeoutStartSec=90
+TimeoutStopSec=30
+WatchdogSec=30
+
+User=blufio
+Group=blufio
+WorkingDirectory=/var/lib/blufio/instances/%i
+
+Environment=RUST_LOG=blufio=info
+Environment=BLUFIO_CONFIG=/etc/blufio/instances/%i/config.toml
+EnvironmentFile=-/etc/blufio/instances/%i/environment
+
+# Security hardening (same as single-instance service)
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/blufio/instances/%i
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitNOFILE=65536
+
+# Memory limit per instance
+MemoryMax=256M
+MemoryHigh=200M
+
+[Install]
+WantedBy=multi-user.target
