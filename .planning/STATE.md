@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 ## Current Position
 
 Phase: 37 of 39 (Node System)
-Plan: 0 of 0 in current phase
-Status: Ready to plan
-Last activity: 2026-03-07 — Phase 36 complete (2/2 plans, Docker Image & Deployment with multi-stage Dockerfile, docker-compose, systemd template)
+Plan: 1 of 1 in current phase
+Status: Plan 37-01 complete
+Last activity: 2026-03-07 — Plan 37-01 complete (blufio-node crate with Ed25519 pairing, QR code, SQLite store, config integration)
 
 Progress: [█████░░░░░] 50%
 
@@ -69,6 +69,7 @@ Progress: [█████░░░░░] 50%
 | 35 | 02 | ~20min | 2 | 1 |
 | 36 | 01 | ~10min | 2 | 6 |
 | 36 | 02 | ~5min | 2 | 2 |
+| 37 | 01 | ~12min | 2 | 11 |
 
 ## Accumulated Context
 
@@ -109,6 +110,9 @@ Key v1.3 constraints:
 - Single full-featured Docker image with all adapters compiled in; users enable/disable via config.toml
 - Docker health check uses `blufio healthcheck` subcommand (no shell/curl needed in distroless)
 - Multi-instance systemd template uses /etc/blufio/instances/%i/ for config, /var/lib/blufio/instances/%i/ for data
+- Node config structs defined in blufio-config to avoid circular dependency; re-exported from blufio-node/config.rs
+- Pairing fingerprint: SHA-256 of sorted concatenated public keys, formatted as XXXX-XXXX-XXXX-XXXX
+- tokio-rusqlite errors need explicit type annotation: |e: tokio_rusqlite::Error<rusqlite::Error>|
 
 ### Pending Todos
 
@@ -127,5 +131,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Phase 36 complete, ready for Phase 37
+Stopped at: Completed 37-01-PLAN.md
 Resume file: .planning/ROADMAP.md
