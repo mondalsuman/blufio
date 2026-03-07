@@ -21,8 +21,12 @@ use std::collections::HashMap;
 use anyhow::anyhow;
 use blufio_core::BlufioError;
 use blufio_core::types::{SkillInvocation, SkillManifest, SkillResult};
+use ed25519_dalek::VerifyingKey;
 use tracing::{debug, info, warn};
 use wasmtime::{Caller, Config, Engine, Linker, Memory, Module, Store};
+
+use crate::signing::{PublisherKeypair, compute_content_hash, signature_from_hex};
+use crate::store::VerificationInfo;
 
 /// State stored in each wasmtime Store for a single skill invocation.
 struct SkillState {
@@ -47,6 +51,10 @@ pub struct WasmSkillRuntime {
     engine: Engine,
     manifests: HashMap<String, SkillManifest>,
     modules: HashMap<String, Module>,
+    /// Raw WASM bytes stored for runtime hash verification (avoids TOCTOU).
+    wasm_bytes: HashMap<String, Vec<u8>>,
+    /// Verification metadata loaded at skill load time, checked at invoke time.
+    verification: HashMap<String, VerificationInfo>,
 }
 
 impl WasmSkillRuntime {
@@ -68,6 +76,8 @@ impl WasmSkillRuntime {
             engine,
             manifests: HashMap::new(),
             modules: HashMap::new(),
+            wasm_bytes: HashMap::new(),
+            verification: HashMap::new(),
         })
     }
 
@@ -79,6 +89,7 @@ impl WasmSkillRuntime {
         &mut self,
         manifest: SkillManifest,
         wasm_bytes: &[u8],
+        verification_info: Option<VerificationInfo>,
     ) -> Result<(), BlufioError> {
         let module = Module::new(&self.engine, wasm_bytes).map_err(|e| BlufioError::Skill {
             message: format!(
@@ -89,6 +100,16 @@ impl WasmSkillRuntime {
         })?;
 
         info!(skill = %manifest.name, version = %manifest.version, "loaded WASM skill");
+
+        // Store WASM bytes for runtime hash verification (avoids TOCTOU).
+        self.wasm_bytes
+            .insert(manifest.name.clone(), wasm_bytes.to_vec());
+
+        // Store verification metadata if provided.
+        if let Some(info) = verification_info {
+            self.verification.insert(manifest.name.clone(), info);
+        }
+
         self.modules.insert(manifest.name.clone(), module);
         self.manifests.insert(manifest.name.clone(), manifest);
         Ok(())
@@ -103,7 +124,66 @@ impl WasmSkillRuntime {
     ///
     /// An epoch ticker background task increments the engine epoch every second,
     /// causing the skill to trap if it exceeds its timeout.
+    /// Verify a skill's cryptographic integrity before execution.
+    ///
+    /// Checks SHA-256 content hash and Ed25519 signature against the stored
+    /// WASM bytes. Returns Ok(()) for unsigned skills (no verification info).
+    /// Returns Err(BlufioError::Security) for tampered or invalid signed skills.
+    fn verify_before_execution(&self, skill_name: &str) -> Result<(), BlufioError> {
+        let Some(info) = self.verification.get(skill_name) else {
+            return Ok(()); // No verification info = unsigned skill, allow execution
+        };
+        let Some(stored_bytes) = self.wasm_bytes.get(skill_name) else {
+            return Ok(()); // No stored bytes = legacy load, skip
+        };
+
+        // 1. Verify content hash if present.
+        if let Some(ref expected_hash) = info.content_hash {
+            let actual_hash = compute_content_hash(stored_bytes);
+            if actual_hash != *expected_hash {
+                return Err(BlufioError::Security(format!(
+                    "skill '{}': content hash mismatch — WASM may be tampered (expected {}..., got {}...)",
+                    skill_name,
+                    &expected_hash[..12.min(expected_hash.len())],
+                    &actual_hash[..12.min(actual_hash.len())],
+                )));
+            }
+        }
+
+        // 2. Verify signature if present.
+        if let Some(ref sig_hex) = info.signature {
+            let signature = signature_from_hex(sig_hex)?;
+            let publisher_id = info.publisher_id.as_ref().ok_or_else(|| {
+                BlufioError::Security(format!(
+                    "skill '{}': has signature but no publisher_id",
+                    skill_name
+                ))
+            })?;
+            let pubkey_bytes = hex::decode(publisher_id).map_err(|e| {
+                BlufioError::Security(format!(
+                    "skill '{}': invalid publisher_id hex: {e}",
+                    skill_name
+                ))
+            })?;
+            let pubkey_array: [u8; 32] = pubkey_bytes.try_into().map_err(|_| {
+                BlufioError::Security(format!("skill '{}': publisher_id not 32 bytes", skill_name))
+            })?;
+            let verifying_key = VerifyingKey::from_bytes(&pubkey_array).map_err(|e| {
+                BlufioError::Security(format!(
+                    "skill '{}': invalid publisher key: {e}",
+                    skill_name
+                ))
+            })?;
+            PublisherKeypair::verify_signature(&verifying_key, stored_bytes, &signature)?;
+        }
+
+        Ok(())
+    }
+
     pub async fn invoke(&self, invocation: SkillInvocation) -> Result<SkillResult, BlufioError> {
+        // Pre-execution cryptographic verification.
+        self.verify_before_execution(&invocation.skill_name)?;
+
         let manifest =
             self.manifests
                 .get(&invocation.skill_name)
@@ -695,7 +775,7 @@ mod tests {
         let wasm = wat::parse_str(wat).unwrap();
 
         let manifest = test_manifest();
-        runtime.load_skill(manifest.clone(), &wasm).unwrap();
+        runtime.load_skill(manifest.clone(), &wasm, None).unwrap();
 
         let skills = runtime.list_skills();
         assert_eq!(skills.len(), 1);
@@ -716,7 +796,7 @@ mod tests {
         let wasm = wat::parse_str(wat).unwrap();
 
         let manifest = test_manifest();
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -745,7 +825,7 @@ mod tests {
         manifest.resources.fuel = 10_000; // Very low fuel
         manifest.resources.epoch_timeout_secs = 60; // High timeout so fuel runs out first
 
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -782,7 +862,7 @@ mod tests {
         let wasm = wat::parse_str(wat).unwrap();
 
         let manifest = test_manifest();
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -818,7 +898,7 @@ mod tests {
         manifest.resources.fuel = u64::MAX; // Very high fuel so epoch triggers first
         manifest.resources.epoch_timeout_secs = 1; // 1 second timeout
 
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let start = std::time::Instant::now();
         let invocation = SkillInvocation {
@@ -874,7 +954,7 @@ mod tests {
 
         // Manifest with NO network capability.
         let manifest = test_manifest();
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -920,7 +1000,7 @@ mod tests {
 
         // Manifest with NO filesystem capability.
         let manifest = test_manifest();
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -968,7 +1048,7 @@ mod tests {
 
         // Manifest with NO filesystem capability.
         let manifest = test_manifest();
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -1030,7 +1110,7 @@ mod tests {
             write: vec![],
         });
 
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -1092,7 +1172,7 @@ mod tests {
             write: vec![dir_path.to_string()],
         });
 
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -1147,7 +1227,7 @@ mod tests {
             write: vec![],
         });
 
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -1199,7 +1279,7 @@ mod tests {
             domains: vec!["api.example.com".to_string()],
         });
 
-        runtime.load_skill(manifest, &wasm).unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
 
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
@@ -1234,5 +1314,172 @@ mod tests {
             },
             wasm_entry: "skill.wasm".to_string(),
         }
+    }
+
+    // ---- Pre-execution verification tests ----
+
+    #[tokio::test]
+    async fn invoke_unsigned_skill_no_verification_block() {
+        // Load a skill WITHOUT verification info — should execute normally.
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+        let manifest = test_manifest();
+        let wasm = wat::parse_str(r#"(module (func (export "run")) (memory (export "memory") 1))"#)
+            .unwrap();
+        runtime.load_skill(manifest, &wasm, None).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(!result.is_error, "unsigned skill should execute normally");
+    }
+
+    #[tokio::test]
+    async fn invoke_signed_skill_with_valid_hash_passes() {
+        // Load a skill with correct hash (no signature) — hash check passes.
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+        let manifest = test_manifest();
+        let wasm = wat::parse_str(r#"(module (func (export "run")) (memory (export "memory") 1))"#)
+            .unwrap();
+        let hash = crate::signing::compute_content_hash(&wasm);
+
+        let info = VerificationInfo {
+            content_hash: Some(hash),
+            signature: None,
+            publisher_id: None,
+        };
+        runtime.load_skill(manifest, &wasm, Some(info)).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(
+            !result.is_error,
+            "hash-verified skill should execute normally"
+        );
+    }
+
+    #[tokio::test]
+    async fn invoke_skill_with_hash_mismatch_blocks() {
+        // Load a skill with WRONG hash — should be blocked.
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+        let manifest = test_manifest();
+        let wasm = wat::parse_str(r#"(module (func (export "run")) (memory (export "memory") 1))"#)
+            .unwrap();
+
+        let info = VerificationInfo {
+            content_hash: Some(
+                "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            ),
+            signature: None,
+            publisher_id: None,
+        };
+        runtime.load_skill(manifest, &wasm, Some(info)).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await;
+        assert!(result.is_err(), "hash mismatch should block execution");
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("content hash mismatch"),
+            "expected 'content hash mismatch' in error, got: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn invoke_signed_skill_with_valid_signature_passes() {
+        // Generate keypair, sign WASM, load with full verification info.
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+        let manifest = test_manifest();
+        let wasm = wat::parse_str(r#"(module (func (export "run")) (memory (export "memory") 1))"#)
+            .unwrap();
+
+        let keypair = crate::signing::PublisherKeypair::generate();
+        let hash = crate::signing::compute_content_hash(&wasm);
+        let sig = keypair.sign(&wasm);
+        let sig_hex = crate::signing::signature_to_hex(&sig);
+
+        let info = VerificationInfo {
+            content_hash: Some(hash),
+            signature: Some(sig_hex),
+            publisher_id: Some(keypair.public_hex()),
+        };
+        runtime.load_skill(manifest, &wasm, Some(info)).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await.unwrap();
+        assert!(!result.is_error, "validly signed skill should execute");
+    }
+
+    #[tokio::test]
+    async fn invoke_signed_skill_with_bad_signature_blocks() {
+        // Load a skill with valid hash but signature from DIFFERENT data.
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+        let manifest = test_manifest();
+        let wasm = wat::parse_str(r#"(module (func (export "run")) (memory (export "memory") 1))"#)
+            .unwrap();
+
+        let keypair = crate::signing::PublisherKeypair::generate();
+        let hash = crate::signing::compute_content_hash(&wasm);
+        // Sign different data (not the actual WASM bytes).
+        let bad_sig = keypair.sign(b"completely different data");
+        let sig_hex = crate::signing::signature_to_hex(&bad_sig);
+
+        let info = VerificationInfo {
+            content_hash: Some(hash),
+            signature: Some(sig_hex),
+            publisher_id: Some(keypair.public_hex()),
+        };
+        runtime.load_skill(manifest, &wasm, Some(info)).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await;
+        assert!(result.is_err(), "bad signature should block execution");
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("signature verification failed"),
+            "expected 'signature verification failed' in error, got: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn invoke_signed_skill_with_wrong_pubkey_blocks() {
+        // Sign with one key, load with a different publisher_id.
+        let mut runtime = WasmSkillRuntime::new().unwrap();
+        let manifest = test_manifest();
+        let wasm = wat::parse_str(r#"(module (func (export "run")) (memory (export "memory") 1))"#)
+            .unwrap();
+
+        let keypair1 = crate::signing::PublisherKeypair::generate();
+        let keypair2 = crate::signing::PublisherKeypair::generate();
+        let hash = crate::signing::compute_content_hash(&wasm);
+        let sig = keypair1.sign(&wasm);
+        let sig_hex = crate::signing::signature_to_hex(&sig);
+
+        let info = VerificationInfo {
+            content_hash: Some(hash),
+            signature: Some(sig_hex),
+            publisher_id: Some(keypair2.public_hex()), // Wrong key!
+        };
+        runtime.load_skill(manifest, &wasm, Some(info)).unwrap();
+
+        let invocation = SkillInvocation {
+            skill_name: "test-skill".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = runtime.invoke(invocation).await;
+        assert!(result.is_err(), "wrong pubkey should block execution");
     }
 }

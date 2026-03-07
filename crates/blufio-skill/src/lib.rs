@@ -17,6 +17,7 @@ pub mod manifest;
 pub mod provider;
 pub mod sandbox;
 pub mod scaffold;
+pub mod signing;
 pub mod store;
 pub mod tool;
 
@@ -24,5 +25,9 @@ pub use manifest::{load_manifest, parse_manifest};
 pub use provider::SkillProvider;
 pub use sandbox::WasmSkillRuntime;
 pub use scaffold::scaffold_skill;
-pub use store::SkillStore;
+pub use signing::{
+    PublisherKeypair, compute_content_hash, load_private_key_from_file, load_public_key_from_file,
+    save_keypair_to_file, signature_from_hex, signature_to_hex,
+};
+pub use store::{SkillStore, VerificationInfo};
 pub use tool::{Tool, ToolOutput, ToolRegistry};

@@ -65,7 +65,7 @@
 - [ ] **Phase 32: Scoped API Keys, Webhooks & Batch** — API key management, webhook delivery, and batch operations
 - [x] **Phase 33: Discord & Slack Channel Adapters** (3/3 plans) — completed 2026-03-06
 - [x] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** (5/5 plans) — completed 2026-03-06
-- [ ] **Phase 35: Skill Registry & Code Signing** — Local skill marketplace with Ed25519 verification
+- [x] **Phase 35: Skill Registry & Code Signing** (2/2 plans) — completed 2026-03-06
 - [ ] **Phase 36: Docker Image & Deployment** — Multi-stage Dockerfile, docker-compose, multi-instance systemd
 - [ ] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication
 - [ ] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle
@@ -185,11 +185,11 @@ Plans:
   2. Registry stores skill manifests with SHA-256 content hashes and verifies integrity on every load
   3. Ed25519 code signatures are verified at install time AND before every WASM execution
   4. Capability enforcement is checked at every WASM host function call site (not just at install time)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 35-01: Local skill registry (blufio-registry)
-- [ ] 35-02: Ed25519 code signing and capability enforcement
+- [x] 35-01: Signing infrastructure, V8 migration, store extensions, CLI commands (Sign, Update, Keygen, Verify, Info)
+- [x] 35-02: Pre-execution verification gate and capability enforcement audit
 
 ### Phase 36: Docker Image & Deployment
 **Goal**: Users can deploy Blufio via Docker with a single command and run multiple instances via systemd templates
@@ -292,8 +292,8 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 31. OpenAI-Compatible Gateway API | v1.3 | 0/3 | Not started | - |
 | 32. Scoped API Keys, Webhooks & Batch | v1.3 | 0/3 | Not started | - |
 | 33. Discord & Slack Channel Adapters | v1.3 | 3/3 | Complete | 2026-03-06 |
-| 34. WhatsApp, Signal, IRC & Matrix Adapters | v1.3 | 0/5 | Not started | - |
-| 35. Skill Registry & Code Signing | v1.3 | 0/2 | Not started | - |
+| 34. WhatsApp, Signal, IRC & Matrix Adapters | v1.3 | 5/5 | Complete | 2026-03-06 |
+| 35. Skill Registry & Code Signing | v1.3 | 2/2 | Complete | 2026-03-06 |
 | 36. Docker Image & Deployment | v1.3 | 0/2 | Not started | - |
 | 37. Node System | v1.3 | 0/3 | Not started | - |
 | 38. Migration & CLI Utilities | v1.3 | 0/2 | Not started | - |
@@ -301,4 +301,4 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-06 after Phase 33 completed*
+*Last updated: 2026-03-06 after Phase 35 completed*

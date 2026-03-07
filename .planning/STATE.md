@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: unknown
-last_updated: "2026-03-06T20:00:00.000Z"
+last_updated: "2026-03-07T00:00:00.000Z"
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 17
-  completed_plans: 17
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 19
+  completed_plans: 19
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — Phase 35 (Skill Registry & Code Signing)
+**Current focus:** v1.3 Ecosystem Expansion — Phase 36 (Docker Image & Deployment)
 
 ## Current Position
 
-Phase: 35 of 39 (Skill Registry & Code Signing)
+Phase: 36 of 39 (Docker Image & Deployment)
 Plan: 0 of 0 in current phase
 Status: Ready to plan
-Last activity: 2026-03-06 — Phase 34 complete (5/5 plans, WhatsApp/Signal/IRC/Matrix adapters + cross-channel bridge)
+Last activity: 2026-03-06 — Phase 35 complete (2/2 plans, Skill Registry & Code Signing with Ed25519 verification)
 
 Progress: [████░░░░░░] 45%
 
@@ -65,6 +65,8 @@ Progress: [████░░░░░░] 45%
 | 34 | 03 | ~15min | 2 | 6 |
 | 34 | 04 | ~15min | 2 | 4 |
 | 34 | 05 | ~10min | 2 | 5 |
+| 35 | 01 | ~25min | 2 | 7 |
+| 35 | 02 | ~20min | 2 | 1 |
 
 ## Accumulated Context
 
@@ -72,6 +74,10 @@ Progress: [████░░░░░░] 45%
 
 All decisions logged in PROJECT.md Key Decisions table.
 Key v1.3 constraints:
+- PublisherKeypair is separate from DeviceKeypair (skill author identity vs device identity)
+- TOFU key management: first publisher key seen is trusted, key changes hard-blocked
+- Pre-execution verification gate runs before every invoke() call
+- WASM bytes stored in memory for TOCTOU prevention
 - Event bus must come first (unblocks webhooks, bridging, nodes, batch)
 - Provider-agnostic ToolDefinition must exist before non-Anthropic providers
 - OpenAI wire types MUST be separate from internal ProviderResponse
@@ -115,5 +121,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Phase 34 complete, ready for Phase 35
+Stopped at: Phase 35 complete, ready for Phase 36
 Resume file: .planning/ROADMAP.md
