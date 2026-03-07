@@ -231,11 +231,11 @@ Plans:
   3. blufio config translate converts OpenClaw JSON config to Blufio TOML
   4. blufio bench runs built-in benchmarks (startup, context assembly, WASM, SQLite) and reports results
   5. blufio privacy evidence-report, blufio config recipe, blufio uninstall, and blufio bundle all work as documented
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 38-01: OpenClaw migration tool (migrate, preview, config translate)
-- [ ] 38-02: CLI utilities (bench, privacy, recipe, uninstall, bundle)
+- [ ] 38-01-PLAN.md — OpenClaw migration tool (migrate, preview, config translate)
+- [ ] 38-02-PLAN.md — CLI utilities (bench, privacy, recipe, uninstall, bundle)
 
 ### Phase 39: Integration Verification
 **Goal**: All 69 v1.3 requirements are verified end-to-end with cross-feature integration validated
