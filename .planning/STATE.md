@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — Phase 37 (Node System)
+**Current focus:** v1.3 Ecosystem Expansion — Phase 38 (Migration CLI Utilities)
 
 ## Current Position
 
-Phase: 37 of 39 (Node System) -- COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase 37 complete
-Last activity: 2026-03-07 — Plan 37-03 complete (ApprovalRouter with first-wins broadcast and timeout-then-deny)
+Phase: 38 of 39 (Migration CLI Utilities)
+Plan: 1 of 2 in current phase
+Status: Plan 38-01 complete
+Last activity: 2026-03-07 — Plan 38-01 complete (OpenClaw migration pipeline with preview, import, and config translate)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 55%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [█████░░░░░] 50%
 | 37 | 01 | ~12min | 2 | 11 |
 | 37 | 02 | ~11min | 2 | 7 |
 | 37 | 03 | ~2min | 2 | 3 |
+| 38 | 01 | ~17min | 2 | 7 |
 
 ## Accumulated Context
 
@@ -118,6 +119,9 @@ Key v1.3 constraints:
 - [Phase 37]: register_connection/remove_connection async because EventBus::publish is async
 - [Phase 37]: First-wins approval via DashMap::remove (atomic remove guarantees only one responder wins)
 - [Phase 37]: ConnectionManager gets optional approval_router via setter to avoid circular construction
+- [Phase 38]: OpenClaw detection order: --data-dir > $OPENCLAW_HOME > ~/.openclaw
+- [Phase 38]: Idempotent migration via migration_log UNIQUE(source, item_type, source_id)
+- [Phase 38]: Config translate preserves unmapped fields as TOML comments
 
 ### Pending Todos
 
@@ -136,5 +140,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Completed 37-03-PLAN.md (Phase 37 complete)
+Stopped at: Completed 38-01-PLAN.md
 Resume file: .planning/ROADMAP.md
