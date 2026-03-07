@@ -233,12 +233,10 @@ fn extract_secrets_from_json(
                 if SECRET_KEY_PATTERNS
                     .iter()
                     .any(|pat| lower_key.contains(pat))
+                    && let Some(s) = val.as_str()
+                    && !s.is_empty()
                 {
-                    if let Some(s) = val.as_str() {
-                        if !s.is_empty() {
-                            secrets.push((full_key.clone(), s.to_string()));
-                        }
-                    }
+                    secrets.push((full_key.clone(), s.to_string()));
                 }
                 extract_secrets_from_json(val, &full_key, secrets);
             }
@@ -267,17 +265,16 @@ fn parse_sessions(path: &Path, data: &mut OpenClawData) -> Result<(), BlufioErro
 
     // Try sessions/ directory with individual JSON files.
     let sessions_dir = path.join("sessions");
-    if sessions_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&sessions_dir) {
-            for entry in entries.flatten() {
-                let entry_path = entry.path();
-                if entry_path.extension().is_some_and(|ext| ext == "json") {
-                    if let Ok(content) = std::fs::read_to_string(&entry_path) {
-                        if let Ok(session) = serde_json::from_str::<OpenClawSession>(&content) {
-                            data.sessions.push(session);
-                        }
-                    }
-                }
+    if sessions_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&sessions_dir)
+    {
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.extension().is_some_and(|ext| ext == "json")
+                && let Ok(content) = std::fs::read_to_string(&entry_path)
+                && let Ok(session) = serde_json::from_str::<OpenClawSession>(&content)
+            {
+                data.sessions.push(session);
             }
         }
     }
@@ -309,8 +306,8 @@ fn parse_sessions_from_sqlite(conn: &rusqlite::Connection, data: &mut OpenClawDa
     ];
 
     for query in &table_queries {
-        if let Ok(mut stmt) = conn.prepare(query) {
-            if let Ok(rows) = stmt.query_map([], |row| {
+        if let Ok(mut stmt) = conn.prepare(query)
+            && let Ok(rows) = stmt.query_map([], |row| {
                 Ok(OpenClawSession {
                     id: row.get::<_, String>(0)?,
                     channel: row.get::<_, Option<String>>(1)?,
@@ -318,42 +315,41 @@ fn parse_sessions_from_sqlite(conn: &rusqlite::Connection, data: &mut OpenClawDa
                     messages: Vec::new(),
                     metadata: HashMap::new(),
                 })
-            }) {
-                for row in rows.flatten() {
-                    data.sessions.push(row);
-                }
+            })
+        {
+            for row in rows.flatten() {
+                data.sessions.push(row);
+            }
 
-                // Try to load messages for each session.
-                let msg_queries = [
-                    "SELECT id, role, content, created_at, token_count FROM messages WHERE session_id = ?1 ORDER BY created_at",
-                    "SELECT id, role, content, created_at, NULL FROM messages WHERE conversation_id = ?1 ORDER BY created_at",
-                ];
+            // Try to load messages for each session.
+            let msg_queries = [
+                "SELECT id, role, content, created_at, token_count FROM messages WHERE session_id = ?1 ORDER BY created_at",
+                "SELECT id, role, content, created_at, NULL FROM messages WHERE conversation_id = ?1 ORDER BY created_at",
+            ];
 
-                for session in &mut data.sessions {
-                    for mq in &msg_queries {
-                        if let Ok(mut msg_stmt) = conn.prepare(mq) {
-                            if let Ok(msg_rows) =
-                                msg_stmt.query_map(rusqlite::params![session.id], |row| {
-                                    Ok(OpenClawMessage {
-                                        id: row.get::<_, Option<String>>(0)?,
-                                        role: row.get::<_, String>(1)?,
-                                        content: row.get::<_, String>(2)?,
-                                        created_at: row.get::<_, Option<String>>(3)?,
-                                        token_count: row.get::<_, Option<i64>>(4)?,
-                                    })
+            for session in &mut data.sessions {
+                for mq in &msg_queries {
+                    if let Ok(mut msg_stmt) = conn.prepare(mq)
+                        && let Ok(msg_rows) =
+                            msg_stmt.query_map(rusqlite::params![session.id], |row| {
+                                Ok(OpenClawMessage {
+                                    id: row.get::<_, Option<String>>(0)?,
+                                    role: row.get::<_, String>(1)?,
+                                    content: row.get::<_, String>(2)?,
+                                    created_at: row.get::<_, Option<String>>(3)?,
+                                    token_count: row.get::<_, Option<i64>>(4)?,
                                 })
-                            {
-                                session.messages = msg_rows.flatten().collect();
-                                if !session.messages.is_empty() {
-                                    break;
-                                }
-                            }
+                            })
+                    {
+                        session.messages = msg_rows.flatten().collect();
+                        if !session.messages.is_empty() {
+                            break;
                         }
                     }
                 }
-
-                break;
             }
+
+            break;
         }
     }
 }
@@ -397,8 +393,8 @@ fn parse_cost_records_from_sqlite(conn: &rusqlite::Connection, data: &mut OpenCl
     ];
 
     for query in &queries {
-        if let Ok(mut stmt) = conn.prepare(query) {
-            if let Ok(rows) = stmt.query_map([], |row| {
+        if let Ok(mut stmt) = conn.prepare(query)
+            && let Ok(rows) = stmt.query_map([], |row| {
                 Ok(OpenClawCostRecord {
                     id: row.get::<_, Option<String>>(0)?,
                     session_id: row.get::<_, Option<String>>(1)?,
@@ -408,11 +404,11 @@ fn parse_cost_records_from_sqlite(conn: &rusqlite::Connection, data: &mut OpenCl
                     cost_usd: row.get::<_, Option<f64>>(5)?,
                     created_at: row.get::<_, Option<String>>(6)?,
                 })
-            }) {
-                data.cost_records = rows.flatten().collect();
-                if !data.cost_records.is_empty() {
-                    break;
-                }
+            })
+        {
+            data.cost_records = rows.flatten().collect();
+            if !data.cost_records.is_empty() {
+                break;
             }
         }
     }
@@ -429,19 +425,18 @@ fn collect_personality_files(path: &Path, data: &mut OpenClawData) -> Result<(),
     ];
 
     for dir in &search_dirs {
-        if dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let entry_path = entry.path();
-                    if entry_path.is_file()
-                        && entry_path
-                            .extension()
-                            .is_some_and(|ext| ext == "md" || ext == "txt")
-                    {
-                        if !data.personality_files.contains(&entry_path) {
-                            data.personality_files.push(entry_path);
-                        }
-                    }
+        if dir.is_dir()
+            && let Ok(entries) = std::fs::read_dir(dir)
+        {
+            for entry in entries.flatten() {
+                let entry_path = entry.path();
+                if entry_path.is_file()
+                    && entry_path
+                        .extension()
+                        .is_some_and(|ext| ext == "md" || ext == "txt")
+                    && !data.personality_files.contains(&entry_path)
+                {
+                    data.personality_files.push(entry_path);
                 }
             }
         }
@@ -1005,11 +1000,11 @@ pub fn run_config_translate(input: &str, output: Option<&str>) -> Result<(), Blu
                 }
             }
             "discord" => {
-                if let Some(obj) = value.as_object() {
-                    if let Some(token) = obj.get("bot_token").and_then(|v| v.as_str()) {
-                        blufio_config.discord.bot_token = Some(token.to_string());
-                        mapped_count += 1;
-                    }
+                if let Some(obj) = value.as_object()
+                    && let Some(token) = obj.get("bot_token").and_then(|v| v.as_str())
+                {
+                    blufio_config.discord.bot_token = Some(token.to_string());
+                    mapped_count += 1;
                 }
             }
             "system_prompt" | "personality" | "system_message" => {
@@ -1102,8 +1097,8 @@ mod tests {
         let result = detect_openclaw_dir(None);
         // This will likely fail since ~/.openclaw probably doesn't exist in test env.
         // That's OK -- we just verify it returns a helpful error.
-        if result.is_err() {
-            let err = result.unwrap_err().to_string();
+        if let Err(e) = result {
+            let err = e.to_string();
             assert!(err.contains("not found") || err.contains("does not exist"));
         }
     }

@@ -117,10 +117,10 @@ fn get_peak_rss() -> Option<u64> {
             for line in status.lines() {
                 if line.starts_with("VmHWM:") {
                     let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        if let Ok(kb) = parts[1].parse::<u64>() {
-                            return Some(kb * 1024);
-                        }
+                    if parts.len() >= 2
+                        && let Ok(kb) = parts[1].parse::<u64>()
+                    {
+                        return Some(kb * 1024);
                     }
                 }
             }
@@ -504,8 +504,7 @@ pub async fn run_bench(
         let mut selected = Vec::new();
         for name in only_list {
             for part in name.split(',') {
-                let kind =
-                    BenchmarkKind::from_str(part.trim()).map_err(|e| BlufioError::Internal(e))?;
+                let kind = BenchmarkKind::from_str(part.trim()).map_err(BlufioError::Internal)?;
                 selected.push(kind);
             }
         }
@@ -609,8 +608,8 @@ pub async fn run_bench(
         // Table output
         println!();
         println!(
-            "  {:<16} {:<12} {:<12} {:<12} {:<12} {}",
-            "Benchmark", "Median", "Min", "Max", "Peak RSS", "Delta"
+            "  {:<16} {:<12} {:<12} {:<12} {:<12} Delta",
+            "Benchmark", "Median", "Min", "Max", "Peak RSS"
         );
         println!("  {}", "-".repeat(76));
 

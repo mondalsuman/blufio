@@ -58,33 +58,33 @@ pub fn run_bundle(output: Option<&str>, include_data: bool) -> Result<(), Blufio
 
     // Config file (sanitized - strip API keys and vault secrets)
     let config_path = find_config_path();
-    if let Some(ref path) = config_path {
-        if path.exists() {
-            let config_content = std::fs::read_to_string(path)
-                .map_err(|e| BlufioError::Internal(format!("cannot read config: {e}")))?;
-            let sanitized = sanitize_config(&config_content);
-            contents.push(("blufio.toml".to_string(), sanitized.into_bytes()));
-        }
+    if let Some(ref path) = config_path
+        && path.exists()
+    {
+        let config_content = std::fs::read_to_string(path)
+            .map_err(|e| BlufioError::Internal(format!("cannot read config: {e}")))?;
+        let sanitized = sanitize_config(&config_content);
+        contents.push(("blufio.toml".to_string(), sanitized.into_bytes()));
     }
 
     // WASM skills
     let skills_dir = Path::new(&config.skill.skills_dir);
     let mut skill_names = Vec::new();
-    if skills_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(skills_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("wasm") {
-                    if let Ok(data) = std::fs::read(&path) {
-                        let name = path
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string();
-                        skill_names.push(name.clone());
-                        contents.push((format!("skills/{name}"), data));
-                    }
-                }
+    if skills_dir.exists()
+        && let Ok(entries) = std::fs::read_dir(skills_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("wasm")
+                && let Ok(data) = std::fs::read(&path)
+            {
+                let name = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
+                skill_names.push(name.clone());
+                contents.push((format!("skills/{name}"), data));
             }
         }
     }

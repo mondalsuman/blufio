@@ -202,44 +202,42 @@ fn stop_running_processes() -> Result<(), BlufioError> {
     if let Ok(output) = std::process::Command::new("systemctl")
         .args(["is-active", "blufio"])
         .output()
+        && output.status.success()
     {
-        if output.status.success() {
-            let status = String::from_utf8_lossy(&output.stdout);
-            if status.trim() == "active" {
-                eprintln!("  Stopping blufio systemd service...");
-                let stop_result = std::process::Command::new("systemctl")
-                    .args(["stop", "blufio"])
-                    .output();
-                match stop_result {
-                    Ok(out) if out.status.success() => {
-                        eprintln!("  Service stopped.");
-                    }
-                    _ => {
-                        eprintln!("  WARNING: Could not stop service (may need sudo).");
-                    }
+        let status = String::from_utf8_lossy(&output.stdout);
+        if status.trim() == "active" {
+            eprintln!("  Stopping blufio systemd service...");
+            let stop_result = std::process::Command::new("systemctl")
+                .args(["stop", "blufio"])
+                .output();
+            match stop_result {
+                Ok(out) if out.status.success() => {
+                    eprintln!("  Service stopped.");
+                }
+                _ => {
+                    eprintln!("  WARNING: Could not stop service (may need sudo).");
                 }
             }
         }
     }
 
     // Try launchd (macOS)
-    if cfg!(target_os = "macos") {
-        if let Ok(output) = std::process::Command::new("launchctl")
+    if cfg!(target_os = "macos")
+        && let Ok(output) = std::process::Command::new("launchctl")
             .args(["list"])
             .output()
-        {
-            let list = String::from_utf8_lossy(&output.stdout);
-            if list.contains("blufio") {
-                eprintln!("  Stopping blufio launchd service...");
-                if let Some(home) = dirs::home_dir() {
-                    let plist = home
-                        .join("Library")
-                        .join("LaunchAgents")
-                        .join("io.bluf.blufio.plist");
-                    let _ = std::process::Command::new("launchctl")
-                        .args(["unload", &plist.to_string_lossy()])
-                        .output();
-                }
+    {
+        let list = String::from_utf8_lossy(&output.stdout);
+        if list.contains("blufio") {
+            eprintln!("  Stopping blufio launchd service...");
+            if let Some(home) = dirs::home_dir() {
+                let plist = home
+                    .join("Library")
+                    .join("LaunchAgents")
+                    .join("io.bluf.blufio.plist");
+                let _ = std::process::Command::new("launchctl")
+                    .args(["unload", &plist.to_string_lossy()])
+                    .output();
             }
         }
     }
@@ -247,24 +245,24 @@ fn stop_running_processes() -> Result<(), BlufioError> {
     // Check for PID file or process as fallback
     if let Some(data_dir) = dirs::data_dir() {
         let pid_file = data_dir.join("blufio").join("blufio.pid");
-        if pid_file.exists() {
-            if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
-                let pid = pid_str.trim();
-                eprintln!("  Found PID file (pid: {pid}). Checking process...");
-                // Check if process is still running
-                let check = std::process::Command::new("kill")
-                    .args(["-0", pid])
-                    .output();
-                if let Ok(out) = check {
-                    if out.status.success() {
-                        eprintln!("  Sending SIGTERM to process {pid}...");
-                        let _ = std::process::Command::new("kill").args([pid]).output();
-                        // Wait briefly for shutdown
-                        std::thread::sleep(std::time::Duration::from_secs(2));
-                    }
-                }
-                let _ = std::fs::remove_file(&pid_file);
+        if pid_file.exists()
+            && let Ok(pid_str) = std::fs::read_to_string(&pid_file)
+        {
+            let pid = pid_str.trim();
+            eprintln!("  Found PID file (pid: {pid}). Checking process...");
+            // Check if process is still running
+            let check = std::process::Command::new("kill")
+                .args(["-0", pid])
+                .output();
+            if let Ok(out) = check
+                && out.status.success()
+            {
+                eprintln!("  Sending SIGTERM to process {pid}...");
+                let _ = std::process::Command::new("kill").args([pid]).output();
+                // Wait briefly for shutdown
+                std::thread::sleep(std::time::Duration::from_secs(2));
             }
+            let _ = std::fs::remove_file(&pid_file);
         }
     }
 
