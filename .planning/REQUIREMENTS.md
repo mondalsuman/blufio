@@ -9,16 +9,16 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### API Layer
 
-- [ ] **API-01**: User can send OpenAI-compatible chat completions via POST /v1/chat/completions
-- [ ] **API-02**: Chat completions endpoint supports SSE streaming responses
-- [ ] **API-03**: Chat completions endpoint supports tool calling (tools + tool_choice)
-- [ ] **API-04**: Chat completions endpoint supports response_format (JSON mode)
-- [ ] **API-05**: Chat completions responses include usage (token counts + cost)
-- [ ] **API-06**: OpenAI wire types are separate from internal ProviderResponse (finish_reason vs stop_reason)
-- [ ] **API-07**: User can send requests via OpenResponses POST /v1/responses
-- [ ] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
-- [ ] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
-- [ ] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
+- [x] **API-01**: User can send OpenAI-compatible chat completions via POST /v1/chat/completions
+- [x] **API-02**: Chat completions endpoint supports SSE streaming responses
+- [x] **API-03**: Chat completions endpoint supports tool calling (tools + tool_choice)
+- [x] **API-04**: Chat completions endpoint supports response_format (JSON mode)
+- [x] **API-05**: Chat completions responses include usage (token counts + cost)
+- [x] **API-06**: OpenAI wire types are separate from internal ProviderResponse (finish_reason vs stop_reason)
+- [x] **API-07**: User can send requests via OpenResponses POST /v1/responses
+- [x] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
+- [x] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
+- [x] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
 - [ ] **API-11**: User can create scoped API keys via POST /v1/api-keys
 - [ ] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
 - [ ] **API-13**: API keys support per-key rate limiting (requests per minute)

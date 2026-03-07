@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: executing
-stopped_at: Completed 41-01-PLAN.md
-last_updated: "2026-03-07T21:03:43.489Z"
-last_activity: 2026-03-07 -- ConcreteProviderRegistry implemented with feature-gated provider init
+stopped_at: Completed 41-02-PLAN.md
+last_updated: "2026-03-07T21:10:26Z"
+last_activity: 2026-03-07 -- ProviderRegistry and ToolRegistry wired into GatewayChannel in serve.rs
 progress:
   total_phases: 14
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 40
-  completed_plans: 37
-  percent: 93
+  completed_plans: 38
+  percent: 95
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 
 ## Current Position
 
-Phase: 41 of 42 (Wire Provider Registry)
-Plan: 1 of 2 in current phase
+Phase: 41 of 42 (Wire Provider Registry) -- COMPLETE
+Plan: 2 of 2 in current phase (DONE)
 Status: executing
-Last activity: 2026-03-07 -- ConcreteProviderRegistry implemented with feature-gated provider init
+Last activity: 2026-03-07 -- ProviderRegistry and ToolRegistry wired into GatewayChannel in serve.rs
 
-Progress: [█████████░] 93%
+Progress: [█████████░] 95%
 
 ## Performance Metrics
 
@@ -92,6 +92,7 @@ Progress: [█████████░] 93%
 | Phase 40 P01 | 7min | 2 tasks | 3 files |
 | Phase 40 P02 | 7min | 2 tasks | 1 files |
 | Phase 41 P01 | 7min | 2 tasks | 3 files |
+| Phase 41 P02 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -159,6 +160,8 @@ Key v1.3 constraints:
 - [Phase 40]: Bridge dispatch calls adapter.send() directly (outbound-only) to prevent infinite loops
 - [Phase 41]: Ollama provider stored as separate Arc<OllamaProvider> field to avoid Any downcast for list_local_models()
 - [Phase 41]: All four new provider features (openai, ollama, openrouter, gemini) added to default feature set
+- [Phase 41]: Provider registry init gated on config.gateway.enabled (no unnecessary API key validation)
+- [Phase 41]: set_api_tools_allowlist uses &mut self, gateway binding changed to `let mut gateway`
 
 ### Pending Todos
 
@@ -176,6 +179,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T21:03:43.484Z
-Stopped at: Completed 41-01-PLAN.md
+Last session: 2026-03-07T21:10:26Z
+Stopped at: Completed 41-02-PLAN.md
 Resume file: None
