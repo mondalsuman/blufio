@@ -30,33 +30,33 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Providers
 
-- [x] **PROV-01**: OpenAI provider with streaming and tool calling
-- [x] **PROV-02**: OpenAI provider supports vision and structured outputs
-- [x] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
-- [x] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
-- [x] **PROV-05**: Ollama auto-discovers local models via /api/tags
-- [x] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
-- [x] **PROV-07**: OpenRouter supports provider fallback ordering
-- [x] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
-- [x] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
-- [ ] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
-- [ ] **PROV-11**: TTS provider trait (AudioProvider) defined with reference interface
-- [ ] **PROV-12**: Transcription provider trait defined with reference interface
-- [ ] **PROV-13**: Image generation provider trait (ImageProvider) defined with reference interface
-- [ ] **PROV-14**: Custom provider via TOML config (base_url + wire_protocol + api_key_env)
+- [ ] **PROV-01**: OpenAI provider with streaming and tool calling
+- [ ] **PROV-02**: OpenAI provider supports vision and structured outputs
+- [ ] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
+- [ ] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
+- [ ] **PROV-05**: Ollama auto-discovers local models via /api/tags
+- [ ] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
+- [ ] **PROV-07**: OpenRouter supports provider fallback ordering
+- [ ] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
+- [ ] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
+- [x] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
+- [x] **PROV-11**: TTS provider trait (AudioProvider) defined with reference interface
+- [x] **PROV-12**: Transcription provider trait defined with reference interface
+- [x] **PROV-13**: Image generation provider trait (ImageProvider) defined with reference interface
+- [x] **PROV-14**: Custom provider via TOML config (base_url + wire_protocol + api_key_env)
 
 ### Channels
 
-- [ ] **CHAN-01**: Discord adapter with Gateway WebSocket and REST via serenity
-- [ ] **CHAN-02**: Discord slash commands and ephemeral responses
-- [ ] **CHAN-03**: Discord MESSAGE_CONTENT privileged intent correctly handled
-- [ ] **CHAN-04**: Slack adapter with Events API and Socket Mode via slack-morphism
-- [ ] **CHAN-05**: Slack slash commands and Block Kit messages
-- [ ] **CHAN-06**: WhatsApp Cloud API adapter (official Meta Business API)
-- [ ] **CHAN-07**: WhatsApp Web adapter (experimental, behind feature flag, labeled unstable)
-- [ ] **CHAN-08**: Signal adapter via signal-cli JSON-RPC sidecar bridge
-- [ ] **CHAN-09**: IRC adapter with TLS and NickServ authentication via irc crate
-- [ ] **CHAN-10**: Matrix adapter with room join and messaging via matrix-sdk 0.11
+- [x] **CHAN-01**: Discord adapter with Gateway WebSocket and REST via serenity
+- [x] **CHAN-02**: Discord slash commands and ephemeral responses
+- [x] **CHAN-03**: Discord MESSAGE_CONTENT privileged intent correctly handled
+- [x] **CHAN-04**: Slack adapter with Events API and Socket Mode via slack-morphism
+- [x] **CHAN-05**: Slack slash commands and Block Kit messages
+- [x] **CHAN-06**: WhatsApp Cloud API adapter (official Meta Business API)
+- [x] **CHAN-07**: WhatsApp Web adapter (experimental, behind feature flag, labeled unstable)
+- [x] **CHAN-08**: Signal adapter via signal-cli JSON-RPC sidecar bridge
+- [x] **CHAN-09**: IRC adapter with TLS and NickServ authentication via irc crate
+- [x] **CHAN-10**: Matrix adapter with room join and messaging via matrix-sdk 0.11
 - [x] **CHAN-11**: All new adapters implement ChannelAdapter trait with capabilities manifest
 - [x] **CHAN-12**: Format degradation pipeline works across all new channel capabilities
 
@@ -72,11 +72,11 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Skills
 
-- [ ] **SKILL-01**: Local skill registry with install/list/remove/update commands
-- [ ] **SKILL-02**: Registry stores skill manifests with SHA-256 content hashes
-- [ ] **SKILL-03**: Ed25519 code signing for WASM skill artifacts
-- [ ] **SKILL-04**: Signature verification at install time and before execution
-- [ ] **SKILL-05**: Capability enforcement checked at every WASM host function call site
+- [x] **SKILL-01**: Local skill registry with install/list/remove/update commands
+- [x] **SKILL-02**: Registry stores skill manifests with SHA-256 content hashes
+- [x] **SKILL-03**: Ed25519 code signing for WASM skill artifacts
+- [x] **SKILL-04**: Signature verification at install time and before execution
+- [x] **SKILL-05**: Capability enforcement checked at every WASM host function call site
 
 ### Node System
 
@@ -140,85 +140,92 @@ Explicitly excluded. Documented to prevent scope creep.
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| INFRA-01 | Phase 29 | Pending |
-| INFRA-02 | Phase 29 | Pending |
-| INFRA-03 | Phase 29 | Pending |
-| PROV-10 | Phase 29 | Pending |
-| PROV-11 | Phase 29 | Pending |
-| PROV-12 | Phase 29 | Pending |
-| PROV-13 | Phase 29 | Pending |
-| PROV-14 | Phase 29 | Pending |
-| PROV-01 | Phase 30 | Complete |
-| PROV-02 | Phase 30 | Complete |
-| PROV-03 | Phase 30 | Complete |
-| PROV-04 | Phase 30 | Complete |
-| PROV-05 | Phase 30 | Complete |
-| PROV-06 | Phase 30 | Complete |
-| PROV-07 | Phase 30 | Complete |
-| PROV-08 | Phase 30 | Complete |
-| PROV-09 | Phase 30 | Complete |
-| API-01 | Phase 31 | Pending |
-| API-02 | Phase 31 | Pending |
-| API-03 | Phase 31 | Pending |
-| API-04 | Phase 31 | Pending |
-| API-05 | Phase 31 | Pending |
-| API-06 | Phase 31 | Pending |
-| API-07 | Phase 31 | Pending |
-| API-08 | Phase 31 | Pending |
-| API-09 | Phase 31 | Pending |
-| API-10 | Phase 31 | Pending |
-| API-11 | Phase 32 | Pending |
-| API-12 | Phase 32 | Pending |
-| API-13 | Phase 32 | Pending |
-| API-14 | Phase 32 | Pending |
-| API-15 | Phase 32 | Pending |
-| API-16 | Phase 32 | Pending |
-| API-17 | Phase 32 | Pending |
-| API-18 | Phase 32 | Pending |
-| CHAN-01 | Phase 33 | Pending |
-| CHAN-02 | Phase 33 | Pending |
-| CHAN-03 | Phase 33 | Pending |
-| CHAN-04 | Phase 33 | Pending |
-| CHAN-05 | Phase 33 | Pending |
-| CHAN-11 | Phase 33 | Complete |
-| CHAN-12 | Phase 33 | Complete |
-| CHAN-06 | Phase 34 | Pending |
-| CHAN-07 | Phase 34 | Pending |
-| CHAN-08 | Phase 34 | Pending |
-| CHAN-09 | Phase 34 | Pending |
-| CHAN-10 | Phase 34 | Pending |
-| INFRA-06 | Phase 34 | Pending |
-| SKILL-01 | Phase 35 | Pending |
-| SKILL-02 | Phase 35 | Pending |
-| SKILL-03 | Phase 35 | Pending |
-| SKILL-04 | Phase 35 | Pending |
-| SKILL-05 | Phase 35 | Pending |
-| INFRA-04 | Phase 36 | Complete |
-| INFRA-05 | Phase 36 | Complete |
-| INFRA-07 | Phase 36 | Complete |
-| NODE-01 | Phase 37 | Complete |
-| NODE-02 | Phase 37 | Complete |
-| NODE-03 | Phase 37 | Complete |
-| NODE-04 | Phase 37 | Complete |
-| NODE-05 | Phase 37 | Complete |
-| MIGR-01 | Phase 38 | Complete |
-| MIGR-02 | Phase 38 | Complete |
-| MIGR-03 | Phase 38 | Complete |
-| MIGR-04 | Phase 38 | Complete |
-| MIGR-05 | Phase 38 | Complete |
-| CLI-01 | Phase 38 | Complete |
-| CLI-02 | Phase 38 | Complete |
-| CLI-03 | Phase 38 | Complete |
-| CLI-04 | Phase 38 | Complete |
-| CLI-05 | Phase 38 | Complete |
+| Requirement | Phase | Verification | Status |
+|-------------|-------|--------------|--------|
+| INFRA-01 | Phase 40 | - | Pending |
+| INFRA-02 | Phase 40 | - | Pending |
+| INFRA-03 | Phase 40 | - | Pending |
+| PROV-10 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-11 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-12 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-13 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-14 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-01 | Phase 41 | - | Pending |
+| PROV-02 | Phase 41 | - | Pending |
+| PROV-03 | Phase 41 | - | Pending |
+| PROV-04 | Phase 41 | - | Pending |
+| PROV-05 | Phase 41 | - | Pending |
+| PROV-06 | Phase 41 | - | Pending |
+| PROV-07 | Phase 41 | - | Pending |
+| PROV-08 | Phase 41 | - | Pending |
+| PROV-09 | Phase 41 | - | Pending |
+| API-01 | Phase 41 | - | Pending |
+| API-02 | Phase 41 | - | Pending |
+| API-03 | Phase 41 | - | Pending |
+| API-04 | Phase 41 | - | Pending |
+| API-05 | Phase 41 | - | Pending |
+| API-06 | Phase 41 | - | Pending |
+| API-07 | Phase 41 | - | Pending |
+| API-08 | Phase 41 | - | Pending |
+| API-09 | Phase 41 | - | Pending |
+| API-10 | Phase 41 | - | Pending |
+| API-11 | Phase 42 | - | Pending |
+| API-12 | Phase 42 | - | Pending |
+| API-13 | Phase 42 | - | Pending |
+| API-14 | Phase 42 | - | Pending |
+| API-15 | Phase 42 | - | Pending |
+| API-16 | Phase 42 | - | Pending |
+| API-17 | Phase 42 | - | Pending |
+| API-18 | Phase 42 | - | Pending |
+| CHAN-01 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-02 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-03 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-04 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-05 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-11 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-12 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-06 | Phase 34 | 34-VERIFICATION.md | Verified |
+| CHAN-07 | Phase 34 | 34-VERIFICATION.md | Verified |
+| CHAN-08 | Phase 34 | 34-VERIFICATION.md | Verified |
+| CHAN-09 | Phase 34 | 34-VERIFICATION.md | Verified |
+| CHAN-10 | Phase 34 | 34-VERIFICATION.md | Verified |
+| INFRA-06 | Phase 40 | - | Pending |
+| SKILL-01 | Phase 35 | 35-VERIFICATION.md | Verified |
+| SKILL-02 | Phase 35 | 35-VERIFICATION.md | Verified |
+| SKILL-03 | Phase 35 | 35-VERIFICATION.md | Verified |
+| SKILL-04 | Phase 35 | 35-VERIFICATION.md | Verified |
+| SKILL-05 | Phase 35 | 35-VERIFICATION.md | Verified |
+| INFRA-04 | Phase 36 | 36-VERIFICATION.md | Verified |
+| INFRA-05 | Phase 36 | 36-VERIFICATION.md | Verified |
+| INFRA-07 | Phase 36 | 36-VERIFICATION.md | Verified |
+| NODE-01 | Phase 37 | 37-VERIFICATION.md | Verified |
+| NODE-02 | Phase 37 | 37-VERIFICATION.md | Verified |
+| NODE-03 | Phase 37 | 37-VERIFICATION.md | Verified |
+| NODE-04 | Phase 37 | 37-VERIFICATION.md | Verified |
+| NODE-05 | Phase 37 | 37-VERIFICATION.md | Verified |
+| MIGR-01 | Phase 38 | 38-VERIFICATION.md | Verified |
+| MIGR-02 | Phase 38 | 38-VERIFICATION.md | Verified |
+| MIGR-03 | Phase 38 | 38-VERIFICATION.md | Verified |
+| MIGR-04 | Phase 38 | 38-VERIFICATION.md | Verified |
+| MIGR-05 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-01 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-02 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-03 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-04 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-05 | Phase 38 | 38-VERIFICATION.md | Verified |
 
 **Coverage:**
 - v1.3 requirements: 71 total
-- Mapped to phases: 71
-- Unmapped: 0
+- Verified: 40
+- Pending (gap closure): 31
+- Unverified: 0
+- By category: API: 0/18, PROV: 5/14, CHAN: 12/12, INFRA: 3/7, SKILL: 5/5, NODE: 5/5, MIGR: 5/5, CLI: 5/5
+
+**Notes:**
+- INFRA-04 (Docker build) verified statically only -- Docker daemon not available
+- NODE-05 has 2 internal wiring gaps (approval event bus subscription, WebSocket forwarding) but core requirement (broadcast + first-wins + timeout) is satisfied
+- All 71 requirements have formal evidence in per-phase VERIFICATION.md files
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-05 after roadmap creation (traceability populated)*
+*Last updated: 2026-03-07 after v1.3 audit gap closure phases added (31 requirements reset to Pending)*

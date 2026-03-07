@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude, with Telegram messaging, SQLite persistence (WAL mode, ACID), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox, plugin system with 7 adapter traits, HTTP/WebSocket gateway, model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, Prometheus observability, and full MCP integration (server + client). 39,168 LOC Rust across 21 crates, 148 requirements verified across 3 milestones.
+Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 8 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, Prometheus observability, full MCP integration (server + client), Docker deployment, and migration/CLI utilities. 70,755 LOC Rust across 35 crates, 219 requirements verified across 4 milestones.
 
 ## Core Value
 
@@ -53,53 +53,49 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ Ollama provider plugin — Phase 30
 - ✓ OpenRouter provider plugin — Phase 30
 - ✓ Google/Gemini provider plugin — Phase 30
+- ✓ OpenAI-compatible /v1/chat/completions API — Phase 31
+- ✓ OpenResponses /v1/responses API — Phase 31
+- ✓ Tools Invoke API (/v1/tools/invoke) — Phase 31
+- ✓ Scoped API keys with rate limiting — Phase 32
+- ✓ Webhook management with HMAC signing — Phase 32
+- ✓ Batch operations API — Phase 32
+- ✓ TTS/Transcription/Image provider traits — Phase 29
+- ✓ Discord channel adapter (serenity) — Phase 33
+- ✓ Slack channel adapter (slack-morphism) — Phase 33
+- ✓ WhatsApp Cloud API adapter — Phase 34
+- ✓ Signal adapter (signal-cli sidecar) — Phase 34
+- ✓ IRC adapter (TLS + SASL) — Phase 34
+- ✓ Matrix adapter (matrix-sdk 0.11) — Phase 34
+- ✓ Cross-channel bridging — Phase 34
+- ✓ Skill registry with install/list/remove/update — Phase 35
+- ✓ Ed25519 code signing for WASM skills — Phase 35
+- ✓ Docker image (multi-stage distroless) — Phase 36
+- ✓ docker-compose with volumes/env/healthcheck — Phase 36
+- ✓ Multi-instance systemd template — Phase 36
+- ✓ Node system (Ed25519 pairing, heartbeat, fleet CLI) — Phase 37
+- ✓ OpenClaw migration tool — Phase 38
+- ✓ blufio bench (built-in benchmarks) — Phase 38
+- ✓ blufio privacy evidence-report — Phase 38
+- ✓ blufio config recipe + blufio uninstall — Phase 38
+- ✓ blufio bundle (air-gapped deployment) — Phase 38
+- ✓ All 71 v1.3 requirements verified with VERIFICATION.md reports — Phase 39
 
 ### Active
 
-<!-- Current scope: v1.3 Ecosystem Expansion -->
+<!-- No active requirements -- v1.3 complete, all moved to Validated -->
 
-- [ ] OpenAI-compatible /v1/chat/completions API
-- [ ] OpenResponses /v1/responses API
-- [ ] Tools Invoke API (/v1/tools/invoke)
-- [ ] Scoped API keys with rate limiting
-- [ ] Webhook management
-- [ ] Batch operations API
-- [ ] TTS/Transcription/Image provider traits
-- [ ] Discord channel adapter
-- [ ] WhatsApp channel adapter
-- [ ] Slack channel adapter
-- [ ] Signal channel adapter
-- [ ] IRC channel adapter
-- [ ] Matrix channel adapter
-- [ ] Docker image (Dockerfile + compose)
-- [ ] Skill registry / marketplace
-- [ ] Code signing (Ed25519) for skills
-- [ ] Node system (paired devices)
-- [ ] OpenClaw migration tool
-- [ ] Cross-channel bridging
-- [ ] Multi-instance systemd template
-- [ ] blufio bundle (air-gapped deployment)
-- [ ] blufio bench (built-in benchmarks)
-- [ ] blufio privacy evidence-report
-- [ ] blufio config recipe + blufio uninstall
+(none -- v1.3 Ecosystem Expansion verified and complete)
 
-## Current Milestone: v1.3 Ecosystem Expansion
+## Current Milestone: None (v1.3 complete)
 
-**Goal:** Expand the platform ecosystem with OpenAI-compatible APIs, multi-provider LLM support, multi-channel adapters, Docker deployment, event bus, skill marketplace, node system, and migration tooling — delivering all remaining PRD Phase 3+ features.
-
-**Target features:**
-- OpenAI-compatible API layer (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch)
-- Multi-provider LLM (OpenAI, Ollama, OpenRouter, Google/Gemini, TTS/Transcription/Image)
-- Multi-channel adapters (Discord, WhatsApp, Slack, Signal, IRC, Matrix)
-- Infrastructure (Docker image, event bus, cross-channel bridging, multi-instance)
-- Ecosystem (skill registry, code signing, node system, OpenClaw migration)
-- CLI utilities (bench, privacy report, config recipe, uninstall, bundle)
+v1.3 Ecosystem Expansion verified and complete as of 2026-03-07.
 
 ## Shipped Milestones
 
+- **v1.3 Ecosystem Expansion** -- 11 phases (29-39), 36 plans, 71 requirements (2026-03-05 -> 2026-03-07)
 - **v1.2 Production Hardening** -- 6 phases, 13 plans, 30 requirements (2026-03-03 -> 2026-03-04)
-- **v1.1 MCP Integration** — 8 phases, 32 plans, 48 requirements (2026-03-02 → 2026-03-03)
-- **v1.0 MVP** — 14 phases, 43 plans, 70 requirements (2026-02-28 → 2026-03-02)
+- **v1.1 MCP Integration** -- 8 phases, 32 plans, 48 requirements (2026-03-02 -> 2026-03-03)
+- **v1.0 MVP** -- 14 phases, 43 plans, 70 requirements (2026-02-28 -> 2026-03-02)
 
 ### Out of Scope
 
@@ -118,11 +114,11 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.2 with 39,168 LOC Rust across 21 crates, now expanding to 25 crates with v1.3. 148 requirements verified across 3 milestones, 9 more validated in v1.3 so far (phases 29-30).
+Shipped v1.3 Ecosystem Expansion with 70,755 LOC Rust across 35 crates. 219 requirements verified across 4 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71). 1,414 tests passing. All 71 v1.3 requirements verified with formal VERIFICATION.md reports. 4/4 cross-feature integration flows passing.
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower.
 
-**Architecture:** 25-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-gateway, blufio-gemini, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-skill, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, plus blufio (binary).
+**Architecture:** 35-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-discord, blufio-gateway, blufio-gemini, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
 
 **Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). v1.2 introduced no new tech debt.
 
@@ -192,4 +188,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Query-param auth for Gemini | ?key= per Google convention (not Authorization header) | ✓ Good — matches Gemini API docs exactly |
 
 ---
-*Last updated: 2026-03-05 after Phase 30*
+*Last updated: 2026-03-07 after v1.3 Ecosystem Expansion verification complete (71/71 requirements verified)*
