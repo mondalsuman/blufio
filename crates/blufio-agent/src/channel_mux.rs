@@ -37,6 +37,8 @@ pub struct ChannelMultiplexer {
     inbound_rx: Mutex<mpsc::Receiver<InboundMessage>>,
     /// Shared inbound sender (cloned per background task).
     inbound_tx: mpsc::Sender<InboundMessage>,
+    /// Optional global event bus for publishing channel events.
+    event_bus: Option<Arc<blufio_bus::EventBus>>,
 }
 
 impl Default for ChannelMultiplexer {
@@ -54,6 +56,7 @@ impl ChannelMultiplexer {
             connected_channels: Arc::new(Vec::new()),
             inbound_rx: Mutex::new(inbound_rx),
             inbound_tx,
+            event_bus: None,
         }
     }
 
@@ -68,6 +71,23 @@ impl ChannelMultiplexer {
     /// Number of channels registered (pending + connected).
     pub fn channel_count(&self) -> usize {
         self.pending_channels.len() + self.connected_channels.len()
+    }
+
+    /// Set the global event bus for publishing channel events.
+    ///
+    /// Must be called before `connect()` so that per-channel receive tasks
+    /// can publish `ChannelEvent::MessageReceived` events.
+    pub fn set_event_bus(&mut self, bus: Arc<blufio_bus::EventBus>) {
+        self.event_bus = Some(bus);
+    }
+
+    /// Return a clone of the connected channels `Arc` for external use
+    /// (e.g., bridge dispatch).
+    ///
+    /// This is safe to call after `connect()`. Before `connect()`, it returns
+    /// an empty vec wrapped in an `Arc`.
+    pub fn connected_channels_ref(&self) -> Arc<Vec<(String, Arc<dyn ChannelAdapter + Send + Sync>)>> {
+        Arc::clone(&self.connected_channels)
     }
 }
 
@@ -175,6 +195,7 @@ impl ChannelAdapter for ChannelMultiplexer {
             let tx = self.inbound_tx.clone();
             let channel_name = name.clone();
             let recv_channel = arc_channel;
+            let event_bus_clone = self.event_bus.clone();
 
             tokio::spawn(async move {
                 loop {
@@ -196,6 +217,26 @@ impl ChannelAdapter for ChannelMultiplexer {
 
                             // Set the channel name on the message.
                             msg.channel = channel_name.clone();
+
+                            // Publish to event bus for bridging/webhooks.
+                            if let Some(ref bus) = event_bus_clone {
+                                if let blufio_core::types::MessageContent::Text(ref text) =
+                                    msg.content
+                                {
+                                    bus.publish(blufio_bus::BusEvent::Channel(
+                                        blufio_bus::ChannelEvent::MessageReceived {
+                                            event_id: blufio_bus::new_event_id(),
+                                            timestamp: blufio_bus::now_timestamp(),
+                                            channel: channel_name.clone(),
+                                            sender_id: msg.sender_id.clone(),
+                                            content: Some(text.clone()),
+                                            sender_name: None,
+                                            is_bridged: false,
+                                        },
+                                    ))
+                                    .await;
+                                }
+                            }
 
                             if tx.send(msg).await.is_err() {
                                 // Multiplexer was dropped.
@@ -338,5 +379,21 @@ mod tests {
     async fn multiplexer_empty_shutdown() {
         let mux = ChannelMultiplexer::new();
         assert!(mux.shutdown().await.is_ok());
+    }
+
+    #[test]
+    fn test_set_event_bus() {
+        let mut mux = ChannelMultiplexer::new();
+        let bus = Arc::new(blufio_bus::EventBus::new(16));
+        mux.set_event_bus(bus);
+        // Should not panic and event_bus should be set.
+        assert!(mux.event_bus.is_some());
+    }
+
+    #[test]
+    fn test_connected_channels_ref_empty() {
+        let mux = ChannelMultiplexer::new();
+        let channels = mux.connected_channels_ref();
+        assert!(channels.is_empty());
     }
 }
