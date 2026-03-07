@@ -68,7 +68,7 @@
 - [x] **Phase 35: Skill Registry & Code Signing** (2/2 plans) — completed 2026-03-06
 - [x] **Phase 36: Docker Image & Deployment** (2/2 plans) — completed 2026-03-07
 - [x] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication (completed 2026-03-07)
-- [ ] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle
+- [x] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle (completed 2026-03-07)
 - [ ] **Phase 39: Integration Verification** — End-to-end validation across all v1.3 features
 
 ## Phase Details
@@ -296,7 +296,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 35. Skill Registry & Code Signing | v1.3 | 2/2 | Complete | 2026-03-06 |
 | 36. Docker Image & Deployment | v1.3 | 0/2 | Not started | - |
 | 37. Node System | 3/3 | Complete   | 2026-03-07 | - |
-| 38. Migration & CLI Utilities | 1/2 | In Progress|  | - |
+| 38. Migration & CLI Utilities | 2/2 | Complete   | 2026-03-07 | - |
 | 39. Integration Verification | v1.3 | 0/2 | Not started | - |
 
 ---

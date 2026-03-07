@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: unknown
-last_updated: "2026-03-07T11:26:28Z"
+last_updated: "2026-03-07T14:38:11Z"
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 27
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 ## Current Position
 
 Phase: 38 of 39 (Migration CLI Utilities)
-Plan: 1 of 2 in current phase
-Status: Plan 38-01 complete
-Last activity: 2026-03-07 — Plan 38-01 complete (OpenClaw migration pipeline with preview, import, and config translate)
+Plan: 2 of 2 in current phase
+Status: Phase 38 complete
+Last activity: 2026-03-07 — Plan 38-02 complete (CLI utilities: bench, privacy, bundle, uninstall, config recipe)
 
-Progress: [██████░░░░] 55%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [██████░░░░] 55%
 | 37 | 02 | ~11min | 2 | 7 |
 | 37 | 03 | ~2min | 2 | 3 |
 | 38 | 01 | ~17min | 2 | 7 |
+| 38 | 02 | ~11min | 2 | 7 |
 
 ## Accumulated Context
 
@@ -122,6 +123,10 @@ Key v1.3 constraints:
 - [Phase 38]: OpenClaw detection order: --data-dir > $OPENCLAW_HOME > ~/.openclaw
 - [Phase 38]: Idempotent migration via migration_log UNIQUE(source, item_type, source_id)
 - [Phase 38]: Config translate preserves unmapped fields as TOML comments
+- [Phase 38]: Bench SQLite storage ops gated behind cfg(feature = "sqlite") for graceful degradation
+- [Phase 38]: Peak RSS via libc getrusage on macOS, /proc/self/status VmHWM on Linux
+- [Phase 38]: Bundle verifies binary signature before packaging, continues with warning if .minisig missing
+- [Phase 38]: Privacy report is static config analysis only -- no server connection needed
 
 ### Pending Todos
 
@@ -140,5 +145,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Completed 38-01-PLAN.md
+Stopped at: Completed 38-02-PLAN.md (Phase 38 complete)
 Resume file: .planning/ROADMAP.md
