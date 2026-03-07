@@ -55,7 +55,7 @@
 
 </details>
 
-### 🚧 v1.3 Ecosystem Expansion (In Progress)
+### v1.3 Ecosystem Expansion (In Progress)
 
 **Milestone Goal:** Expand the platform ecosystem with OpenAI-compatible APIs, multi-provider LLM support, multi-channel adapters, Docker deployment, event bus, skill marketplace, node system, and migration tooling.
 
@@ -238,19 +238,24 @@ Plans:
 - [ ] 38-02-PLAN.md — CLI utilities (bench, privacy, recipe, uninstall, bundle)
 
 ### Phase 39: Integration Verification
-**Goal**: All 69 v1.3 requirements are verified end-to-end with cross-feature integration validated
+**Goal**: All 71 v1.3 requirements are verified end-to-end with cross-feature integration validated
 **Depends on**: All previous v1.3 phases (29-38)
 **Requirements**: (verification phase -- validates all requirements from phases 29-38)
 **Success Criteria** (what must be TRUE):
-  1. All 69 v1.3 requirements have formal verification evidence in VERIFICATION.md
+  1. All 71 v1.3 requirements have formal verification evidence in VERIFICATION.md
   2. Cross-feature flows work: OpenAI SDK -> chat completions -> OpenRouter provider -> Discord channel -> webhook delivery
   3. Docker deployment passes full integration: docker-compose up -> API key create -> chat completion -> webhook fires
   4. Traceability is complete: every requirement maps to a phase, every phase has verification evidence
-**Plans**: TBD
+**Plans**: 7 plans
 
 Plans:
-- [ ] 39-01: Requirement verification and traceability audit
-- [ ] 39-02: Cross-feature integration testing
+- [ ] 39-01-PLAN.md — Verify Phases 29+30 (Event Bus + Providers, 17 requirements)
+- [ ] 39-02-PLAN.md — Verify Phases 31+32 (Gateway API + Keys/Webhooks/Batch, 18 requirements)
+- [ ] 39-03-PLAN.md — Verify Phases 33+34 (Channel Adapters + Bridging, 13 requirements)
+- [ ] 39-04-PLAN.md — Verify Phases 35+36 (Skills + Docker, 8 requirements)
+- [ ] 39-05-PLAN.md — Re-verify Phases 37+38 (Nodes + Migration/CLI, 15 requirements)
+- [ ] 39-06-PLAN.md — Cross-feature integration flows (4 E2E tests)
+- [ ] 39-07-PLAN.md — Traceability audit + documentation updates + readiness summary
 
 ## Progress
 
@@ -288,17 +293,17 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 27. Self-Update with Rollback | v1.2 | 2/2 | Complete | 2026-03-03 |
 | 28. Close Audit Gaps | v1.2 | 2/2 | Complete | 2026-03-04 |
 | 29. Event Bus & Core Trait Extensions | v1.3 | 2/2 | Complete | 2026-03-05 |
-| 30. Multi-Provider LLM Support | 4/4 | Complete    | 2026-03-05 | - |
-| 31. OpenAI-Compatible Gateway API | v1.3 | 0/3 | Not started | - |
-| 32. Scoped API Keys, Webhooks & Batch | v1.3 | 0/3 | Not started | - |
+| 30. Multi-Provider LLM Support | v1.3 | 4/4 | Complete | 2026-03-05 |
+| 31. OpenAI-Compatible Gateway API | v1.3 | 3/3 | Complete | 2026-03-05 |
+| 32. Scoped API Keys, Webhooks & Batch | v1.3 | 3/3 | Complete | 2026-03-06 |
 | 33. Discord & Slack Channel Adapters | v1.3 | 3/3 | Complete | 2026-03-06 |
 | 34. WhatsApp, Signal, IRC & Matrix Adapters | v1.3 | 5/5 | Complete | 2026-03-06 |
 | 35. Skill Registry & Code Signing | v1.3 | 2/2 | Complete | 2026-03-06 |
-| 36. Docker Image & Deployment | v1.3 | 0/2 | Not started | - |
-| 37. Node System | 3/3 | Complete   | 2026-03-07 | - |
-| 38. Migration & CLI Utilities | 2/2 | Complete    | 2026-03-07 | - |
-| 39. Integration Verification | v1.3 | 0/2 | Not started | - |
+| 36. Docker Image & Deployment | v1.3 | 2/2 | Complete | 2026-03-07 |
+| 37. Node System | v1.3 | 3/3 | Complete | 2026-03-07 |
+| 38. Migration & CLI Utilities | v1.3 | 2/2 | Complete | 2026-03-07 |
+| 39. Integration Verification | v1.3 | 0/7 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-06 after Phase 35 completed*
+*Last updated: 2026-03-07 after Phase 39 planning*
