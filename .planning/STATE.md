@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
-status: verifying
-stopped_at: Phase 40 context gathered
-last_updated: "2026-03-07T19:19:11.609Z"
-last_activity: 2026-03-07 -- v1.3 milestone verification complete (71/71 requirements, 4/4 integration flows, 1414 tests)
+status: executing
+stopped_at: Completed 40-01-PLAN.md
+last_updated: "2026-03-07T19:41:20.132Z"
+last_activity: 2026-03-07 -- Global EventBus wired to ChannelMultiplexer and node system
 progress:
   total_phases: 14
   completed_phases: 10
-  total_plans: 36
-  completed_plans: 34
-  percent: 100
+  total_plans: 38
+  completed_plans: 35
+  percent: 92
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 
 ## Current Position
 
-Phase: 39 of 39 (Integration Verification) -- COMPLETE
-Plan: 7 of 7 in current phase -- COMPLETE
-Status: v1.3 Ecosystem Expansion milestone verified -- READY TO SHIP
-Last activity: 2026-03-07 -- v1.3 milestone verification complete (71/71 requirements, 4/4 integration flows, 1414 tests)
+Phase: 40 of 42 (Wire Global EventBus Bridge)
+Plan: 1 of 2 in current phase -- COMPLETE
+Status: executing
+Last activity: 2026-03-07 -- Global EventBus wired to ChannelMultiplexer and node system
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Progress: [██████████] 100%
 - Total plans completed: 36
 - Total execution time: ~3 days
 - Average: ~12 plans/day
+| Phase 40 P01 | 7min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -151,6 +152,8 @@ Key v1.3 constraints:
 - [Phase 39]: Integration flow tests in blufio-test-utils/tests/ (not unit tests) -- uses wiremock + TestHarness for cross-crate E2E
 - [Phase 39]: Gateway tested via TestHarness pipeline, not actual server binding -- avoids port allocation in CI
 - [Phase 39]: v1.3 milestone declared READY TO SHIP -- 71/71 requirements verified, 4/4 integration flows passing, 2 Phase 37 internal wiring gaps are non-blocking
+- [Phase 40]: Global EventBus capacity 1024 (up from node-scoped 128) since it handles all event types
+- [Phase 40]: blufio-bus added as dependency to blufio-agent (was only in blufio main crate)
 
 ### Pending Todos
 
@@ -168,6 +171,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T19:19:11.604Z
-Stopped at: Phase 40 context gathered
-Resume file: .planning/phases/40-wire-global-eventbus-bridge/40-CONTEXT.md
+Last session: 2026-03-07T19:41:20.127Z
+Stopped at: Completed 40-01-PLAN.md
+Resume file: None
