@@ -9,24 +9,24 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### API Layer
 
-- [ ] **API-01**: User can send OpenAI-compatible chat completions via POST /v1/chat/completions
-- [ ] **API-02**: Chat completions endpoint supports SSE streaming responses
-- [ ] **API-03**: Chat completions endpoint supports tool calling (tools + tool_choice)
-- [ ] **API-04**: Chat completions endpoint supports response_format (JSON mode)
-- [ ] **API-05**: Chat completions responses include usage (token counts + cost)
-- [ ] **API-06**: OpenAI wire types are separate from internal ProviderResponse (finish_reason vs stop_reason)
-- [ ] **API-07**: User can send requests via OpenResponses POST /v1/responses
-- [ ] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
-- [ ] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
-- [ ] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
-- [ ] **API-11**: User can create scoped API keys via POST /v1/api-keys
-- [ ] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
-- [ ] **API-13**: API keys support per-key rate limiting (requests per minute)
-- [ ] **API-14**: API keys support expiration and revocation
-- [ ] **API-15**: User can register webhooks via POST /v1/webhooks
-- [ ] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
-- [ ] **API-17**: User can submit batch requests via POST /v1/batch
-- [ ] **API-18**: Batch results available with per-item success/error status
+- [x] **API-01**: User can send OpenAI-compatible chat completions via POST /v1/chat/completions
+- [x] **API-02**: Chat completions endpoint supports SSE streaming responses
+- [x] **API-03**: Chat completions endpoint supports tool calling (tools + tool_choice)
+- [x] **API-04**: Chat completions endpoint supports response_format (JSON mode)
+- [x] **API-05**: Chat completions responses include usage (token counts + cost)
+- [x] **API-06**: OpenAI wire types are separate from internal ProviderResponse (finish_reason vs stop_reason)
+- [x] **API-07**: User can send requests via OpenResponses POST /v1/responses
+- [x] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
+- [x] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
+- [x] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
+- [x] **API-11**: User can create scoped API keys via POST /v1/api-keys
+- [x] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
+- [x] **API-13**: API keys support per-key rate limiting (requests per minute)
+- [x] **API-14**: API keys support expiration and revocation
+- [x] **API-15**: User can register webhooks via POST /v1/webhooks
+- [x] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
+- [x] **API-17**: User can submit batch requests via POST /v1/batch
+- [x] **API-18**: Batch results available with per-item success/error status
 
 ### Providers
 
@@ -159,24 +159,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROV-07 | Phase 30 | Complete |
 | PROV-08 | Phase 30 | Complete |
 | PROV-09 | Phase 30 | Complete |
-| API-01 | Phase 31 | Pending |
-| API-02 | Phase 31 | Pending |
-| API-03 | Phase 31 | Pending |
-| API-04 | Phase 31 | Pending |
-| API-05 | Phase 31 | Pending |
-| API-06 | Phase 31 | Pending |
-| API-07 | Phase 31 | Pending |
-| API-08 | Phase 31 | Pending |
-| API-09 | Phase 31 | Pending |
-| API-10 | Phase 31 | Pending |
-| API-11 | Phase 32 | Pending |
-| API-12 | Phase 32 | Pending |
-| API-13 | Phase 32 | Pending |
-| API-14 | Phase 32 | Pending |
-| API-15 | Phase 32 | Pending |
-| API-16 | Phase 32 | Pending |
-| API-17 | Phase 32 | Pending |
-| API-18 | Phase 32 | Pending |
+| API-01 | Phase 31 | Complete |
+| API-02 | Phase 31 | Complete |
+| API-03 | Phase 31 | Complete |
+| API-04 | Phase 31 | Complete |
+| API-05 | Phase 31 | Complete |
+| API-06 | Phase 31 | Complete |
+| API-07 | Phase 31 | Complete |
+| API-08 | Phase 31 | Complete |
+| API-09 | Phase 31 | Complete |
+| API-10 | Phase 31 | Complete |
+| API-11 | Phase 32 | Complete |
+| API-12 | Phase 32 | Complete |
+| API-13 | Phase 32 | Complete |
+| API-14 | Phase 32 | Complete |
+| API-15 | Phase 32 | Complete |
+| API-16 | Phase 32 | Complete |
+| API-17 | Phase 32 | Complete |
+| API-18 | Phase 32 | Complete |
 | CHAN-01 | Phase 33 | Complete |
 | CHAN-02 | Phase 33 | Complete |
 | CHAN-03 | Phase 33 | Complete |
