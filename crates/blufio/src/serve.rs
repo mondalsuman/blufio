@@ -214,6 +214,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     );
     let tool_registry = Arc::new(tokio::sync::RwLock::new(tool_registry));
 
+    // Create global event bus shared across all subsystems.
+    let event_bus = Arc::new(blufio_bus::EventBus::new(1024));
+    info!("global event bus created (capacity=1024)");
+
     // Register SkillProvider with context engine for progressive tool discovery.
     let skill_provider =
         SkillProvider::new(tool_registry.clone(), config.skill.max_skills_in_prompt);
@@ -341,6 +345,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Build channel multiplexer.
     let mut mux = ChannelMultiplexer::new();
+    mux.set_event_bus(event_bus.clone());
 
     // Add Telegram channel (if enabled and configured).
     #[cfg(feature = "telegram")]
@@ -783,11 +788,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
         let node_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
         let node_store = Arc::new(blufio_node::NodeStore::new(node_conn));
-        let node_event_bus = Arc::new(blufio_bus::EventBus::new(128));
 
         let conn_manager = Arc::new(blufio_node::ConnectionManager::new(
             node_store.clone(),
-            node_event_bus.clone(),
+            event_bus.clone(),
             config.node.clone(),
         ));
 
@@ -797,7 +801,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         // Start heartbeat monitor.
         let heartbeat_monitor = blufio_node::HeartbeatMonitor::new(
             conn_manager.clone(),
-            node_event_bus.clone(),
+            event_bus.clone(),
             config.node.clone(),
         );
         tokio::spawn(async move {
