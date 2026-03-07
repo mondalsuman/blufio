@@ -5,7 +5,7 @@
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-02)
 - ✅ **v1.1 MCP Integration** — Phases 15-22 (shipped 2026-03-03)
 - ✅ **v1.2 Production Hardening** — Phases 23-28 (shipped 2026-03-04)
-- **v1.3 Ecosystem Expansion** — Phases 29-42 (gap closure in progress)
+- **v1.3 Ecosystem Expansion** — Phases 29-45 (gap closure in progress)
 
 ## Phases
 
@@ -58,7 +58,7 @@
 ### v1.3 Ecosystem Expansion (GAP CLOSURE IN PROGRESS)
 
 **Milestone Goal:** Expand the platform ecosystem with OpenAI-compatible APIs, multi-provider LLM support, multi-channel adapters, Docker deployment, event bus, skill marketplace, node system, and migration tooling.
-**Status:** Gap closure in progress -- 71/71 component-level, ~31 non-functional at runtime. Phases 40-42 close wiring gaps.
+**Status:** Tech debt closure in progress -- 71/71 requirements satisfied, 2 event publisher gaps + node wiring + doc sync. Phases 40-42 closed runtime wiring; Phases 43-45 close remaining gaps.
 
 - [x] **Phase 29: Event Bus & Core Trait Extensions** — Internal pub/sub backbone and provider-agnostic ToolDefinition
 - [x] **Phase 30: Multi-Provider LLM Support** — OpenAI, Ollama, OpenRouter, and Gemini provider plugins (completed 2026-03-05)
@@ -74,6 +74,9 @@
 - [x] **Phase 40: Wire Global EventBus & Bridge** — Global EventBus in serve.rs + bridge loop startup (completed 2026-03-07)
 - [x] **Phase 41: Wire ProviderRegistry into Gateway** — Provider crates as binary deps + ProviderRegistry impl (completed 2026-03-07)
 - [x] **Phase 42: Wire Gateway Stores** — ApiKeyStore, WebhookStore, BatchStore instantiation + webhook delivery (completed 2026-03-07)
+- [ ] **Phase 43: Wire EventBus Event Publishers** — AgentLoop + WasmSkillRuntime event publishing for webhook triggers
+- [ ] **Phase 44: Node Approval Wiring** — ApprovalRouter EventBus subscription + ConnectionManager forwarding
+- [ ] **Phase 45: Documentation & Traceability Sync** — Fix 31 stale traceability entries + Phase 32 checkbox
 
 ## Phase Details
 
@@ -292,6 +295,37 @@ Plans:
 - [ ] 42-01-PLAN.md — Add store/event_bus setters to GatewayChannel, instantiate stores in serve.rs
 - [ ] 42-02-PLAN.md — Spawn webhook delivery background task with EventBus
 
+### Phase 43: Wire EventBus Event Publishers
+**Goal:** Wire EventBus into AgentLoop and WasmSkillRuntime so chat.completed and tool.invoked webhook events actually fire
+**Depends on:** Phase 42 (webhook delivery spawned), Phase 29 (EventBus)
+**Requirements:** API-16
+**Gap Closure:** Closes 2 event publisher gaps from v1.3 audit (AgentLoop → ChannelEvent::MessageSent, WasmSkillRuntime → SkillEvent::Invoked/Completed)
+
+Plans:
+- [ ] 43-01-PLAN.md — Wire EventBus into AgentLoop, publish ChannelEvent::MessageSent after outbound delivery
+- [ ] 43-02-PLAN.md — Wire EventBus into WASM skill execution, publish SkillEvent::Invoked/Completed
+- [ ] 43-03-PLAN.md — Verify chat.completed and tool.invoked webhook flows fire end-to-end
+
+### Phase 44: Node Approval Wiring
+**Goal:** Wire ApprovalRouter into EventBus for event-driven triggering and fix ConnectionManager forwarding
+**Depends on:** Phase 37 (node system), Phase 40 (global EventBus)
+**Requirements:** NODE-05 (enhancement — core satisfied, wiring gaps remain)
+**Gap Closure:** Closes Phase 37 tech debt from v1.3 audit
+
+Plans:
+- [ ] 44-01-PLAN.md — Subscribe ApprovalRouter to EventBus for automatic event-driven triggering
+- [ ] 44-02-PLAN.md — Forward ApprovalResponse from ConnectionManager to handle_response()
+
+### Phase 45: Documentation & Traceability Sync
+**Goal:** Update stale REQUIREMENTS.md traceability entries and fix ROADMAP.md inaccuracies
+**Depends on:** Phase 42 (all gap closure phases with VERIFICATION.md files)
+**Requirements:** (documentation phase — no new requirements)
+**Gap Closure:** Closes documentation staleness from v1.3 audit
+
+Plans:
+- [ ] 45-01-PLAN.md — Update 31 traceability entries from Pending to Verified with VERIFICATION.md references
+- [ ] 45-02-PLAN.md — Fix ROADMAP.md Phase 32 checkbox and stale status lines
+
 ## Progress
 
 **Execution Order:**
@@ -340,8 +374,11 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 39. Integration Verification | v1.3 | Complete    | 2026-03-07 | 2026-03-07 |
 | 40. Wire Global EventBus & Bridge | 2/2 | Complete    | 2026-03-07 | - |
 | 41. Wire ProviderRegistry into Gateway | 2/2 | Complete    | 2026-03-07 | - |
-| 42. Wire Gateway Stores | 2/2 | Complete   | 2026-03-07 | - |
+| 42. Wire Gateway Stores | 2/2 | Complete    | 2026-03-07 | - |
+| 43. Wire EventBus Event Publishers | v1.3 | 0/3 | Planned | - |
+| 44. Node Approval Wiring | v1.3 | 0/2 | Planned | - |
+| 45. Documentation & Traceability Sync | v1.3 | 0/2 | Planned | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-07 after Phase 42 planning complete (2 plans, 2 waves)*
+*Last updated: 2026-03-07 after gap closure phases 43-45 added from milestone audit*

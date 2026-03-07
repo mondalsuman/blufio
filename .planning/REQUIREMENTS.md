@@ -24,7 +24,7 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 - [x] **API-13**: API keys support per-key rate limiting (requests per minute)
 - [x] **API-14**: API keys support expiration and revocation
 - [x] **API-15**: User can register webhooks via POST /v1/webhooks
-- [x] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
+- [ ] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
 - [x] **API-17**: User can submit batch requests via POST /v1/batch
 - [x] **API-18**: Batch results available with per-item success/error status
 
@@ -174,7 +174,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | API-13 | Phase 42 | - | Pending |
 | API-14 | Phase 42 | - | Pending |
 | API-15 | Phase 42 | - | Pending |
-| API-16 | Phase 42 | - | Pending |
+| API-16 | Phase 43 | - | Pending |
 | API-17 | Phase 42 | - | Pending |
 | API-18 | Phase 42 | - | Pending |
 | CHAN-01 | Phase 33 | 33-VERIFICATION.md | Verified |
@@ -217,7 +217,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 **Coverage:**
 - v1.3 requirements: 71 total
 - Verified: 40
-- Pending (gap closure): 31
+- Pending (gap closure): 31 (30 doc-stale from Ph 40-42 + 1 API-16 partial from Ph 43)
 - Unverified: 0
 - By category: API: 0/18, PROV: 5/14, CHAN: 12/12, INFRA: 3/7, SKILL: 5/5, NODE: 5/5, MIGR: 5/5, CLI: 5/5
 
@@ -228,4 +228,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-07 after v1.3 audit gap closure phases added (31 requirements reset to Pending)*
+*Last updated: 2026-03-07 after gap closure phases 43-45 added (API-16 reset to [ ], assigned to Phase 43)*
