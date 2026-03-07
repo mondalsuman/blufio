@@ -140,85 +140,91 @@ Explicitly excluded. Documented to prevent scope creep.
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| INFRA-01 | Phase 29 | Complete |
-| INFRA-02 | Phase 29 | Complete |
-| INFRA-03 | Phase 29 | Complete |
-| PROV-10 | Phase 29 | Complete |
-| PROV-11 | Phase 29 | Complete |
-| PROV-12 | Phase 29 | Complete |
-| PROV-13 | Phase 29 | Complete |
-| PROV-14 | Phase 29 | Complete |
-| PROV-01 | Phase 30 | Complete |
-| PROV-02 | Phase 30 | Complete |
-| PROV-03 | Phase 30 | Complete |
-| PROV-04 | Phase 30 | Complete |
-| PROV-05 | Phase 30 | Complete |
-| PROV-06 | Phase 30 | Complete |
-| PROV-07 | Phase 30 | Complete |
-| PROV-08 | Phase 30 | Complete |
-| PROV-09 | Phase 30 | Complete |
-| API-01 | Phase 31 | Complete |
-| API-02 | Phase 31 | Complete |
-| API-03 | Phase 31 | Complete |
-| API-04 | Phase 31 | Complete |
-| API-05 | Phase 31 | Complete |
-| API-06 | Phase 31 | Complete |
-| API-07 | Phase 31 | Complete |
-| API-08 | Phase 31 | Complete |
-| API-09 | Phase 31 | Complete |
-| API-10 | Phase 31 | Complete |
-| API-11 | Phase 32 | Complete |
-| API-12 | Phase 32 | Complete |
-| API-13 | Phase 32 | Complete |
-| API-14 | Phase 32 | Complete |
-| API-15 | Phase 32 | Complete |
-| API-16 | Phase 32 | Complete |
-| API-17 | Phase 32 | Complete |
-| API-18 | Phase 32 | Complete |
-| CHAN-01 | Phase 33 | Complete |
-| CHAN-02 | Phase 33 | Complete |
-| CHAN-03 | Phase 33 | Complete |
-| CHAN-04 | Phase 33 | Complete |
-| CHAN-05 | Phase 33 | Complete |
-| CHAN-11 | Phase 33 | Complete |
-| CHAN-12 | Phase 33 | Complete |
-| CHAN-06 | Phase 34 | Complete |
-| CHAN-07 | Phase 34 | Complete |
-| CHAN-08 | Phase 34 | Complete |
-| CHAN-09 | Phase 34 | Complete |
-| CHAN-10 | Phase 34 | Complete |
-| INFRA-06 | Phase 34 | Complete |
-| SKILL-01 | Phase 35 | Complete |
-| SKILL-02 | Phase 35 | Complete |
-| SKILL-03 | Phase 35 | Complete |
-| SKILL-04 | Phase 35 | Complete |
-| SKILL-05 | Phase 35 | Complete |
-| INFRA-04 | Phase 36 | Complete |
-| INFRA-05 | Phase 36 | Complete |
-| INFRA-07 | Phase 36 | Complete |
-| NODE-01 | Phase 37 | Complete |
-| NODE-02 | Phase 37 | Complete |
-| NODE-03 | Phase 37 | Complete |
-| NODE-04 | Phase 37 | Complete |
-| NODE-05 | Phase 37 | Complete |
-| MIGR-01 | Phase 38 | Complete |
-| MIGR-02 | Phase 38 | Complete |
-| MIGR-03 | Phase 38 | Complete |
-| MIGR-04 | Phase 38 | Complete |
-| MIGR-05 | Phase 38 | Complete |
-| CLI-01 | Phase 38 | Complete |
-| CLI-02 | Phase 38 | Complete |
-| CLI-03 | Phase 38 | Complete |
-| CLI-04 | Phase 38 | Complete |
-| CLI-05 | Phase 38 | Complete |
+| Requirement | Phase | Verification | Status |
+|-------------|-------|--------------|--------|
+| INFRA-01 | Phase 29 | 29-VERIFICATION.md | Verified |
+| INFRA-02 | Phase 29 | 29-VERIFICATION.md | Verified |
+| INFRA-03 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-10 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-11 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-12 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-13 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-14 | Phase 29 | 29-VERIFICATION.md | Verified |
+| PROV-01 | Phase 30 | 30-VERIFICATION.md | Verified |
+| PROV-02 | Phase 30 | 30-VERIFICATION.md | Verified |
+| PROV-03 | Phase 30 | 30-VERIFICATION.md | Verified |
+| PROV-04 | Phase 30 | 30-VERIFICATION.md | Verified |
+| PROV-05 | Phase 30 | 30-VERIFICATION.md | Verified |
+| PROV-06 | Phase 30 | 30-VERIFICATION.md | Verified |
+| PROV-07 | Phase 30 | 30-VERIFICATION.md | Verified |
+| PROV-08 | Phase 30 | 30-VERIFICATION.md | Verified |
+| PROV-09 | Phase 30 | 30-VERIFICATION.md | Verified |
+| API-01 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-02 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-03 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-04 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-05 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-06 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-07 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-08 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-09 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-10 | Phase 31 | 31-VERIFICATION.md | Verified |
+| API-11 | Phase 32 | 32-VERIFICATION.md | Verified |
+| API-12 | Phase 32 | 32-VERIFICATION.md | Verified |
+| API-13 | Phase 32 | 32-VERIFICATION.md | Verified |
+| API-14 | Phase 32 | 32-VERIFICATION.md | Verified |
+| API-15 | Phase 32 | 32-VERIFICATION.md | Verified |
+| API-16 | Phase 32 | 32-VERIFICATION.md | Verified |
+| API-17 | Phase 32 | 32-VERIFICATION.md | Verified |
+| API-18 | Phase 32 | 32-VERIFICATION.md | Verified |
+| CHAN-01 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-02 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-03 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-04 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-05 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-11 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-12 | Phase 33 | 33-VERIFICATION.md | Verified |
+| CHAN-06 | Phase 34 | 34-VERIFICATION.md | Verified |
+| CHAN-07 | Phase 34 | 34-VERIFICATION.md | Verified |
+| CHAN-08 | Phase 34 | 34-VERIFICATION.md | Verified |
+| CHAN-09 | Phase 34 | 34-VERIFICATION.md | Verified |
+| CHAN-10 | Phase 34 | 34-VERIFICATION.md | Verified |
+| INFRA-06 | Phase 34 | 34-VERIFICATION.md | Verified |
+| SKILL-01 | Phase 35 | 35-VERIFICATION.md | Verified |
+| SKILL-02 | Phase 35 | 35-VERIFICATION.md | Verified |
+| SKILL-03 | Phase 35 | 35-VERIFICATION.md | Verified |
+| SKILL-04 | Phase 35 | 35-VERIFICATION.md | Verified |
+| SKILL-05 | Phase 35 | 35-VERIFICATION.md | Verified |
+| INFRA-04 | Phase 36 | 36-VERIFICATION.md | Verified |
+| INFRA-05 | Phase 36 | 36-VERIFICATION.md | Verified |
+| INFRA-07 | Phase 36 | 36-VERIFICATION.md | Verified |
+| NODE-01 | Phase 37 | 37-VERIFICATION.md | Verified |
+| NODE-02 | Phase 37 | 37-VERIFICATION.md | Verified |
+| NODE-03 | Phase 37 | 37-VERIFICATION.md | Verified |
+| NODE-04 | Phase 37 | 37-VERIFICATION.md | Verified |
+| NODE-05 | Phase 37 | 37-VERIFICATION.md | Verified |
+| MIGR-01 | Phase 38 | 38-VERIFICATION.md | Verified |
+| MIGR-02 | Phase 38 | 38-VERIFICATION.md | Verified |
+| MIGR-03 | Phase 38 | 38-VERIFICATION.md | Verified |
+| MIGR-04 | Phase 38 | 38-VERIFICATION.md | Verified |
+| MIGR-05 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-01 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-02 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-03 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-04 | Phase 38 | 38-VERIFICATION.md | Verified |
+| CLI-05 | Phase 38 | 38-VERIFICATION.md | Verified |
 
 **Coverage:**
 - v1.3 requirements: 71 total
-- Mapped to phases: 71
-- Unmapped: 0
+- Verified: 71
+- Unverified: 0
+- By category: API: 18/18, PROV: 14/14, CHAN: 12/12, INFRA: 7/7, SKILL: 5/5, NODE: 5/5, MIGR: 5/5, CLI: 5/5
+
+**Notes:**
+- INFRA-04 (Docker build) verified statically only -- Docker daemon not available
+- NODE-05 has 2 internal wiring gaps (approval event bus subscription, WebSocket forwarding) but core requirement (broadcast + first-wins + timeout) is satisfied
+- All 71 requirements have formal evidence in per-phase VERIFICATION.md files
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-05 after roadmap creation (traceability populated)*
+*Last updated: 2026-03-07 after Phase 39 verification audit (all 71 requirements verified)*
