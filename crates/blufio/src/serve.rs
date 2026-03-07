@@ -711,6 +711,64 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         blufio_agent::sdnotify::notify_ready(&ready_status);
     }
 
+    // --- Bridge system ---
+    #[cfg(feature = "bridge")]
+    let _bridge_handles = if !config.bridge.is_empty() {
+        // Grab a reference to connected channels BEFORE mux is moved into AgentLoop.
+        let bridge_channels = mux.connected_channels_ref();
+
+        // Spawn the bridge loop (subscribes to event bus, routes messages).
+        let (mut bridge_rx, bridge_task) = blufio_bridge::spawn_bridge(
+            event_bus.clone(),
+            config.bridge.clone(),
+        );
+
+        // Spawn a consumer task that dispatches bridged messages to target channels.
+        let dispatch_task = tokio::spawn(async move {
+            while let Some(bridged_msg) = bridge_rx.recv().await {
+                // Find the target channel adapter by name.
+                let target = bridge_channels
+                    .iter()
+                    .find(|(name, _)| name == &bridged_msg.target_channel);
+
+                if let Some((_, adapter)) = target {
+                    let outbound = blufio_core::types::OutboundMessage {
+                        session_id: None,
+                        channel: bridged_msg.target_channel.clone(),
+                        content: bridged_msg.content,
+                        reply_to: None,
+                        parse_mode: None,
+                        metadata: Some(
+                            serde_json::json!({"is_bridged": true}).to_string(),
+                        ),
+                    };
+                    if let Err(e) = adapter.send(outbound).await {
+                        warn!(
+                            target_channel = %bridged_msg.target_channel,
+                            error = %e,
+                            "bridge dispatch failed"
+                        );
+                    }
+                } else {
+                    warn!(
+                        target_channel = %bridged_msg.target_channel,
+                        "bridge target channel not found in multiplexer"
+                    );
+                }
+            }
+            info!("bridge dispatch task completed");
+        });
+
+        info!(
+            groups = config.bridge.len(),
+            "cross-channel bridge started"
+        );
+        Some((bridge_task, dispatch_task))
+    } else {
+        info!("no bridge groups configured, bridge disabled");
+        None
+    };
+
     // Initialize model router.
     let router = Arc::new(ModelRouter::new(config.routing.clone()));
     if config.routing.enabled {
