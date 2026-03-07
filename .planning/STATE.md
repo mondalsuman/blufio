@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: unknown
-last_updated: "2026-03-07T00:00:00.000Z"
+last_updated: "2026-03-07T11:26:28Z"
 progress:
-  total_phases: 6
-  completed_phases: 7
-  total_plans: 21
-  completed_plans: 21
+  total_phases: 9
+  completed_phases: 8
+  total_plans: 27
+  completed_plans: 24
 ---
 
 # Project State
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 37 of 39 (Node System)
-Plan: 0 of 0 in current phase
-Status: Ready to plan
-Last activity: 2026-03-07 — Phase 36 complete (2/2 plans, Docker Image & Deployment with multi-stage Dockerfile, docker-compose, systemd template)
+Phase: 37 of 39 (Node System) -- COMPLETE
+Plan: 3 of 3 in current phase
+Status: Phase 37 complete
+Last activity: 2026-03-07 — Plan 37-03 complete (ApprovalRouter with first-wins broadcast and timeout-then-deny)
 
 Progress: [█████░░░░░] 50%
 
@@ -69,6 +69,9 @@ Progress: [█████░░░░░] 50%
 | 35 | 02 | ~20min | 2 | 1 |
 | 36 | 01 | ~10min | 2 | 6 |
 | 36 | 02 | ~5min | 2 | 2 |
+| 37 | 01 | ~12min | 2 | 11 |
+| 37 | 02 | ~11min | 2 | 7 |
+| 37 | 03 | ~2min | 2 | 3 |
 
 ## Accumulated Context
 
@@ -109,6 +112,12 @@ Key v1.3 constraints:
 - Single full-featured Docker image with all adapters compiled in; users enable/disable via config.toml
 - Docker health check uses `blufio healthcheck` subcommand (no shell/curl needed in distroless)
 - Multi-instance systemd template uses /etc/blufio/instances/%i/ for config, /var/lib/blufio/instances/%i/ for data
+- Node config structs defined in blufio-config to avoid circular dependency; re-exported from blufio-node/config.rs
+- Pairing fingerprint: SHA-256 of sorted concatenated public keys, formatted as XXXX-XXXX-XXXX-XXXX
+- tokio-rusqlite errors need explicit type annotation: |e: tokio_rusqlite::Error<rusqlite::Error>|
+- [Phase 37]: register_connection/remove_connection async because EventBus::publish is async
+- [Phase 37]: First-wins approval via DashMap::remove (atomic remove guarantees only one responder wins)
+- [Phase 37]: ConnectionManager gets optional approval_router via setter to avoid circular construction
 
 ### Pending Todos
 
@@ -127,5 +136,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Phase 36 complete, ready for Phase 37
+Stopped at: Completed 37-03-PLAN.md (Phase 37 complete)
 Resume file: .planning/ROADMAP.md

@@ -776,6 +776,37 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         None
     };
 
+    // --- Node system ---
+    #[cfg(feature = "node")]
+    if config.node.enabled {
+        info!(port = config.node.listen_port, "starting node system");
+
+        let node_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
+        let node_store = Arc::new(blufio_node::NodeStore::new(node_conn));
+        let node_event_bus = Arc::new(blufio_bus::EventBus::new(128));
+
+        let conn_manager = Arc::new(blufio_node::ConnectionManager::new(
+            node_store.clone(),
+            node_event_bus.clone(),
+            config.node.clone(),
+        ));
+
+        // Reconnect to all known peers.
+        conn_manager.reconnect_all().await;
+
+        // Start heartbeat monitor.
+        let heartbeat_monitor = blufio_node::HeartbeatMonitor::new(
+            conn_manager.clone(),
+            node_event_bus.clone(),
+            config.node.clone(),
+        );
+        tokio::spawn(async move {
+            heartbeat_monitor.run().await;
+        });
+
+        info!("node system started");
+    }
+
     // Spawn memory monitor background task.
     {
         let daemon_config = config.daemon.clone();

@@ -67,7 +67,7 @@
 - [x] **Phase 34: WhatsApp, Signal, IRC & Matrix Adapters** (5/5 plans) — completed 2026-03-06
 - [x] **Phase 35: Skill Registry & Code Signing** (2/2 plans) — completed 2026-03-06
 - [x] **Phase 36: Docker Image & Deployment** (2/2 plans) — completed 2026-03-07
-- [ ] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication
+- [x] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication (completed 2026-03-07)
 - [ ] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle
 - [ ] **Phase 39: Integration Verification** — End-to-end validation across all v1.3 features
 
@@ -295,7 +295,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 34. WhatsApp, Signal, IRC & Matrix Adapters | v1.3 | 5/5 | Complete | 2026-03-06 |
 | 35. Skill Registry & Code Signing | v1.3 | 2/2 | Complete | 2026-03-06 |
 | 36. Docker Image & Deployment | v1.3 | 0/2 | Not started | - |
-| 37. Node System | v1.3 | 0/3 | Not started | - |
+| 37. Node System | 3/3 | Complete   | 2026-03-07 | - |
 | 38. Migration & CLI Utilities | v1.3 | 0/2 | Not started | - |
 | 39. Integration Verification | v1.3 | 0/2 | Not started | - |
 

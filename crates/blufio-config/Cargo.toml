@@ -17,6 +17,7 @@ miette.workspace = true
 thiserror.workspace = true
 dirs.workspace = true
 strsim.workspace = true
+uuid = { workspace = true }
 
 [dev-dependencies]
 dirs.workspace = true

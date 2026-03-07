@@ -155,6 +155,37 @@ pub enum NodeEvent {
         /// Reason for disconnection.
         reason: String,
     },
+    /// A new node was successfully paired.
+    Paired {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Node identifier.
+        node_id: String,
+        /// Node display name.
+        name: String,
+    },
+    /// A pairing attempt failed.
+    PairingFailed {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Reason for failure.
+        reason: String,
+    },
+    /// A node has become stale (missed heartbeats).
+    Stale {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Node identifier.
+        node_id: String,
+        /// Seconds since last heartbeat.
+        last_seen_secs_ago: u64,
+    },
 }
 
 // --- Webhook events ---
