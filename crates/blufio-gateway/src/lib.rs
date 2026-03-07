@@ -109,6 +109,18 @@ pub struct GatewayChannel {
     /// Optional extra public routes (e.g., WhatsApp webhook routes).
     /// Set via [`set_extra_public_routes`] before calling `connect()`.
     extra_public_routes: Mutex<Option<axum::Router>>,
+    /// Optional API key store for key-based authentication (API-11..12).
+    /// Set via [`set_api_key_store`] before calling `connect()`.
+    api_key_store: Mutex<Option<Arc<crate::api_keys::store::ApiKeyStore>>>,
+    /// Optional webhook store for webhook management (API-13..14).
+    /// Set via [`set_webhook_store`] before calling `connect()`.
+    webhook_store: Mutex<Option<Arc<crate::webhooks::store::WebhookStore>>>,
+    /// Optional batch store for batch request handling (API-15..17).
+    /// Set via [`set_batch_store`] before calling `connect()`.
+    batch_store: Mutex<Option<Arc<crate::batch::store::BatchStore>>>,
+    /// Optional event bus for real-time event delivery (API-18).
+    /// Set via [`set_event_bus`] before calling `connect()`.
+    event_bus: Mutex<Option<Arc<blufio_bus::EventBus>>>,
 }
 
 impl GatewayChannel {
@@ -128,6 +140,10 @@ impl GatewayChannel {
             tools: Mutex::new(None),
             api_tools_allowlist: Vec::new(),
             extra_public_routes: Mutex::new(None),
+            api_key_store: Mutex::new(None),
+            webhook_store: Mutex::new(None),
+            batch_store: Mutex::new(None),
+            event_bus: Mutex::new(None),
         }
     }
 
@@ -183,6 +199,42 @@ impl GatewayChannel {
     /// receive 403 responses when invoked via the API.
     pub fn set_api_tools_allowlist(&mut self, allowlist: Vec<String>) {
         self.api_tools_allowlist = allowlist;
+    }
+
+    /// Sets the API key store for key-based authentication.
+    ///
+    /// Must be called before `connect()`. Enables API key management
+    /// endpoints and key-based request authentication.
+    pub async fn set_api_key_store(&self, store: Arc<crate::api_keys::store::ApiKeyStore>) {
+        let mut s = self.api_key_store.lock().await;
+        *s = Some(store);
+    }
+
+    /// Sets the webhook store for webhook management.
+    ///
+    /// Must be called before `connect()`. Enables webhook CRUD
+    /// endpoints and event-driven webhook delivery.
+    pub async fn set_webhook_store(&self, store: Arc<crate::webhooks::store::WebhookStore>) {
+        let mut s = self.webhook_store.lock().await;
+        *s = Some(store);
+    }
+
+    /// Sets the batch store for batch request handling.
+    ///
+    /// Must be called before `connect()`. Enables batch request
+    /// submission and status tracking endpoints.
+    pub async fn set_batch_store(&self, store: Arc<crate::batch::store::BatchStore>) {
+        let mut s = self.batch_store.lock().await;
+        *s = Some(store);
+    }
+
+    /// Sets the event bus for real-time event delivery.
+    ///
+    /// Must be called before `connect()`. Enables SSE event streaming
+    /// and webhook event dispatch.
+    pub async fn set_event_bus(&self, bus: Arc<blufio_bus::EventBus>) {
+        let mut s = self.event_bus.lock().await;
+        *s = Some(bus);
     }
 }
 
@@ -245,6 +297,10 @@ impl ChannelAdapter for GatewayChannel {
         let storage = self.storage.lock().await.take();
         let providers = self.providers.lock().await.take();
         let tools = self.tools.lock().await.take();
+        let api_key_store = self.api_key_store.lock().await.take();
+        let webhook_store = self.webhook_store.lock().await.take();
+        let batch_store = self.batch_store.lock().await.take();
+        let event_bus = self.event_bus.lock().await.take();
 
         let state = GatewayState {
             inbound_tx: self.inbound_tx.clone(),
@@ -253,7 +309,7 @@ impl ChannelAdapter for GatewayChannel {
             auth: AuthConfig {
                 bearer_token: self.config.bearer_token.clone(),
                 keypair_public_key: self.config.keypair_public_key,
-                key_store: None,
+                key_store: api_key_store,
             },
             health: HealthState {
                 start_time: std::time::Instant::now(),
@@ -264,9 +320,9 @@ impl ChannelAdapter for GatewayChannel {
             tools,
             api_tools_allowlist: self.api_tools_allowlist.clone(),
             max_batch_size: 100,
-            webhook_store: None,
-            batch_store: None,
-            event_bus: None,
+            webhook_store,
+            batch_store,
+            event_bus,
         };
 
         // Take the MCP router (if set) to pass to the server.
