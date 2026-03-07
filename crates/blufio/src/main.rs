@@ -22,6 +22,7 @@ mod healthcheck;
 mod mcp_server;
 mod migrate;
 mod privacy;
+mod providers;
 mod serve;
 mod shell;
 mod status;

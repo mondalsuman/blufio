@@ -9,36 +9,36 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### API Layer
 
-- [ ] **API-01**: User can send OpenAI-compatible chat completions via POST /v1/chat/completions
-- [ ] **API-02**: Chat completions endpoint supports SSE streaming responses
-- [ ] **API-03**: Chat completions endpoint supports tool calling (tools + tool_choice)
-- [ ] **API-04**: Chat completions endpoint supports response_format (JSON mode)
-- [ ] **API-05**: Chat completions responses include usage (token counts + cost)
-- [ ] **API-06**: OpenAI wire types are separate from internal ProviderResponse (finish_reason vs stop_reason)
-- [ ] **API-07**: User can send requests via OpenResponses POST /v1/responses
-- [ ] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
-- [ ] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
-- [ ] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
-- [ ] **API-11**: User can create scoped API keys via POST /v1/api-keys
-- [ ] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
-- [ ] **API-13**: API keys support per-key rate limiting (requests per minute)
-- [ ] **API-14**: API keys support expiration and revocation
-- [ ] **API-15**: User can register webhooks via POST /v1/webhooks
+- [x] **API-01**: User can send OpenAI-compatible chat completions via POST /v1/chat/completions
+- [x] **API-02**: Chat completions endpoint supports SSE streaming responses
+- [x] **API-03**: Chat completions endpoint supports tool calling (tools + tool_choice)
+- [x] **API-04**: Chat completions endpoint supports response_format (JSON mode)
+- [x] **API-05**: Chat completions responses include usage (token counts + cost)
+- [x] **API-06**: OpenAI wire types are separate from internal ProviderResponse (finish_reason vs stop_reason)
+- [x] **API-07**: User can send requests via OpenResponses POST /v1/responses
+- [x] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
+- [x] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
+- [x] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
+- [x] **API-11**: User can create scoped API keys via POST /v1/api-keys
+- [x] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
+- [x] **API-13**: API keys support per-key rate limiting (requests per minute)
+- [x] **API-14**: API keys support expiration and revocation
+- [x] **API-15**: User can register webhooks via POST /v1/webhooks
 - [ ] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
-- [ ] **API-17**: User can submit batch requests via POST /v1/batch
-- [ ] **API-18**: Batch results available with per-item success/error status
+- [x] **API-17**: User can submit batch requests via POST /v1/batch
+- [x] **API-18**: Batch results available with per-item success/error status
 
 ### Providers
 
-- [ ] **PROV-01**: OpenAI provider with streaming and tool calling
-- [ ] **PROV-02**: OpenAI provider supports vision and structured outputs
-- [ ] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
-- [ ] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
-- [ ] **PROV-05**: Ollama auto-discovers local models via /api/tags
-- [ ] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
-- [ ] **PROV-07**: OpenRouter supports provider fallback ordering
-- [ ] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
-- [ ] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
+- [x] **PROV-01**: OpenAI provider with streaming and tool calling
+- [x] **PROV-02**: OpenAI provider supports vision and structured outputs
+- [x] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
+- [x] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
+- [x] **PROV-05**: Ollama auto-discovers local models via /api/tags
+- [x] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
+- [x] **PROV-07**: OpenRouter supports provider fallback ordering
+- [x] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
+- [x] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
 - [x] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
 - [x] **PROV-11**: TTS provider trait (AudioProvider) defined with reference interface
 - [x] **PROV-12**: Transcription provider trait defined with reference interface
@@ -174,7 +174,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | API-13 | Phase 42 | - | Pending |
 | API-14 | Phase 42 | - | Pending |
 | API-15 | Phase 42 | - | Pending |
-| API-16 | Phase 42 | - | Pending |
+| API-16 | Phase 43 | - | Pending |
 | API-17 | Phase 42 | - | Pending |
 | API-18 | Phase 42 | - | Pending |
 | CHAN-01 | Phase 33 | 33-VERIFICATION.md | Verified |
@@ -217,7 +217,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 **Coverage:**
 - v1.3 requirements: 71 total
 - Verified: 40
-- Pending (gap closure): 31
+- Pending (gap closure): 31 (30 doc-stale from Ph 40-42 + 1 API-16 partial from Ph 43)
 - Unverified: 0
 - By category: API: 0/18, PROV: 5/14, CHAN: 12/12, INFRA: 3/7, SKILL: 5/5, NODE: 5/5, MIGR: 5/5, CLI: 5/5
 
@@ -228,4 +228,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-07 after v1.3 audit gap closure phases added (31 requirements reset to Pending)*
+*Last updated: 2026-03-07 after gap closure phases 43-45 added (API-16 reset to [ ], assigned to Phase 43)*

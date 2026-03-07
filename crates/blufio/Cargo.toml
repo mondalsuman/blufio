@@ -13,7 +13,7 @@ name = "blufio"
 path = "src/main.rs"
 
 [features]
-default = ["telegram", "discord", "slack", "whatsapp", "signal", "irc", "matrix", "bridge", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client", "node"]
+default = ["telegram", "discord", "slack", "whatsapp", "signal", "irc", "matrix", "bridge", "anthropic", "openai", "ollama", "openrouter", "gemini", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client", "node"]
 telegram = ["dep:blufio-telegram"]
 discord = ["dep:blufio-discord"]
 slack = ["dep:blufio-slack"]
@@ -23,6 +23,10 @@ irc = ["dep:blufio-irc"]
 matrix = ["dep:blufio-matrix"]
 bridge = ["dep:blufio-bridge"]
 anthropic = ["dep:blufio-anthropic"]
+openai = ["dep:blufio-openai"]
+ollama = ["dep:blufio-ollama"]
+openrouter = ["dep:blufio-openrouter"]
+gemini = ["dep:blufio-gemini"]
 sqlite = ["dep:blufio-storage"]
 onnx = []
 prometheus = ["dep:blufio-prometheus", "blufio-agent/prometheus"]
@@ -57,6 +61,10 @@ blufio-matrix = { path = "../blufio-matrix", optional = true }
 blufio-bridge = { path = "../blufio-bridge", optional = true }
 blufio-bus = { path = "../blufio-bus" }
 blufio-anthropic = { path = "../blufio-anthropic", optional = true }
+blufio-openai = { path = "../blufio-openai", optional = true }
+blufio-ollama = { path = "../blufio-ollama", optional = true }
+blufio-openrouter = { path = "../blufio-openrouter", optional = true }
+blufio-gemini = { path = "../blufio-gemini", optional = true }
 blufio-memory = { path = "../blufio-memory" }
 blufio-gateway = { path = "../blufio-gateway", optional = true }
 blufio-prometheus = { path = "../blufio-prometheus", optional = true }
@@ -93,6 +101,7 @@ tempfile = { workspace = true }
 semver.workspace = true
 sysinfo.workspace = true
 wasmtime.workspace = true
+async-trait.workspace = true
 flate2 = "1"
 tar = "0.4"
 

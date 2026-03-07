@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
-status: executing
-stopped_at: Completed 40-02-PLAN.md
-last_updated: "2026-03-07T19:55:51.093Z"
-last_activity: 2026-03-07 -- Bridge dispatch wired in serve.rs, Phase 40 complete
+status: completed
+stopped_at: Completed 42-02-PLAN.md
+last_updated: "2026-03-07T21:49:12.705Z"
+last_activity: 2026-03-07 -- Phase 42 Plan 02 complete, webhook delivery spawned
 progress:
   total_phases: 14
-  completed_phases: 11
-  total_plans: 38
-  completed_plans: 36
-  percent: 92
+  completed_phases: 13
+  total_plans: 42
+  completed_plans: 40
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion -- VERIFIED AND COMPLETE
+**Current focus:** Phase 42 -- Wire Gateway Stores (gap closure)
 
 ## Current Position
 
-Phase: 40 of 42 (Wire Global EventBus Bridge)
-Plan: 2 of 2 in current phase -- COMPLETE
-Status: executing
-Last activity: 2026-03-07 -- Bridge dispatch wired in serve.rs, Phase 40 complete
+Phase: 42 of 42 (Wire Gateway Stores)
+Plan: 2 of 2 complete
+Status: Complete
+Last activity: 2026-03-07 -- Phase 42 Plan 02 complete, webhook delivery spawned
 
-Progress: [█████████░] 92%
+Progress: [████████████████████] 42/42 plans (100%)
 
 ## Performance Metrics
 
@@ -91,6 +91,10 @@ Progress: [█████████░] 92%
 - Average: ~12 plans/day
 | Phase 40 P01 | 7min | 2 tasks | 3 files |
 | Phase 40 P02 | 7min | 2 tasks | 1 files |
+| Phase 41 P01 | 7min | 2 tasks | 3 files |
+| Phase 41 P02 | 5min | 2 tasks | 2 files |
+| Phase 42 P01 | 3min | 2 tasks | 2 files |
+| Phase 42 P02 | 2min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -156,6 +160,13 @@ Key v1.3 constraints:
 - [Phase 40]: Global EventBus capacity 1024 (up from node-scoped 128) since it handles all event types
 - [Phase 40]: blufio-bus added as dependency to blufio-agent (was only in blufio main crate)
 - [Phase 40]: Bridge dispatch calls adapter.send() directly (outbound-only) to prevent infinite loops
+- [Phase 41]: Ollama provider stored as separate Arc<OllamaProvider> field to avoid Any downcast for list_local_models()
+- [Phase 41]: All four new provider features (openai, ollama, openrouter, gemini) added to default feature set
+- [Phase 41]: Provider registry init gated on config.gateway.enabled (no unnecessary API key validation)
+- [Phase 41]: set_api_tools_allowlist uses &mut self, gateway binding changed to `let mut gateway`
+- [Phase 42]: Dedicated tokio_rusqlite connection for gateway stores (separate from main storage connection)
+- [Phase 42]: webhook_store cloned before setter call to preserve Arc for Plan 02 webhook delivery
+- [Phase 42]: webhook_store moved (not cloned) into delivery task since setter already consumed its own clone
 
 ### Pending Todos
 
@@ -173,6 +184,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T19:51:43.037Z
-Stopped at: Completed 40-02-PLAN.md
+Last session: 2026-03-07T21:45:38.994Z
+Stopped at: Completed 42-02-PLAN.md
 Resume file: None
