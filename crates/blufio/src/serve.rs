@@ -779,13 +779,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // --- Node system ---
     #[cfg(feature = "node")]
     if config.node.enabled {
-        info!(
-            port = config.node.listen_port,
-            "starting node system"
-        );
+        info!(port = config.node.listen_port, "starting node system");
 
-        let node_conn =
-            blufio_storage::open_connection(&config.storage.database_path).await?;
+        let node_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
         let node_store = Arc::new(blufio_node::NodeStore::new(node_conn));
         let node_event_bus = Arc::new(blufio_bus::EventBus::new(128));
 

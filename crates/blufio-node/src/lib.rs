@@ -22,8 +22,8 @@ pub use fleet::{
     create_group, delete_group, exec_on_nodes, format_groups_table, format_nodes_json,
     format_nodes_table, list_groups, list_nodes,
 };
-pub use heartbeat::{collect_metrics, HeartbeatMonitor, SystemMetrics};
-pub use pairing::{compute_pairing_fingerprint, PairingManager};
+pub use heartbeat::{HeartbeatMonitor, SystemMetrics, collect_metrics};
+pub use pairing::{PairingManager, compute_pairing_fingerprint};
 pub use store::NodeStore;
 pub use types::*;
 

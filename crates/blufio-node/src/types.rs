@@ -139,10 +139,7 @@ impl PairingToken {
 pub enum NodeMessage {
     // --- Pairing ---
     /// Initiator sends token and public key.
-    PairRequest {
-        token: String,
-        public_key: String,
-    },
+    PairRequest { token: String, public_key: String },
     /// Responder sends public key and signature over challenge.
     PairResponse {
         public_key: String,

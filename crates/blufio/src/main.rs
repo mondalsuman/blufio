@@ -575,11 +575,8 @@ async fn handle_nodes_command(
     let conn = blufio_storage::open_connection(&config.storage.database_path).await?;
     let store = Arc::new(blufio_node::NodeStore::new(conn));
     let event_bus = Arc::new(blufio_bus::EventBus::new(128));
-    let conn_manager = blufio_node::ConnectionManager::new(
-        store.clone(),
-        event_bus.clone(),
-        config.node.clone(),
-    );
+    let conn_manager =
+        blufio_node::ConnectionManager::new(store.clone(), event_bus.clone(), config.node.clone());
 
     match action {
         NodesCommands::List { json } => {
@@ -626,7 +623,9 @@ async fn handle_nodes_command(
                 std::process::exit(1);
             }
         }
-        NodesCommands::Group { action: group_action } => match group_action {
+        NodesCommands::Group {
+            action: group_action,
+        } => match group_action {
             NodeGroupCommands::Create { name, nodes } => {
                 blufio_node::create_group(&store, &name, &nodes)
                     .await

@@ -73,7 +73,10 @@ impl ApprovalRouter {
 
     /// Check if an action type requires broadcast approval.
     pub fn requires_approval(&self, action_type: &str) -> bool {
-        self.config.broadcast_actions.iter().any(|a| a == action_type)
+        self.config
+            .broadcast_actions
+            .iter()
+            .any(|a| a == action_type)
     }
 
     /// Request approval from all connected operator devices.

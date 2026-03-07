@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blufio_bus::{
-    events::{new_event_id, now_timestamp, BusEvent, NodeEvent},
     EventBus,
+    events::{BusEvent, NodeEvent, new_event_id, now_timestamp},
 };
 use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
@@ -186,11 +186,7 @@ impl ConnectionManager {
     }
 
     /// Register an accepted incoming connection (from server-side WebSocket handler).
-    pub async fn register_connection(
-        &self,
-        node_id: NodeId,
-        sender: mpsc::Sender<NodeMessage>,
-    ) {
+    pub async fn register_connection(&self, node_id: NodeId, sender: mpsc::Sender<NodeMessage>) {
         self.connections.insert(node_id.clone(), sender);
         self.node_states.insert(
             node_id.clone(),
@@ -316,9 +312,7 @@ async fn reconnect_with_backoff(
                                     uptime_secs,
                                 },
                             );
-                            let _ = store
-                                .update_last_seen(node_id, &now_timestamp())
-                                .await;
+                            let _ = store.update_last_seen(node_id, &now_timestamp()).await;
                         }
                         NodeMessage::ApprovalResponse {
                             ref request_id,

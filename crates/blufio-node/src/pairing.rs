@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use blufio_auth_keypair::DeviceKeypair;
 use blufio_bus::{
-    events::{new_event_id, now_timestamp, BusEvent, NodeEvent},
     EventBus,
+    events::{BusEvent, NodeEvent, new_event_id, now_timestamp},
 };
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use sha2::{Digest, Sha256};
@@ -106,11 +106,9 @@ impl PairingManager {
         let challenge = build_challenge(&self.keypair.public_bytes(), peer_public_bytes);
         let signature = Signature::from_bytes(peer_signature_bytes);
 
-        peer_public
-            .verify(&challenge, &signature)
-            .map_err(|e| {
-                crate::NodeError::Auth(format!("peer signature verification failed: {e}"))
-            })?;
+        peer_public.verify(&challenge, &signature).map_err(|e| {
+            crate::NodeError::Auth(format!("peer signature verification failed: {e}"))
+        })?;
 
         debug!("peer signature verified successfully");
         Ok(peer_public)
@@ -235,8 +233,8 @@ pub fn compute_pairing_fingerprint(key_a: &[u8; 32], key_b: &[u8; 32]) -> String
 /// Uses Dense1x2 (Unicode half-block characters) for compact rendering
 /// with inverted colors for readability on dark terminals.
 pub fn render_pairing_qr(token: &str, host: &str, port: u16) -> String {
-    use qrcode::render::unicode::Dense1x2;
     use qrcode::QrCode;
+    use qrcode::render::unicode::Dense1x2;
 
     let uri = format!("blufio-pair://{}:{}?token={}", host, port, token);
     match QrCode::new(uri.as_bytes()) {
