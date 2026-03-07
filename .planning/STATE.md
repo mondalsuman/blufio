@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: executing
-stopped_at: Completed 40-01-PLAN.md
-last_updated: "2026-03-07T19:41:20.132Z"
-last_activity: 2026-03-07 -- Global EventBus wired to ChannelMultiplexer and node system
+stopped_at: Completed 40-02-PLAN.md
+last_updated: "2026-03-07T19:51:43.042Z"
+last_activity: 2026-03-07 -- Bridge dispatch wired in serve.rs, Phase 40 complete
 progress:
   total_phases: 14
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 38
-  completed_plans: 35
+  completed_plans: 36
   percent: 92
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 ## Current Position
 
 Phase: 40 of 42 (Wire Global EventBus Bridge)
-Plan: 1 of 2 in current phase -- COMPLETE
+Plan: 2 of 2 in current phase -- COMPLETE
 Status: executing
-Last activity: 2026-03-07 -- Global EventBus wired to ChannelMultiplexer and node system
+Last activity: 2026-03-07 -- Bridge dispatch wired in serve.rs, Phase 40 complete
 
 Progress: [█████████░] 92%
 
@@ -90,6 +90,7 @@ Progress: [█████████░] 92%
 - Total execution time: ~3 days
 - Average: ~12 plans/day
 | Phase 40 P01 | 7min | 2 tasks | 3 files |
+| Phase 40 P02 | 7min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,7 @@ Key v1.3 constraints:
 - [Phase 39]: v1.3 milestone declared READY TO SHIP -- 71/71 requirements verified, 4/4 integration flows passing, 2 Phase 37 internal wiring gaps are non-blocking
 - [Phase 40]: Global EventBus capacity 1024 (up from node-scoped 128) since it handles all event types
 - [Phase 40]: blufio-bus added as dependency to blufio-agent (was only in blufio main crate)
+- [Phase 40]: Bridge dispatch calls adapter.send() directly (outbound-only) to prevent infinite loops
 
 ### Pending Todos
 
@@ -171,6 +173,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T19:41:20.127Z
-Stopped at: Completed 40-01-PLAN.md
+Last session: 2026-03-07T19:51:43.037Z
+Stopped at: Completed 40-02-PLAN.md
 Resume file: None
