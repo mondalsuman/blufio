@@ -46,7 +46,11 @@ impl ConcreteProviderRegistry {
         {
             let is_default = default_provider == "anthropic";
             // Anthropic config-required: api_key in config or ANTHROPIC_API_KEY env var
-            let has_config = config.anthropic.api_key.as_ref().is_some_and(|k| !k.is_empty())
+            let has_config = config
+                .anthropic
+                .api_key
+                .as_ref()
+                .is_some_and(|k| !k.is_empty())
                 || std::env::var("ANTHROPIC_API_KEY").is_ok();
 
             if has_config || is_default {
@@ -201,6 +205,7 @@ impl ConcreteProviderRegistry {
     }
 
     /// Creates a registry from pre-built providers (for testing without API keys).
+    #[allow(dead_code)]
     pub fn from_providers(
         providers: HashMap<String, Arc<dyn ProviderAdapter + Send + Sync>>,
         default: String,
@@ -217,6 +222,7 @@ impl ConcreteProviderRegistry {
     ///
     /// - `"openai/gpt-4o"` -> `("openai", "gpt-4o")`
     /// - `"gpt-4o"` -> `(default_provider, "gpt-4o")`
+    #[allow(dead_code)]
     pub fn resolve_model<'a>(&'a self, model: &'a str) -> (&'a str, &'a str) {
         if let Some(idx) = model.find('/') {
             let (provider, rest) = model.split_at(idx);
@@ -444,17 +450,21 @@ mod tests {
         let models = reg.list_models(None).await.unwrap();
 
         let openai_models: Vec<_> = models.iter().filter(|m| m.owned_by == "openai").collect();
-        let anthropic_models: Vec<_> =
-            models.iter().filter(|m| m.owned_by == "anthropic").collect();
+        let anthropic_models: Vec<_> = models
+            .iter()
+            .filter(|m| m.owned_by == "anthropic")
+            .collect();
 
         assert_eq!(openai_models.len(), 6);
         assert_eq!(anthropic_models.len(), 3);
 
         // Check format: "provider/model"
         assert!(openai_models.iter().any(|m| m.id == "openai/gpt-4o"));
-        assert!(anthropic_models
-            .iter()
-            .any(|m| m.id == "anthropic/claude-sonnet-4-20250514"));
+        assert!(
+            anthropic_models
+                .iter()
+                .any(|m| m.id == "anthropic/claude-sonnet-4-20250514")
+        );
     }
 
     #[tokio::test]

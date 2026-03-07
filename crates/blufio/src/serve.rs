@@ -57,9 +57,9 @@ use blufio_matrix::MatrixChannel;
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
 #[cfg(feature = "gateway")]
-use blufio_core::ProviderRegistry;
-#[cfg(feature = "gateway")]
 use crate::providers::ConcreteProviderRegistry;
+#[cfg(feature = "gateway")]
+use blufio_core::ProviderRegistry;
 
 use blufio_memory::{
     HybridRetriever, MemoryExtractor, MemoryProvider, MemoryStore, ModelManager, OnnxEmbedder,
