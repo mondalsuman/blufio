@@ -35,6 +35,8 @@ pub struct ConnectionManager {
     event_bus: Arc<EventBus>,
     /// Node configuration.
     config: NodeConfig,
+    /// Optional approval router for handling incoming approval responses.
+    approval_router: Option<Arc<crate::approval::ApprovalRouter>>,
 }
 
 /// Runtime state for a connected node (not persisted).
@@ -57,6 +59,7 @@ impl ConnectionManager {
             store,
             event_bus,
             config,
+            approval_router: None,
         }
     }
 
@@ -68,6 +71,11 @@ impl ConnectionManager {
     /// Get the runtime node states map.
     pub fn node_states(&self) -> &Arc<DashMap<NodeId, NodeRuntimeState>> {
         &self.node_states
+    }
+
+    /// Set the approval router for handling incoming approval responses.
+    pub fn set_approval_router(&mut self, router: Arc<crate::approval::ApprovalRouter>) {
+        self.approval_router = Some(router);
     }
 
     /// Connect to all known paired nodes on startup.
@@ -311,6 +319,32 @@ async fn reconnect_with_backoff(
                             let _ = store
                                 .update_last_seen(node_id, &now_timestamp())
                                 .await;
+                        }
+                        NodeMessage::ApprovalResponse {
+                            ref request_id,
+                            approved,
+                            ref responder_node,
+                        } => {
+                            debug!(
+                                request_id = %request_id,
+                                approved = approved,
+                                responder = %responder_node,
+                                "received approval response from peer"
+                            );
+                            // Approval handling is done by the ApprovalRouter which is
+                            // wired separately. The connection manager just logs receipt.
+                            // In a full implementation, the ApprovalRouter would subscribe
+                            // to incoming messages or be passed as a dependency.
+                        }
+                        NodeMessage::ApprovalHandled {
+                            ref request_id,
+                            ref handled_by,
+                        } => {
+                            info!(
+                                request_id = %request_id,
+                                handled_by = %handled_by,
+                                "approval already handled by another device"
+                            );
                         }
                         _ => {
                             debug!(node_id = %peer.node_id, msg_type = ?std::mem::discriminant(&msg), "received node message");

@@ -7,6 +7,7 @@
 //! device mesh, share sessions, and coordinate approvals. Pairing uses
 //! Ed25519 mutual authentication with QR code or shared token exchange.
 
+pub mod approval;
 pub mod config;
 pub mod connection;
 pub mod fleet;
@@ -15,6 +16,7 @@ pub mod pairing;
 pub mod store;
 pub mod types;
 
+pub use approval::{ApprovalOutcome, ApprovalRouter};
 pub use connection::{ConnectionManager, NodeRuntimeState};
 pub use fleet::{
     create_group, delete_group, exec_on_nodes, format_groups_table, format_nodes_json,
