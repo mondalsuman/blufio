@@ -151,18 +151,17 @@ impl SkillStore {
         })?;
 
         // TOFU continuity: if previously signed, publisher must match.
-        if let Some(ref existing_pub) = existing.publisher_id {
-            if let Some(new_pub) = publisher_id {
-                if existing_pub != new_pub {
-                    return Err(BlufioError::Security(format!(
-                        "skill '{}': publisher key changed (expected {}, got {}). \
-                         Remove and re-install to accept a new publisher.",
-                        name,
-                        &existing_pub[..12.min(existing_pub.len())],
-                        &new_pub[..12.min(new_pub.len())],
-                    )));
-                }
-            }
+        if let Some(ref existing_pub) = existing.publisher_id
+            && let Some(new_pub) = publisher_id
+            && existing_pub != new_pub
+        {
+            return Err(BlufioError::Security(format!(
+                "skill '{}': publisher key changed (expected {}, got {}). \
+                 Remove and re-install to accept a new publisher.",
+                name,
+                &existing_pub[..12.min(existing_pub.len())],
+                &new_pub[..12.min(new_pub.len())],
+            )));
         }
 
         self.install(
