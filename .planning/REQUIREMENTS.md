@@ -39,11 +39,11 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 - [x] **PROV-07**: OpenRouter supports provider fallback ordering
 - [x] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
 - [x] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
-- [ ] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
-- [ ] **PROV-11**: TTS provider trait (AudioProvider) defined with reference interface
-- [ ] **PROV-12**: Transcription provider trait defined with reference interface
-- [ ] **PROV-13**: Image generation provider trait (ImageProvider) defined with reference interface
-- [ ] **PROV-14**: Custom provider via TOML config (base_url + wire_protocol + api_key_env)
+- [x] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
+- [x] **PROV-11**: TTS provider trait (AudioProvider) defined with reference interface
+- [x] **PROV-12**: Transcription provider trait defined with reference interface
+- [x] **PROV-13**: Image generation provider trait (ImageProvider) defined with reference interface
+- [x] **PROV-14**: Custom provider via TOML config (base_url + wire_protocol + api_key_env)
 
 ### Channels
 
@@ -62,9 +62,9 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: Internal event bus using tokio broadcast with lag handling
-- [ ] **INFRA-02**: Event bus publishes typed events (session, channel, skill, node, webhook, batch)
-- [ ] **INFRA-03**: Event bus uses mpsc for reliable subscribers (webhook delivery)
+- [x] **INFRA-01**: Internal event bus using tokio broadcast with lag handling
+- [x] **INFRA-02**: Event bus publishes typed events (session, channel, skill, node, webhook, batch)
+- [x] **INFRA-03**: Event bus uses mpsc for reliable subscribers (webhook delivery)
 - [x] **INFRA-04**: Docker multi-stage build producing minimal image (distroless or scratch)
 - [x] **INFRA-05**: docker-compose.yml with volume mounts, env injection, and health check
 - [x] **INFRA-06**: Cross-channel bridging with configurable bridge rules in TOML
@@ -142,14 +142,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 29 | Pending |
-| INFRA-02 | Phase 29 | Pending |
-| INFRA-03 | Phase 29 | Pending |
-| PROV-10 | Phase 29 | Pending |
-| PROV-11 | Phase 29 | Pending |
-| PROV-12 | Phase 29 | Pending |
-| PROV-13 | Phase 29 | Pending |
-| PROV-14 | Phase 29 | Pending |
+| INFRA-01 | Phase 29 | Complete |
+| INFRA-02 | Phase 29 | Complete |
+| INFRA-03 | Phase 29 | Complete |
+| PROV-10 | Phase 29 | Complete |
+| PROV-11 | Phase 29 | Complete |
+| PROV-12 | Phase 29 | Complete |
+| PROV-13 | Phase 29 | Complete |
+| PROV-14 | Phase 29 | Complete |
 | PROV-01 | Phase 30 | Complete |
 | PROV-02 | Phase 30 | Complete |
 | PROV-03 | Phase 30 | Complete |
