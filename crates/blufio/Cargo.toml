@@ -13,7 +13,7 @@ name = "blufio"
 path = "src/main.rs"
 
 [features]
-default = ["telegram", "discord", "slack", "whatsapp", "signal", "irc", "matrix", "bridge", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client"]
+default = ["telegram", "discord", "slack", "whatsapp", "signal", "irc", "matrix", "bridge", "anthropic", "sqlite", "onnx", "prometheus", "keypair", "gateway", "mcp-server", "mcp-client", "node"]
 telegram = ["dep:blufio-telegram"]
 discord = ["dep:blufio-discord"]
 slack = ["dep:blufio-slack"]
@@ -30,6 +30,7 @@ keypair = ["dep:blufio-auth-keypair"]
 gateway = ["dep:blufio-gateway"]
 mcp-server = ["dep:blufio-mcp-server"]
 mcp-client = ["dep:blufio-mcp-client"]
+node = ["dep:blufio-node"]
 
 [dependencies]
 blufio-core = { path = "../blufio-core" }
@@ -62,6 +63,7 @@ blufio-prometheus = { path = "../blufio-prometheus", optional = true }
 blufio-auth-keypair = { path = "../blufio-auth-keypair", optional = true }
 blufio-mcp-server = { path = "../blufio-mcp-server", optional = true }
 blufio-mcp-client = { path = "../blufio-mcp-client", optional = true }
+blufio-node = { path = "../blufio-node", optional = true }
 
 tokio-rusqlite.workspace = true
 clap.workspace = true
