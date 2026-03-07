@@ -81,6 +81,10 @@ pub enum BlufioError {
     #[error("update error: {0}")]
     Update(String),
 
+    /// Migration errors (data import, format conversion, source detection).
+    #[error("migration error: {0}")]
+    Migration(String),
+
     /// Internal or unexpected errors.
     #[error("internal error: {0}")]
     Internal(String),
