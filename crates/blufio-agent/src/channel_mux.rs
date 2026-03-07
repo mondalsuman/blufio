@@ -86,7 +86,9 @@ impl ChannelMultiplexer {
     ///
     /// This is safe to call after `connect()`. Before `connect()`, it returns
     /// an empty vec wrapped in an `Arc`.
-    pub fn connected_channels_ref(&self) -> Arc<Vec<(String, Arc<dyn ChannelAdapter + Send + Sync>)>> {
+    pub fn connected_channels_ref(
+        &self,
+    ) -> Arc<Vec<(String, Arc<dyn ChannelAdapter + Send + Sync>)>> {
         Arc::clone(&self.connected_channels)
     }
 }
@@ -219,23 +221,22 @@ impl ChannelAdapter for ChannelMultiplexer {
                             msg.channel = channel_name.clone();
 
                             // Publish to event bus for bridging/webhooks.
-                            if let Some(ref bus) = event_bus_clone {
-                                if let blufio_core::types::MessageContent::Text(ref text) =
+                            if let Some(ref bus) = event_bus_clone
+                                && let blufio_core::types::MessageContent::Text(ref text) =
                                     msg.content
-                                {
-                                    bus.publish(blufio_bus::BusEvent::Channel(
-                                        blufio_bus::ChannelEvent::MessageReceived {
-                                            event_id: blufio_bus::new_event_id(),
-                                            timestamp: blufio_bus::now_timestamp(),
-                                            channel: channel_name.clone(),
-                                            sender_id: msg.sender_id.clone(),
-                                            content: Some(text.clone()),
-                                            sender_name: None,
-                                            is_bridged: false,
-                                        },
-                                    ))
-                                    .await;
-                                }
+                            {
+                                bus.publish(blufio_bus::BusEvent::Channel(
+                                    blufio_bus::ChannelEvent::MessageReceived {
+                                        event_id: blufio_bus::new_event_id(),
+                                        timestamp: blufio_bus::now_timestamp(),
+                                        channel: channel_name.clone(),
+                                        sender_id: msg.sender_id.clone(),
+                                        content: Some(text.clone()),
+                                        sender_name: None,
+                                        is_bridged: false,
+                                    },
+                                ))
+                                .await;
                             }
 
                             if tx.send(msg).await.is_err() {

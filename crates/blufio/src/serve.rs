@@ -718,10 +718,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         let bridge_channels = mux.connected_channels_ref();
 
         // Spawn the bridge loop (subscribes to event bus, routes messages).
-        let (mut bridge_rx, bridge_task) = blufio_bridge::spawn_bridge(
-            event_bus.clone(),
-            config.bridge.clone(),
-        );
+        let (mut bridge_rx, bridge_task) =
+            blufio_bridge::spawn_bridge(event_bus.clone(), config.bridge.clone());
 
         // Spawn a consumer task that dispatches bridged messages to target channels.
         let dispatch_task = tokio::spawn(async move {
@@ -738,9 +736,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                         content: bridged_msg.content,
                         reply_to: None,
                         parse_mode: None,
-                        metadata: Some(
-                            serde_json::json!({"is_bridged": true}).to_string(),
-                        ),
+                        metadata: Some(serde_json::json!({"is_bridged": true}).to_string()),
                     };
                     if let Err(e) = adapter.send(outbound).await {
                         warn!(
@@ -759,10 +755,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             info!("bridge dispatch task completed");
         });
 
-        info!(
-            groups = config.bridge.len(),
-            "cross-channel bridge started"
-        );
+        info!(groups = config.bridge.len(), "cross-channel bridge started");
         Some((bridge_task, dispatch_task))
     } else {
         info!("no bridge groups configured, bridge disabled");
