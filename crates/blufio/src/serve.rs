@@ -656,8 +656,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
             // Open a dedicated connection for gateway stores (API-11..18).
             // V7 migration tables already created by SqliteStorage::initialize().
-            let store_conn =
-                blufio_storage::open_connection(&config.storage.database_path).await?;
+            let store_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
 
             let api_key_store = Arc::new(blufio_gateway::api_keys::store::ApiKeyStore::new(
                 store_conn.clone(),
@@ -665,8 +664,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             let webhook_store = Arc::new(blufio_gateway::webhooks::store::WebhookStore::new(
                 store_conn.clone(),
             ));
-            let batch_store =
-                Arc::new(blufio_gateway::batch::store::BatchStore::new(store_conn));
+            let batch_store = Arc::new(blufio_gateway::batch::store::BatchStore::new(store_conn));
 
             gateway.set_api_key_store(api_key_store).await;
             gateway.set_webhook_store(webhook_store.clone()).await;
