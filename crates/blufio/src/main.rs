@@ -18,6 +18,7 @@ mod encrypt;
 mod healthcheck;
 #[cfg(feature = "mcp-server")]
 mod mcp_server;
+mod migrate;
 mod serve;
 mod shell;
 mod status;
@@ -108,6 +109,11 @@ enum Commands {
         #[arg(long)]
         yes: bool,
     },
+    /// Migrate data from another AI agent platform.
+    Migrate {
+        #[command(subcommand)]
+        action: MigrateCommands,
+    },
     /// Run a health check (for Docker HEALTHCHECK). Exits 0 if healthy, 1 if not.
     Healthcheck,
     /// Manage paired device nodes.
@@ -127,6 +133,30 @@ enum UpdateCommands {
     Rollback,
 }
 
+/// Migration subcommands.
+#[derive(Subcommand, Debug)]
+enum MigrateCommands {
+    /// Import data from OpenClaw.
+    #[command(name = "--from-openclaw")]
+    FromOpenclaw {
+        /// Path to OpenClaw data directory (auto-detected if omitted).
+        #[arg(long)]
+        data_dir: Option<String>,
+        /// Output as structured JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Preview what would be imported (dry run).
+    Preview {
+        /// Path to OpenClaw data directory.
+        #[arg(long)]
+        data_dir: Option<String>,
+        /// Output as structured JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 /// Config management subcommands.
 #[derive(Subcommand, Debug)]
 enum ConfigCommands {
@@ -144,6 +174,14 @@ enum ConfigCommands {
     },
     /// Validate the configuration file and report any errors.
     Validate,
+    /// Translate an OpenClaw JSON config to Blufio TOML.
+    Translate {
+        /// Path to OpenClaw JSON config file.
+        input: String,
+        /// Output file path (prints to stdout if omitted).
+        #[arg(long)]
+        output: Option<String>,
+    },
 }
 
 /// Skill management subcommands.
@@ -379,6 +417,12 @@ async fn main() {
                     std::process::exit(1);
                 }
             },
+            Some(ConfigCommands::Translate { input, output }) => {
+                if let Err(e) = migrate::run_config_translate(&input, output.as_deref()) {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
             None => {
                 println!("blufio config: use --help for available config commands");
             }
@@ -446,6 +490,22 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::Migrate { action }) => match action {
+            MigrateCommands::FromOpenclaw { data_dir, json } => {
+                if let Err(e) =
+                    migrate::run_migrate(&config, data_dir.as_deref(), json).await
+                {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+            MigrateCommands::Preview { data_dir, json } => {
+                if let Err(e) = migrate::run_migrate_preview(data_dir.as_deref(), json).await {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        },
         Some(Commands::Healthcheck) => {
             if let Err(_e) = healthcheck::run_healthcheck(&config).await {
                 std::process::exit(1);
