@@ -56,6 +56,11 @@ use blufio_matrix::MatrixChannel;
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
+#[cfg(feature = "gateway")]
+use blufio_core::ProviderRegistry;
+#[cfg(feature = "gateway")]
+use crate::providers::ConcreteProviderRegistry;
+
 use blufio_memory::{
     HybridRetriever, MemoryExtractor, MemoryProvider, MemoryStore, ModelManager, OnnxEmbedder,
 };
@@ -572,6 +577,26 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     #[cfg(not(feature = "prometheus"))]
     let prometheus_render: Option<Arc<dyn Fn() -> String + Send + Sync>> = None;
 
+    // Initialize provider registry for gateway API endpoints (API-01..API-10).
+    #[cfg(feature = "gateway")]
+    let provider_registry = if config.gateway.enabled {
+        match ConcreteProviderRegistry::from_config(&config).await {
+            Ok(reg) => {
+                info!(
+                    default = reg.default_provider(),
+                    "provider registry initialized"
+                );
+                Some(Arc::new(reg) as Arc<dyn blufio_core::ProviderRegistry + Send + Sync>)
+            }
+            Err(e) => {
+                error!(error = %e, "failed to initialize provider registry");
+                return Err(e);
+            }
+        }
+    } else {
+        None
+    };
+
     // Add Gateway channel (if enabled and compiled in).
     #[cfg(feature = "gateway")]
     {
@@ -607,10 +632,27 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 prometheus_render: prometheus_render.clone(),
                 mcp_max_connections: config.mcp.max_connections,
             };
-            let gateway = GatewayChannel::new(gateway_config);
+            let mut gateway = GatewayChannel::new(gateway_config);
 
             // Wire storage adapter for GET /v1/sessions (DEBT-01).
             gateway.set_storage(storage.clone()).await;
+
+            // Wire provider registry for OpenAI-compatible API (API-01..API-08).
+            if let Some(ref providers) = provider_registry {
+                gateway.set_providers(providers.clone()).await;
+                info!("provider registry wired into gateway");
+            }
+
+            // Wire tool registry for Tools API (API-09..API-10).
+            gateway.set_tools(tool_registry.clone()).await;
+            info!("tool registry wired into gateway");
+
+            // Wire API tools allowlist from config (API-10: secure default = empty = no tools).
+            gateway.set_api_tools_allowlist(config.gateway.api_tools_allowlist.clone());
+            info!(
+                allowlist_count = config.gateway.api_tools_allowlist.len(),
+                "api tools allowlist configured"
+            );
 
             // Wire MCP HTTP transport onto the gateway (if enabled).
             #[cfg(feature = "mcp-server")]
