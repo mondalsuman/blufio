@@ -46,11 +46,7 @@ impl FlowMetrics {
         for (name, dur) in &self.steps {
             println!("  {:50} {:>8.2}ms", name, dur.as_secs_f64() * 1000.0);
         }
-        println!(
-            "  {:50} {:>8.2}ms",
-            "TOTAL",
-            total.as_secs_f64() * 1000.0
-        );
+        println!("  {:50} {:>8.2}ms", "TOTAL", total.as_secs_f64() * 1000.0);
     }
 }
 
@@ -71,9 +67,7 @@ impl FlowMetrics {
 
 #[tokio::test]
 async fn flow_openai_sdk_openrouter_discord_webhook() {
-    let mut metrics = FlowMetrics::new(
-        "OpenAI SDK -> OpenRouter -> Discord -> Webhook",
-    );
+    let mut metrics = FlowMetrics::new("OpenAI SDK -> OpenRouter -> Discord -> Webhook");
 
     // Step 1: Start wiremock for OpenRouter API
     let step = Instant::now();
@@ -207,10 +201,7 @@ async fn flow_openai_sdk_openrouter_discord_webhook() {
     let step = Instant::now();
     let client = reqwest::Client::new();
     let openrouter_resp = client
-        .post(format!(
-            "{}/api/v1/chat/completions",
-            mock_server.uri()
-        ))
+        .post(format!("{}/api/v1/chat/completions", mock_server.uri()))
         .json(&serde_json::json!({
             "model": "openai/gpt-4o",
             "messages": [{"role": "user", "content": "test"}]
@@ -295,9 +286,7 @@ async fn flow_ollama_telegram_event_bus() {
         session_id: None,
         channel: "telegram".to_string(),
         sender_id: "tg-user-42".to_string(),
-        content: blufio_core::types::MessageContent::Text(
-            "Tell me a joke".to_string(),
-        ),
+        content: blufio_core::types::MessageContent::Text("Tell me a joke".to_string()),
         timestamp: chrono::Utc::now().to_rfc3339(),
         metadata: None,
     };
@@ -405,9 +394,7 @@ async fn flow_ollama_telegram_event_bus() {
 
 #[tokio::test]
 async fn flow_api_key_rate_limit_gemini_batch() {
-    let mut metrics = FlowMetrics::new(
-        "API Key -> Rate Limit -> Gemini -> Batch",
-    );
+    let mut metrics = FlowMetrics::new("API Key -> Rate Limit -> Gemini -> Batch");
 
     // Step 1: Start wiremock for Gemini API
     let step = Instant::now();
@@ -504,9 +491,8 @@ async fn flow_api_key_rate_limit_gemini_batch() {
     let lookup_hash = key_hash.clone();
     let found = conn
         .call(move |conn| {
-            let mut stmt = conn.prepare(
-                "SELECT id, name, scopes FROM api_keys WHERE key_hash = ?1",
-            )?;
+            let mut stmt =
+                conn.prepare("SELECT id, name, scopes FROM api_keys WHERE key_hash = ?1")?;
             let result = stmt
                 .query_row(rusqlite::params![lookup_hash], |row| {
                     Ok((
@@ -530,9 +516,7 @@ async fn flow_api_key_rate_limit_gemini_batch() {
 
     // Step 5: Simulate rate limit tracking
     let step = Instant::now();
-    let window_start = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:00Z")
-        .to_string();
+    let window_start = chrono::Utc::now().format("%Y-%m-%dT%H:%M:00Z").to_string();
 
     let kid2 = key_id.clone();
     let ws = window_start.clone();
@@ -657,9 +641,7 @@ async fn flow_api_key_rate_limit_gemini_batch() {
 
 #[tokio::test]
 async fn flow_skill_install_verify_execute_cost() {
-    let mut metrics = FlowMetrics::new(
-        "Skill Install -> Verify Signature -> Execute -> Cost",
-    );
+    let mut metrics = FlowMetrics::new("Skill Install -> Verify Signature -> Execute -> Cost");
 
     // Step 1: Create a test WASM binary and sign it with Ed25519
     let step = Instant::now();
@@ -676,7 +658,11 @@ async fn flow_skill_install_verify_execute_cost() {
 
     // Compute SHA-256 content hash
     let content_hash = blufio_skill::compute_content_hash(&test_wasm_bytes);
-    assert_eq!(content_hash.len(), 64, "SHA-256 hash should be 64 hex chars");
+    assert_eq!(
+        content_hash.len(),
+        64,
+        "SHA-256 hash should be 64 hex chars"
+    );
 
     // Sign the WASM bytes
     let signature = keypair.sign(&test_wasm_bytes);
@@ -786,17 +772,27 @@ async fn flow_skill_install_verify_execute_cost() {
         .expect("get_verification_info should succeed")
         .expect("verification info should exist");
 
-    assert_eq!(verify_info.content_hash.as_deref(), Some(content_hash.as_str()));
-    assert_eq!(verify_info.signature.as_deref(), Some(signature_hex.as_str()));
-    assert_eq!(verify_info.publisher_id.as_deref(), Some(publisher_hex.as_str()));
-    metrics.record_step("Load verification info (pre-execution gate)", step.elapsed());
+    assert_eq!(
+        verify_info.content_hash.as_deref(),
+        Some(content_hash.as_str())
+    );
+    assert_eq!(
+        verify_info.signature.as_deref(),
+        Some(signature_hex.as_str())
+    );
+    assert_eq!(
+        verify_info.publisher_id.as_deref(),
+        Some(publisher_hex.as_str())
+    );
+    metrics.record_step(
+        "Load verification info (pre-execution gate)",
+        step.elapsed(),
+    );
 
     // Step 6: Re-verify signature before execution (pre-execution verification gate)
     let step = Instant::now();
-    let stored_sig = blufio_skill::signature_from_hex(
-        verify_info.signature.as_deref().unwrap(),
-    )
-    .expect("signature hex should parse");
+    let stored_sig = blufio_skill::signature_from_hex(verify_info.signature.as_deref().unwrap())
+        .expect("signature hex should parse");
 
     // Reconstruct verifying key from publisher ID
     let pub_bytes = hex::decode(verify_info.publisher_id.as_deref().unwrap())
@@ -810,18 +806,13 @@ async fn flow_skill_install_verify_execute_cost() {
     // Verify WASM content hash matches
     let recomputed_hash = blufio_skill::compute_content_hash(&test_wasm_bytes);
     assert_eq!(
-        recomputed_hash,
-        content_hash,
+        recomputed_hash, content_hash,
         "recomputed hash should match stored hash (TOCTOU prevention)"
     );
 
     // Verify signature matches
-    blufio_skill::PublisherKeypair::verify_signature(
-        &verifying_key,
-        &test_wasm_bytes,
-        &stored_sig,
-    )
-    .expect("pre-execution signature verification should pass");
+    blufio_skill::PublisherKeypair::verify_signature(&verifying_key, &test_wasm_bytes, &stored_sig)
+        .expect("pre-execution signature verification should pass");
     metrics.record_step("Pre-execution signature re-verification", step.elapsed());
 
     // Step 7: TOFU key management
@@ -864,10 +855,7 @@ async fn flow_skill_install_verify_execute_cost() {
     ))
     .await;
 
-    let event = skill_rx
-        .recv()
-        .await
-        .expect("should receive skill event");
+    let event = skill_rx.recv().await.expect("should receive skill event");
     match event {
         blufio_bus::BusEvent::Skill(blufio_bus::SkillEvent::Invoked {
             skill_name,
