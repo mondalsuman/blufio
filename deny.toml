@@ -13,6 +13,7 @@ ignore = [
     "RUSTSEC-2025-0065", # matrix-sdk-base panic — pinned to 0.11 per Phase 34 requirements, upgrade deferred
     "RUSTSEC-2025-0135", # matrix-sdk-base DoS — pinned to 0.11 per Phase 34 requirements, upgrade deferred
     "RUSTSEC-2025-0134", # rustls-pemfile unmaintained — transitive via irc crate, no alternative yet
+    "RUSTSEC-2025-0119", # number_prefix unmaintained — transitive via indicatif, no alternative yet
 ]
 
 [bans]
