@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: unknown
-last_updated: "2026-03-07T11:22:56.194Z"
+last_updated: "2026-03-07T11:26:28Z"
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 27
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 
 ## Current Position
 
-Phase: 37 of 39 (Node System)
-Plan: 2 of 3 in current phase
-Status: Plan 37-02 complete
-Last activity: 2026-03-07 — Plan 37-02 complete (ConnectionManager, HeartbeatMonitor, fleet CLI, serve.rs wiring)
+Phase: 37 of 39 (Node System) -- COMPLETE
+Plan: 3 of 3 in current phase
+Status: Phase 37 complete
+Last activity: 2026-03-07 — Plan 37-03 complete (ApprovalRouter with first-wins broadcast and timeout-then-deny)
 
 Progress: [█████░░░░░] 50%
 
@@ -71,6 +71,7 @@ Progress: [█████░░░░░] 50%
 | 36 | 02 | ~5min | 2 | 2 |
 | 37 | 01 | ~12min | 2 | 11 |
 | 37 | 02 | ~11min | 2 | 7 |
+| 37 | 03 | ~2min | 2 | 3 |
 
 ## Accumulated Context
 
@@ -115,6 +116,8 @@ Key v1.3 constraints:
 - Pairing fingerprint: SHA-256 of sorted concatenated public keys, formatted as XXXX-XXXX-XXXX-XXXX
 - tokio-rusqlite errors need explicit type annotation: |e: tokio_rusqlite::Error<rusqlite::Error>|
 - [Phase 37]: register_connection/remove_connection async because EventBus::publish is async
+- [Phase 37]: First-wins approval via DashMap::remove (atomic remove guarantees only one responder wins)
+- [Phase 37]: ConnectionManager gets optional approval_router via setter to avoid circular construction
 
 ### Pending Todos
 
@@ -133,5 +136,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Completed 37-02-PLAN.md
+Stopped at: Completed 37-03-PLAN.md (Phase 37 complete)
 Resume file: .planning/ROADMAP.md
