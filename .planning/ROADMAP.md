@@ -5,7 +5,7 @@
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-02)
 - ✅ **v1.1 MCP Integration** — Phases 15-22 (shipped 2026-03-03)
 - ✅ **v1.2 Production Hardening** — Phases 23-28 (shipped 2026-03-04)
-- ✅ **v1.3 Ecosystem Expansion** — Phases 29-39 (shipped 2026-03-07)
+- **v1.3 Ecosystem Expansion** — Phases 29-42 (gap closure in progress)
 
 ## Phases
 
@@ -55,10 +55,10 @@
 
 </details>
 
-### v1.3 Ecosystem Expansion (SHIPPED 2026-03-07)
+### v1.3 Ecosystem Expansion (GAP CLOSURE IN PROGRESS)
 
 **Milestone Goal:** Expand the platform ecosystem with OpenAI-compatible APIs, multi-provider LLM support, multi-channel adapters, Docker deployment, event bus, skill marketplace, node system, and migration tooling.
-**Status:** VERIFIED -- 71/71 requirements, 4/4 integration flows, READY TO SHIP.
+**Status:** Gap closure in progress -- 71/71 component-level, ~31 non-functional at runtime. Phases 40-42 close wiring gaps.
 
 - [x] **Phase 29: Event Bus & Core Trait Extensions** — Internal pub/sub backbone and provider-agnostic ToolDefinition
 - [x] **Phase 30: Multi-Provider LLM Support** — OpenAI, Ollama, OpenRouter, and Gemini provider plugins (completed 2026-03-05)
@@ -71,6 +71,9 @@
 - [x] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication (completed 2026-03-07)
 - [x] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle (completed 2026-03-07)
 - [x] **Phase 39: Integration Verification** — End-to-end validation across all v1.3 features (completed 2026-03-07)
+- [ ] **Phase 40: Wire Global EventBus & Bridge** — Global EventBus in serve.rs + bridge loop startup
+- [ ] **Phase 41: Wire ProviderRegistry into Gateway** — Provider crates as binary deps + ProviderRegistry impl
+- [ ] **Phase 42: Wire Gateway Stores** — ApiKeyStore, WebhookStore, BatchStore instantiation + webhook delivery
 
 ## Phase Details
 
@@ -258,6 +261,36 @@ Plans:
 - [x] 39-06-PLAN.md — Cross-feature integration flows (4 E2E tests)
 - [x] 39-07-PLAN.md — Traceability audit + documentation updates + readiness summary
 
+### Phase 40: Wire Global EventBus & Bridge
+**Goal:** Create a single global EventBus in serve.rs shared across all subsystems, and wire the bridge loop
+**Depends on:** Phase 29 (EventBus crate), Phase 34 (bridge crate)
+**Requirements:** INFRA-01, INFRA-02, INFRA-03, INFRA-06
+**Gap Closure:** Closes runtime wiring gaps from v1.3 audit
+
+Plans:
+- [ ] 40-01: Global EventBus creation and subsystem sharing in serve.rs
+- [ ] 40-02: Wire blufio-bridge import and run_bridge_loop() startup
+
+### Phase 41: Wire ProviderRegistry into Gateway
+**Goal:** Add Phase 30 provider crates as binary dependencies, implement ProviderRegistry, and wire into GatewayState
+**Depends on:** Phase 30 (provider crates), Phase 31 (gateway with ProviderRegistry trait)
+**Requirements:** API-01, API-02, API-03, API-04, API-05, API-06, API-07, API-08, API-09, API-10, PROV-01, PROV-02, PROV-03, PROV-04, PROV-05, PROV-06, PROV-07, PROV-08, PROV-09
+**Gap Closure:** Closes runtime wiring gaps from v1.3 audit
+
+Plans:
+- [ ] 41-01: Add provider crate deps and implement concrete ProviderRegistry
+- [ ] 41-02: Wire ProviderRegistry into GatewayState in serve.rs
+
+### Phase 42: Wire Gateway Stores
+**Goal:** Instantiate ApiKeyStore, WebhookStore, and BatchStore in serve.rs and wire into GatewayState
+**Depends on:** Phase 32 (store implementations), Phase 40 (global EventBus for webhook delivery)
+**Requirements:** API-11, API-12, API-13, API-14, API-15, API-16, API-17, API-18
+**Gap Closure:** Closes runtime wiring gaps from v1.3 audit
+
+Plans:
+- [ ] 42-01: Instantiate stores and wire into GatewayState
+- [ ] 42-02: Spawn webhook delivery with global EventBus
+
 ## Progress
 
 **Execution Order:**
@@ -304,7 +337,10 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 37. Node System | v1.3 | 3/3 | Complete | 2026-03-07 |
 | 38. Migration & CLI Utilities | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 39. Integration Verification | v1.3 | Complete    | 2026-03-07 | 2026-03-07 |
+| 40. Wire Global EventBus & Bridge | v1.3 | 0/2 | Pending | - |
+| 41. Wire ProviderRegistry into Gateway | v1.3 | 0/2 | Pending | - |
+| 42. Wire Gateway Stores | v1.3 | 0/2 | Pending | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-07 after v1.3 Ecosystem Expansion verification complete (71/71 requirements verified, READY TO SHIP)*
+*Last updated: 2026-03-07 after v1.3 audit gap closure phases added (Phases 40-42)*

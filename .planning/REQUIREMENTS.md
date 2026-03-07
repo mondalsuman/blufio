@@ -9,36 +9,36 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### API Layer
 
-- [x] **API-01**: User can send OpenAI-compatible chat completions via POST /v1/chat/completions
-- [x] **API-02**: Chat completions endpoint supports SSE streaming responses
-- [x] **API-03**: Chat completions endpoint supports tool calling (tools + tool_choice)
-- [x] **API-04**: Chat completions endpoint supports response_format (JSON mode)
-- [x] **API-05**: Chat completions responses include usage (token counts + cost)
-- [x] **API-06**: OpenAI wire types are separate from internal ProviderResponse (finish_reason vs stop_reason)
-- [x] **API-07**: User can send requests via OpenResponses POST /v1/responses
-- [x] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
-- [x] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
-- [x] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
-- [x] **API-11**: User can create scoped API keys via POST /v1/api-keys
-- [x] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
-- [x] **API-13**: API keys support per-key rate limiting (requests per minute)
-- [x] **API-14**: API keys support expiration and revocation
-- [x] **API-15**: User can register webhooks via POST /v1/webhooks
-- [x] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
-- [x] **API-17**: User can submit batch requests via POST /v1/batch
-- [x] **API-18**: Batch results available with per-item success/error status
+- [ ] **API-01**: User can send OpenAI-compatible chat completions via POST /v1/chat/completions
+- [ ] **API-02**: Chat completions endpoint supports SSE streaming responses
+- [ ] **API-03**: Chat completions endpoint supports tool calling (tools + tool_choice)
+- [ ] **API-04**: Chat completions endpoint supports response_format (JSON mode)
+- [ ] **API-05**: Chat completions responses include usage (token counts + cost)
+- [ ] **API-06**: OpenAI wire types are separate from internal ProviderResponse (finish_reason vs stop_reason)
+- [ ] **API-07**: User can send requests via OpenResponses POST /v1/responses
+- [ ] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
+- [ ] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
+- [ ] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
+- [ ] **API-11**: User can create scoped API keys via POST /v1/api-keys
+- [ ] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
+- [ ] **API-13**: API keys support per-key rate limiting (requests per minute)
+- [ ] **API-14**: API keys support expiration and revocation
+- [ ] **API-15**: User can register webhooks via POST /v1/webhooks
+- [ ] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
+- [ ] **API-17**: User can submit batch requests via POST /v1/batch
+- [ ] **API-18**: Batch results available with per-item success/error status
 
 ### Providers
 
-- [x] **PROV-01**: OpenAI provider with streaming and tool calling
-- [x] **PROV-02**: OpenAI provider supports vision and structured outputs
-- [x] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
-- [x] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
-- [x] **PROV-05**: Ollama auto-discovers local models via /api/tags
-- [x] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
-- [x] **PROV-07**: OpenRouter supports provider fallback ordering
-- [x] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
-- [x] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
+- [ ] **PROV-01**: OpenAI provider with streaming and tool calling
+- [ ] **PROV-02**: OpenAI provider supports vision and structured outputs
+- [ ] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
+- [ ] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
+- [ ] **PROV-05**: Ollama auto-discovers local models via /api/tags
+- [ ] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
+- [ ] **PROV-07**: OpenRouter supports provider fallback ordering
+- [ ] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
+- [ ] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
 - [x] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
 - [x] **PROV-11**: TTS provider trait (AudioProvider) defined with reference interface
 - [x] **PROV-12**: Transcription provider trait defined with reference interface
@@ -62,12 +62,12 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [x] **INFRA-01**: Internal event bus using tokio broadcast with lag handling
-- [x] **INFRA-02**: Event bus publishes typed events (session, channel, skill, node, webhook, batch)
-- [x] **INFRA-03**: Event bus uses mpsc for reliable subscribers (webhook delivery)
+- [ ] **INFRA-01**: Internal event bus using tokio broadcast with lag handling
+- [ ] **INFRA-02**: Event bus publishes typed events (session, channel, skill, node, webhook, batch)
+- [ ] **INFRA-03**: Event bus uses mpsc for reliable subscribers (webhook delivery)
 - [x] **INFRA-04**: Docker multi-stage build producing minimal image (distroless or scratch)
 - [x] **INFRA-05**: docker-compose.yml with volume mounts, env injection, and health check
-- [x] **INFRA-06**: Cross-channel bridging with configurable bridge rules in TOML
+- [ ] **INFRA-06**: Cross-channel bridging with configurable bridge rules in TOML
 - [x] **INFRA-07**: Multi-instance systemd template (blufio@.service) with per-instance config
 
 ### Skills
@@ -142,41 +142,41 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Verification | Status |
 |-------------|-------|--------------|--------|
-| INFRA-01 | Phase 29 | 29-VERIFICATION.md | Verified |
-| INFRA-02 | Phase 29 | 29-VERIFICATION.md | Verified |
-| INFRA-03 | Phase 29 | 29-VERIFICATION.md | Verified |
+| INFRA-01 | Phase 40 | - | Pending |
+| INFRA-02 | Phase 40 | - | Pending |
+| INFRA-03 | Phase 40 | - | Pending |
 | PROV-10 | Phase 29 | 29-VERIFICATION.md | Verified |
 | PROV-11 | Phase 29 | 29-VERIFICATION.md | Verified |
 | PROV-12 | Phase 29 | 29-VERIFICATION.md | Verified |
 | PROV-13 | Phase 29 | 29-VERIFICATION.md | Verified |
 | PROV-14 | Phase 29 | 29-VERIFICATION.md | Verified |
-| PROV-01 | Phase 30 | 30-VERIFICATION.md | Verified |
-| PROV-02 | Phase 30 | 30-VERIFICATION.md | Verified |
-| PROV-03 | Phase 30 | 30-VERIFICATION.md | Verified |
-| PROV-04 | Phase 30 | 30-VERIFICATION.md | Verified |
-| PROV-05 | Phase 30 | 30-VERIFICATION.md | Verified |
-| PROV-06 | Phase 30 | 30-VERIFICATION.md | Verified |
-| PROV-07 | Phase 30 | 30-VERIFICATION.md | Verified |
-| PROV-08 | Phase 30 | 30-VERIFICATION.md | Verified |
-| PROV-09 | Phase 30 | 30-VERIFICATION.md | Verified |
-| API-01 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-02 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-03 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-04 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-05 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-06 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-07 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-08 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-09 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-10 | Phase 31 | 31-VERIFICATION.md | Verified |
-| API-11 | Phase 32 | 32-VERIFICATION.md | Verified |
-| API-12 | Phase 32 | 32-VERIFICATION.md | Verified |
-| API-13 | Phase 32 | 32-VERIFICATION.md | Verified |
-| API-14 | Phase 32 | 32-VERIFICATION.md | Verified |
-| API-15 | Phase 32 | 32-VERIFICATION.md | Verified |
-| API-16 | Phase 32 | 32-VERIFICATION.md | Verified |
-| API-17 | Phase 32 | 32-VERIFICATION.md | Verified |
-| API-18 | Phase 32 | 32-VERIFICATION.md | Verified |
+| PROV-01 | Phase 41 | - | Pending |
+| PROV-02 | Phase 41 | - | Pending |
+| PROV-03 | Phase 41 | - | Pending |
+| PROV-04 | Phase 41 | - | Pending |
+| PROV-05 | Phase 41 | - | Pending |
+| PROV-06 | Phase 41 | - | Pending |
+| PROV-07 | Phase 41 | - | Pending |
+| PROV-08 | Phase 41 | - | Pending |
+| PROV-09 | Phase 41 | - | Pending |
+| API-01 | Phase 41 | - | Pending |
+| API-02 | Phase 41 | - | Pending |
+| API-03 | Phase 41 | - | Pending |
+| API-04 | Phase 41 | - | Pending |
+| API-05 | Phase 41 | - | Pending |
+| API-06 | Phase 41 | - | Pending |
+| API-07 | Phase 41 | - | Pending |
+| API-08 | Phase 41 | - | Pending |
+| API-09 | Phase 41 | - | Pending |
+| API-10 | Phase 41 | - | Pending |
+| API-11 | Phase 42 | - | Pending |
+| API-12 | Phase 42 | - | Pending |
+| API-13 | Phase 42 | - | Pending |
+| API-14 | Phase 42 | - | Pending |
+| API-15 | Phase 42 | - | Pending |
+| API-16 | Phase 42 | - | Pending |
+| API-17 | Phase 42 | - | Pending |
+| API-18 | Phase 42 | - | Pending |
 | CHAN-01 | Phase 33 | 33-VERIFICATION.md | Verified |
 | CHAN-02 | Phase 33 | 33-VERIFICATION.md | Verified |
 | CHAN-03 | Phase 33 | 33-VERIFICATION.md | Verified |
@@ -189,7 +189,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHAN-08 | Phase 34 | 34-VERIFICATION.md | Verified |
 | CHAN-09 | Phase 34 | 34-VERIFICATION.md | Verified |
 | CHAN-10 | Phase 34 | 34-VERIFICATION.md | Verified |
-| INFRA-06 | Phase 34 | 34-VERIFICATION.md | Verified |
+| INFRA-06 | Phase 40 | - | Pending |
 | SKILL-01 | Phase 35 | 35-VERIFICATION.md | Verified |
 | SKILL-02 | Phase 35 | 35-VERIFICATION.md | Verified |
 | SKILL-03 | Phase 35 | 35-VERIFICATION.md | Verified |
@@ -216,9 +216,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 **Coverage:**
 - v1.3 requirements: 71 total
-- Verified: 71
+- Verified: 40
+- Pending (gap closure): 31
 - Unverified: 0
-- By category: API: 18/18, PROV: 14/14, CHAN: 12/12, INFRA: 7/7, SKILL: 5/5, NODE: 5/5, MIGR: 5/5, CLI: 5/5
+- By category: API: 0/18, PROV: 5/14, CHAN: 12/12, INFRA: 3/7, SKILL: 5/5, NODE: 5/5, MIGR: 5/5, CLI: 5/5
 
 **Notes:**
 - INFRA-04 (Docker build) verified statically only -- Docker daemon not available
@@ -227,4 +228,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-07 after Phase 39 verification audit (all 71 requirements verified)*
+*Last updated: 2026-03-07 after v1.3 audit gap closure phases added (31 requirements reset to Pending)*
