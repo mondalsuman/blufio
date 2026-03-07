@@ -124,8 +124,7 @@ fn enumerate_outbound_endpoints(config: &BlufioConfig) -> Vec<EndpointInfo> {
     }
 
     // OpenRouter provider
-    if config.providers.openrouter.api_key.is_some()
-        || std::env::var("OPENROUTER_API_KEY").is_ok()
+    if config.providers.openrouter.api_key.is_some() || std::env::var("OPENROUTER_API_KEY").is_ok()
     {
         endpoints.push(EndpointInfo {
             name: "OpenRouter API".to_string(),
@@ -207,11 +206,7 @@ fn enumerate_outbound_endpoints(config: &BlufioConfig) -> Vec<EndpointInfo> {
         let url = if let Some(ref socket) = config.signal.socket_path {
             format!("unix://{socket}")
         } else {
-            let host = config
-                .signal
-                .host
-                .as_deref()
-                .unwrap_or("127.0.0.1");
+            let host = config.signal.host.as_deref().unwrap_or("127.0.0.1");
             let port = config.signal.port.unwrap_or(7583);
             format!("{host}:{port}")
         };
@@ -226,7 +221,10 @@ fn enumerate_outbound_endpoints(config: &BlufioConfig) -> Vec<EndpointInfo> {
     // IRC
     if config.irc.server.is_some() {
         let server = config.irc.server.as_deref().unwrap_or("unknown");
-        let port = config.irc.port.unwrap_or(if config.irc.tls { 6697 } else { 6667 });
+        let port = config
+            .irc
+            .port
+            .unwrap_or(if config.irc.tls { 6697 } else { 6667 });
         endpoints.push(EndpointInfo {
             name: "IRC Server".to_string(),
             url: format!("{server}:{port}"),
@@ -257,11 +255,7 @@ fn enumerate_outbound_endpoints(config: &BlufioConfig) -> Vec<EndpointInfo> {
 
     // MCP servers
     for server in &config.mcp.servers {
-        let url = server
-            .url
-            .as_deref()
-            .unwrap_or("stdio")
-            .to_string();
+        let url = server.url.as_deref().unwrap_or("stdio").to_string();
         endpoints.push(EndpointInfo {
             name: format!("MCP Server: {}", server.name),
             url,
@@ -336,10 +330,7 @@ fn enumerate_skill_permissions(config: &BlufioConfig) -> Vec<SkillPermissionInfo
                 "epoch_timeout: {}s",
                 config.skill.default_epoch_timeout_secs
             ),
-            format!(
-                "max_in_prompt: {}",
-                config.skill.max_skills_in_prompt
-            ),
+            format!("max_in_prompt: {}", config.skill.max_skills_in_prompt),
         ],
         advisories: vec![
             "Skills run in WASM sandbox with resource limits".to_string(),
@@ -371,10 +362,7 @@ fn generate_classification_summary(
         .collect();
 
     if !pii_endpoints.is_empty() {
-        summary.push(format!(
-            "PII sent to: {}",
-            pii_endpoints.join(", ")
-        ));
+        summary.push(format!("PII sent to: {}", pii_endpoints.join(", ")));
     }
 
     if !cred_endpoints.is_empty() {
@@ -391,10 +379,7 @@ fn generate_classification_summary(
         .collect();
 
     if !local_pii.is_empty() {
-        summary.push(format!(
-            "PII stored locally in: {}",
-            local_pii.join(", ")
-        ));
+        summary.push(format!("PII stored locally in: {}", local_pii.join(", ")));
     }
 
     summary
@@ -438,8 +423,7 @@ fn format_markdown_report(report: &PrivacyReport) -> String {
         out.push_str("| Store | Path | Data Types | Retention | Deletion |\n");
         out.push_str("|-------|------|------------|-----------|----------|\n");
         for store in &report.stores {
-            let data_types: Vec<String> =
-                store.data_types.iter().map(|d| d.to_string()).collect();
+            let data_types: Vec<String> = store.data_types.iter().map(|d| d.to_string()).collect();
             out.push_str(&format!(
                 "| {} | {} | {} | {} | {} |\n",
                 store.name,
@@ -495,13 +479,9 @@ fn format_markdown_report(report: &PrivacyReport) -> String {
 }
 
 /// Main entry point for `blufio privacy evidence-report`.
-pub async fn run_privacy_report(
-    json: bool,
-    output: Option<&str>,
-) -> Result<(), BlufioError> {
-    let config = blufio_config::load_and_validate().map_err(|errors| {
-        BlufioError::Config(format!("{} config error(s)", errors.len()))
-    })?;
+pub async fn run_privacy_report(json: bool, output: Option<&str>) -> Result<(), BlufioError> {
+    let config = blufio_config::load_and_validate()
+        .map_err(|errors| BlufioError::Config(format!("{} config error(s)", errors.len())))?;
 
     let endpoints = enumerate_outbound_endpoints(&config);
     let stores = enumerate_local_stores(&config);
@@ -523,9 +503,8 @@ pub async fn run_privacy_report(
     };
 
     if let Some(path) = output {
-        std::fs::write(path, &content).map_err(|e| {
-            BlufioError::Internal(format!("failed to write report to {path}: {e}"))
-        })?;
+        std::fs::write(path, &content)
+            .map_err(|e| BlufioError::Internal(format!("failed to write report to {path}: {e}")))?;
         eprintln!("Privacy report written to: {path}");
     } else {
         println!("{content}");

@@ -257,12 +257,10 @@ fn parse_sessions(path: &Path, data: &mut OpenClawData) -> Result<(), BlufioErro
     // Try sessions.json first.
     let sessions_json = path.join("sessions.json");
     if sessions_json.exists() {
-        let content = std::fs::read_to_string(&sessions_json).map_err(|e| {
-            BlufioError::Migration(format!("failed to read sessions.json: {e}"))
-        })?;
-        let sessions: Vec<OpenClawSession> = serde_json::from_str(&content).map_err(|e| {
-            BlufioError::Migration(format!("failed to parse sessions.json: {e}"))
-        })?;
+        let content = std::fs::read_to_string(&sessions_json)
+            .map_err(|e| BlufioError::Migration(format!("failed to read sessions.json: {e}")))?;
+        let sessions: Vec<OpenClawSession> = serde_json::from_str(&content)
+            .map_err(|e| BlufioError::Migration(format!("failed to parse sessions.json: {e}")))?;
         data.sessions = sessions;
         return Ok(());
     }
@@ -334,9 +332,8 @@ fn parse_sessions_from_sqlite(conn: &rusqlite::Connection, data: &mut OpenClawDa
                 for session in &mut data.sessions {
                     for mq in &msg_queries {
                         if let Ok(mut msg_stmt) = conn.prepare(mq) {
-                            if let Ok(msg_rows) = msg_stmt.query_map(
-                                rusqlite::params![session.id],
-                                |row| {
+                            if let Ok(msg_rows) =
+                                msg_stmt.query_map(rusqlite::params![session.id], |row| {
                                     Ok(OpenClawMessage {
                                         id: row.get::<_, Option<String>>(0)?,
                                         role: row.get::<_, String>(1)?,
@@ -344,8 +341,8 @@ fn parse_sessions_from_sqlite(conn: &rusqlite::Connection, data: &mut OpenClawDa
                                         created_at: row.get::<_, Option<String>>(3)?,
                                         token_count: row.get::<_, Option<i64>>(4)?,
                                     })
-                                },
-                            ) {
+                                })
+                            {
                                 session.messages = msg_rows.flatten().collect();
                                 if !session.messages.is_empty() {
                                     break;
@@ -366,12 +363,10 @@ fn parse_cost_records(path: &Path, data: &mut OpenClawData) -> Result<(), Blufio
     // Try costs.json.
     let costs_json = path.join("costs.json");
     if costs_json.exists() {
-        let content = std::fs::read_to_string(&costs_json).map_err(|e| {
-            BlufioError::Migration(format!("failed to read costs.json: {e}"))
-        })?;
-        let records: Vec<OpenClawCostRecord> = serde_json::from_str(&content).map_err(|e| {
-            BlufioError::Migration(format!("failed to parse costs.json: {e}"))
-        })?;
+        let content = std::fs::read_to_string(&costs_json)
+            .map_err(|e| BlufioError::Migration(format!("failed to read costs.json: {e}")))?;
+        let records: Vec<OpenClawCostRecord> = serde_json::from_str(&content)
+            .map_err(|e| BlufioError::Migration(format!("failed to parse costs.json: {e}")))?;
         data.cost_records = records;
         return Ok(());
     }
@@ -460,10 +455,7 @@ fn collect_personality_files(path: &Path, data: &mut OpenClawData) -> Result<(),
 // ---------------------------------------------------------------------------
 
 /// Run a dry-run preview of what would be imported from OpenClaw.
-pub async fn run_migrate_preview(
-    data_dir: Option<&str>,
-    json: bool,
-) -> Result<(), BlufioError> {
+pub async fn run_migrate_preview(data_dir: Option<&str>, json: bool) -> Result<(), BlufioError> {
     let oc_dir = detect_openclaw_dir(data_dir)?;
     eprintln!("OpenClaw directory: {}", oc_dir.display());
 
@@ -472,9 +464,10 @@ pub async fn run_migrate_preview(
 
     // Categorize sessions.
     for session in &data.sessions {
-        let has_unsupported = session.metadata.keys().any(|k| {
-            !["source", "channel", "user_id"].contains(&k.as_str())
-        });
+        let has_unsupported = session
+            .metadata
+            .keys()
+            .any(|k| !["source", "channel", "user_id"].contains(&k.as_str()));
 
         if has_unsupported {
             report.needs_attention.sessions += 1;
@@ -511,11 +504,7 @@ pub async fn run_migrate_preview(
 
     // Estimated cost comparison.
     if !data.cost_records.is_empty() {
-        let oc_total: f64 = data
-            .cost_records
-            .iter()
-            .filter_map(|r| r.cost_usd)
-            .sum();
+        let oc_total: f64 = data.cost_records.iter().filter_map(|r| r.cost_usd).sum();
 
         let blufio_estimate: f64 = data
             .cost_records
@@ -555,32 +544,18 @@ fn print_preview_table(report: &PreviewReport) {
     println!();
 
     println!("  Will Import:");
-    println!(
-        "    Sessions:         {}",
-        report.will_import.sessions
-    );
-    println!(
-        "    Cost records:     {}",
-        report.will_import.cost_records
-    );
+    println!("    Sessions:         {}", report.will_import.sessions);
+    println!("    Cost records:     {}", report.will_import.cost_records);
     println!(
         "    Personality files: {}",
         report.will_import.personality_files
     );
-    println!(
-        "    Secrets:          {}",
-        report.will_import.secrets
-    );
+    println!("    Secrets:          {}", report.will_import.secrets);
     println!();
 
-    if report.needs_attention.sessions > 0
-        || !report.needs_attention.items.is_empty()
-    {
+    if report.needs_attention.sessions > 0 || !report.needs_attention.items.is_empty() {
         println!("  Needs Manual Attention:");
-        println!(
-            "    Sessions:         {}",
-            report.needs_attention.sessions
-        );
+        println!("    Sessions:         {}", report.needs_attention.sessions);
         for item in &report.needs_attention.items {
             println!("      - {item}");
         }
@@ -646,10 +621,9 @@ pub async fn run_migrate(
 
     // Set up progress bars.
     let multi = MultiProgress::new();
-    let style = ProgressStyle::with_template(
-        "  {prefix:<20} [{bar:30.cyan/dim}] {pos}/{len} {msg}",
-    )
-    .unwrap_or_else(|_| ProgressStyle::default_bar());
+    let style =
+        ProgressStyle::with_template("  {prefix:<20} [{bar:30.cyan/dim}] {pos}/{len} {msg}")
+            .unwrap_or_else(|_| ProgressStyle::default_bar());
 
     let session_bar = multi.add(ProgressBar::new(data.sessions.len() as u64));
     session_bar.set_style(style.clone());
@@ -668,9 +642,7 @@ pub async fn run_migrate(
     secret_bar.set_prefix("Secrets");
 
     let mut summary = ImportSummary::default();
-    let now_ts = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%SZ")
-        .to_string();
+    let now_ts = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     // Import sessions.
     for session in &data.sessions {
@@ -682,7 +654,10 @@ pub async fn run_migrate(
 
         let blufio_session = blufio_core::types::Session {
             id: session.id.clone(),
-            channel: session.channel.clone().unwrap_or_else(|| "openclaw".to_string()),
+            channel: session
+                .channel
+                .clone()
+                .unwrap_or_else(|| "openclaw".to_string()),
             user_id: None,
             state: "closed".to_string(),
             metadata: Some(
@@ -692,10 +667,7 @@ pub async fn run_migrate(
                 })
                 .to_string(),
             ),
-            created_at: session
-                .created_at
-                .clone()
-                .unwrap_or_else(|| now_ts.clone()),
+            created_at: session.created_at.clone().unwrap_or_else(|| now_ts.clone()),
             updated_at: now_ts.clone(),
         };
 
@@ -703,9 +675,10 @@ pub async fn run_migrate(
 
         // Import messages for this session.
         for (i, msg) in session.messages.iter().enumerate() {
-            let msg_id = msg.id.clone().unwrap_or_else(|| {
-                format!("{}-msg-{i}", session.id)
-            });
+            let msg_id = msg
+                .id
+                .clone()
+                .unwrap_or_else(|| format!("{}-msg-{i}", session.id));
 
             let blufio_msg = blufio_core::types::Message {
                 id: msg_id,
@@ -714,10 +687,7 @@ pub async fn run_migrate(
                 content: msg.content.clone(),
                 token_count: msg.token_count,
                 metadata: None,
-                created_at: msg
-                    .created_at
-                    .clone()
-                    .unwrap_or_else(|| now_ts.clone()),
+                created_at: msg.created_at.clone().unwrap_or_else(|| now_ts.clone()),
             };
 
             blufio_storage::queries::messages::insert_message(&db, &blufio_msg).await?;
@@ -801,9 +771,7 @@ pub async fn run_migrate(
             let dest = personality_dir.join(file_name);
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
-                    BlufioError::Migration(format!(
-                        "failed to create personality directory: {e}"
-                    ))
+                    BlufioError::Migration(format!("failed to create personality directory: {e}"))
                 })?;
             }
             dest
@@ -811,9 +779,7 @@ pub async fn run_migrate(
             let dest = import_dir.join(file_name);
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
-                    BlufioError::Migration(format!(
-                        "failed to create import directory: {e}"
-                    ))
+                    BlufioError::Migration(format!("failed to create import directory: {e}"))
                 })?;
             }
             dest
@@ -880,10 +846,7 @@ pub async fn run_migrate(
             "    Sessions:     {} imported, {} skipped",
             summary.sessions_imported, summary.sessions_skipped
         );
-        println!(
-            "    Messages:     {} imported",
-            summary.messages_imported
-        );
+        println!("    Messages:     {} imported", summary.messages_imported);
         println!(
             "    Cost records: {} imported, {} skipped",
             summary.cost_records_imported, summary.cost_records_skipped
@@ -951,11 +914,7 @@ async fn record_migration(
 /// Try to store a secret in the vault.
 ///
 /// Returns Ok if successful, Err if vault is unavailable.
-async fn try_vault_store(
-    config: &BlufioConfig,
-    key: &str,
-    value: &str,
-) -> Result<(), BlufioError> {
+async fn try_vault_store(config: &BlufioConfig, key: &str, value: &str) -> Result<(), BlufioError> {
     let conn = blufio_storage::open_connection(&config.storage.database_path).await?;
 
     if !blufio_vault::Vault::exists(&conn).await? {
@@ -976,18 +935,13 @@ async fn try_vault_store(
 // ---------------------------------------------------------------------------
 
 /// Translate an OpenClaw JSON config to Blufio TOML.
-pub fn run_config_translate(
-    input: &str,
-    output: Option<&str>,
-) -> Result<(), BlufioError> {
+pub fn run_config_translate(input: &str, output: Option<&str>) -> Result<(), BlufioError> {
     let content = std::fs::read_to_string(input).map_err(|e| {
         BlufioError::Migration(format!("failed to read OpenClaw config '{}': {e}", input))
     })?;
 
     let oc_config: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
-        BlufioError::Migration(format!(
-            "failed to parse OpenClaw config as JSON: {e}"
-        ))
+        BlufioError::Migration(format!("failed to parse OpenClaw config as JSON: {e}"))
     })?;
 
     let oc_map = oc_config.as_object().ok_or_else(|| {
@@ -1040,8 +994,11 @@ pub fn run_config_translate(
                     if let Some(ids) = obj.get("allowed_user_ids").and_then(|v| v.as_array()) {
                         blufio_config.telegram.allowed_users = ids
                             .iter()
-                            .filter_map(|v| v.as_str().map(|s| s.to_string())
-                                .or_else(|| v.as_i64().map(|n| n.to_string())))
+                            .filter_map(|v| {
+                                v.as_str()
+                                    .map(|s| s.to_string())
+                                    .or_else(|| v.as_i64().map(|n| n.to_string()))
+                            })
                             .collect();
                         mapped_count += 1;
                     }
@@ -1101,9 +1058,8 @@ pub fn run_config_translate(
 
     // Output.
     if let Some(output_path) = output {
-        std::fs::write(output_path, &toml_output).map_err(|e| {
-            BlufioError::Migration(format!("failed to write output file: {e}"))
-        })?;
+        std::fs::write(output_path, &toml_output)
+            .map_err(|e| BlufioError::Migration(format!("failed to write output file: {e}")))?;
         eprintln!("Config written to: {output_path}");
     } else {
         print!("{toml_output}");
@@ -1165,8 +1121,16 @@ mod tests {
         let mut secrets = Vec::new();
         extract_secrets_from_json(&json, "", &mut secrets);
         assert_eq!(secrets.len(), 2);
-        assert!(secrets.iter().any(|(k, v)| k == "api_key" && v == "sk-test-123"));
-        assert!(secrets.iter().any(|(k, v)| k == "nested.bot_token" && v == "bot-456"));
+        assert!(
+            secrets
+                .iter()
+                .any(|(k, v)| k == "api_key" && v == "sk-test-123")
+        );
+        assert!(
+            secrets
+                .iter()
+                .any(|(k, v)| k == "nested.bot_token" && v == "bot-456")
+        );
     }
 
     #[test]

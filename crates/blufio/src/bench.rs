@@ -196,9 +196,8 @@ fn bench_context_assembly() -> Result<Duration, BlufioError> {
     }
 
     // Serialize and measure the assembly of a large context
-    let _assembled = serde_json::to_string(&messages).map_err(|e| {
-        BlufioError::Internal(format!("context assembly benchmark failed: {e}"))
-    })?;
+    let _assembled = serde_json::to_string(&messages)
+        .map_err(|e| BlufioError::Internal(format!("context assembly benchmark failed: {e}")))?;
 
     Ok(start.elapsed())
 }
@@ -214,10 +213,7 @@ fn bench_wasm() -> Result<Duration, BlufioError> {
     ];
 
     // Measure the time to validate WASM bytes
-    let _ = wasmtime::Module::validate(
-        &wasmtime::Engine::default(),
-        minimal_wasm,
-    );
+    let _ = wasmtime::Module::validate(&wasmtime::Engine::default(), minimal_wasm);
 
     Ok(start.elapsed())
 }
@@ -227,7 +223,9 @@ fn bench_sqlite() -> Result<Duration, BlufioError> {
     let start = Instant::now();
 
     let dir = tempfile::tempdir().map_err(|e| {
-        BlufioError::Internal(format!("failed to create temp dir for sqlite benchmark: {e}"))
+        BlufioError::Internal(format!(
+            "failed to create temp dir for sqlite benchmark: {e}"
+        ))
     })?;
     let db_path = dir.path().join("bench.db");
 
@@ -235,12 +233,10 @@ fn bench_sqlite() -> Result<Duration, BlufioError> {
         source: Box::new(e),
     })?;
 
-    conn.execute_batch(
-        "CREATE TABLE bench_data (id INTEGER PRIMARY KEY, value TEXT NOT NULL);",
-    )
-    .map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    conn.execute_batch("CREATE TABLE bench_data (id INTEGER PRIMARY KEY, value TEXT NOT NULL);")
+        .map_err(|e| BlufioError::Storage {
+            source: Box::new(e),
+        })?;
 
     // Batch insert 1000 rows
     conn.execute_batch("BEGIN TRANSACTION;")
@@ -382,9 +378,7 @@ fn save_results(
 
 /// Load previous benchmark results for comparison.
 #[cfg(feature = "sqlite")]
-fn load_previous_results(
-    db_path: &str,
-) -> Result<Vec<(String, i64)>, BlufioError> {
+fn load_previous_results(db_path: &str) -> Result<Vec<(String, i64)>, BlufioError> {
     let path = std::path::Path::new(db_path);
     if !path.exists() {
         return Ok(vec![]);
@@ -428,17 +422,13 @@ fn load_previous_results(
 
 /// Load previous benchmark results (no-op without sqlite feature).
 #[cfg(not(feature = "sqlite"))]
-fn load_previous_results(
-    _db_path: &str,
-) -> Result<Vec<(String, i64)>, BlufioError> {
+fn load_previous_results(_db_path: &str) -> Result<Vec<(String, i64)>, BlufioError> {
     Ok(vec![])
 }
 
 /// Load baseline results for CI comparison.
 #[cfg(feature = "sqlite")]
-fn load_baseline_results(
-    db_path: &str,
-) -> Result<Vec<(String, i64)>, BlufioError> {
+fn load_baseline_results(db_path: &str) -> Result<Vec<(String, i64)>, BlufioError> {
     let path = std::path::Path::new(db_path);
     if !path.exists() {
         return Ok(vec![]);
@@ -482,9 +472,7 @@ fn load_baseline_results(
 
 /// Load baseline results (no-op without sqlite feature).
 #[cfg(not(feature = "sqlite"))]
-fn load_baseline_results(
-    _db_path: &str,
-) -> Result<Vec<(String, i64)>, BlufioError> {
+fn load_baseline_results(_db_path: &str) -> Result<Vec<(String, i64)>, BlufioError> {
     Ok(vec![])
 }
 
@@ -498,9 +486,8 @@ pub async fn run_bench(
     ci: bool,
     threshold: Option<f64>,
 ) -> Result<(), BlufioError> {
-    let config = blufio_config::load_and_validate().map_err(|errors| {
-        BlufioError::Config(format!("{} config error(s)", errors.len()))
-    })?;
+    let config = blufio_config::load_and_validate()
+        .map_err(|errors| BlufioError::Config(format!("{} config error(s)", errors.len())))?;
 
     let iterations = iterations.unwrap_or(3);
     let threshold_pct = threshold.unwrap_or(20.0);
@@ -517,8 +504,8 @@ pub async fn run_bench(
         let mut selected = Vec::new();
         for name in only_list {
             for part in name.split(',') {
-                let kind = BenchmarkKind::from_str(part.trim())
-                    .map_err(|e| BlufioError::Internal(e))?;
+                let kind =
+                    BenchmarkKind::from_str(part.trim()).map_err(|e| BlufioError::Internal(e))?;
                 selected.push(kind);
             }
         }
@@ -538,10 +525,7 @@ pub async fn run_bench(
             "  CPU:     {}",
             system_info["cpu"].as_str().unwrap_or("unknown")
         );
-        eprintln!(
-            "  Cores:   {}",
-            system_info["cores"].as_u64().unwrap_or(0)
-        );
+        eprintln!("  Cores:   {}", system_info["cores"].as_u64().unwrap_or(0));
         eprintln!(
             "  RAM:     {} MB",
             system_info["ram_mb"].as_u64().unwrap_or(0)
@@ -594,7 +578,12 @@ pub async fn run_bench(
     };
 
     // Save results
-    save_results(&config.storage.database_path, &results, &system_info, baseline)?;
+    save_results(
+        &config.storage.database_path,
+        &results,
+        &system_info,
+        baseline,
+    )?;
 
     // Output results
     if json {

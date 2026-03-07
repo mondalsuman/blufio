@@ -13,15 +13,19 @@ use tikv_jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 mod backup;
+mod bench;
+mod bundle;
 mod doctor;
 mod encrypt;
 mod healthcheck;
 #[cfg(feature = "mcp-server")]
 mod mcp_server;
 mod migrate;
+mod privacy;
 mod serve;
 mod shell;
 mod status;
+mod uninstall;
 mod update;
 mod verify;
 
@@ -122,6 +126,64 @@ enum Commands {
         #[command(subcommand)]
         action: NodesCommands,
     },
+    /// Run built-in performance benchmarks.
+    Bench {
+        /// Run only specific benchmarks (comma-separated: startup,sqlite,wasm,context).
+        #[arg(long)]
+        only: Option<String>,
+        /// Output as structured JSON.
+        #[arg(long)]
+        json: bool,
+        /// Compare results against previous run.
+        #[arg(long)]
+        compare: bool,
+        /// Save current results as baseline.
+        #[arg(long)]
+        baseline: bool,
+        /// Number of iterations per benchmark (default: 3).
+        #[arg(long)]
+        iterations: Option<u32>,
+        /// CI mode: exit non-zero if benchmarks regress beyond threshold.
+        #[arg(long)]
+        ci: bool,
+        /// Regression threshold percentage for CI mode (default: 20).
+        #[arg(long)]
+        threshold: Option<f64>,
+    },
+    /// Generate a privacy evidence report.
+    Privacy {
+        #[command(subcommand)]
+        action: PrivacyCommands,
+    },
+    /// Create an air-gapped deployment bundle.
+    Bundle {
+        /// Output path for the archive (default: blufio-{version}-{platform}.tar.gz).
+        #[arg(long)]
+        output: Option<String>,
+        /// Include SQLite database backup in bundle.
+        #[arg(long)]
+        include_data: bool,
+    },
+    /// Uninstall Blufio (remove binary, service files, optionally data).
+    Uninstall {
+        /// Remove all data without prompting (auto-backup created first).
+        #[arg(long)]
+        purge: bool,
+    },
+}
+
+/// Privacy subcommands.
+#[derive(Subcommand, Debug)]
+enum PrivacyCommands {
+    /// Generate a privacy evidence report.
+    EvidenceReport {
+        /// Output as structured JSON.
+        #[arg(long)]
+        json: bool,
+        /// Save report to file instead of printing.
+        #[arg(long)]
+        output: Option<String>,
+    },
 }
 
 /// Update subcommands.
@@ -181,6 +243,11 @@ enum ConfigCommands {
         /// Output file path (prints to stdout if omitted).
         #[arg(long)]
         output: Option<String>,
+    },
+    /// Generate a config template for a specific use case.
+    Recipe {
+        /// Preset: personal, team, production, or iot.
+        preset: String,
     },
 }
 
@@ -423,6 +490,16 @@ async fn main() {
                     std::process::exit(1);
                 }
             }
+            Some(ConfigCommands::Recipe { preset }) => {
+                let recipe = generate_config_recipe(&preset);
+                match recipe {
+                    Ok(content) => println!("{content}"),
+                    Err(e) => {
+                        eprintln!("error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
             None => {
                 println!("blufio config: use --help for available config commands");
             }
@@ -492,9 +569,7 @@ async fn main() {
         }
         Some(Commands::Migrate { action }) => match action {
             MigrateCommands::FromOpenclaw { data_dir, json } => {
-                if let Err(e) =
-                    migrate::run_migrate(&config, data_dir.as_deref(), json).await
-                {
+                if let Err(e) = migrate::run_migrate(&config, data_dir.as_deref(), json).await {
                     eprintln!("error: {e}");
                     std::process::exit(1);
                 }
@@ -518,10 +593,249 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::Bench {
+            only,
+            json,
+            compare,
+            baseline,
+            iterations,
+            ci,
+            threshold,
+        }) => {
+            let only_list = only.map(|s| vec![s]);
+            if let Err(e) = bench::run_bench(
+                only_list, json, compare, baseline, iterations, ci, threshold,
+            )
+            .await
+            {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Privacy { action }) => match action {
+            PrivacyCommands::EvidenceReport { json, output } => {
+                if let Err(e) = privacy::run_privacy_report(json, output.as_deref()).await {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        },
+        Some(Commands::Bundle {
+            output,
+            include_data,
+        }) => {
+            if let Err(e) = bundle::run_bundle(output.as_deref(), include_data) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Uninstall { purge }) => {
+            if let Err(e) = uninstall::run_uninstall(purge).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
         None => {
             println!("blufio: use --help for available commands");
         }
     }
+}
+
+/// Generate a config recipe template for a specific preset.
+fn generate_config_recipe(preset: &str) -> Result<String, blufio_core::BlufioError> {
+    let content = match preset {
+        "personal" => {
+            r#"# Blufio Configuration: Personal Use
+# Generated by: blufio config recipe personal
+#
+# Minimal setup for personal use with a single chat channel.
+
+[agent]
+name = "blufio"
+max_sessions = 3
+log_level = "info"
+# system_prompt = "You are a helpful personal assistant."
+
+[telegram]
+# bot_token = "<your-telegram-bot-token>"
+# allowed_users = ["your_telegram_id"]
+
+[anthropic]
+# api_key = "<your-anthropic-api-key>"
+# Or set ANTHROPIC_API_KEY environment variable
+default_model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+
+[storage]
+# database_path = "~/.local/share/blufio/blufio.db"
+
+[cost]
+# daily_limit_usd = 5.0
+# monthly_limit_usd = 50.0
+"#
+        }
+        "team" => {
+            r#"# Blufio Configuration: Team Use
+# Generated by: blufio config recipe team
+#
+# Setup for a small team with Slack integration and cost controls.
+
+[agent]
+name = "team-blufio"
+max_sessions = 10
+log_level = "info"
+# system_prompt_file = "/etc/blufio/system-prompt.md"
+
+[slack]
+# bot_token = "<xoxb-your-slack-bot-token>"
+# app_token = "<xapp-your-slack-app-token>"
+# allowed_users = ["U12345", "U67890"]
+
+[anthropic]
+# api_key = "<your-anthropic-api-key>"
+default_model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+
+[storage]
+# database_path = "/var/lib/blufio/blufio.db"
+
+[cost]
+# daily_limit_usd = 20.0
+# monthly_limit_usd = 200.0
+
+[security]
+# require_tls = true
+
+[gateway]
+enabled = true
+host = "127.0.0.1"
+port = 3000
+# bearer_token = "<generate-a-strong-token>"
+"#
+        }
+        "production" => {
+            r##"# Blufio Configuration: Production
+# Generated by: blufio config recipe production
+#
+# Full production setup with all channels, security, monitoring, and rate limits.
+
+[agent]
+name = "blufio-prod"
+max_sessions = 50
+log_level = "warn"
+# system_prompt_file = "/etc/blufio/system-prompt.md"
+
+[telegram]
+# bot_token = "<your-telegram-bot-token>"
+# allowed_users = []
+
+[discord]
+# bot_token = "<your-discord-bot-token>"
+# application_id = 0
+# allowed_users = []
+
+[slack]
+# bot_token = "<xoxb-your-slack-bot-token>"
+# app_token = "<xapp-your-slack-app-token>"
+# allowed_users = []
+
+[irc]
+# server = "irc.libera.chat"
+# port = 6697
+# nickname = "blufio-bot"
+# channels = ["#your-channel"]
+# tls = true
+
+[matrix]
+# homeserver_url = "https://matrix.org"
+# username = "blufio-bot"
+# password = "<your-matrix-password>"
+# rooms = ["#your-room:matrix.org"]
+
+[anthropic]
+# api_key = "<your-anthropic-api-key>"
+default_model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+
+[providers]
+default = "anthropic"
+
+[providers.openai]
+# api_key = "<your-openai-api-key>"
+# default_model = "gpt-4o"
+
+[storage]
+database_path = "/var/lib/blufio/blufio.db"
+wal_mode = true
+
+[cost]
+# daily_limit_usd = 100.0
+# monthly_limit_usd = 1000.0
+
+[security]
+# require_tls = true
+
+[vault]
+# session_timeout_secs = 900
+
+[gateway]
+enabled = true
+host = "0.0.0.0"
+port = 3000
+# bearer_token = "<generate-a-strong-token>"
+# default_rate_limit = 60
+
+[prometheus]
+enabled = true
+port = 9090
+
+[daemon]
+memory_warn_mb = 256
+memory_limit_mb = 512
+# health_port = 3000
+"##
+        }
+        "iot" => {
+            r#"# Blufio Configuration: IoT / Embedded
+# Generated by: blufio config recipe iot
+#
+# Minimal configuration for resource-constrained IoT devices.
+
+[agent]
+name = "blufio-iot"
+max_sessions = 1
+log_level = "warn"
+
+[anthropic]
+# api_key = "<your-anthropic-api-key>"
+default_model = "claude-sonnet-4-20250514"
+max_tokens = 1024
+
+[storage]
+# database_path = "/var/lib/blufio/blufio.db"
+
+[daemon]
+memory_warn_mb = 64
+memory_limit_mb = 128
+
+[skill]
+default_fuel = 500000
+default_memory_mb = 16
+default_epoch_timeout_secs = 5
+max_skills_in_prompt = 3
+
+[gateway]
+enabled = false
+"#
+        }
+        _ => {
+            return Err(blufio_core::BlufioError::Config(format!(
+                "unknown recipe preset: \"{preset}\". Available: personal, team, production, iot"
+            )));
+        }
+    };
+
+    Ok(content.to_string())
 }
 
 /// Open the database, returning the connection.
