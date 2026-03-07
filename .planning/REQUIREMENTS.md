@@ -72,11 +72,11 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Skills
 
-- [ ] **SKILL-01**: Local skill registry with install/list/remove/update commands
-- [ ] **SKILL-02**: Registry stores skill manifests with SHA-256 content hashes
-- [ ] **SKILL-03**: Ed25519 code signing for WASM skill artifacts
-- [ ] **SKILL-04**: Signature verification at install time and before execution
-- [ ] **SKILL-05**: Capability enforcement checked at every WASM host function call site
+- [x] **SKILL-01**: Local skill registry with install/list/remove/update commands
+- [x] **SKILL-02**: Registry stores skill manifests with SHA-256 content hashes
+- [x] **SKILL-03**: Ed25519 code signing for WASM skill artifacts
+- [x] **SKILL-04**: Signature verification at install time and before execution
+- [x] **SKILL-05**: Capability enforcement checked at every WASM host function call site
 
 ### Node System
 
@@ -190,11 +190,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHAN-09 | Phase 34 | Complete |
 | CHAN-10 | Phase 34 | Complete |
 | INFRA-06 | Phase 34 | Complete |
-| SKILL-01 | Phase 35 | Pending |
-| SKILL-02 | Phase 35 | Pending |
-| SKILL-03 | Phase 35 | Pending |
-| SKILL-04 | Phase 35 | Pending |
-| SKILL-05 | Phase 35 | Pending |
+| SKILL-01 | Phase 35 | Complete |
+| SKILL-02 | Phase 35 | Complete |
+| SKILL-03 | Phase 35 | Complete |
+| SKILL-04 | Phase 35 | Complete |
+| SKILL-05 | Phase 35 | Complete |
 | INFRA-04 | Phase 36 | Complete |
 | INFRA-05 | Phase 36 | Complete |
 | INFRA-07 | Phase 36 | Complete |
