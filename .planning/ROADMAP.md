@@ -71,7 +71,7 @@
 - [x] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication (completed 2026-03-07)
 - [x] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle (completed 2026-03-07)
 - [x] **Phase 39: Integration Verification** — End-to-end validation across all v1.3 features (completed 2026-03-07)
-- [ ] **Phase 40: Wire Global EventBus & Bridge** — Global EventBus in serve.rs + bridge loop startup
+- [x] **Phase 40: Wire Global EventBus & Bridge** — Global EventBus in serve.rs + bridge loop startup (completed 2026-03-07)
 - [ ] **Phase 41: Wire ProviderRegistry into Gateway** — Provider crates as binary deps + ProviderRegistry impl
 - [ ] **Phase 42: Wire Gateway Stores** — ApiKeyStore, WebhookStore, BatchStore instantiation + webhook delivery
 
@@ -337,7 +337,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 37. Node System | v1.3 | 3/3 | Complete | 2026-03-07 |
 | 38. Migration & CLI Utilities | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 39. Integration Verification | v1.3 | Complete    | 2026-03-07 | 2026-03-07 |
-| 40. Wire Global EventBus & Bridge | v1.3 | 0/2 | Pending | - |
+| 40. Wire Global EventBus & Bridge | 2/2 | Complete    | 2026-03-07 | - |
 | 41. Wire ProviderRegistry into Gateway | v1.3 | 0/2 | Pending | - |
 | 42. Wire Gateway Stores | v1.3 | 0/2 | Pending | - |
 

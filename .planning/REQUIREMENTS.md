@@ -62,12 +62,12 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: Internal event bus using tokio broadcast with lag handling
-- [ ] **INFRA-02**: Event bus publishes typed events (session, channel, skill, node, webhook, batch)
-- [ ] **INFRA-03**: Event bus uses mpsc for reliable subscribers (webhook delivery)
+- [x] **INFRA-01**: Internal event bus using tokio broadcast with lag handling
+- [x] **INFRA-02**: Event bus publishes typed events (session, channel, skill, node, webhook, batch)
+- [x] **INFRA-03**: Event bus uses mpsc for reliable subscribers (webhook delivery)
 - [x] **INFRA-04**: Docker multi-stage build producing minimal image (distroless or scratch)
 - [x] **INFRA-05**: docker-compose.yml with volume mounts, env injection, and health check
-- [ ] **INFRA-06**: Cross-channel bridging with configurable bridge rules in TOML
+- [x] **INFRA-06**: Cross-channel bridging with configurable bridge rules in TOML
 - [x] **INFRA-07**: Multi-instance systemd template (blufio@.service) with per-instance config
 
 ### Skills

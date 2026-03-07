@@ -642,6 +642,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "blufio-auth-keypair",
+ "blufio-bus",
  "blufio-config",
  "blufio-context",
  "blufio-core",

@@ -214,6 +214,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     );
     let tool_registry = Arc::new(tokio::sync::RwLock::new(tool_registry));
 
+    // Create global event bus shared across all subsystems.
+    let event_bus = Arc::new(blufio_bus::EventBus::new(1024));
+    info!("global event bus created (capacity=1024)");
+
     // Register SkillProvider with context engine for progressive tool discovery.
     let skill_provider =
         SkillProvider::new(tool_registry.clone(), config.skill.max_skills_in_prompt);
@@ -341,6 +345,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Build channel multiplexer.
     let mut mux = ChannelMultiplexer::new();
+    mux.set_event_bus(event_bus.clone());
 
     // Add Telegram channel (if enabled and configured).
     #[cfg(feature = "telegram")]
@@ -706,6 +711,57 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         blufio_agent::sdnotify::notify_ready(&ready_status);
     }
 
+    // --- Bridge system ---
+    #[cfg(feature = "bridge")]
+    let _bridge_handles = if !config.bridge.is_empty() {
+        // Grab a reference to connected channels BEFORE mux is moved into AgentLoop.
+        let bridge_channels = mux.connected_channels_ref();
+
+        // Spawn the bridge loop (subscribes to event bus, routes messages).
+        let (mut bridge_rx, bridge_task) =
+            blufio_bridge::spawn_bridge(event_bus.clone(), config.bridge.clone());
+
+        // Spawn a consumer task that dispatches bridged messages to target channels.
+        let dispatch_task = tokio::spawn(async move {
+            while let Some(bridged_msg) = bridge_rx.recv().await {
+                // Find the target channel adapter by name.
+                let target = bridge_channels
+                    .iter()
+                    .find(|(name, _)| name == &bridged_msg.target_channel);
+
+                if let Some((_, adapter)) = target {
+                    let outbound = blufio_core::types::OutboundMessage {
+                        session_id: None,
+                        channel: bridged_msg.target_channel.clone(),
+                        content: bridged_msg.content,
+                        reply_to: None,
+                        parse_mode: None,
+                        metadata: Some(serde_json::json!({"is_bridged": true}).to_string()),
+                    };
+                    if let Err(e) = adapter.send(outbound).await {
+                        warn!(
+                            target_channel = %bridged_msg.target_channel,
+                            error = %e,
+                            "bridge dispatch failed"
+                        );
+                    }
+                } else {
+                    warn!(
+                        target_channel = %bridged_msg.target_channel,
+                        "bridge target channel not found in multiplexer"
+                    );
+                }
+            }
+            info!("bridge dispatch task completed");
+        });
+
+        info!(groups = config.bridge.len(), "cross-channel bridge started");
+        Some((bridge_task, dispatch_task))
+    } else {
+        info!("no bridge groups configured, bridge disabled");
+        None
+    };
+
     // Initialize model router.
     let router = Arc::new(ModelRouter::new(config.routing.clone()));
     if config.routing.enabled {
@@ -783,11 +839,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
         let node_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
         let node_store = Arc::new(blufio_node::NodeStore::new(node_conn));
-        let node_event_bus = Arc::new(blufio_bus::EventBus::new(128));
 
         let conn_manager = Arc::new(blufio_node::ConnectionManager::new(
             node_store.clone(),
-            node_event_bus.clone(),
+            event_bus.clone(),
             config.node.clone(),
         ));
 
@@ -797,7 +852,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         // Start heartbeat monitor.
         let heartbeat_monitor = blufio_node::HeartbeatMonitor::new(
             conn_manager.clone(),
-            node_event_bus.clone(),
+            event_bus.clone(),
             config.node.clone(),
         );
         tokio::spawn(async move {
