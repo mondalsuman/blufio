@@ -123,6 +123,10 @@ pub struct BlufioConfig {
     /// Provider configuration including custom provider declarations.
     #[serde(default)]
     pub providers: ProvidersConfig,
+
+    /// Node system configuration for paired device mesh.
+    #[serde(default)]
+    pub node: NodeConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -1450,6 +1454,158 @@ pub struct CustomProviderConfig {
     /// Default model identifier for this provider.
     #[serde(default)]
     pub default_model: Option<String>,
+}
+
+// --- Node system configuration ---
+
+/// Node system configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NodeConfig {
+    /// Whether the node system is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// User-friendly node name (defaults to hostname or generated ID).
+    #[serde(default = "default_node_id")]
+    pub node_id: String,
+
+    /// WebSocket listener port for incoming node connections.
+    #[serde(default = "default_node_listen_port")]
+    pub listen_port: u16,
+
+    /// Declared capabilities for this node.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+
+    /// Heartbeat configuration.
+    #[serde(default)]
+    pub heartbeat: NodeHeartbeatConfig,
+
+    /// Reconnection configuration.
+    #[serde(default)]
+    pub reconnect: NodeReconnectConfig,
+
+    /// Approval routing configuration.
+    #[serde(default)]
+    pub approval: NodeApprovalConfig,
+}
+
+impl Default for NodeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            node_id: default_node_id(),
+            listen_port: default_node_listen_port(),
+            capabilities: Vec::new(),
+            heartbeat: NodeHeartbeatConfig::default(),
+            reconnect: NodeReconnectConfig::default(),
+            approval: NodeApprovalConfig::default(),
+        }
+    }
+}
+
+fn default_node_id() -> String {
+    format!("node-{}", &uuid::Uuid::new_v4().to_string()[..8])
+}
+
+fn default_node_listen_port() -> u16 {
+    9877
+}
+
+/// Node heartbeat timing configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NodeHeartbeatConfig {
+    /// Interval between heartbeat sends, in seconds.
+    #[serde(default = "default_node_heartbeat_interval")]
+    pub interval_secs: u64,
+
+    /// Threshold after which a node is marked stale (recommended: 3x interval).
+    #[serde(default = "default_node_stale_threshold")]
+    pub stale_threshold_secs: u64,
+}
+
+impl Default for NodeHeartbeatConfig {
+    fn default() -> Self {
+        Self {
+            interval_secs: default_node_heartbeat_interval(),
+            stale_threshold_secs: default_node_stale_threshold(),
+        }
+    }
+}
+
+fn default_node_heartbeat_interval() -> u64 {
+    30
+}
+
+fn default_node_stale_threshold() -> u64 {
+    90
+}
+
+/// Node WebSocket reconnection backoff configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NodeReconnectConfig {
+    /// Initial delay before first reconnection attempt, in seconds.
+    #[serde(default = "default_node_initial_delay")]
+    pub initial_delay_secs: u64,
+
+    /// Maximum delay between reconnection attempts, in seconds.
+    #[serde(default = "default_node_max_delay")]
+    pub max_delay_secs: u64,
+
+    /// Whether to add random jitter to backoff delays.
+    #[serde(default = "default_node_jitter")]
+    pub jitter: bool,
+}
+
+impl Default for NodeReconnectConfig {
+    fn default() -> Self {
+        Self {
+            initial_delay_secs: default_node_initial_delay(),
+            max_delay_secs: default_node_max_delay(),
+            jitter: default_node_jitter(),
+        }
+    }
+}
+
+fn default_node_initial_delay() -> u64 {
+    1
+}
+
+fn default_node_max_delay() -> u64 {
+    60
+}
+
+fn default_node_jitter() -> bool {
+    true
+}
+
+/// Node approval routing configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NodeApprovalConfig {
+    /// Action types that require broadcast approval.
+    #[serde(default)]
+    pub broadcast_actions: Vec<String>,
+
+    /// Timeout before auto-denying a pending approval, in seconds.
+    #[serde(default = "default_node_approval_timeout")]
+    pub timeout_secs: u64,
+}
+
+impl Default for NodeApprovalConfig {
+    fn default() -> Self {
+        Self {
+            broadcast_actions: Vec::new(),
+            timeout_secs: default_node_approval_timeout(),
+        }
+    }
+}
+
+fn default_node_approval_timeout() -> u64 {
+    300
 }
 
 #[cfg(test)]
