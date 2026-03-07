@@ -47,16 +47,16 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Channels
 
-- [ ] **CHAN-01**: Discord adapter with Gateway WebSocket and REST via serenity
-- [ ] **CHAN-02**: Discord slash commands and ephemeral responses
-- [ ] **CHAN-03**: Discord MESSAGE_CONTENT privileged intent correctly handled
-- [ ] **CHAN-04**: Slack adapter with Events API and Socket Mode via slack-morphism
-- [ ] **CHAN-05**: Slack slash commands and Block Kit messages
-- [ ] **CHAN-06**: WhatsApp Cloud API adapter (official Meta Business API)
-- [ ] **CHAN-07**: WhatsApp Web adapter (experimental, behind feature flag, labeled unstable)
-- [ ] **CHAN-08**: Signal adapter via signal-cli JSON-RPC sidecar bridge
-- [ ] **CHAN-09**: IRC adapter with TLS and NickServ authentication via irc crate
-- [ ] **CHAN-10**: Matrix adapter with room join and messaging via matrix-sdk 0.11
+- [x] **CHAN-01**: Discord adapter with Gateway WebSocket and REST via serenity
+- [x] **CHAN-02**: Discord slash commands and ephemeral responses
+- [x] **CHAN-03**: Discord MESSAGE_CONTENT privileged intent correctly handled
+- [x] **CHAN-04**: Slack adapter with Events API and Socket Mode via slack-morphism
+- [x] **CHAN-05**: Slack slash commands and Block Kit messages
+- [x] **CHAN-06**: WhatsApp Cloud API adapter (official Meta Business API)
+- [x] **CHAN-07**: WhatsApp Web adapter (experimental, behind feature flag, labeled unstable)
+- [x] **CHAN-08**: Signal adapter via signal-cli JSON-RPC sidecar bridge
+- [x] **CHAN-09**: IRC adapter with TLS and NickServ authentication via irc crate
+- [x] **CHAN-10**: Matrix adapter with room join and messaging via matrix-sdk 0.11
 - [x] **CHAN-11**: All new adapters implement ChannelAdapter trait with capabilities manifest
 - [x] **CHAN-12**: Format degradation pipeline works across all new channel capabilities
 
@@ -67,7 +67,7 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 - [ ] **INFRA-03**: Event bus uses mpsc for reliable subscribers (webhook delivery)
 - [x] **INFRA-04**: Docker multi-stage build producing minimal image (distroless or scratch)
 - [x] **INFRA-05**: docker-compose.yml with volume mounts, env injection, and health check
-- [ ] **INFRA-06**: Cross-channel bridging with configurable bridge rules in TOML
+- [x] **INFRA-06**: Cross-channel bridging with configurable bridge rules in TOML
 - [x] **INFRA-07**: Multi-instance systemd template (blufio@.service) with per-instance config
 
 ### Skills
@@ -177,19 +177,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 | API-16 | Phase 32 | Pending |
 | API-17 | Phase 32 | Pending |
 | API-18 | Phase 32 | Pending |
-| CHAN-01 | Phase 33 | Pending |
-| CHAN-02 | Phase 33 | Pending |
-| CHAN-03 | Phase 33 | Pending |
-| CHAN-04 | Phase 33 | Pending |
-| CHAN-05 | Phase 33 | Pending |
+| CHAN-01 | Phase 33 | Complete |
+| CHAN-02 | Phase 33 | Complete |
+| CHAN-03 | Phase 33 | Complete |
+| CHAN-04 | Phase 33 | Complete |
+| CHAN-05 | Phase 33 | Complete |
 | CHAN-11 | Phase 33 | Complete |
 | CHAN-12 | Phase 33 | Complete |
-| CHAN-06 | Phase 34 | Pending |
-| CHAN-07 | Phase 34 | Pending |
-| CHAN-08 | Phase 34 | Pending |
-| CHAN-09 | Phase 34 | Pending |
-| CHAN-10 | Phase 34 | Pending |
-| INFRA-06 | Phase 34 | Pending |
+| CHAN-06 | Phase 34 | Complete |
+| CHAN-07 | Phase 34 | Complete |
+| CHAN-08 | Phase 34 | Complete |
+| CHAN-09 | Phase 34 | Complete |
+| CHAN-10 | Phase 34 | Complete |
+| INFRA-06 | Phase 34 | Complete |
 | SKILL-01 | Phase 35 | Pending |
 | SKILL-02 | Phase 35 | Pending |
 | SKILL-03 | Phase 35 | Pending |
