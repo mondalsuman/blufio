@@ -1,0 +1,13 @@
+target/
+.git/
+.planning/
+.claude/
+.agents/
+.github/
+contrib/
+deploy/
+docs/
+*.md
+!CHANGELOG.md
+.gitignore
+.cargo/

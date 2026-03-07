@@ -15,6 +15,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 mod backup;
 mod doctor;
 mod encrypt;
+mod healthcheck;
 #[cfg(feature = "mcp-server")]
 mod mcp_server;
 mod serve;
@@ -107,6 +108,8 @@ enum Commands {
         #[arg(long)]
         yes: bool,
     },
+    /// Run a health check (for Docker HEALTHCHECK). Exits 0 if healthy, 1 if not.
+    Healthcheck,
 }
 
 /// Update subcommands.
@@ -376,6 +379,11 @@ async fn main() {
             #[cfg(not(feature = "mcp-server"))]
             {
                 eprintln!("error: blufio was compiled without mcp-server feature");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Healthcheck) => {
+            if let Err(_e) = healthcheck::run_healthcheck(&config).await {
                 std::process::exit(1);
             }
         }
@@ -1703,6 +1711,15 @@ plugins = { telegram = true, prometheus = false }
                 ..
             }) => {}
             _ => panic!("expected Update Rollback command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_healthcheck() {
+        let cli = Cli::parse_from(["blufio", "healthcheck"]);
+        match cli.command {
+            Some(Commands::Healthcheck) => {}
+            _ => panic!("expected Healthcheck command"),
         }
     }
 }
