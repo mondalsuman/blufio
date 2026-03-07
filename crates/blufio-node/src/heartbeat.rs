@@ -10,8 +10,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blufio_bus::{
-    events::{new_event_id, now_timestamp, BusEvent, NodeEvent},
     EventBus,
+    events::{BusEvent, NodeEvent, new_event_id, now_timestamp},
 };
 use tracing::{debug, warn};
 
@@ -105,9 +105,7 @@ impl HeartbeatMonitor {
                 let state = entry.value();
                 let elapsed = state.last_heartbeat.elapsed();
 
-                if elapsed > stale_threshold
-                    && state.status != crate::types::NodeStatus::Stale
-                {
+                if elapsed > stale_threshold && state.status != crate::types::NodeStatus::Stale {
                     warn!(
                         node_id = %node_id,
                         last_seen_secs_ago = elapsed.as_secs(),
@@ -134,8 +132,7 @@ mod tests {
     #[tokio::test]
     async fn collect_metrics_does_not_panic() {
         let metrics = collect_metrics().await;
-        // On any platform, total memory should be > 0
-        assert!(metrics.memory_total_mb > 0 || metrics.memory_total_mb == 0);
-        // uptime should be > 0 on a running system
+        // Verify we got some metrics back (uptime always > 0 on a running system)
+        assert!(metrics.uptime_secs > 0);
     }
 }

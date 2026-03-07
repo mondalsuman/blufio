@@ -120,7 +120,7 @@ impl NodeStore {
                 match result {
                     Ok(info) => Ok(Some(info)),
                     Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-                    Err(e) => Err(e.into()),
+                    Err(e) => Err(e),
                 }
             })
             .await
@@ -139,7 +139,9 @@ impl NodeStore {
                 Ok(affected > 0)
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| crate::NodeError::Store(format!("remove pairing: {e}")))
+            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| {
+                crate::NodeError::Store(format!("remove pairing: {e}"))
+            })
     }
 
     /// Update last_seen timestamp for a node.
@@ -159,7 +161,9 @@ impl NodeStore {
                 Ok(())
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| crate::NodeError::Store(format!("update last_seen: {e}")))
+            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| {
+                crate::NodeError::Store(format!("update last_seen: {e}"))
+            })
     }
 
     // --- Group operations ---
@@ -202,7 +206,9 @@ impl NodeStore {
                 Ok(())
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| crate::NodeError::Store(format!("remove from group: {e}")))
+            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| {
+                crate::NodeError::Store(format!("remove from group: {e}"))
+            })
     }
 
     /// List all groups.
@@ -226,14 +232,13 @@ impl NodeStore {
                 Ok(result)
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| crate::NodeError::Store(format!("list groups: {e}")))
+            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| {
+                crate::NodeError::Store(format!("list groups: {e}"))
+            })
     }
 
     /// Get all node IDs in a group.
-    pub async fn get_group_nodes(
-        &self,
-        group_name: &str,
-    ) -> Result<Vec<String>, crate::NodeError> {
+    pub async fn get_group_nodes(&self, group_name: &str) -> Result<Vec<String>, crate::NodeError> {
         let gn = group_name.to_string();
         self.conn
             .call(move |conn| {
@@ -248,7 +253,9 @@ impl NodeStore {
                 Ok(nodes)
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| crate::NodeError::Store(format!("get group nodes: {e}")))
+            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| {
+                crate::NodeError::Store(format!("get group nodes: {e}"))
+            })
     }
 
     /// Delete a group entirely.
@@ -263,7 +270,9 @@ impl NodeStore {
                 Ok(affected > 0)
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| crate::NodeError::Store(format!("delete group: {e}")))
+            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| {
+                crate::NodeError::Store(format!("delete group: {e}"))
+            })
     }
 
     // --- Approval operations ---
@@ -318,6 +327,8 @@ impl NodeStore {
                 Ok(affected > 0)
             })
             .await
-            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| crate::NodeError::Store(format!("resolve approval: {e}")))
+            .map_err(|e: tokio_rusqlite::Error<rusqlite::Error>| {
+                crate::NodeError::Store(format!("resolve approval: {e}"))
+            })
     }
 }

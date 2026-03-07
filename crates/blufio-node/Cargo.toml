@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+publish = false
 description = "Paired device mesh with Ed25519 mutual authentication for Blufio"
 
 [dependencies]
