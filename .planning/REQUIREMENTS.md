@@ -30,15 +30,15 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Providers
 
-- [ ] **PROV-01**: OpenAI provider with streaming and tool calling
-- [ ] **PROV-02**: OpenAI provider supports vision and structured outputs
-- [ ] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
-- [ ] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
-- [ ] **PROV-05**: Ollama auto-discovers local models via /api/tags
-- [ ] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
-- [ ] **PROV-07**: OpenRouter supports provider fallback ordering
-- [ ] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
-- [ ] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
+- [x] **PROV-01**: OpenAI provider with streaming and tool calling
+- [x] **PROV-02**: OpenAI provider supports vision and structured outputs
+- [x] **PROV-03**: OpenAI provider configurable via base_url (Azure OpenAI, Together, Fireworks)
+- [x] **PROV-04**: Ollama provider using native /api/chat endpoint (not OpenAI compat shim)
+- [x] **PROV-05**: Ollama auto-discovers local models via /api/tags
+- [x] **PROV-06**: OpenRouter provider with streaming and X-Title/HTTP-Referer headers
+- [x] **PROV-07**: OpenRouter supports provider fallback ordering
+- [x] **PROV-08**: Google/Gemini provider with native API format (not OpenAI-compatible)
+- [x] **PROV-09**: Gemini function calling mapped to provider-agnostic ToolDefinition
 - [x] **PROV-10**: Provider-agnostic ToolDefinition type in blufio-core (replaces Anthropic-specific)
 - [x] **PROV-11**: TTS provider trait (AudioProvider) defined with reference interface
 - [x] **PROV-12**: Transcription provider trait defined with reference interface

@@ -338,7 +338,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 38. Migration & CLI Utilities | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 39. Integration Verification | v1.3 | Complete    | 2026-03-07 | 2026-03-07 |
 | 40. Wire Global EventBus & Bridge | 2/2 | Complete    | 2026-03-07 | - |
-| 41. Wire ProviderRegistry into Gateway | v1.3 | 0/2 | Pending | - |
+| 41. Wire ProviderRegistry into Gateway | 1/2 | In Progress|  | - |
 | 42. Wire Gateway Stores | v1.3 | 0/2 | Pending | - |
 
 ---

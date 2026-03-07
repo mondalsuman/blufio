@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: executing
-stopped_at: Phase 41 planning complete
-last_updated: "2026-03-07T20:51:59.823Z"
-last_activity: 2026-03-07 -- Bridge dispatch wired in serve.rs, Phase 40 complete
+stopped_at: Completed 41-01-PLAN.md
+last_updated: "2026-03-07T21:03:43.489Z"
+last_activity: 2026-03-07 -- ConcreteProviderRegistry implemented with feature-gated provider init
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 40
-  completed_plans: 36
-  percent: 92
+  completed_plans: 37
+  percent: 93
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 
 ## Current Position
 
-Phase: 40 of 42 (Wire Global EventBus Bridge)
-Plan: 2 of 2 in current phase -- COMPLETE
+Phase: 41 of 42 (Wire Provider Registry)
+Plan: 1 of 2 in current phase
 Status: executing
-Last activity: 2026-03-07 -- Bridge dispatch wired in serve.rs, Phase 40 complete
+Last activity: 2026-03-07 -- ConcreteProviderRegistry implemented with feature-gated provider init
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -91,6 +91,7 @@ Progress: [█████████░] 92%
 - Average: ~12 plans/day
 | Phase 40 P01 | 7min | 2 tasks | 3 files |
 | Phase 40 P02 | 7min | 2 tasks | 1 files |
+| Phase 41 P01 | 7min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,8 @@ Key v1.3 constraints:
 - [Phase 40]: Global EventBus capacity 1024 (up from node-scoped 128) since it handles all event types
 - [Phase 40]: blufio-bus added as dependency to blufio-agent (was only in blufio main crate)
 - [Phase 40]: Bridge dispatch calls adapter.send() directly (outbound-only) to prevent infinite loops
+- [Phase 41]: Ollama provider stored as separate Arc<OllamaProvider> field to avoid Any downcast for list_local_models()
+- [Phase 41]: All four new provider features (openai, ollama, openrouter, gemini) added to default feature set
 
 ### Pending Todos
 
@@ -173,6 +176,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T20:51:59.815Z
-Stopped at: Phase 41 planning complete
-Resume file: .planning/phases/41-wire-provider-registry/41-01-PLAN.md
+Last session: 2026-03-07T21:03:43.484Z
+Stopped at: Completed 41-01-PLAN.md
+Resume file: None
