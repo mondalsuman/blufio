@@ -19,14 +19,14 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 - [x] **API-08**: Responses endpoint streams semantic events (response.created, output_text.delta, response.completed)
 - [x] **API-09**: User can invoke tools directly via POST /v1/tools/invoke
 - [x] **API-10**: User can list available tools via GET /v1/tools with JSON schemas
-- [ ] **API-11**: User can create scoped API keys via POST /v1/api-keys
-- [ ] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
-- [ ] **API-13**: API keys support per-key rate limiting (requests per minute)
-- [ ] **API-14**: API keys support expiration and revocation
-- [ ] **API-15**: User can register webhooks via POST /v1/webhooks
+- [x] **API-11**: User can create scoped API keys via POST /v1/api-keys
+- [x] **API-12**: API keys support scope restrictions (chat.completions, tools.invoke, admin)
+- [x] **API-13**: API keys support per-key rate limiting (requests per minute)
+- [x] **API-14**: API keys support expiration and revocation
+- [x] **API-15**: User can register webhooks via POST /v1/webhooks
 - [ ] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
-- [ ] **API-17**: User can submit batch requests via POST /v1/batch
-- [ ] **API-18**: Batch results available with per-item success/error status
+- [x] **API-17**: User can submit batch requests via POST /v1/batch
+- [x] **API-18**: Batch results available with per-item success/error status
 
 ### Providers
 

@@ -286,7 +286,7 @@ Plans:
 **Depends on:** Phase 32 (store implementations), Phase 40 (global EventBus for webhook delivery)
 **Requirements:** API-11, API-12, API-13, API-14, API-15, API-16, API-17, API-18
 **Gap Closure:** Closes runtime wiring gaps from v1.3 audit
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 42-01-PLAN.md — Add store/event_bus setters to GatewayChannel, instantiate stores in serve.rs
@@ -340,7 +340,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 39. Integration Verification | v1.3 | Complete    | 2026-03-07 | 2026-03-07 |
 | 40. Wire Global EventBus & Bridge | 2/2 | Complete    | 2026-03-07 | - |
 | 41. Wire ProviderRegistry into Gateway | 2/2 | Complete    | 2026-03-07 | - |
-| 42. Wire Gateway Stores | v1.3 | 0/2 | Pending | - |
+| 42. Wire Gateway Stores | 1/2 | In Progress|  | - |
 
 ---
 *Roadmap created: 2026-02-28*
