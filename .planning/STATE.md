@@ -2,13 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
-status: unknown
-last_updated: "2026-03-07T11:26:28Z"
+status: completed
+stopped_at: Completed 38-02-PLAN.md (Phase 38 complete)
+last_updated: "2026-03-07T14:44:15.202Z"
+last_activity: "2026-03-07 — Plan 38-02 complete (CLI utilities: bench, privacy, bundle, uninstall, config recipe)"
 progress:
-  total_phases: 9
-  completed_phases: 8
-  total_plans: 27
-  completed_plans: 24
+  total_phases: 11
+  completed_phases: 9
+  total_plans: 29
+  completed_plans: 26
+  percent: 93
 ---
 
 # Project State
@@ -18,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.3 Ecosystem Expansion — Phase 37 (Node System)
+**Current focus:** v1.3 Ecosystem Expansion — Phase 38 (Migration CLI Utilities)
 
 ## Current Position
 
-Phase: 37 of 39 (Node System) -- COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase 37 complete
-Last activity: 2026-03-07 — Plan 37-03 complete (ApprovalRouter with first-wins broadcast and timeout-then-deny)
+Phase: 38 of 39 (Migration CLI Utilities)
+Plan: 2 of 2 in current phase
+Status: Phase 38 complete
+Last activity: 2026-03-07 — Plan 38-02 complete (CLI utilities: bench, privacy, bundle, uninstall, config recipe)
 
-Progress: [█████░░░░░] 50%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -72,6 +75,8 @@ Progress: [█████░░░░░] 50%
 | 37 | 01 | ~12min | 2 | 11 |
 | 37 | 02 | ~11min | 2 | 7 |
 | 37 | 03 | ~2min | 2 | 3 |
+| 38 | 01 | ~17min | 2 | 7 |
+| 38 | 02 | ~11min | 2 | 7 |
 
 ## Accumulated Context
 
@@ -118,6 +123,13 @@ Key v1.3 constraints:
 - [Phase 37]: register_connection/remove_connection async because EventBus::publish is async
 - [Phase 37]: First-wins approval via DashMap::remove (atomic remove guarantees only one responder wins)
 - [Phase 37]: ConnectionManager gets optional approval_router via setter to avoid circular construction
+- [Phase 38]: OpenClaw detection order: --data-dir > $OPENCLAW_HOME > ~/.openclaw
+- [Phase 38]: Idempotent migration via migration_log UNIQUE(source, item_type, source_id)
+- [Phase 38]: Config translate preserves unmapped fields as TOML comments
+- [Phase 38]: Bench SQLite storage ops gated behind cfg(feature = "sqlite") for graceful degradation
+- [Phase 38]: Peak RSS via libc getrusage on macOS, /proc/self/status VmHWM on Linux
+- [Phase 38]: Bundle verifies binary signature before packaging, continues with warning if .minisig missing
+- [Phase 38]: Privacy report is static config analysis only -- no server connection needed
 
 ### Pending Todos
 
@@ -136,5 +148,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Completed 37-03-PLAN.md (Phase 37 complete)
+Stopped at: Completed 38-02-PLAN.md (Phase 38 complete)
 Resume file: .planning/ROADMAP.md

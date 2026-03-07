@@ -70,6 +70,7 @@ serial_test = "3"
 qrcode = { version = "0.14", default-features = false }
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
+indicatif = "0.17"
 
 [profile.release]
 lto = "thin"

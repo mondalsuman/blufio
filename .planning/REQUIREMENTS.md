@@ -88,19 +88,19 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 
 ### Migration
 
-- [ ] **MIGR-01**: blufio migrate --from-openclaw reads OpenClaw data directory
-- [ ] **MIGR-02**: Migration imports session history and cost records to SQLite
-- [ ] **MIGR-03**: Migration imports workspace personality files (SOUL.md, AGENTS.md, USER.md, etc.)
-- [ ] **MIGR-04**: blufio migrate preview shows dry-run report of what translates and what needs manual attention
-- [ ] **MIGR-05**: blufio config translate maps OpenClaw JSON config to Blufio TOML
+- [x] **MIGR-01**: blufio migrate --from-openclaw reads OpenClaw data directory
+- [x] **MIGR-02**: Migration imports session history and cost records to SQLite
+- [x] **MIGR-03**: Migration imports workspace personality files (SOUL.md, AGENTS.md, USER.md, etc.)
+- [x] **MIGR-04**: blufio migrate preview shows dry-run report of what translates and what needs manual attention
+- [x] **MIGR-05**: blufio config translate maps OpenClaw JSON config to Blufio TOML
 
 ### CLI Utilities
 
-- [ ] **CLI-01**: blufio bench runs built-in benchmarks (startup, context assembly, WASM, SQLite)
-- [ ] **CLI-02**: blufio privacy evidence-report enumerates outbound data flows and local stores
-- [ ] **CLI-03**: blufio config recipe generates config templates (personal/team/production/iot)
-- [ ] **CLI-04**: blufio uninstall removes binary, service files, and optionally data
-- [ ] **CLI-05**: blufio bundle creates Minisign-signed air-gapped deployment archive
+- [x] **CLI-01**: blufio bench runs built-in benchmarks (startup, context assembly, WASM, SQLite)
+- [x] **CLI-02**: blufio privacy evidence-report enumerates outbound data flows and local stores
+- [x] **CLI-03**: blufio config recipe generates config templates (personal/team/production/iot)
+- [x] **CLI-04**: blufio uninstall removes binary, service files, and optionally data
+- [x] **CLI-05**: blufio bundle creates Minisign-signed air-gapped deployment archive
 
 ## Future Requirements
 
@@ -203,16 +203,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NODE-03 | Phase 37 | Complete |
 | NODE-04 | Phase 37 | Complete |
 | NODE-05 | Phase 37 | Complete |
-| MIGR-01 | Phase 38 | Pending |
-| MIGR-02 | Phase 38 | Pending |
-| MIGR-03 | Phase 38 | Pending |
-| MIGR-04 | Phase 38 | Pending |
-| MIGR-05 | Phase 38 | Pending |
-| CLI-01 | Phase 38 | Pending |
-| CLI-02 | Phase 38 | Pending |
-| CLI-03 | Phase 38 | Pending |
-| CLI-04 | Phase 38 | Pending |
-| CLI-05 | Phase 38 | Pending |
+| MIGR-01 | Phase 38 | Complete |
+| MIGR-02 | Phase 38 | Complete |
+| MIGR-03 | Phase 38 | Complete |
+| MIGR-04 | Phase 38 | Complete |
+| MIGR-05 | Phase 38 | Complete |
+| CLI-01 | Phase 38 | Complete |
+| CLI-02 | Phase 38 | Complete |
+| CLI-03 | Phase 38 | Complete |
+| CLI-04 | Phase 38 | Complete |
+| CLI-05 | Phase 38 | Complete |
 
 **Coverage:**
 - v1.3 requirements: 71 total

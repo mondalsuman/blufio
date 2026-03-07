@@ -68,7 +68,7 @@
 - [x] **Phase 35: Skill Registry & Code Signing** (2/2 plans) — completed 2026-03-06
 - [x] **Phase 36: Docker Image & Deployment** (2/2 plans) — completed 2026-03-07
 - [x] **Phase 37: Node System** — Paired device mesh with Ed25519 mutual authentication (completed 2026-03-07)
-- [ ] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle
+- [x] **Phase 38: Migration & CLI Utilities** — OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle (completed 2026-03-07)
 - [ ] **Phase 39: Integration Verification** — End-to-end validation across all v1.3 features
 
 ## Phase Details
@@ -231,11 +231,11 @@ Plans:
   3. blufio config translate converts OpenClaw JSON config to Blufio TOML
   4. blufio bench runs built-in benchmarks (startup, context assembly, WASM, SQLite) and reports results
   5. blufio privacy evidence-report, blufio config recipe, blufio uninstall, and blufio bundle all work as documented
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 38-01: OpenClaw migration tool (migrate, preview, config translate)
-- [ ] 38-02: CLI utilities (bench, privacy, recipe, uninstall, bundle)
+- [ ] 38-01-PLAN.md — OpenClaw migration tool (migrate, preview, config translate)
+- [ ] 38-02-PLAN.md — CLI utilities (bench, privacy, recipe, uninstall, bundle)
 
 ### Phase 39: Integration Verification
 **Goal**: All 69 v1.3 requirements are verified end-to-end with cross-feature integration validated
@@ -296,7 +296,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 35. Skill Registry & Code Signing | v1.3 | 2/2 | Complete | 2026-03-06 |
 | 36. Docker Image & Deployment | v1.3 | 0/2 | Not started | - |
 | 37. Node System | 3/3 | Complete   | 2026-03-07 | - |
-| 38. Migration & CLI Utilities | v1.3 | 0/2 | Not started | - |
+| 38. Migration & CLI Utilities | 2/2 | Complete    | 2026-03-07 | - |
 | 39. Integration Verification | v1.3 | 0/2 | Not started | - |
 
 ---
