@@ -61,7 +61,9 @@ impl BusEvent {
             BusEvent::Node(NodeEvent::PairingFailed { .. }) => "node.pairing_failed",
             BusEvent::Node(NodeEvent::Stale { .. }) => "node.stale",
             BusEvent::Webhook(WebhookEvent::Triggered { .. }) => "webhook.triggered",
-            BusEvent::Webhook(WebhookEvent::DeliveryAttempted { .. }) => "webhook.delivery_attempted",
+            BusEvent::Webhook(WebhookEvent::DeliveryAttempted { .. }) => {
+                "webhook.delivery_attempted"
+            }
             BusEvent::Batch(BatchEvent::Submitted { .. }) => "batch.submitted",
             BusEvent::Batch(BatchEvent::Completed { .. }) => "batch.completed",
         }
