@@ -555,7 +555,8 @@ impl AgentLoop {
                     timestamp: blufio_bus::events::now_timestamp(),
                     channel: channel_name.clone(),
                 },
-            )).await;
+            ))
+            .await;
         }
 
         // Persist final assistant response (also records cost).

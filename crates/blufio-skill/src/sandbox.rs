@@ -202,7 +202,8 @@ impl WasmSkillRuntime {
                     skill_name: invocation.skill_name.clone(),
                     session_id: invocation.session_id.clone().unwrap_or_default(),
                 },
-            )).await;
+            ))
+            .await;
         }
 
         let manifest =
@@ -337,7 +338,8 @@ impl WasmSkillRuntime {
                     skill_name: invocation.skill_name.clone(),
                     is_error: result.as_ref().map_or(true, |r| r.is_error),
                 },
-            )).await;
+            ))
+            .await;
         }
 
         result
