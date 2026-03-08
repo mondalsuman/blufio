@@ -375,7 +375,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 41. Wire ProviderRegistry into Gateway | 2/2 | Complete    | 2026-03-07 | - |
 | 42. Wire Gateway Stores | 2/2 | Complete    | 2026-03-07 | - |
 | 43. Wire EventBus Event Publishers | v1.3 | Complete    | 2026-03-08 | - |
-| 44. Node Approval Wiring | 2/2 | Complete   | 2026-03-08 | - |
+| 44. Node Approval Wiring | 2/2 | Complete    | 2026-03-08 | - |
 | 45. Documentation & Traceability Sync | v1.3 | 0/2 | Planned | - |
 
 ---
