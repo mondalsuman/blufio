@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Ecosystem Expansion
-status: completed
-stopped_at: Milestone v1.3 archived
-last_updated: "2026-03-08T22:30:00.000Z"
-last_activity: 2026-03-08 -- v1.3 milestone completed and archived
+milestone: v1.4
+milestone_name: Quality & Resilience
+status: active
+stopped_at: Defining requirements
+last_updated: "2026-03-08T23:00:00.000Z"
+last_activity: 2026-03-08 -- Milestone v1.4 started
 progress:
-  total_phases: 17
-  completed_phases: 17
-  total_plans: 47
-  completed_plans: 47
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Planning next milestone
+**Current focus:** v1.4 Quality & Resilience
 
 ## Current Position
 
-Milestone: v1.3 Ecosystem Expansion -- SHIPPED 2026-03-08
-Next: `/gsd:new-milestone` to start next milestone
-
-Progress: [██████████] 47/47 plans (100%) -- ARCHIVED
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-08 — Milestone v1.4 started
 
 ## Performance Metrics
 
@@ -75,4 +75,4 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-08
-Stopped at: v1.3 milestone archived
+Stopped at: Milestone v1.4 started — defining requirements

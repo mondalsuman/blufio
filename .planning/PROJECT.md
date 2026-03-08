@@ -78,11 +78,27 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Active
 
-(none -- planning next milestone)
+- [ ] Accurate token counting via tokenizers crate (replace len()/4 heuristic)
+- [ ] Circuit breaker state machine for external dependencies
+- [ ] Graceful degradation ladder (6 levels, automatic escalation)
+- [ ] Typed error hierarchy with is_retryable(), severity(), category()
+- [ ] FormatPipeline integration into channel adapters + Table/List content types
+- [ ] ChannelCapabilities extension (streaming_type, formatting_support, rate_limits)
+- [ ] ORT upgrade from RC to stable release + ADR
+- [ ] Plugin architecture ADR (Phase 1 compiled-in vs future dynamic loading)
 
-## Current Milestone: Planning
+## Current Milestone: v1.4 Quality & Resilience
 
-v1.3 Ecosystem Expansion shipped 2026-03-08. Next milestone TBD via `/gsd:new-milestone`.
+**Goal:** Address QA audit deviations — accurate token counting, circuit breakers, graceful degradation, typed errors, format pipeline integration, and documentation of architectural decisions.
+
+**Target features:**
+- Accurate token counting for all languages (CJK, code, mixed content)
+- Per-dependency circuit breakers with configurable thresholds and Prometheus metrics
+- 6-level degradation ladder with automatic escalation/de-escalation
+- Typed error hierarchy enabling automated retry decisions
+- FormatPipeline wired into all channel adapters with content type extensions
+- ChannelCapabilities enriched for streaming, formatting, and rate limit metadata
+- ORT stable release + architectural decision records
 
 ## Shipped Milestones
 
@@ -191,4 +207,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | matrix-sdk 0.11 pinned | 0.12+ requires Rust 1.88 (not yet stable) | ✓ Good — room join + messaging work |
 
 ---
-*Last updated: 2026-03-08 after v1.3 milestone completion*
+*Last updated: 2026-03-08 after v1.4 milestone start*
