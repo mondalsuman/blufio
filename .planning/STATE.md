@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
-status: in-progress
-stopped_at: Phase 44 Plan 01 complete
-last_updated: "2026-03-08T20:18:17.000Z"
-last_activity: 2026-03-08 -- Phase 44 Plan 01 complete, BusEvent type strings + ApprovalResponse forwarding
+status: completed
+stopped_at: Completed 44-02-PLAN.md (Phase 44 complete)
+last_updated: "2026-03-08T20:27:54.962Z"
+last_activity: 2026-03-08 -- Phase 44 Plan 02 complete, ApprovalRouter wired into serve.rs with EventBus subscription
 progress:
   total_phases: 17
-  completed_phases: 14
+  completed_phases: 15
   total_plans: 45
-  completed_plans: 42
-  percent: 93
+  completed_plans: 44
+  percent: 96
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 ## Current Position
 
 Phase: 44 of 45 (Node Approval Wiring)
-Plan: 1 of 2 complete
-Status: In Progress
-Last activity: 2026-03-08 -- Phase 44 Plan 01 complete, BusEvent type strings + ApprovalResponse forwarding
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-03-08 -- Phase 44 Plan 02 complete, ApprovalRouter wired into serve.rs with EventBus subscription
 
-Progress: [██████████████████░░] 44/45 plans (93%)
+Progress: [███████████████████░] 44/45 plans (96%)
 
 ## Performance Metrics
 
@@ -97,6 +97,7 @@ Progress: [██████████████████░░] 44/45 p
 | Phase 42 P02 | 2min | 2 tasks | 1 files |
 | Phase 43 P01 | 7min | 2 tasks | 5 files |
 | Phase 44 P01 | 4min | 2 tasks | 2 files |
+| Phase 44 P02 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -174,6 +175,8 @@ Key v1.3 constraints:
 - [Phase 43]: MessageSent published after both send and edit-in-place paths complete, before persist_response
 - [Phase 44]: OnceLock<Arc<ApprovalRouter>> replaces Option<Arc<>> for Arc-compatible set_approval_router(&self)
 - [Phase 44]: BusEvent::event_type_string() returns &'static str (zero allocation) for all 15 leaf variants
+- [Phase 44]: Approval subscription spawned before reconnect_all to capture events during reconnection
+- [Phase 44]: Fire-and-forget request_approval (drop Receiver) -- events are post-action notifications, not gates
 
 ### Pending Todos
 
@@ -191,6 +194,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-08T20:18:17Z
-Stopped at: Completed 44-01-PLAN.md
-Resume file: .planning/phases/44-node-approval-wiring/44-02-PLAN.md
+Last session: 2026-03-08T20:27:54.954Z
+Stopped at: Completed 44-02-PLAN.md (Phase 44 complete)
+Resume file: None

@@ -75,7 +75,7 @@
 - [x] **Phase 41: Wire ProviderRegistry into Gateway** — Provider crates as binary deps + ProviderRegistry impl (completed 2026-03-07)
 - [x] **Phase 42: Wire Gateway Stores** — ApiKeyStore, WebhookStore, BatchStore instantiation + webhook delivery (completed 2026-03-07)
 - [x] **Phase 43: Wire EventBus Event Publishers** — AgentLoop + WasmSkillRuntime event publishing for webhook triggers (completed 2026-03-08)
-- [ ] **Phase 44: Node Approval Wiring** — ApprovalRouter EventBus subscription + ConnectionManager forwarding
+- [x] **Phase 44: Node Approval Wiring** — ApprovalRouter EventBus subscription + ConnectionManager forwarding (completed 2026-03-08)
 - [ ] **Phase 45: Documentation & Traceability Sync** — Fix 31 stale traceability entries + Phase 32 checkbox
 
 ## Phase Details
@@ -309,7 +309,7 @@ Plans:
 **Depends on:** Phase 37 (node system), Phase 40 (global EventBus)
 **Requirements:** NODE-05 (enhancement — core satisfied, wiring gaps remain)
 **Gap Closure:** Closes Phase 37 tech debt from v1.3 audit
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 44-01-PLAN.md — BusEvent type string mapping + ConnectionManager ApprovalResponse forwarding
@@ -375,7 +375,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 41. Wire ProviderRegistry into Gateway | 2/2 | Complete    | 2026-03-07 | - |
 | 42. Wire Gateway Stores | 2/2 | Complete    | 2026-03-07 | - |
 | 43. Wire EventBus Event Publishers | v1.3 | Complete    | 2026-03-08 | - |
-| 44. Node Approval Wiring | 1/2 | In Progress|  | - |
+| 44. Node Approval Wiring | 2/2 | Complete   | 2026-03-08 | - |
 | 45. Documentation & Traceability Sync | v1.3 | 0/2 | Planned | - |
 
 ---
