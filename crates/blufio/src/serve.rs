@@ -923,7 +923,40 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             config.node.clone(),
         ));
 
-        // Reconnect to all known peers.
+        // Create approval router and wire into connection manager.
+        let approval_router = Arc::new(blufio_node::ApprovalRouter::new(
+            conn_manager.clone(),
+            node_store.clone(),
+            config.node.approval.clone(),
+        ));
+        conn_manager.set_approval_router(approval_router.clone());
+
+        // Spawn EventBus subscription for approval routing.
+        {
+            let approval_bus = event_bus.clone();
+            let approval_router_clone = approval_router.clone();
+            tokio::spawn(async move {
+                let mut rx = approval_bus.subscribe_reliable(256).await;
+                tracing::info!("approval event subscription started");
+
+                while let Some(event) = rx.recv().await {
+                    let event_type = event.event_type_string();
+                    if approval_router_clone.requires_approval(event_type) {
+                        let description = format!("{event_type}: {event:?}");
+                        if let Err(e) = approval_router_clone
+                            .request_approval(event_type, &description)
+                            .await
+                        {
+                            tracing::error!(error = %e, event_type = event_type, "failed to request approval");
+                        }
+                    }
+                }
+                tracing::warn!("approval event subscription stopped -- event bus closed");
+            });
+            info!("approval event subscription spawned");
+        }
+
+        // Reconnect to all known peers (now with approval_router available).
         conn_manager.reconnect_all().await;
 
         // Start heartbeat monitor.

@@ -38,6 +38,38 @@ pub enum BusEvent {
     Batch(BatchEvent),
 }
 
+impl BusEvent {
+    /// Returns the dot-separated event type string for this event.
+    ///
+    /// Maps each leaf variant to a `"domain.action"` string matching the
+    /// `broadcast_actions` TOML config format (e.g., `"skill.invoked"`,
+    /// `"session.created"`, `"channel.message_received"`).
+    ///
+    /// The match is exhaustive, so the compiler will catch any future variants
+    /// added to `BusEvent`.
+    pub fn event_type_string(&self) -> &'static str {
+        match self {
+            BusEvent::Session(SessionEvent::Created { .. }) => "session.created",
+            BusEvent::Session(SessionEvent::Closed { .. }) => "session.closed",
+            BusEvent::Channel(ChannelEvent::MessageReceived { .. }) => "channel.message_received",
+            BusEvent::Channel(ChannelEvent::MessageSent { .. }) => "channel.message_sent",
+            BusEvent::Skill(SkillEvent::Invoked { .. }) => "skill.invoked",
+            BusEvent::Skill(SkillEvent::Completed { .. }) => "skill.completed",
+            BusEvent::Node(NodeEvent::Connected { .. }) => "node.connected",
+            BusEvent::Node(NodeEvent::Disconnected { .. }) => "node.disconnected",
+            BusEvent::Node(NodeEvent::Paired { .. }) => "node.paired",
+            BusEvent::Node(NodeEvent::PairingFailed { .. }) => "node.pairing_failed",
+            BusEvent::Node(NodeEvent::Stale { .. }) => "node.stale",
+            BusEvent::Webhook(WebhookEvent::Triggered { .. }) => "webhook.triggered",
+            BusEvent::Webhook(WebhookEvent::DeliveryAttempted { .. }) => {
+                "webhook.delivery_attempted"
+            }
+            BusEvent::Batch(BatchEvent::Submitted { .. }) => "batch.submitted",
+            BusEvent::Batch(BatchEvent::Completed { .. }) => "batch.completed",
+        }
+    }
+}
+
 // --- Session events ---
 
 /// Events related to session lifecycle.
@@ -353,5 +385,156 @@ mod tests {
     fn now_timestamp_is_nonempty() {
         let ts = now_timestamp();
         assert!(!ts.is_empty());
+    }
+
+    #[test]
+    fn event_type_string_all_variants() {
+        let cases: Vec<(BusEvent, &str)> = vec![
+            (
+                BusEvent::Session(SessionEvent::Created {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    session_id: String::new(),
+                    channel: String::new(),
+                }),
+                "session.created",
+            ),
+            (
+                BusEvent::Session(SessionEvent::Closed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    session_id: String::new(),
+                }),
+                "session.closed",
+            ),
+            (
+                BusEvent::Channel(ChannelEvent::MessageReceived {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    channel: String::new(),
+                    sender_id: String::new(),
+                    content: None,
+                    sender_name: None,
+                    is_bridged: false,
+                }),
+                "channel.message_received",
+            ),
+            (
+                BusEvent::Channel(ChannelEvent::MessageSent {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    channel: String::new(),
+                }),
+                "channel.message_sent",
+            ),
+            (
+                BusEvent::Skill(SkillEvent::Invoked {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    skill_name: String::new(),
+                    session_id: String::new(),
+                }),
+                "skill.invoked",
+            ),
+            (
+                BusEvent::Skill(SkillEvent::Completed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    skill_name: String::new(),
+                    is_error: false,
+                }),
+                "skill.completed",
+            ),
+            (
+                BusEvent::Node(NodeEvent::Connected {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    node_id: String::new(),
+                }),
+                "node.connected",
+            ),
+            (
+                BusEvent::Node(NodeEvent::Disconnected {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    node_id: String::new(),
+                    reason: String::new(),
+                }),
+                "node.disconnected",
+            ),
+            (
+                BusEvent::Node(NodeEvent::Paired {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    node_id: String::new(),
+                    name: String::new(),
+                }),
+                "node.paired",
+            ),
+            (
+                BusEvent::Node(NodeEvent::PairingFailed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    reason: String::new(),
+                }),
+                "node.pairing_failed",
+            ),
+            (
+                BusEvent::Node(NodeEvent::Stale {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    node_id: String::new(),
+                    last_seen_secs_ago: 0,
+                }),
+                "node.stale",
+            ),
+            (
+                BusEvent::Webhook(WebhookEvent::Triggered {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    webhook_id: String::new(),
+                    event_type: String::new(),
+                }),
+                "webhook.triggered",
+            ),
+            (
+                BusEvent::Webhook(WebhookEvent::DeliveryAttempted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    webhook_id: String::new(),
+                    status_code: 0,
+                    success: false,
+                }),
+                "webhook.delivery_attempted",
+            ),
+            (
+                BusEvent::Batch(BatchEvent::Submitted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    batch_id: String::new(),
+                    item_count: 0,
+                }),
+                "batch.submitted",
+            ),
+            (
+                BusEvent::Batch(BatchEvent::Completed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    batch_id: String::new(),
+                    success_count: 0,
+                    error_count: 0,
+                }),
+                "batch.completed",
+            ),
+        ];
+
+        for (event, expected) in &cases {
+            assert_eq!(
+                event.event_type_string(),
+                *expected,
+                "mismatch for {:?}",
+                std::mem::discriminant(event)
+            );
+        }
     }
 }

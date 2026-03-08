@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
 status: completed
-stopped_at: Completed 43-01-PLAN.md
-last_updated: "2026-03-08T17:46:58.536Z"
-last_activity: 2026-03-08 -- Phase 43 Plan 01 complete, EventBus publishers wired
+stopped_at: Completed 44-02-PLAN.md (Phase 44 complete)
+last_updated: "2026-03-08T20:31:30.097Z"
+last_activity: 2026-03-08 -- Phase 44 Plan 02 complete, ApprovalRouter wired into serve.rs with EventBus subscription
 progress:
   total_phases: 17
-  completed_phases: 14
-  total_plans: 43
-  completed_plans: 41
-  percent: 95
+  completed_phases: 15
+  total_plans: 45
+  completed_plans: 43
+  percent: 96
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 43 -- Wire EventBus Publishers (gap closure)
+**Current focus:** Phase 44 -- Node Approval Wiring (gap closure)
 
 ## Current Position
 
-Phase: 43 of 45 (Wire EventBus Publishers)
-Plan: 1 of 1 complete
-Status: Complete
-Last activity: 2026-03-08 -- Phase 43 Plan 01 complete, EventBus publishers wired
+Phase: 44 of 45 (Node Approval Wiring)
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-03-08 -- Phase 44 Plan 02 complete, ApprovalRouter wired into serve.rs with EventBus subscription
 
-Progress: [███████████████████░] 43/45 plans (95%)
+Progress: [███████████████████░] 44/45 plans (96%)
 
 ## Performance Metrics
 
@@ -96,6 +96,8 @@ Progress: [███████████████████░] 43/45 p
 | Phase 42 P01 | 3min | 2 tasks | 2 files |
 | Phase 42 P02 | 2min | 2 tasks | 1 files |
 | Phase 43 P01 | 7min | 2 tasks | 5 files |
+| Phase 44 P01 | 4min | 2 tasks | 2 files |
+| Phase 44 P02 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -171,6 +173,10 @@ Key v1.3 constraints:
 - [Phase 43]: EventBus.publish() is fire-and-forget (returns ()), publish calls use simple await without error handling
 - [Phase 43]: WasmSkillRuntime not created in production serve.rs yet; set_event_bus ready for wiring when skill loading implemented
 - [Phase 43]: MessageSent published after both send and edit-in-place paths complete, before persist_response
+- [Phase 44]: OnceLock<Arc<ApprovalRouter>> replaces Option<Arc<>> for Arc-compatible set_approval_router(&self)
+- [Phase 44]: BusEvent::event_type_string() returns &'static str (zero allocation) for all 15 leaf variants
+- [Phase 44]: Approval subscription spawned before reconnect_all to capture events during reconnection
+- [Phase 44]: Fire-and-forget request_approval (drop Receiver) -- events are post-action notifications, not gates
 
 ### Pending Todos
 
@@ -188,6 +194,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-08T12:31:53Z
-Stopped at: Completed 43-01-PLAN.md
-Resume file: .planning/phases/43-wire-eventbus-publishers/43-01-SUMMARY.md
+Last session: 2026-03-08T20:27:54.954Z
+Stopped at: Completed 44-02-PLAN.md (Phase 44 complete)
+Resume file: None
