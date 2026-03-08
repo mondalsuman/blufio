@@ -141,6 +141,61 @@
 
 ---
 
+## Milestone: v1.3 -- Ecosystem Expansion
+
+**Shipped:** 2026-03-08
+**Phases:** 17 | **Plans:** 47
+
+### What Was Built
+- Internal event bus (tokio broadcast + mpsc) with provider-agnostic ToolDefinition and media provider traits
+- 4 LLM provider plugins: OpenAI (streaming + vision), Ollama (native /api/chat), OpenRouter (fallback ordering), Gemini (native API)
+- OpenAI-compatible gateway API: /v1/chat/completions, /v1/responses, /v1/tools with complete wire type separation
+- Scoped API keys (rate limiting, revocation), webhooks (HMAC-SHA256, exponential backoff), batch processing
+- 6 new channel adapters: Discord (serenity), Slack (slack-morphism), WhatsApp (Cloud API + Web), Signal (signal-cli), IRC (TLS + SASL), Matrix (matrix-sdk 0.11)
+- Cross-channel bridging with configurable TOML rules and loop prevention
+- Skill registry with Ed25519 code signing, pre-execution verification gate, capability enforcement
+- Docker multi-stage distroless image, docker-compose deployment, multi-instance systemd template
+- Node system: Ed25519 pairing, WebSocket heartbeat, fleet CLI, approval routing broadcast
+- OpenClaw migration tool, bench, privacy report, config recipe, uninstall, bundle
+- 14 new crates, ~40,150 lines added (total: 71,808 LOC across 35 crates)
+
+### What Worked
+- **Audit-driven gap closure phases (40-45)**: The v1.3 audit identified 5 runtime wiring gaps (EventBus, provider registry, gateway stores, event publishers, node approval) plus documentation staleness. Creating targeted gap-closure phases (40-45) resolved all of them systematically.
+- **Provider crate decoupling**: Each LLM provider (OpenAI, Ollama, OpenRouter, Gemini) owns its own wire types with no cross-crate dependencies. Providers evolved independently without conflicts.
+- **Phase velocity on gap closure**: Phases 40-45 averaged ~5 minutes per plan — tiny, focused plans that wired existing infrastructure. Fastest execution in the project's history.
+- **Comprehensive integration verification**: Phase 39 created formal VERIFICATION.md for every phase, with 7 verification plans covering all 71 requirements and 4 E2E integration flows.
+- **Three-audit pattern**: Initial audit (gaps_found) → gap closure (phases 40-44) → re-audit (tech_debt) → docs sync (phase 45) → final audit (passed). Each round found real issues.
+
+### What Was Inefficient
+- **Phase 32 SUMMARY files missing**: Phase 32 (Scoped API Keys, Webhooks & Batch) shipped without SUMMARY.md files. Code verified via 32-VERIFICATION.md but the analyzer showed 0/3 summaries. Fourth milestone with this pattern.
+- **SUMMARY one_liner frontmatter empty**: All v1.3 SUMMARY files lack `one_liner` frontmatter, making automated accomplishment extraction return null. The complete-milestone CLI couldn't extract accomplishments automatically.
+- **Gap closure overhead still significant**: 6 gap-closure phases (40-45) out of 17 total (35%). While individually small (1-2 plans each), the pattern of "build feature crates, wire them later" persists. Integration during initial feature phases would eliminate this entirely.
+- **ROADMAP progress table formatting drift**: Phase 45 row had inconsistent column formatting (missing v1.3 milestone column). Manual table editing continues to be error-prone.
+- **Three audit rounds**: Despite v1.2's improvement to 17% gap-closure ratio, v1.3 reverted to 35% because the milestone was significantly larger (17 phases vs 6) and included complex cross-crate wiring.
+
+### Patterns Established
+- **Provider-agnostic ToolDefinition**: Each LLM provider serializes to its own wire format from a common ToolDefinition type in blufio-core
+- **Wire type separation**: OpenAI-compatible API uses its own request/response types completely separate from internal ProviderResponse — no leaky abstractions
+- **ChannelAdapter trait with capabilities manifest**: All 8 channels declare capabilities (markdown, images, reactions, threads, etc.) and the format degradation pipeline adapts output
+- **EventBus publish/subscribe with dual channels**: tokio broadcast for fire-and-forget (chat events, skill events), mpsc for reliable delivery (webhook, audit)
+- **TOFU key management for skills**: First publisher key trusted on install, key changes hard-blocked
+- **OnceLock for late-wiring**: OnceLock<Arc<T>> pattern for components that need to be set after construction (ApprovalRouter, EventBus)
+
+### Key Lessons
+1. **Gap-closure phases scale with milestone size.** v1.2 had 17% overhead (6 phases). v1.3 had 35% (17 phases). For large milestones, integration wiring must be part of the original feature phase, not deferred.
+2. **SUMMARY one_liner frontmatter needs to be mandatory.** Four milestones of empty frontmatter. The GSD workflow should enforce this during plan completion.
+3. **Phase 32's missing SUMMARYs prove the frontmatter lesson.** Despite 53 tests passing and full VERIFICATION.md, the phase appeared incomplete to tooling because SUMMARY files were absent.
+4. **Small, focused gap-closure plans execute fastest.** Phases 40-45 averaged 2-7 minutes per plan because each had a single, well-defined wiring task. This is the ideal plan granularity.
+5. **Three-audit pattern is the right quality bar for large milestones.** The first audit found 5 wiring gaps, the second found documentation staleness, the third confirmed clean. Each round caught real issues.
+
+### Cost Observations
+- Commits: 156 total
+- Timeline: 4 calendar days (2026-03-05 to 2026-03-08)
+- Notable: Gap-closure phases (40-45) were 6 of 17 phases (35%) but only ~11 plans of 47 total (23%). Small plans, big impact.
+- Lines: +40,150 net across 207 files
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -150,6 +205,7 @@
 | v1.0 | 14 | 43 | ~10/day | Initial structured approach with GSD workflow |
 | v1.1 | 8 | 32 | ~16/day | Security-per-phase, dual audit, gap closure phases |
 | v1.2 | 6 | 13 | ~13/day | Lowest gap-closure ratio (17%), mature audit pattern |
+| v1.3 | 17 | 47 | ~12/day | Largest milestone, three-audit pattern, provider crate decoupling |
 
 ### Cumulative Quality
 
@@ -158,10 +214,21 @@
 | v1.0 | 28,790 | 14 | 70 | 70/70 | 10 |
 | v1.1 | 36,462 | 16 | 48 (118 total) | 48/48 | 12 |
 | v1.2 | 39,168 | 21 | 30 (148 total) | 30/30 | 12 (carry-forward) |
+| v1.3 | 71,808 | 35 | 71 (219 total) | 71/71 | 16 |
+
+### Gap-Closure Ratio
+
+| Milestone | Total Phases | Gap-Closure | Ratio | Trend |
+|-----------|-------------|-------------|-------|-------|
+| v1.0 | 14 | 4 | 28% | baseline |
+| v1.1 | 8 | 3 | 37% | worse (but smaller milestone) |
+| v1.2 | 6 | 1 | 17% | improvement |
+| v1.3 | 17 | 6 | 35% | reverted (large milestone, complex cross-crate wiring) |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. **Wire integration at phase boundaries** — both milestones had wiring gaps caught only at audit. Must be enforced as a phase gate, not just advice.
-2. **Milestone audit before completion catches gaps** — v1.0 found 33 stale requirements; v1.1 found 26 orphaned requirements. Always audit.
-3. **SUMMARY frontmatter must be filled during execution** — both milestones had empty/missing frontmatter. Consider tooling enforcement.
-4. **Gap-closure phases are trending down** — v1.0: 4/14 (28%), v1.1: 3/8 (37%), v1.2: 1/6 (17%). Trending down. Worth the investment but reducible with earlier verification.
+1. **Wire integration at phase boundaries** — all four milestones had wiring gaps caught only at audit. Must be enforced as a phase gate, not just advice.
+2. **Milestone audit before completion catches gaps** — v1.0 found 33 stale requirements; v1.1 found 26 orphaned; v1.3 found 5 runtime wiring gaps. Always audit.
+3. **SUMMARY frontmatter must be filled during execution** — four milestones of empty/missing frontmatter. Tooling enforcement is overdue.
+4. **Gap-closure overhead correlates with milestone scope** — small milestones (v1.2: 17%) have less overhead than large ones (v1.3: 35%). For large milestones, integration wiring should be part of original feature phases.
+5. **Small, focused gap-closure plans execute fastest** — v1.3 phases 40-45 averaged 2-7 minutes per plan. This is the ideal plan granularity for wiring tasks.

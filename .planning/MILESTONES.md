@@ -1,5 +1,36 @@
 # Milestones
 
+## v1.3 Ecosystem Expansion (Shipped: 2026-03-08)
+
+**Delivered:** Ecosystem expansion — multi-provider LLM support (OpenAI, Ollama, OpenRouter, Gemini), OpenAI-compatible gateway API, 6 new channel adapters with cross-channel bridging, event bus, skill registry with Ed25519 code signing, Docker deployment, node system, and migration/CLI utilities.
+
+**Phases completed:** 17 phases, 47 plans
+**Timeline:** 4 days (2026-03-05 -> 2026-03-08)
+**Commits:** 156 total
+**Lines added:** ~40,150 (total Rust LOC: 71,808 across 35 crates)
+**Git range:** 53f7009 -> 33ceb4c
+**Requirements:** 71/71 satisfied (all formally verified)
+
+**Key accomplishments:**
+1. Internal event bus (tokio broadcast + mpsc) with provider-agnostic ToolDefinition and TTS/Transcription/Image media provider traits
+2. Multi-provider LLM support — OpenAI, Ollama (native /api/chat), OpenRouter, and Gemini with streaming + tool calling across all four
+3. OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, /v1/tools) with complete wire type separation from internal types
+4. Scoped API keys with rate limiting, HMAC-SHA256 webhook delivery with exponential backoff, and batch processing API
+5. 6 new channel adapters (Discord, Slack, WhatsApp, Signal, IRC, Matrix) with cross-channel bridging via configurable TOML rules
+6. Skill registry with Ed25519 code signing, pre-execution verification gate, and capability enforcement at every WASM host function call
+7. Docker multi-stage distroless image, docker-compose deployment, and multi-instance systemd template
+8. Node system with Ed25519 mutual authentication, WebSocket heartbeat, fleet CLI, and approval routing broadcast
+9. OpenClaw migration tool, built-in benchmarks, privacy evidence report, config recipes, air-gapped bundle, and uninstall
+10. Gap closure phases (40-44) wired all runtime integrations: EventBus, bridge loop, provider registry, gateway stores, event publishers, node approvals
+
+### Known Tech Debt
+- Carry-forward from v1.1: 5 deferred MCP integration items, 4 human verification items
+- WasmSkillRuntime.set_event_bus() exists but not called in production serve.rs (skill events deferred until production skill loading path exists)
+- INFRA-04 Docker build verified statically only (no Docker daemon available)
+- Media traits (TTS, Transcription, Image) defined but no provider implementations yet (future scope: EXT-03/04/05)
+
+---
+
 ## v1.2 Production Hardening (Shipped: 2026-03-04)
 
 **Delivered:** Production hardening -- systemd readiness, database encryption at rest, supply chain integrity via Minisign signatures, self-update with rollback, and backup integrity verification.

@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 8 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, Prometheus observability, full MCP integration (server + client), Docker deployment, and migration/CLI utilities. 70,755 LOC Rust across 35 crates, 219 requirements verified across 4 milestones.
+Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 8 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, Prometheus observability, full MCP integration (server + client), Docker deployment, and migration/CLI utilities. 71,808 LOC Rust across 35 crates, 219 requirements verified across 4 milestones.
 
 ## Core Value
 
@@ -48,51 +48,45 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ Minisign Ed25519 signature verification with embedded public key — v1.2
 - ✓ Self-update with download, Minisign verify, atomic swap, health check, rollback — v1.2
 - ✓ All 30 v1.2 requirements verified with VERIFICATION.md reports — v1.2
-- ✓ Event bus (internal pub/sub) — Phase 29
-- ✓ OpenAI provider plugin — Phase 30
-- ✓ Ollama provider plugin — Phase 30
-- ✓ OpenRouter provider plugin — Phase 30
-- ✓ Google/Gemini provider plugin — Phase 30
-- ✓ OpenAI-compatible /v1/chat/completions API — Phase 31
-- ✓ OpenResponses /v1/responses API — Phase 31
-- ✓ Tools Invoke API (/v1/tools/invoke) — Phase 31
-- ✓ Scoped API keys with rate limiting — Phase 32
-- ✓ Webhook management with HMAC signing — Phase 32
-- ✓ Batch operations API — Phase 32
-- ✓ TTS/Transcription/Image provider traits — Phase 29
-- ✓ Discord channel adapter (serenity) — Phase 33
-- ✓ Slack channel adapter (slack-morphism) — Phase 33
-- ✓ WhatsApp Cloud API adapter — Phase 34
-- ✓ Signal adapter (signal-cli sidecar) — Phase 34
-- ✓ IRC adapter (TLS + SASL) — Phase 34
-- ✓ Matrix adapter (matrix-sdk 0.11) — Phase 34
-- ✓ Cross-channel bridging — Phase 34
-- ✓ Skill registry with install/list/remove/update — Phase 35
-- ✓ Ed25519 code signing for WASM skills — Phase 35
-- ✓ Docker image (multi-stage distroless) — Phase 36
-- ✓ docker-compose with volumes/env/healthcheck — Phase 36
-- ✓ Multi-instance systemd template — Phase 36
-- ✓ Node system (Ed25519 pairing, heartbeat, fleet CLI) — Phase 37
-- ✓ OpenClaw migration tool — Phase 38
-- ✓ blufio bench (built-in benchmarks) — Phase 38
-- ✓ blufio privacy evidence-report — Phase 38
-- ✓ blufio config recipe + blufio uninstall — Phase 38
-- ✓ blufio bundle (air-gapped deployment) — Phase 38
-- ✓ All 71 v1.3 requirements verified with VERIFICATION.md reports — Phase 39
+- ✓ Event bus (internal pub/sub with tokio broadcast + mpsc) — v1.3
+- ✓ Provider-agnostic ToolDefinition and TTS/Transcription/Image media traits — v1.3
+- ✓ OpenAI provider plugin (streaming + tool calling + vision) — v1.3
+- ✓ Ollama provider plugin (native /api/chat + model discovery) — v1.3
+- ✓ OpenRouter provider plugin (provider fallback ordering) — v1.3
+- ✓ Google/Gemini provider plugin (native API + function calling) — v1.3
+- ✓ OpenAI-compatible /v1/chat/completions API with wire type separation — v1.3
+- ✓ OpenResponses /v1/responses API with semantic streaming — v1.3
+- ✓ Tools API (/v1/tools, /v1/tools/invoke) — v1.3
+- ✓ Scoped API keys with per-key rate limiting and revocation — v1.3
+- ✓ Webhook delivery with HMAC-SHA256 signing and exponential backoff — v1.3
+- ✓ Batch operations API with per-item results — v1.3
+- ✓ Discord channel adapter (serenity, slash commands, ephemeral responses) — v1.3
+- ✓ Slack channel adapter (slack-morphism, Events API, Socket Mode, Block Kit) — v1.3
+- ✓ WhatsApp Cloud API adapter + WhatsApp Web experimental adapter — v1.3
+- ✓ Signal adapter via signal-cli JSON-RPC sidecar — v1.3
+- ✓ IRC adapter with TLS and NickServ/SASL authentication — v1.3
+- ✓ Matrix adapter (matrix-sdk 0.11, room join, invite auto-accept) — v1.3
+- ✓ Cross-channel bridging with configurable TOML bridge rules — v1.3
+- ✓ Skill registry with install/list/remove/update and SHA-256 content hashes — v1.3
+- ✓ Ed25519 code signing with pre-execution verification gate — v1.3
+- ✓ Docker multi-stage distroless image with docker-compose deployment — v1.3
+- ✓ Multi-instance systemd template (blufio@.service) — v1.3
+- ✓ Node system (Ed25519 pairing, WebSocket heartbeat, fleet CLI, approval routing) — v1.3
+- ✓ OpenClaw migration tool (migrate, preview, config translate) — v1.3
+- ✓ CLI utilities (bench, privacy evidence-report, config recipe, uninstall, bundle) — v1.3
+- ✓ All 71 v1.3 requirements verified with VERIFICATION.md reports — v1.3
 
 ### Active
 
-<!-- No active requirements -- v1.3 complete, all moved to Validated -->
+(none -- planning next milestone)
 
-(none -- v1.3 Ecosystem Expansion verified and complete)
+## Current Milestone: Planning
 
-## Current Milestone: None (v1.3 complete)
-
-v1.3 Ecosystem Expansion verified and complete as of 2026-03-07.
+v1.3 Ecosystem Expansion shipped 2026-03-08. Next milestone TBD via `/gsd:new-milestone`.
 
 ## Shipped Milestones
 
-- **v1.3 Ecosystem Expansion** -- 11 phases (29-39), 36 plans, 71 requirements (2026-03-05 -> 2026-03-07)
+- **v1.3 Ecosystem Expansion** -- 17 phases (29-45), 47 plans, 71 requirements (2026-03-05 -> 2026-03-08)
 - **v1.2 Production Hardening** -- 6 phases, 13 plans, 30 requirements (2026-03-03 -> 2026-03-04)
 - **v1.1 MCP Integration** -- 8 phases, 32 plans, 48 requirements (2026-03-02 -> 2026-03-03)
 - **v1.0 MVP** -- 14 phases, 43 plans, 70 requirements (2026-02-28 -> 2026-03-02)
@@ -100,27 +94,28 @@ v1.3 Ecosystem Expansion verified and complete as of 2026-03-07.
 ### Out of Scope
 
 - Visual builder / GUI — CLI and config files only
-- More than 2-4 channels at launch — Telegram first, expand later
 - SOC 2 / HIPAA compliance tooling — post-v1.0
-- DAG workflow engine — post-v1.0
+- DAG workflow engine — v2.0 per PRD
 - Client SDKs (Python, TypeScript, Go) — post-v1.0
-- Multi-node sharding — single-instance only for v1.0
-- Native plugin system (libloading) — WASM-only for v1.0
+- Multi-node sharding — single-instance only
+- Native plugin system (libloading) — WASM-only; memory safety boundary
 - Windows native builds — WSL2 is the path
-- Shell automation layer (lifecycle scripts, hooks) — not needed for v1.0, scripts suffice
-- Official skill registry with verified signatures — deferred, local registry works for v1.0
+- Remote skill registry / marketplace with CDN distribution — local registry works
+- Browser extension — post-v1.0 per PRD
+- Matrix E2E encryption — requires matrix-sdk-crypto
+- Media provider implementations (TTS, Transcription, Image) — traits defined, implementations deferred
 
 ## Context
 
 ### Current State
 
-Shipped v1.3 Ecosystem Expansion with 70,755 LOC Rust across 35 crates. 219 requirements verified across 4 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71). 1,414 tests passing. All 71 v1.3 requirements verified with formal VERIFICATION.md reports. 4/4 cross-feature integration flows passing.
+Shipped v1.3 Ecosystem Expansion with 71,808 LOC Rust across 35 crates. 219 requirements verified across 4 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71). All 71 v1.3 requirements verified with formal VERIFICATION.md reports. 4/4 cross-feature integration flows passing.
 
-**Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower.
+**Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc.
 
 **Architecture:** 35-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-discord, blufio-gateway, blufio-gemini, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
 
-**Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). v1.2 introduced no new tech debt.
+**Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). WasmSkillRuntime EventBus wiring deferred. Media provider trait implementations deferred (EXT-03/04/05).
 
 ### The Kill Shot
 
@@ -186,6 +181,14 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Gemini native API (not OpenAI shim) | systemInstruction, functionDeclarations, inlineData — best feature support | ✓ Good — brace-depth JSON parser handles chunked stream |
 | Provider crate decoupling | Each provider owns its wire types independently (no cross-crate deps) | ✓ Good — providers can evolve independently |
 | Query-param auth for Gemini | ?key= per Google convention (not Authorization header) | ✓ Good — matches Gemini API docs exactly |
+| Event bus before features | EventBus unblocks webhooks, bridging, nodes, batch — must come first | ✓ Good — clean dependency chain, all consumers wired |
+| TOFU key management for skills | First publisher key trusted, key changes hard-blocked | ✓ Good — simple trust model, prevents supply chain attacks |
+| Pre-execution verification gate | Signature + capability check before every WASM invoke() | ✓ Good — TOCTOU prevented by in-memory WASM bytes |
+| Global EventBus capacity 1024 | Handles all event types system-wide (up from scoped 128) | ✓ Good — no lag warnings in testing |
+| Bridge outbound-only dispatch | adapter.send() called directly to prevent infinite loops | ✓ Good — loop prevention built into architecture |
+| Distroless cc-debian12 (not static) | ONNX Runtime ships glibc-linked .so files | ✓ Good — TLS and SQLCipher work in distroless |
+| signal-cli sidecar (not native Rust) | No production Rust Signal library exists | ✓ Good — JSON-RPC bridge works cleanly |
+| matrix-sdk 0.11 pinned | 0.12+ requires Rust 1.88 (not yet stable) | ✓ Good — room join + messaging work |
 
 ---
-*Last updated: 2026-03-07 after v1.3 Ecosystem Expansion verification complete (71/71 requirements verified)*
+*Last updated: 2026-03-08 after v1.3 milestone completion*
