@@ -38,6 +38,36 @@ pub enum BusEvent {
     Batch(BatchEvent),
 }
 
+impl BusEvent {
+    /// Returns the dot-separated event type string for this event.
+    ///
+    /// Maps each leaf variant to a `"domain.action"` string matching the
+    /// `broadcast_actions` TOML config format (e.g., `"skill.invoked"`,
+    /// `"session.created"`, `"channel.message_received"`).
+    ///
+    /// The match is exhaustive, so the compiler will catch any future variants
+    /// added to `BusEvent`.
+    pub fn event_type_string(&self) -> &'static str {
+        match self {
+            BusEvent::Session(SessionEvent::Created { .. }) => "session.created",
+            BusEvent::Session(SessionEvent::Closed { .. }) => "session.closed",
+            BusEvent::Channel(ChannelEvent::MessageReceived { .. }) => "channel.message_received",
+            BusEvent::Channel(ChannelEvent::MessageSent { .. }) => "channel.message_sent",
+            BusEvent::Skill(SkillEvent::Invoked { .. }) => "skill.invoked",
+            BusEvent::Skill(SkillEvent::Completed { .. }) => "skill.completed",
+            BusEvent::Node(NodeEvent::Connected { .. }) => "node.connected",
+            BusEvent::Node(NodeEvent::Disconnected { .. }) => "node.disconnected",
+            BusEvent::Node(NodeEvent::Paired { .. }) => "node.paired",
+            BusEvent::Node(NodeEvent::PairingFailed { .. }) => "node.pairing_failed",
+            BusEvent::Node(NodeEvent::Stale { .. }) => "node.stale",
+            BusEvent::Webhook(WebhookEvent::Triggered { .. }) => "webhook.triggered",
+            BusEvent::Webhook(WebhookEvent::DeliveryAttempted { .. }) => "webhook.delivery_attempted",
+            BusEvent::Batch(BatchEvent::Submitted { .. }) => "batch.submitted",
+            BusEvent::Batch(BatchEvent::Completed { .. }) => "batch.completed",
+        }
+    }
+}
+
 // --- Session events ---
 
 /// Events related to session lifecycle.
