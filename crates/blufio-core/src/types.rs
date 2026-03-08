@@ -427,6 +427,8 @@ pub struct SkillInvocation {
     pub skill_name: String,
     /// JSON input to pass to the skill.
     pub input: serde_json::Value,
+    /// Optional session ID for event correlation.
+    pub session_id: Option<String>,
 }
 
 /// The result of a skill invocation.

@@ -67,6 +67,8 @@ pub struct AgentLoop {
     heartbeat_runner: Option<Arc<HeartbeatRunner>>,
     /// Registry of available tools (built-in and WASM skills).
     tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
+    /// Optional EventBus for publishing channel lifecycle events.
+    event_bus: Option<Arc<blufio_bus::EventBus>>,
     config: BlufioConfig,
     sessions: HashMap<String, SessionActor>,
 }
@@ -106,9 +108,15 @@ impl AgentLoop {
             router,
             heartbeat_runner,
             tool_registry,
+            event_bus: None,
             config,
             sessions: HashMap::new(),
         })
+    }
+
+    /// Sets the EventBus for publishing channel lifecycle events.
+    pub fn set_event_bus(&mut self, bus: Arc<blufio_bus::EventBus>) {
+        self.event_bus = Some(bus);
     }
 
     /// Runs the main agent loop until the cancellation token is triggered.
@@ -537,6 +545,17 @@ impl AgentLoop {
             {
                 debug!(error = %e, "failed to send final edit");
             }
+        }
+
+        // Publish ChannelEvent::MessageSent after final response delivery.
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(blufio_bus::events::BusEvent::Channel(
+                blufio_bus::events::ChannelEvent::MessageSent {
+                    event_id: blufio_bus::events::new_event_id(),
+                    timestamp: blufio_bus::events::now_timestamp(),
+                    channel: channel_name.clone(),
+                },
+            )).await;
         }
 
         // Persist final assistant response (also records cost).
