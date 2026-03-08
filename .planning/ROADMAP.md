@@ -74,7 +74,7 @@
 - [x] **Phase 40: Wire Global EventBus & Bridge** — Global EventBus in serve.rs + bridge loop startup (completed 2026-03-07)
 - [x] **Phase 41: Wire ProviderRegistry into Gateway** — Provider crates as binary deps + ProviderRegistry impl (completed 2026-03-07)
 - [x] **Phase 42: Wire Gateway Stores** — ApiKeyStore, WebhookStore, BatchStore instantiation + webhook delivery (completed 2026-03-07)
-- [ ] **Phase 43: Wire EventBus Event Publishers** — AgentLoop + WasmSkillRuntime event publishing for webhook triggers
+- [x] **Phase 43: Wire EventBus Event Publishers** — AgentLoop + WasmSkillRuntime event publishing for webhook triggers (completed 2026-03-08)
 - [ ] **Phase 44: Node Approval Wiring** — ApprovalRouter EventBus subscription + ConnectionManager forwarding
 - [ ] **Phase 45: Documentation & Traceability Sync** — Fix 31 stale traceability entries + Phase 32 checkbox
 
@@ -302,7 +302,7 @@ Plans:
 **Gap Closure:** Closes 2 event publisher gaps from v1.3 audit (AgentLoop → ChannelEvent::MessageSent, WasmSkillRuntime → SkillEvent::Invoked/Completed)
 
 Plans:
-- [ ] 43-01-PLAN.md — Wire EventBus into AgentLoop and WasmSkillRuntime, publish chat.completed and tool.invoked events
+- [x] 43-01-PLAN.md — Wire EventBus into AgentLoop and WasmSkillRuntime, publish chat.completed and tool.invoked events
 
 ### Phase 44: Node Approval Wiring
 **Goal:** Wire ApprovalRouter into EventBus for event-driven triggering and fix ConnectionManager forwarding

@@ -24,7 +24,7 @@ Requirements for v1.3 Ecosystem Expansion. Each maps to roadmap phases.
 - [x] **API-13**: API keys support per-key rate limiting (requests per minute)
 - [x] **API-14**: API keys support expiration and revocation
 - [x] **API-15**: User can register webhooks via POST /v1/webhooks
-- [ ] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
+- [x] **API-16**: Webhooks deliver events with HMAC-SHA256 signing and exponential backoff retry
 - [x] **API-17**: User can submit batch requests via POST /v1/batch
 - [x] **API-18**: Batch results available with per-item success/error status
 
@@ -174,7 +174,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | API-13 | Phase 42 | - | Pending |
 | API-14 | Phase 42 | - | Pending |
 | API-15 | Phase 42 | - | Pending |
-| API-16 | Phase 43 | - | Pending |
+| API-16 | Phase 43 | 43-01-SUMMARY.md | Complete |
 | API-17 | Phase 42 | - | Pending |
 | API-18 | Phase 42 | - | Pending |
 | CHAN-01 | Phase 33 | 33-VERIFICATION.md | Verified |

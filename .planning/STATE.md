@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Ecosystem Expansion
-status: completed
-stopped_at: Phase 43 context gathered
-last_updated: "2026-03-08T12:14:37.709Z"
-last_activity: 2026-03-07 -- Phase 42 Plan 02 complete, webhook delivery spawned
+status: in-progress
+stopped_at: Completed 43-01-PLAN.md
+last_updated: "2026-03-08T12:31:53Z"
+last_activity: 2026-03-08 -- Phase 43 Plan 01 complete, EventBus publishers wired
 progress:
   total_phases: 17
   completed_phases: 13
-  total_plans: 42
-  completed_plans: 40
-  percent: 100
+  total_plans: 43
+  completed_plans: 41
+  percent: 95
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 42 -- Wire Gateway Stores (gap closure)
+**Current focus:** Phase 43 -- Wire EventBus Publishers (gap closure)
 
 ## Current Position
 
-Phase: 42 of 42 (Wire Gateway Stores)
-Plan: 2 of 2 complete
+Phase: 43 of 45 (Wire EventBus Publishers)
+Plan: 1 of 1 complete
 Status: Complete
-Last activity: 2026-03-07 -- Phase 42 Plan 02 complete, webhook delivery spawned
+Last activity: 2026-03-08 -- Phase 43 Plan 01 complete, EventBus publishers wired
 
-Progress: [████████████████████] 42/42 plans (100%)
+Progress: [███████████████████░] 43/45 plans (95%)
 
 ## Performance Metrics
 
@@ -95,6 +95,7 @@ Progress: [████████████████████] 42/42 p
 | Phase 41 P02 | 5min | 2 tasks | 2 files |
 | Phase 42 P01 | 3min | 2 tasks | 2 files |
 | Phase 42 P02 | 2min | 2 tasks | 1 files |
+| Phase 43 P01 | 7min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -167,6 +168,9 @@ Key v1.3 constraints:
 - [Phase 42]: Dedicated tokio_rusqlite connection for gateway stores (separate from main storage connection)
 - [Phase 42]: webhook_store cloned before setter call to preserve Arc for Plan 02 webhook delivery
 - [Phase 42]: webhook_store moved (not cloned) into delivery task since setter already consumed its own clone
+- [Phase 43]: EventBus.publish() is fire-and-forget (returns ()), publish calls use simple await without error handling
+- [Phase 43]: WasmSkillRuntime not created in production serve.rs yet; set_event_bus ready for wiring when skill loading implemented
+- [Phase 43]: MessageSent published after both send and edit-in-place paths complete, before persist_response
 
 ### Pending Todos
 
@@ -184,6 +188,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-08T12:14:37.703Z
-Stopped at: Phase 43 context gathered
-Resume file: .planning/phases/43-wire-eventbus-publishers/43-CONTEXT.md
+Last session: 2026-03-08T12:31:53Z
+Stopped at: Completed 43-01-PLAN.md
+Resume file: .planning/phases/43-wire-eventbus-publishers/43-01-SUMMARY.md
