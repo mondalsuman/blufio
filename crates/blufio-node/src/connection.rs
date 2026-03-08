@@ -35,8 +35,9 @@ pub struct ConnectionManager {
     event_bus: Arc<EventBus>,
     /// Node configuration.
     config: NodeConfig,
-    /// Optional approval router for handling incoming approval responses.
-    approval_router: Option<Arc<crate::approval::ApprovalRouter>>,
+    /// Approval router for handling incoming approval responses.
+    /// Uses OnceLock for Arc-compatible set-once initialization.
+    approval_router: std::sync::OnceLock<Arc<crate::approval::ApprovalRouter>>,
 }
 
 /// Runtime state for a connected node (not persisted).
@@ -59,7 +60,7 @@ impl ConnectionManager {
             store,
             event_bus,
             config,
-            approval_router: None,
+            approval_router: std::sync::OnceLock::new(),
         }
     }
 
@@ -74,8 +75,11 @@ impl ConnectionManager {
     }
 
     /// Set the approval router for handling incoming approval responses.
-    pub fn set_approval_router(&mut self, router: Arc<crate::approval::ApprovalRouter>) {
-        self.approval_router = Some(router);
+    ///
+    /// Takes `&self` (not `&mut self`) so it can be called on `Arc<ConnectionManager>`.
+    /// Uses `OnceLock` internally -- only the first call has effect.
+    pub fn set_approval_router(&self, router: Arc<crate::approval::ApprovalRouter>) {
+        let _ = self.approval_router.set(router);
     }
 
     /// Connect to all known paired nodes on startup.
@@ -97,6 +101,7 @@ impl ConnectionManager {
                 let config = self.config.clone();
                 let endpoint = endpoint.clone();
                 let peer = peer.clone();
+                let approval_router = self.approval_router.get().cloned();
 
                 tokio::spawn(async move {
                     reconnect_with_backoff(
@@ -107,6 +112,7 @@ impl ConnectionManager {
                         event_bus,
                         store,
                         &config,
+                        approval_router,
                     )
                     .await;
                 });
@@ -256,6 +262,7 @@ async fn reconnect_with_backoff(
     event_bus: Arc<EventBus>,
     store: Arc<NodeStore>,
     config: &NodeConfig,
+    approval_router: Option<Arc<crate::approval::ApprovalRouter>>,
 ) {
     let mut delay = Duration::from_secs(config.reconnect.initial_delay_secs);
     let max_delay = Duration::from_secs(config.reconnect.max_delay_secs);
@@ -325,10 +332,27 @@ async fn reconnect_with_backoff(
                                 responder = %responder_node,
                                 "received approval response from peer"
                             );
-                            // Approval handling is done by the ApprovalRouter which is
-                            // wired separately. The connection manager just logs receipt.
-                            // In a full implementation, the ApprovalRouter would subscribe
-                            // to incoming messages or be passed as a dependency.
+                            if let Some(ref router) = approval_router {
+                                match router
+                                    .handle_response(request_id, approved, responder_node)
+                                    .await
+                                {
+                                    Ok(was_first) => {
+                                        debug!(
+                                            request_id = %request_id,
+                                            was_first = was_first,
+                                            "approval response forwarded"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            request_id = %request_id,
+                                            error = %e,
+                                            "failed to handle approval response"
+                                        );
+                                    }
+                                }
+                            }
                         }
                         NodeMessage::ApprovalHandled {
                             ref request_id,
