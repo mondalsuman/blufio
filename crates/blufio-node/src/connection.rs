@@ -254,6 +254,7 @@ impl ConnectionManager {
 }
 
 /// Reconnect to a peer with exponential backoff and jitter.
+#[allow(clippy::too_many_arguments)]
 async fn reconnect_with_backoff(
     peer: &NodeInfo,
     endpoint: &str,
