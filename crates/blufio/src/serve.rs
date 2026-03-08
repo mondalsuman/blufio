@@ -1017,6 +1017,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     )
     .await?;
 
+    // Wire EventBus into AgentLoop for publishing MessageSent events.
+    agent_loop.set_event_bus(event_bus.clone());
+
     // Log integration status summary.
     {
         let security_status = "OK (TLS 1.2+ / SSRF protection)";

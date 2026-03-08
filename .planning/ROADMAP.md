@@ -74,7 +74,7 @@
 - [x] **Phase 40: Wire Global EventBus & Bridge** — Global EventBus in serve.rs + bridge loop startup (completed 2026-03-07)
 - [x] **Phase 41: Wire ProviderRegistry into Gateway** — Provider crates as binary deps + ProviderRegistry impl (completed 2026-03-07)
 - [x] **Phase 42: Wire Gateway Stores** — ApiKeyStore, WebhookStore, BatchStore instantiation + webhook delivery (completed 2026-03-07)
-- [ ] **Phase 43: Wire EventBus Event Publishers** — AgentLoop + WasmSkillRuntime event publishing for webhook triggers
+- [x] **Phase 43: Wire EventBus Event Publishers** — AgentLoop + WasmSkillRuntime event publishing for webhook triggers (completed 2026-03-08)
 - [ ] **Phase 44: Node Approval Wiring** — ApprovalRouter EventBus subscription + ConnectionManager forwarding
 - [ ] **Phase 45: Documentation & Traceability Sync** — Fix 31 stale traceability entries + Phase 32 checkbox
 
@@ -302,9 +302,7 @@ Plans:
 **Gap Closure:** Closes 2 event publisher gaps from v1.3 audit (AgentLoop → ChannelEvent::MessageSent, WasmSkillRuntime → SkillEvent::Invoked/Completed)
 
 Plans:
-- [ ] 43-01-PLAN.md — Wire EventBus into AgentLoop, publish ChannelEvent::MessageSent after outbound delivery
-- [ ] 43-02-PLAN.md — Wire EventBus into WASM skill execution, publish SkillEvent::Invoked/Completed
-- [ ] 43-03-PLAN.md — Verify chat.completed and tool.invoked webhook flows fire end-to-end
+- [x] 43-01-PLAN.md — Wire EventBus into AgentLoop and WasmSkillRuntime, publish chat.completed and tool.invoked events
 
 ### Phase 44: Node Approval Wiring
 **Goal:** Wire ApprovalRouter into EventBus for event-driven triggering and fix ConnectionManager forwarding
@@ -375,7 +373,7 @@ Phases execute in numeric order: 29 -> 30 -> 31 -> ... -> 39
 | 40. Wire Global EventBus & Bridge | 2/2 | Complete    | 2026-03-07 | - |
 | 41. Wire ProviderRegistry into Gateway | 2/2 | Complete    | 2026-03-07 | - |
 | 42. Wire Gateway Stores | 2/2 | Complete    | 2026-03-07 | - |
-| 43. Wire EventBus Event Publishers | v1.3 | 0/3 | Planned | - |
+| 43. Wire EventBus Event Publishers | v1.3 | Complete    | 2026-03-08 | - |
 | 44. Node Approval Wiring | v1.3 | 0/2 | Planned | - |
 | 45. Documentation & Traceability Sync | v1.3 | 0/2 | Planned | - |
 

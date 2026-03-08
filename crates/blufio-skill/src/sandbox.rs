@@ -17,6 +17,7 @@
 //! efficiency (compilation happens once at load time).
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use blufio_core::BlufioError;
@@ -55,6 +56,8 @@ pub struct WasmSkillRuntime {
     wasm_bytes: HashMap<String, Vec<u8>>,
     /// Verification metadata loaded at skill load time, checked at invoke time.
     verification: HashMap<String, VerificationInfo>,
+    /// Optional EventBus for publishing skill lifecycle events.
+    event_bus: Option<Arc<blufio_bus::EventBus>>,
 }
 
 impl WasmSkillRuntime {
@@ -78,7 +81,13 @@ impl WasmSkillRuntime {
             modules: HashMap::new(),
             wasm_bytes: HashMap::new(),
             verification: HashMap::new(),
+            event_bus: None,
         })
+    }
+
+    /// Sets the EventBus for publishing skill lifecycle events.
+    pub fn set_event_bus(&mut self, bus: Arc<blufio_bus::EventBus>) {
+        self.event_bus = Some(bus);
     }
 
     /// Loads a skill from its manifest and WASM binary bytes.
@@ -184,6 +193,19 @@ impl WasmSkillRuntime {
         // Pre-execution cryptographic verification.
         self.verify_before_execution(&invocation.skill_name)?;
 
+        // Publish SkillEvent::Invoked before execution.
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(blufio_bus::events::BusEvent::Skill(
+                blufio_bus::events::SkillEvent::Invoked {
+                    event_id: blufio_bus::events::new_event_id(),
+                    timestamp: blufio_bus::events::now_timestamp(),
+                    skill_name: invocation.skill_name.clone(),
+                    session_id: invocation.session_id.clone().unwrap_or_default(),
+                },
+            ))
+            .await;
+        }
+
         let manifest =
             self.manifests
                 .get(&invocation.skill_name)
@@ -267,7 +289,7 @@ impl WasmSkillRuntime {
         let fuel = manifest.resources.fuel;
         let timeout = manifest.resources.epoch_timeout_secs;
 
-        match wasm_result {
+        let result = match wasm_result {
             Ok(store) => {
                 let state = store.data();
                 let content = if let Some(ref result_json) = state.result_json {
@@ -305,7 +327,22 @@ impl WasmSkillRuntime {
                     is_error: true,
                 })
             }
+        };
+
+        // Publish SkillEvent::Completed after execution (success or error).
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(blufio_bus::events::BusEvent::Skill(
+                blufio_bus::events::SkillEvent::Completed {
+                    event_id: blufio_bus::events::new_event_id(),
+                    timestamp: blufio_bus::events::now_timestamp(),
+                    skill_name: invocation.skill_name.clone(),
+                    is_error: result.as_ref().map_or(true, |r| r.is_error),
+                },
+            ))
+            .await;
         }
+
+        result
     }
 
     /// Returns clones of all loaded skill manifests.
@@ -752,6 +789,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "nonexistent".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await;
         assert!(result.is_err());
@@ -801,6 +839,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({"query": "test"}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(!result.is_error);
@@ -830,6 +869,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(result.is_error);
@@ -867,6 +907,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(!result.is_error);
@@ -904,6 +945,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         let elapsed = start.elapsed();
@@ -959,6 +1001,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(
@@ -1005,6 +1048,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(
@@ -1053,6 +1097,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(
@@ -1115,6 +1160,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(!result.is_error, "Unexpected error: {}", result.content);
@@ -1177,6 +1223,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(!result.is_error, "Unexpected error: {}", result.content);
@@ -1232,6 +1279,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(result.is_error, "Expected error, got: {}", result.content);
@@ -1284,6 +1332,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(
@@ -1330,6 +1379,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(!result.is_error, "unsigned skill should execute normally");
@@ -1354,6 +1404,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(
@@ -1382,6 +1433,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await;
         assert!(result.is_err(), "hash mismatch should block execution");
@@ -1415,6 +1467,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await.unwrap();
         assert!(!result.is_error, "validly signed skill should execute");
@@ -1444,6 +1497,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await;
         assert!(result.is_err(), "bad signature should block execution");
@@ -1478,6 +1532,7 @@ mod tests {
         let invocation = SkillInvocation {
             skill_name: "test-skill".to_string(),
             input: serde_json::json!({}),
+            session_id: None,
         };
         let result = runtime.invoke(invocation).await;
         assert!(result.is_err(), "wrong pubkey should block execution");
