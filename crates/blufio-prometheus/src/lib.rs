@@ -18,7 +18,9 @@ use blufio_core::traits::observability::ObservabilityAdapter;
 use blufio_core::types::{AdapterType, HealthStatus, MetricEvent};
 
 pub use recording::{
+    record_classified_error,
     record_error,
+    record_error_classified,
     record_latency,
     // MCP metrics (INTG-04)
     record_mcp_connection,

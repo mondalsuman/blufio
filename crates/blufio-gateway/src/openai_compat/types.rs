@@ -340,6 +340,15 @@ pub struct GatewayErrorDetail {
     /// Extended: retry-after seconds.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_after: Option<u64>,
+    /// Extended: error category from BlufioError classification.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// Extended: whether the error is retryable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retryable: Option<bool>,
+    /// Extended: failure mode from BlufioError classification.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_mode: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -648,6 +657,9 @@ mod tests {
                 code: Some("model_not_found".into()),
                 provider: None,
                 retry_after: None,
+                category: None,
+                retryable: None,
+                failure_mode: None,
             },
         };
         let json = serde_json::to_value(&err).unwrap();
@@ -841,6 +853,49 @@ mod tests {
         assert!(so.include_usage);
         let out = serde_json::to_value(&so).unwrap();
         assert_eq!(out["include_usage"], true);
+    }
+
+    #[test]
+    fn gateway_error_response_with_classification_fields() {
+        let err = GatewayErrorResponse {
+            error: GatewayErrorDetail {
+                message: "Rate limited".into(),
+                error_type: "server_error".into(),
+                param: None,
+                code: Some("provider_error".into()),
+                provider: Some("anthropic".into()),
+                retry_after: Some(30),
+                category: Some("Provider".into()),
+                retryable: Some(true),
+                failure_mode: Some("RateLimit".into()),
+            },
+        };
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["error"]["category"], "Provider");
+        assert_eq!(json["error"]["retryable"], true);
+        assert_eq!(json["error"]["failure_mode"], "RateLimit");
+        assert_eq!(json["error"]["retry_after"], 30);
+    }
+
+    #[test]
+    fn gateway_error_response_omits_none_classification() {
+        let err = GatewayErrorResponse {
+            error: GatewayErrorDetail {
+                message: "Bad request".into(),
+                error_type: "invalid_request_error".into(),
+                param: None,
+                code: None,
+                provider: None,
+                retry_after: None,
+                category: None,
+                retryable: None,
+                failure_mode: None,
+            },
+        };
+        let json = serde_json::to_value(&err).unwrap();
+        assert!(json["error"].get("category").is_none());
+        assert!(json["error"].get("retryable").is_none());
+        assert!(json["error"].get("failure_mode").is_none());
     }
 
     #[test]

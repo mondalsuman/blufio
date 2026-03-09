@@ -46,6 +46,9 @@ pub async fn post_chat_completions(
                         code: Some("api_not_configured".into()),
                         provider: None,
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )
@@ -70,6 +73,9 @@ pub async fn post_chat_completions(
                         code: Some("provider_not_found".into()),
                         provider: Some(provider_name),
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )
@@ -91,6 +97,9 @@ pub async fn post_chat_completions(
                         code: None,
                         provider: None,
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )
@@ -164,6 +173,15 @@ pub async fn post_chat_completions(
         }
         Err(e) => {
             tracing::error!(error = %e, provider = %provider_name, "provider completion error");
+
+            // Populate classification fields from BlufioError.
+            let category = Some(e.category().to_string());
+            let retryable = Some(e.is_retryable());
+            let failure_mode = Some(e.failure_mode().to_string());
+            let retry_after = e
+                .suggested_backoff()
+                .map(|d| d.as_secs());
+
             (
                 StatusCode::BAD_GATEWAY,
                 Json(GatewayErrorResponse {
@@ -173,7 +191,10 @@ pub async fn post_chat_completions(
                         param: None,
                         code: Some("provider_error".into()),
                         provider: Some(provider_name),
-                        retry_after: None,
+                        retry_after,
+                        category,
+                        retryable,
+                        failure_mode,
                     },
                 }),
             )
@@ -224,6 +245,9 @@ pub async fn get_models(
                         code: None,
                         provider: None,
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )
