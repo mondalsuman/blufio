@@ -8,9 +8,11 @@
 
 pub mod circuit_breaker;
 pub mod clock;
+pub mod registry;
 pub mod snapshot;
 
 // Re-export key types for convenience.
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 pub use clock::{Clock, RealClock};
+pub use registry::CircuitBreakerRegistry;
 pub use snapshot::{CircuitBreakerSnapshot, CircuitBreakerState, CircuitBreakerTransition};

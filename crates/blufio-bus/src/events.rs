@@ -36,6 +36,8 @@ pub enum BusEvent {
     Webhook(WebhookEvent),
     /// Batch processing events.
     Batch(BatchEvent),
+    /// Resilience events (circuit breaker, degradation ladder).
+    Resilience(ResilienceEvent),
 }
 
 impl BusEvent {
@@ -66,6 +68,12 @@ impl BusEvent {
             }
             BusEvent::Batch(BatchEvent::Submitted { .. }) => "batch.submitted",
             BusEvent::Batch(BatchEvent::Completed { .. }) => "batch.completed",
+            BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged { .. }) => {
+                "resilience.circuit_breaker_state_changed"
+            }
+            BusEvent::Resilience(ResilienceEvent::DegradationLevelChanged { .. }) => {
+                "resilience.degradation_level_changed"
+            }
         }
     }
 }
@@ -282,12 +290,49 @@ pub enum BatchEvent {
     },
 }
 
+// --- Resilience events ---
+
+/// Events related to circuit breaker and degradation ladder state changes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResilienceEvent {
+    /// A circuit breaker changed state.
+    CircuitBreakerStateChanged {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Name of the dependency whose breaker changed.
+        dependency: String,
+        /// Previous state (`"closed"`, `"open"`, `"half_open"`).
+        from_state: String,
+        /// New state.
+        to_state: String,
+    },
+    /// The system-wide degradation level changed.
+    DegradationLevelChanged {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Previous level (0-5).
+        from_level: u8,
+        /// New level (0-5).
+        to_level: u8,
+        /// Human-readable name of previous level.
+        from_name: String,
+        /// Human-readable name of new level.
+        to_name: String,
+        /// Reason for the level change.
+        reason: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn all_six_bus_event_variants_exist() {
+    fn all_seven_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -331,6 +376,15 @@ mod tests {
             batch_id: "batch-1".into(),
             item_count: 10,
         });
+
+        let _resilience =
+            BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                dependency: "anthropic".into(),
+                from_state: "closed".into(),
+                to_state: "open".into(),
+            });
     }
 
     #[test]
@@ -526,6 +580,28 @@ mod tests {
                 }),
                 "batch.completed",
             ),
+            (
+                BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    dependency: String::new(),
+                    from_state: String::new(),
+                    to_state: String::new(),
+                }),
+                "resilience.circuit_breaker_state_changed",
+            ),
+            (
+                BusEvent::Resilience(ResilienceEvent::DegradationLevelChanged {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    from_level: 0,
+                    to_level: 1,
+                    from_name: String::new(),
+                    to_name: String::new(),
+                    reason: String::new(),
+                }),
+                "resilience.degradation_level_changed",
+            ),
         ];
 
         for (event, expected) in &cases {
@@ -535,6 +611,72 @@ mod tests {
                 "mismatch for {:?}",
                 std::mem::discriminant(event)
             );
+        }
+    }
+
+    #[test]
+    fn resilience_circuit_breaker_state_changed_roundtrip() {
+        let event =
+            BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
+                event_id: "evt-cb-1".into(),
+                timestamp: "2026-03-09T00:00:00Z".into(),
+                dependency: "anthropic".into(),
+                from_state: "closed".into(),
+                to_state: "open".into(),
+            });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: BusEvent = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
+                event_id,
+                dependency,
+                from_state,
+                to_state,
+                ..
+            }) => {
+                assert_eq!(event_id, "evt-cb-1");
+                assert_eq!(dependency, "anthropic");
+                assert_eq!(from_state, "closed");
+                assert_eq!(to_state, "open");
+            }
+            _ => panic!("expected Resilience::CircuitBreakerStateChanged"),
+        }
+    }
+
+    #[test]
+    fn resilience_degradation_level_changed_roundtrip() {
+        let event =
+            BusEvent::Resilience(ResilienceEvent::DegradationLevelChanged {
+                event_id: "evt-deg-1".into(),
+                timestamp: "2026-03-09T00:00:00Z".into(),
+                from_level: 0,
+                to_level: 2,
+                from_name: "FullyOperational".into(),
+                to_name: "ReducedFunctionality".into(),
+                reason: "Primary provider breaker opened".into(),
+            });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: BusEvent = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            BusEvent::Resilience(ResilienceEvent::DegradationLevelChanged {
+                from_level,
+                to_level,
+                from_name,
+                to_name,
+                reason,
+                ..
+            }) => {
+                assert_eq!(from_level, 0);
+                assert_eq!(to_level, 2);
+                assert_eq!(from_name, "FullyOperational");
+                assert_eq!(to_name, "ReducedFunctionality");
+                assert_eq!(reason, "Primary provider breaker opened");
+            }
+            _ => panic!("expected Resilience::DegradationLevelChanged"),
         }
     }
 }
