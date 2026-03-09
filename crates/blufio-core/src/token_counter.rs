@@ -772,4 +772,109 @@ mod tests {
         // Should fall back to heuristic -- 13 chars / 3.5 = ceil(3.71) = 4
         assert!(result > 0, "Fallback should produce a positive count");
     }
+
+    // --- TokenizerCache Accurate mode: full routing tests (Task 2) ---
+
+    #[test]
+    fn cache_accurate_claude_returns_hf_claude() {
+        let cache = TokenizerCache::new(TokenizerMode::Accurate);
+        let counter = cache.get_counter("claude-sonnet-4-20250514");
+        assert_eq!(
+            counter.counter_name(),
+            "hf-claude",
+            "Expected hf-claude for claude model, got: {}",
+            counter.counter_name()
+        );
+    }
+
+    #[test]
+    fn cache_accurate_gemini_returns_heuristic() {
+        let cache = TokenizerCache::new(TokenizerMode::Accurate);
+        let counter = cache.get_counter("gemini-2.0-flash");
+        assert_eq!(
+            counter.counter_name(),
+            "heuristic",
+            "Expected heuristic for gemini model, got: {}",
+            counter.counter_name()
+        );
+    }
+
+    #[test]
+    fn cache_accurate_openrouter_openai_returns_tiktoken() {
+        let cache = TokenizerCache::new(TokenizerMode::Accurate);
+        let counter = cache.get_counter("openai/gpt-4o");
+        assert!(
+            counter.counter_name().contains("tiktoken"),
+            "Expected tiktoken for openai/gpt-4o, got: {}",
+            counter.counter_name()
+        );
+    }
+
+    #[test]
+    fn cache_accurate_openrouter_anthropic_returns_hf_claude() {
+        let cache = TokenizerCache::new(TokenizerMode::Accurate);
+        let counter = cache.get_counter("anthropic/claude-sonnet-4");
+        assert_eq!(
+            counter.counter_name(),
+            "hf-claude",
+            "Expected hf-claude for anthropic/claude-sonnet-4, got: {}",
+            counter.counter_name()
+        );
+    }
+
+    #[test]
+    fn cache_accurate_openrouter_google_returns_heuristic() {
+        let cache = TokenizerCache::new(TokenizerMode::Accurate);
+        let counter = cache.get_counter("google/gemini-2.0-flash");
+        assert_eq!(
+            counter.counter_name(),
+            "heuristic",
+            "Expected heuristic for google/gemini-2.0-flash, got: {}",
+            counter.counter_name()
+        );
+    }
+
+    #[test]
+    fn cache_accurate_unknown_model_returns_heuristic() {
+        let cache = TokenizerCache::new(TokenizerMode::Accurate);
+        let counter = cache.get_counter("some-unknown-model");
+        assert_eq!(
+            counter.counter_name(),
+            "heuristic",
+            "Expected heuristic for unknown model, got: {}",
+            counter.counter_name()
+        );
+    }
+
+    #[test]
+    fn cache_accurate_meta_llama_returns_heuristic() {
+        let cache = TokenizerCache::new(TokenizerMode::Accurate);
+        let counter = cache.get_counter("meta-llama/llama-3.1-70b");
+        assert_eq!(
+            counter.counter_name(),
+            "heuristic",
+            "Expected heuristic for meta-llama/* model, got: {}",
+            counter.counter_name()
+        );
+    }
+
+    #[tokio::test]
+    async fn cache_accurate_openrouter_model_produces_real_token_count() {
+        let cache = TokenizerCache::new(TokenizerMode::Accurate);
+        // DelegatingCounter behavior: OpenRouter model -> resolved counter -> real count
+        let counter = cache.get_counter("openai/gpt-4o");
+        let tokens = counter
+            .count_tokens("The quick brown fox jumps over the lazy dog.")
+            .await
+            .unwrap();
+        assert!(
+            tokens > 0,
+            "Expected positive token count for OpenRouter model, got {tokens}"
+        );
+        // tiktoken o200k should give a reasonable count (around 10 tokens for this sentence)
+        assert!(
+            tokens < 20,
+            "Expected < 20 tokens for short sentence, got {tokens}"
+        );
+    }
 }
