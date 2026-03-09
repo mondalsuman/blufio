@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Quality & Resilience
+milestone: v1.0
+milestone_name: milestone
 status: completed
-stopped_at: Phase 49 Plan 02 complete
-last_updated: "2026-03-09T16:26:38.491Z"
-last_activity: 2026-03-09 -- Phase 49 Plan 02 complete (all 8 adapters wired with FormatPipeline)
+stopped_at: Completed 50-01-PLAN.md
+last_updated: "2026-03-09T20:41:18.284Z"
+last_activity: 2026-03-09 -- Phase 50 complete (ADR-001, ADR-002, v1.4 milestone shipped)
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
+  completed_phases: 5
+  total_plans: 14
+  completed_plans: 14
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.4 Quality & Resilience -- Phase 49 complete (FormatPipeline Integration)
+**Current focus:** v1.4 Quality & Resilience -- SHIPPED
 
 ## Current Position
 
-Phase: 49 of 50 (FormatPipeline Integration) -- 4 of 5 in v1.4
-Plan: 2 of 2 complete
-Status: Phase Complete
-Last activity: 2026-03-09 -- Phase 49 Plan 02 complete (all 8 adapters wired with FormatPipeline)
+Phase: 50 of 50 (ADRs & Documentation) -- 5 of 5 in v1.4
+Plan: 1 of 1 complete
+Status: Phase Complete -- v1.4 SHIPPED
+Last activity: 2026-03-09 -- Phase 50 complete (ADR-001, ADR-002, v1.4 milestone shipped)
 
 Progress: [██████████] 100%
 
@@ -74,6 +74,8 @@ Recent decisions affecting current work:
 - Phase 48-04: Clone ProviderRequest for fallback iteration (Rust ownership); Tier mapping via contains() for model family detection; Fallback registry reuses gateway ConcreteProviderRegistry; Notification channels grabbed after mux.connect() before move
 - [Phase 49]: Conservative regex detection for markdown structures; HTML Tier 0 before Tier 1 dispatch; split_at_paragraphs as free function with greedy sentence packing
 - [Phase 49-02]: Gateway FormattingSupport changed to FullMarkdown (API clients render); Matrix uses text_html for HTML-containing output; 4-step pipeline enforced in all 8 adapters
+- [Phase 50]: ADR-001 documents ORT rc.11 pin with 8-step upgrade checklist
+- [Phase 50]: ADR-002 documents compiled-in plugin architecture with 3-phase migration roadmap
 
 ### Pending Todos
 
@@ -99,9 +101,10 @@ None.
 | Phase 48 P04 | 12min | 2 tasks | 5 files |
 | Phase 49 P01 | 8min | 2 tasks | 1 files |
 | Phase 49 P02 | 8min | 2 tasks | 10 files |
+| Phase 50 P01 | 5min | 2 tasks | 8 files |
 
 ## Session Continuity
 
-Last session: 2026-03-09T16:22:00Z
-Stopped at: Phase 49 Plan 02 complete
-Resume file: .planning/phases/49-formatpipeline-integration/49-02-SUMMARY.md
+Last session: 2026-03-09T20:41:18.280Z
+Stopped at: Completed 50-01-PLAN.md
+Resume file: None

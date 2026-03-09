@@ -6,7 +6,7 @@
 - ✅ **v1.1 MCP Integration** — Phases 15-22 (shipped 2026-03-03)
 - ✅ **v1.2 Production Hardening** — Phases 23-28 (shipped 2026-03-04)
 - ✅ **v1.3 Ecosystem Expansion** — Phases 29-45 (shipped 2026-03-08)
-- 🚧 **v1.4 Quality & Resilience** — Phases 46-50 (in progress)
+- 🔧 **v1.4 Quality & Resilience** — Phases 46-52 (gap closure in progress)
 
 ## Phases
 
@@ -79,15 +79,20 @@
 
 </details>
 
-### v1.4 Quality & Resilience (In Progress)
+<details>
+<summary>v1.4 Quality & Resilience (Phases 46-52) -- gap closure in progress</summary>
 
 **Milestone Goal:** Address QA audit deviations -- accurate token counting, circuit breakers, graceful degradation, typed errors, format pipeline integration, and architectural decision records.
 
 - [x] **Phase 46: Core Types & Error Hierarchy** - Typed error hierarchy with retryable/severity/category classification, extended ChannelCapabilities, and Table/List content types (completed 2026-03-09)
 - [x] **Phase 47: Accurate Token Counting** - Replace len()/4 heuristic with real tokenizer-backed counting for all 5 LLM providers (completed 2026-03-09)
-- [x] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (gap closure in progress) (completed 2026-03-09)
+- [x] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (completed 2026-03-09)
 - [x] **Phase 49: FormatPipeline Integration** - Wire FormatPipeline into all 8 channel adapters with message splitting and adapter-specific formatting (completed 2026-03-09)
-- [ ] **Phase 50: ADRs & Documentation** - Architectural decision records for ORT pinning and plugin architecture
+- [x] **Phase 50: ADRs & Documentation** - Architectural decision records for ORT pinning and plugin architecture (completed 2026-03-09)
+- [ ] **Phase 51: Wire CB Events to EventBus** - Connect SessionActor circuit breaker transitions to EventBus, unblocking degradation escalation and notifications
+- [ ] **Phase 52: Fix Tracking Gaps** - Fix REQUIREMENTS.md checkboxes and SUMMARY frontmatter for verified requirements
+
+</details>
 
 ## Phase Details
 
@@ -152,8 +157,9 @@ Plans:
   4. All 8 channel adapters report accurate extended capability fields (streaming_type, formatting_support, rate_limit)
 **Plans:** 2/2 plans complete
 Plans:
-- [ ] 49-01-PLAN.md -- detect_and_format() auto-detection, split_at_paragraphs() utility, HTML Tier 0
-- [ ] 49-02-PLAN.md -- Wire pipeline into all 8 channel adapters with escaping, splitting, and CAP-04 verification
+- [x] 49-01-PLAN.md -- detect_and_format() auto-detection, split_at_paragraphs() utility, HTML Tier 0
+- [x] 49-02-PLAN.md -- Wire pipeline into all 8 channel adapters with escaping, splitting, and CAP-04 verification
+
 
 ### Phase 50: ADRs & Documentation
 **Goal**: Architectural decisions for ORT RC pinning and plugin architecture are formally documented with rationale, trade-offs, and upgrade plans
@@ -162,9 +168,32 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. An ADR exists documenting why ORT is pinned at rc.11 over Candle, the trade-offs of each approach, and a concrete upgrade plan for when stable 2.0.0 lands
   2. An ADR exists documenting the Phase 1 compiled-in plugin architecture, why dynamic loading was deferred, and the migration path to libloading in the future
-**Plans:** 0/?
+**Plans:** 1/1 plans complete
 Plans:
-- (not yet planned)
+- [x] 50-01-PLAN.md -- ADR-001 (ORT ONNX inference), ADR-002 (compiled-in plugin architecture), index, project doc updates
+
+### Phase 51: Wire CB Events to EventBus
+**Goal**: SessionActor publishes CircuitBreakerStateChanged events to EventBus when circuit breaker transitions occur, enabling DegradationManager to escalate and notifications to fire in production
+**Depends on**: Phase 48 (circuit breaker and degradation ladder infrastructure)
+**Requirements**: CB-04, DEG-01, DEG-02, DEG-04, DEG-05
+**Gap Closure:** Closes integration gap (SessionActor -> EventBus) and flow gap (CB State -> Degradation Escalation -> Notifications) from v1.4 audit
+**Success Criteria** (what must be TRUE):
+  1. SessionActor has access to EventBus and publishes CircuitBreakerStateChanged when record_result() returns a state transition
+  2. DegradationManager receives CB state change events and escalates/de-escalates degradation level in production (not just tests)
+  3. End-to-end flow works: provider error -> CB trip -> EventBus event -> degradation escalation -> notification sent
+Plans:
+- [ ] 51-01-PLAN.md -- TBD
+
+### Phase 52: Fix Tracking Gaps
+**Goal**: REQUIREMENTS.md checkboxes and SUMMARY frontmatter accurately reflect verified-working requirements
+**Depends on**: Nothing (bookkeeping only)
+**Requirements**: FMT-05, DOC-01, DOC-02
+**Gap Closure:** Closes tracking-only gaps from v1.4 audit (code verified working, metadata out of sync)
+**Success Criteria** (what must be TRUE):
+  1. FMT-05 checkbox is checked in REQUIREMENTS.md and listed in 49-01-SUMMARY requirements_completed
+  2. DOC-01 and DOC-02 are listed in 50-01-SUMMARY requirements_completed frontmatter
+Plans:
+- [ ] 52-01-PLAN.md -- TBD
 
 ## Progress
 
@@ -222,9 +251,11 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 46. Core Types & Error Hierarchy | v1.4 | 4/4 | Complete | 2026-03-09 |
 | 47. Accurate Token Counting | v1.4 | 3/3 | Complete | 2026-03-09 |
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 4/4 | Complete | 2026-03-09 |
-| 49. FormatPipeline Integration | 2/2 | Complete    | 2026-03-09 | - |
-| 50. ADRs & Documentation | v1.4 | 0/? | Not started | - |
+| 49. FormatPipeline Integration | v1.4 | 2/2 | Complete | 2026-03-09 |
+| 50. ADRs & Documentation | 1/1 | Complete   | 2026-03-09 | 2026-03-09 |
+| 51. Wire CB Events to EventBus | v1.4 | 0/0 | Pending | — |
+| 52. Fix Tracking Gaps | v1.4 | 0/0 | Pending | — |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-09 after Phase 49 planning complete*
+*Last updated: 2026-03-09 after gap closure phases 51-52 added*

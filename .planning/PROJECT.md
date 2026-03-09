@@ -81,12 +81,12 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ Accurate token counting via tiktoken-rs and HuggingFace tokenizers (replace len()/4 heuristic) — v1.4 Phase 47
 - ✓ Per-dependency circuit breaker FSM with configurable thresholds and Prometheus metrics — v1.4 Phase 48
 - ✓ 6-level graceful degradation ladder with automatic escalation/de-escalation, fallback routing, and notifications — v1.4 Phase 48
+- ✓ ADR-001: ORT ONNX inference decision record with upgrade plan — v1.4 Phase 50
+- ✓ ADR-002: Compiled-in plugin architecture decision record with migration roadmap — v1.4 Phase 50
 
 ### Active
 
 - [ ] FormatPipeline integration into channel adapters
-- [ ] ORT upgrade from RC to stable release + ADR
-- [ ] Plugin architecture ADR (Phase 1 compiled-in vs future dynamic loading)
 
 ## Current Milestone: v1.4 Quality & Resilience
 
@@ -115,7 +115,7 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - DAG workflow engine — v2.0 per PRD
 - Client SDKs (Python, TypeScript, Go) — post-v1.0
 - Multi-node sharding — single-instance only
-- Native plugin system (libloading) — WASM-only; memory safety boundary
+- Native plugin system (libloading) — WASM-only; memory safety boundary. See [ADR-002](docs/adr/ADR-002-compiled-in-plugin-architecture.md) migration roadmap
 - Windows native builds — WSL2 is the path
 - Remote skill registry / marketplace with CDN distribution — local registry works
 - Browser extension — post-v1.0 per PRD
@@ -170,7 +170,7 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 |----------|-----------|---------|
 | Rust over TypeScript | Memory safety without GC, fearless concurrency, single binary, compile-time guarantees. 2-3x slower to write but eliminates entire bug classes. | ✓ Good — 28,790 LOC in 3 days, zero memory bugs |
 | SQLite over Postgres | Single file, zero dependencies, embedded, ACID with WAL. Backup = cp. Scales to 10-50 concurrent sessions. | ✓ Good — single-writer pattern clean, WAL mode works |
-| Everything-is-a-plugin | Operators customize install without Rust toolchain. ~2-5% overhead on plugin calls (negligible for I/O-bound adapters). Binary stays small. | ✓ Good — 7 adapter traits, built-in catalog, clean separation |
+| Everything-is-a-plugin | Operators customize install without Rust toolchain. ~2-5% overhead on plugin calls (negligible for I/O-bound adapters). Binary stays small. See [ADR-002](docs/adr/ADR-002-compiled-in-plugin-architecture.md) | ✓ Good — 7 adapter traits, built-in catalog, clean separation |
 | WASM-only skills for v1.0 | Sandbox guarantees matter more than native performance for third-party code. Script tier (subprocess) as escape hatch. | ✓ Good — wasmtime sandbox with fuel/memory/epoch limits works |
 | Three-zone context engine | Static (system prompt, cached), conditional (loaded per-relevance), dynamic (current turn). Achieves 68-84% token reduction vs inject-everything. | ✓ Good — cache alignment working, compaction implemented |
 | Dual-license MIT + Apache-2.0 | Apache-2.0 patent protection for enterprise. Both permissive. Must be from first commit. | ✓ Good — SPDX headers on every file from day one |
@@ -179,7 +179,7 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | async-trait for adapter traits | Native async fn in trait not suitable for dyn dispatch. async-trait macro enables trait objects. | ✓ Good — all 7 adapter traits use dyn dispatch cleanly |
 | tokio-rusqlite for single-writer | Single-writer thread avoids SQLITE_BUSY. tokio-rusqlite wraps blocking rusqlite in dedicated thread. | ✓ Good — zero SQLITE_BUSY in testing |
 | Argon2id for vault KDF | Memory-hard KDF resists GPU attacks. Key never stored on disk. | ✓ Good — Zeroizing<[u8;32]> for master key |
-| ort 2.0-rc for ONNX inference | Local embedding inference with no external API calls. RC status monitored. | ⚠️ Revisit — RC not stable, ndarray 0.17 required |
+| ort 2.0-rc for ONNX inference | Local embedding inference with no external API calls. RC status monitored. See [ADR-001](docs/adr/ADR-001-ort-onnx-inference.md) | ⚠️ Revisit — RC not stable, ndarray 0.17 required |
 | Ed25519 for agent signing | Lightweight, fast, well-audited. ed25519-dalek mature crate. | ✓ Good — sign/verify on DeviceKeypair, delegation works |
 | rmcp 0.17 as MCP SDK | Official Anthropic-maintained Rust SDK, matches MCP spec 2025-11-25 | ✓ Good — stdio + HTTP transports, clean handler API |
 | HTTP-only MCP client | No stdio subprocess spawning — preserves single-binary constraint | ✓ Good — Streamable HTTP + SSE fallback covers all cases |
@@ -215,4 +215,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Degradation notifications via EventBus | Background task subscribes to level changes, sends to all channels with dedup | ✓ Good — 60s dedup window prevents notification storms |
 
 ---
-*Last updated: 2026-03-09 after Phase 48*
+*Last updated: 2026-03-09 after Phase 50 -- v1.4 shipped*
