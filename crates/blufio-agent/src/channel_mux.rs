@@ -17,8 +17,10 @@ use tracing::{info, warn};
 use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
+use blufio_core::error::{ChannelErrorKind, ErrorContext};
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
+    OutboundMessage, StreamingType,
 };
 
 /// A multiplexer that aggregates multiple channel adapters into a single
@@ -155,6 +157,10 @@ impl ChannelAdapter for ChannelMultiplexer {
             supports_embeds: false,
             supports_reactions: false,
             supports_threads: false,
+            streaming_type: StreamingType::None,
+            formatting_support: FormattingSupport::PlainText,
+            rate_limit: None,
+            supports_code_blocks: false,
         };
 
         for (_, channel) in self.connected_channels.iter() {
@@ -167,6 +173,8 @@ impl ChannelAdapter for ChannelMultiplexer {
             caps.supports_embeds = caps.supports_embeds || child_caps.supports_embeds;
             caps.supports_reactions = caps.supports_reactions || child_caps.supports_reactions;
             caps.supports_threads = caps.supports_threads || child_caps.supports_threads;
+            caps.supports_code_blocks =
+                caps.supports_code_blocks || child_caps.supports_code_blocks;
             // Use the minimum max_message_length across all channels.
             caps.max_message_length = match (caps.max_message_length, child_caps.max_message_length)
             {
@@ -311,7 +319,11 @@ impl ChannelAdapter for ChannelMultiplexer {
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
         rx.recv().await.ok_or_else(|| BlufioError::Channel {
-            message: "multiplexer inbound channel closed".to_string(),
+            kind: ChannelErrorKind::ConnectionLost,
+            context: ErrorContext {
+                channel_name: Some("multiplexer".to_string()),
+                ..ErrorContext::default()
+            },
             source: None,
         })
     }

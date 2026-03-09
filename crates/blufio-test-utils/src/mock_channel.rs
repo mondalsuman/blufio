@@ -16,7 +16,8 @@ use blufio_core::BlufioError;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
+    OutboundMessage, StreamingType,
 };
 
 /// A mock messaging channel for testing.
@@ -106,6 +107,10 @@ impl ChannelAdapter for MockChannel {
             supports_embeds: false,
             supports_reactions: false,
             supports_threads: false,
+            streaming_type: StreamingType::None,
+            formatting_support: FormattingSupport::PlainText,
+            rate_limit: None,
+            supports_code_blocks: false,
         }
     }
 

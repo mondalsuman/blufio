@@ -19,8 +19,6 @@ mod embedded {
 pub fn run_migrations(conn: &mut rusqlite::Connection) -> Result<(), BlufioError> {
     embedded::migrations::runner()
         .run(conn)
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(BlufioError::storage_schema_error)?;
     Ok(())
 }

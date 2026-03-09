@@ -132,19 +132,15 @@ impl ToolRegistry {
     pub fn register(&mut self, tool: Arc<dyn Tool>) -> Result<(), BlufioError> {
         let name = tool.name().to_string();
         if !validate_tool_name(&name) && !validate_namespaced_tool_name(&name) {
-            return Err(BlufioError::Skill {
-                message: format!(
-                    "invalid tool name '{name}': must match \
-                     [a-zA-Z][a-zA-Z0-9_]* or namespace__tool format"
-                ),
-                source: None,
-            });
+            return Err(BlufioError::skill_execution_msg(&format!(
+                "invalid tool name '{name}': must match \
+                 [a-zA-Z][a-zA-Z0-9_]* or namespace__tool format"
+            )));
         }
         if self.tools.contains_key(&name) {
-            return Err(BlufioError::Skill {
-                message: format!("duplicate tool name '{name}': already registered"),
-                source: None,
-            });
+            return Err(BlufioError::skill_execution_msg(&format!(
+                "duplicate tool name '{name}': already registered"
+            )));
         }
         self.tools.insert(name, tool);
         Ok(())
@@ -156,18 +152,14 @@ impl ToolRegistry {
     pub fn register_builtin(&mut self, tool: Arc<dyn Tool>) -> Result<(), BlufioError> {
         let name = tool.name().to_string();
         if !validate_tool_name(&name) {
-            return Err(BlufioError::Skill {
-                message: format!(
-                    "invalid built-in tool name '{name}': must match [a-zA-Z][a-zA-Z0-9_]*"
-                ),
-                source: None,
-            });
+            return Err(BlufioError::skill_execution_msg(&format!(
+                "invalid built-in tool name '{name}': must match [a-zA-Z][a-zA-Z0-9_]*"
+            )));
         }
         if self.tools.contains_key(&name) {
-            return Err(BlufioError::Skill {
-                message: format!("duplicate built-in tool name '{name}': already registered"),
-                source: None,
-            });
+            return Err(BlufioError::skill_execution_msg(&format!(
+                "duplicate built-in tool name '{name}': already registered"
+            )));
         }
         self.builtin_names.insert(name.clone());
         self.tools.insert(name, tool);
@@ -189,13 +181,10 @@ impl ToolRegistry {
         let namespaced_name = format!("{namespace}__{tool_name}");
 
         if !validate_namespaced_tool_name(&namespaced_name) {
-            return Err(BlufioError::Skill {
-                message: format!(
-                    "invalid namespaced tool name '{namespaced_name}': \
-                     namespace and tool must each match [a-zA-Z][a-zA-Z0-9_]*"
-                ),
-                source: None,
-            });
+            return Err(BlufioError::skill_execution_msg(&format!(
+                "invalid namespaced tool name '{namespaced_name}': \
+                 namespace and tool must each match [a-zA-Z][a-zA-Z0-9_]*"
+            )));
         }
 
         if self.builtin_names.contains(&namespaced_name) {

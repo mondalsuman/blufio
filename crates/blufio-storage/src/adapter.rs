@@ -37,8 +37,11 @@ impl SqliteStorage {
 
     /// Returns a reference to the underlying Database, or an error if not initialized.
     fn db(&self) -> Result<&Database, BlufioError> {
-        self.db.get().ok_or_else(|| BlufioError::Storage {
-            source: "storage not initialized -- call initialize() first".into(),
+        self.db.get().ok_or_else(|| {
+            BlufioError::storage_connection_failed(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "storage not initialized -- call initialize() first",
+            ))
         })
     }
 }
@@ -90,8 +93,11 @@ impl StorageAdapter for SqliteStorage {
     async fn initialize(&self) -> Result<(), BlufioError> {
         let path = self.config.database_path.clone();
         let db = Database::open(&path).await?;
-        self.db.set(db).map_err(|_| BlufioError::Storage {
-            source: "storage already initialized".into(),
+        self.db.set(db).map_err(|_| {
+            BlufioError::storage_connection_failed(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "storage already initialized",
+            ))
         })?;
         debug!(path = %self.config.database_path, "SQLite storage initialized");
         Ok(())

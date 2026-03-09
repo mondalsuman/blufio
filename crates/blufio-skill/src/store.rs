@@ -118,9 +118,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to install skill: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -145,9 +144,11 @@ impl SkillStore {
     ) -> Result<(), BlufioError> {
         // Check that the skill exists.
         let existing = self.get(name).await?;
-        let existing = existing.ok_or_else(|| BlufioError::Skill {
-            message: format!("skill '{}' not installed — use 'install' instead", name),
-            source: None,
+        let existing = existing.ok_or_else(|| {
+            BlufioError::skill_execution_msg(&format!(
+                "skill '{}' not installed -- use 'install' instead",
+                name
+            ))
         })?;
 
         // TOFU continuity: if previously signed, publisher must match.
@@ -192,9 +193,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to remove skill: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -233,9 +233,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to get skill: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -265,9 +264,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to get verification info: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -305,9 +303,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to list skills: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -337,9 +334,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to store publisher key: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -365,9 +361,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to get publisher key: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -404,9 +399,8 @@ impl SkillStore {
                         })
                         .await
                         .map_err(
-                            |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                                message: format!("failed to update publisher last_used: {e}"),
-                                source: None,
+                            |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                                BlufioError::skill_execution_failed(e)
                             },
                         )
                 } else {
@@ -436,9 +430,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to pin publisher key: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -459,9 +452,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to unpin publisher key: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }
@@ -483,9 +475,8 @@ impl SkillStore {
             })
             .await
             .map_err(
-                |e: tokio_rusqlite::Error<rusqlite::Error>| BlufioError::Skill {
-                    message: format!("failed to ensure signing tables: {e}"),
-                    source: None,
+                |e: tokio_rusqlite::Error<rusqlite::Error>| {
+                    BlufioError::skill_execution_failed(e)
                 },
             )
     }

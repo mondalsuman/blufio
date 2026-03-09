@@ -66,7 +66,7 @@ impl TestHarnessBuilder {
     pub async fn build(self) -> Result<TestHarness, BlufioError> {
         // Create temp directory for SQLite
         let temp_dir =
-            tempfile::TempDir::new().map_err(|e| BlufioError::Storage { source: e.into() })?;
+            tempfile::TempDir::new().map_err(|e| BlufioError::storage_connection_failed(e))?;
         let db_path = temp_dir.path().join("test.db");
         let db_path_str = db_path.to_string_lossy().to_string();
 

@@ -15,9 +15,7 @@ use tracing::{debug, info};
 
 /// Convert a tokio-rusqlite error (wrapping rusqlite::Error) into BlufioError::Storage.
 fn map_tokio_rusqlite_err(e: tokio_rusqlite::Error<rusqlite::Error>) -> BlufioError {
-    BlufioError::Storage {
-        source: Box::new(e),
-    }
+    BlufioError::storage_connection_failed(e)
 }
 
 // ---------------------------------------------------------------------------
@@ -46,12 +44,12 @@ fn apply_encryption_key(conn: &rusqlite::Connection, key: &str) -> Result<(), ru
 /// real query, so we test immediately after `PRAGMA key`.
 fn verify_key(conn: &rusqlite::Connection) -> Result<(), BlufioError> {
     conn.query_row("SELECT count(*) FROM sqlite_master;", [], |_| Ok(()))
-        .map_err(|_| BlufioError::Storage {
-            source: Box::new(std::io::Error::new(
+        .map_err(|_| {
+            BlufioError::storage_connection_failed(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "Cannot open database: file is encrypted or not a database. \
                  Verify BLUFIO_DB_KEY is correct.",
-            )),
+            ))
         })
 }
 
@@ -84,9 +82,7 @@ fn ensure_parent_dirs(path: &str) -> Result<(), BlufioError> {
     if let Some(parent) = std::path::Path::new(path).parent()
         && !parent.as_os_str().is_empty()
     {
-        std::fs::create_dir_all(parent).map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        std::fs::create_dir_all(parent).map_err(BlufioError::storage_connection_failed)?;
     }
     Ok(())
 }
@@ -110,20 +106,16 @@ pub async fn open_connection(path: &str) -> Result<tokio_rusqlite::Connection, B
     if key.is_none() && file_path.exists() {
         let is_plain = is_plaintext_sqlite(file_path).unwrap_or(true);
         if !is_plain {
-            return Err(BlufioError::Storage {
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "Database is encrypted but BLUFIO_DB_KEY is not set",
-                )),
-            });
+            return Err(BlufioError::storage_connection_failed(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Database is encrypted but BLUFIO_DB_KEY is not set",
+            )));
         }
     }
 
     let conn = tokio_rusqlite::Connection::open(path)
         .await
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(BlufioError::storage_connection_failed)?;
 
     if let Some(key) = key {
         conn.call(move |conn| {
@@ -140,13 +132,11 @@ pub async fn open_connection(path: &str) -> Result<tokio_rusqlite::Connection, B
             .await;
 
         if verify_result.is_err() {
-            return Err(BlufioError::Storage {
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "Cannot open database: file is encrypted or not a database. \
-                     Verify BLUFIO_DB_KEY is correct.",
-                )),
-            });
+            return Err(BlufioError::storage_connection_failed(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Cannot open database: file is encrypted or not a database. \
+                 Verify BLUFIO_DB_KEY is correct.",
+            )));
         }
     }
 
@@ -170,24 +160,18 @@ pub fn open_connection_sync(
     if key.is_none() && file_path.exists() {
         let is_plain = is_plaintext_sqlite(file_path).unwrap_or(true);
         if !is_plain {
-            return Err(BlufioError::Storage {
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "Database is encrypted but BLUFIO_DB_KEY is not set",
-                )),
-            });
+            return Err(BlufioError::storage_connection_failed(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Database is encrypted but BLUFIO_DB_KEY is not set",
+            )));
         }
     }
 
-    let conn =
-        rusqlite::Connection::open_with_flags(path, flags).map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+    let conn = rusqlite::Connection::open_with_flags(path, flags)
+        .map_err(BlufioError::storage_connection_failed)?;
 
     if let Some(key) = key {
-        apply_encryption_key(&conn, &key).map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        apply_encryption_key(&conn, &key).map_err(BlufioError::storage_connection_failed)?;
         verify_key(&conn)?;
     }
 
@@ -276,9 +260,10 @@ impl Database {
             .map_err(map_tokio_rusqlite_err)?;
 
         // Close the connection.
-        self.conn.close().await.map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        self.conn
+            .close()
+            .await
+            .map_err(BlufioError::storage_connection_failed)?;
 
         info!("database closed");
         Ok(())

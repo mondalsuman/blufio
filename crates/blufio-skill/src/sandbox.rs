@@ -68,9 +68,8 @@ impl WasmSkillRuntime {
         config.consume_fuel(true);
         config.epoch_interruption(true);
 
-        let engine = Engine::new(&config).map_err(|e| BlufioError::Skill {
-            message: format!("failed to create wasmtime engine: {e}"),
-            source: None,
+        let engine = Engine::new(&config).map_err(|e| {
+            BlufioError::skill_compilation_msg(&format!("failed to create wasmtime engine: {e}"))
         })?;
 
         info!("WASM skill runtime initialized");
@@ -100,12 +99,11 @@ impl WasmSkillRuntime {
         wasm_bytes: &[u8],
         verification_info: Option<VerificationInfo>,
     ) -> Result<(), BlufioError> {
-        let module = Module::new(&self.engine, wasm_bytes).map_err(|e| BlufioError::Skill {
-            message: format!(
+        let module = Module::new(&self.engine, wasm_bytes).map_err(|e| {
+            BlufioError::skill_compilation_msg(&format!(
                 "failed to compile WASM module for skill '{}': {e}",
                 manifest.name
-            ),
-            source: None,
+            ))
         })?;
 
         info!(skill = %manifest.name, version = %manifest.version, "loaded WASM skill");
@@ -209,24 +207,26 @@ impl WasmSkillRuntime {
         let manifest =
             self.manifests
                 .get(&invocation.skill_name)
-                .ok_or_else(|| BlufioError::Skill {
-                    message: format!("skill '{}' not loaded", invocation.skill_name),
-                    source: None,
+                .ok_or_else(|| {
+                    BlufioError::skill_execution_msg(&format!(
+                        "skill '{}' not loaded",
+                        invocation.skill_name
+                    ))
                 })?;
 
         let module =
             self.modules
                 .get(&invocation.skill_name)
-                .ok_or_else(|| BlufioError::Skill {
-                    message: format!("module for skill '{}' not found", invocation.skill_name),
-                    source: None,
+                .ok_or_else(|| {
+                    BlufioError::skill_execution_msg(&format!(
+                        "module for skill '{}' not found",
+                        invocation.skill_name
+                    ))
                 })?;
 
         let input_json =
-            serde_json::to_string(&invocation.input).map_err(|e| BlufioError::Skill {
-                message: format!("failed to serialize skill input: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            serde_json::to_string(&invocation.input)
+                .map_err(BlufioError::skill_execution_failed)?;
 
         // Create fresh Store with skill state.
         let state = SkillState {
@@ -240,9 +240,8 @@ impl WasmSkillRuntime {
         // Set fuel limit.
         store
             .set_fuel(manifest.resources.fuel)
-            .map_err(|e| BlufioError::Skill {
-                message: format!("failed to set fuel: {e}"),
-                source: None,
+            .map_err(|e| {
+                BlufioError::skill_execution_msg(&format!("failed to set fuel: {e}"))
             })?;
 
         // Configure epoch deadline for wall-clock timeout.
@@ -277,9 +276,8 @@ impl WasmSkillRuntime {
             Ok::<Store<SkillState>, anyhow::Error>(store)
         })
         .await
-        .map_err(|e| BlufioError::Skill {
-            message: format!("WASM execution task panicked: {e}"),
-            source: None,
+        .map_err(|e| {
+            BlufioError::skill_execution_msg(&format!("WASM execution task panicked: {e}"))
         })?;
 
         // Abort the epoch ticker.
@@ -745,10 +743,7 @@ fn write_bytes_to_memory(
 
 /// Helper: convert linker errors to BlufioError.
 fn linker_err(e: anyhow::Error) -> BlufioError {
-    BlufioError::Skill {
-        message: format!("failed to define host function: {e}"),
-        source: None,
-    }
+    BlufioError::skill_compilation_msg(&format!("failed to define host function: {e}"))
 }
 
 #[cfg(test)]

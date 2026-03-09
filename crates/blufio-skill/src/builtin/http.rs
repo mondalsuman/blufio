@@ -72,16 +72,10 @@ impl Tool for HttpTool {
     }
 
     async fn invoke(&self, input: serde_json::Value) -> Result<ToolOutput, BlufioError> {
-        let url = input["url"].as_str().ok_or_else(|| BlufioError::Skill {
-            message: "missing required 'url' parameter".to_string(),
-            source: None,
-        })?;
+        let url = input["url"].as_str().ok_or_else(|| BlufioError::skill_execution_msg("missing required 'url' parameter"))?;
 
         // Validate URL scheme (http/https only).
-        let parsed_url = reqwest::Url::parse(url).map_err(|e| BlufioError::Skill {
-            message: format!("invalid URL: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        let parsed_url = reqwest::Url::parse(url).map_err(|e| BlufioError::skill_execution_failed(e))?;
 
         let scheme = parsed_url.scheme();
         if scheme != "http" && scheme != "https" {
@@ -104,10 +98,7 @@ impl Tool for HttpTool {
         let method_str = input["method"].as_str().unwrap_or("GET");
         let method = method_str
             .parse::<reqwest::Method>()
-            .map_err(|e| BlufioError::Skill {
-                message: format!("invalid HTTP method '{method_str}': {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::skill_execution_failed(e))?;
 
         let mut request_builder = self.client.request(method, url);
 
@@ -128,16 +119,10 @@ impl Tool for HttpTool {
         let response = request_builder
             .send()
             .await
-            .map_err(|e| BlufioError::Skill {
-                message: format!("HTTP request failed: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::skill_execution_failed(e))?;
 
         let status = response.status();
-        let body = response.text().await.map_err(|e| BlufioError::Skill {
-            message: format!("failed to read response body: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        let body = response.text().await.map_err(|e| BlufioError::skill_execution_failed(e))?;
 
         // Truncate response body if too large.
         let truncated = if body.len() > MAX_RESPONSE_SIZE {

@@ -211,9 +211,7 @@ pub fn hash_key(raw_key: &str) -> String {
 }
 
 fn map_err(e: tokio_rusqlite::Error<rusqlite::Error>) -> BlufioError {
-    BlufioError::Storage {
-        source: Box::new(e),
-    }
+    BlufioError::storage_connection_failed(e)
 }
 
 /// Extension trait for rusqlite to add `.optional()` to query results.

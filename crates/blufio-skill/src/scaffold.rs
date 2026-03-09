@@ -27,38 +27,31 @@ use blufio_core::BlufioError;
 pub fn scaffold_skill(name: &str, target_dir: &Path) -> Result<(), BlufioError> {
     // Validate skill name.
     if name.is_empty() {
-        return Err(BlufioError::Skill {
-            message: "skill name must not be empty".to_string(),
-            source: None,
-        });
+        return Err(BlufioError::skill_execution_msg(
+            "skill name must not be empty",
+        ));
     }
     if !name
         .chars()
         .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(BlufioError::Skill {
-            message: format!(
-                "skill name '{name}' contains invalid characters \
-                 (only alphanumeric, hyphens, underscores allowed)"
-            ),
-            source: None,
-        });
+        return Err(BlufioError::skill_execution_msg(&format!(
+            "skill name '{name}' contains invalid characters \
+             (only alphanumeric, hyphens, underscores allowed)"
+        )));
     }
 
     let skill_dir = target_dir.join(name);
     if skill_dir.exists() {
-        return Err(BlufioError::Skill {
-            message: format!("directory '{}' already exists", skill_dir.display()),
-            source: None,
-        });
+        return Err(BlufioError::skill_execution_msg(&format!(
+            "directory '{}' already exists",
+            skill_dir.display()
+        )));
     }
 
     // Create directory structure.
     let src_dir = skill_dir.join("src");
-    std::fs::create_dir_all(&src_dir).map_err(|e| BlufioError::Skill {
-        message: format!("failed to create directory '{}': {e}", src_dir.display()),
-        source: Some(Box::new(e)),
-    })?;
+    std::fs::create_dir_all(&src_dir).map_err(BlufioError::skill_execution_failed)?;
 
     // Generate Cargo.toml.
     let cargo_toml = format!(
@@ -132,10 +125,7 @@ entry = "{underscored_name}.wasm"
 
 /// Helper to write a file, converting IO errors to BlufioError.
 fn write_file(path: &Path, content: &str) -> Result<(), BlufioError> {
-    std::fs::write(path, content).map_err(|e| BlufioError::Skill {
-        message: format!("failed to write '{}': {e}", path.display()),
-        source: Some(Box::new(e)),
-    })
+    std::fs::write(path, content).map_err(BlufioError::skill_execution_failed)
 }
 
 #[cfg(test)]

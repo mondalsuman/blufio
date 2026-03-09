@@ -229,42 +229,30 @@ fn bench_sqlite() -> Result<Duration, BlufioError> {
     })?;
     let db_path = dir.path().join("bench.db");
 
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| BlufioError::storage_connection_failed(e))?;
 
     conn.execute_batch("CREATE TABLE bench_data (id INTEGER PRIMARY KEY, value TEXT NOT NULL);")
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(|e| BlufioError::storage_connection_failed(e))?;
 
     // Batch insert 1000 rows
     conn.execute_batch("BEGIN TRANSACTION;")
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(|e| BlufioError::storage_connection_failed(e))?;
 
     for i in 0..1000 {
         conn.execute(
             "INSERT INTO bench_data (id, value) VALUES (?1, ?2)",
             rusqlite::params![i, format!("benchmark-value-{i}")],
         )
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(|e| BlufioError::storage_connection_failed(e))?;
     }
 
     conn.execute_batch("COMMIT;")
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(|e| BlufioError::storage_connection_failed(e))?;
 
     // Query all rows
     let mut stmt = conn
         .prepare("SELECT id, value FROM bench_data ORDER BY id")
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(|e| BlufioError::storage_connection_failed(e))?;
 
     let count: usize = stmt
         .query_map([], |row| {
@@ -272,9 +260,7 @@ fn bench_sqlite() -> Result<Duration, BlufioError> {
             let _val: String = row.get(1)?;
             Ok(())
         })
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?
+        .map_err(|e| BlufioError::storage_connection_failed(e))?
         .filter_map(|r| r.ok())
         .count();
 
@@ -337,9 +323,7 @@ fn save_results(
     if is_baseline {
         // Clear previous baselines
         conn.execute("UPDATE bench_results SET is_baseline = 0", [])
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+            .map_err(|e| BlufioError::storage_connection_failed(e))?;
     }
 
     for result in results {
@@ -356,9 +340,7 @@ fn save_results(
                 if is_baseline { 1 } else { 0 },
             ],
         )
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(|e| BlufioError::storage_connection_failed(e))?;
     }
 
     Ok(())
@@ -405,15 +387,13 @@ fn load_previous_results(db_path: &str) -> Result<Vec<(String, i64)>, BlufioErro
 
     let mut stmt = conn.prepare(
         "SELECT benchmark, median_ns FROM bench_results WHERE id IN (SELECT MAX(id) FROM bench_results WHERE is_baseline = 0 GROUP BY benchmark) ORDER BY benchmark"
-    ).map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
+    ).map_err(|e| BlufioError::storage_connection_failed(e))?;
 
     let results: Vec<(String, i64)> = stmt
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?
+        .map_err(|e| BlufioError::storage_connection_failed(e))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -455,15 +435,13 @@ fn load_baseline_results(db_path: &str) -> Result<Vec<(String, i64)>, BlufioErro
 
     let mut stmt = conn.prepare(
         "SELECT benchmark, median_ns FROM bench_results WHERE is_baseline = 1 ORDER BY benchmark"
-    ).map_err(|e| BlufioError::Storage { source: Box::new(e) })?;
+    ).map_err(|e| BlufioError::storage_connection_failed(e))?;
 
     let results: Vec<(String, i64)> = stmt
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?
+        .map_err(|e| BlufioError::storage_connection_failed(e))?
         .filter_map(|r| r.ok())
         .collect();
 

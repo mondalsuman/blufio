@@ -107,9 +107,7 @@ impl CostRecord {
 
 /// Convert a tokio-rusqlite error into BlufioError::Storage.
 fn map_tr_err(e: tokio_rusqlite::Error<rusqlite::Error>) -> BlufioError {
-    BlufioError::Storage {
-        source: Box::new(e),
-    }
+    BlufioError::storage_connection_failed(e)
 }
 
 /// Persistent cost ledger backed by SQLite.

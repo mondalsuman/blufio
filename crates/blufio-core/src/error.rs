@@ -211,7 +211,7 @@ pub enum BlufioError {
     },
 
     /// Storage backend errors (database connection, query failure, serialization).
-    #[error("storage: {kind}")]
+    #[error("storage: {kind}: {source}")]
     Storage {
         kind: StorageErrorKind,
         context: ErrorContext,
@@ -219,7 +219,7 @@ pub enum BlufioError {
     },
 
     /// Skill or tool execution errors.
-    #[error("skill: {kind}")]
+    #[error("skill: {kind}{}", context.request_id.as_ref().map(|m| format!(": {m}")).unwrap_or_default())]
     Skill {
         kind: SkillErrorKind,
         context: ErrorContext,
@@ -227,7 +227,7 @@ pub enum BlufioError {
     },
 
     /// MCP protocol and connection errors.
-    #[error("mcp: {kind}")]
+    #[error("mcp: {kind}{}", context.request_id.as_ref().map(|m| format!(": {m}")).unwrap_or_default())]
     Mcp {
         kind: McpErrorKind,
         context: ErrorContext,
@@ -235,7 +235,7 @@ pub enum BlufioError {
     },
 
     /// Migration errors (data import, format conversion, source detection).
-    #[error("migration: {kind}")]
+    #[error("migration: {kind}{}", context.request_id.as_ref().map(|m| format!(": {m}")).unwrap_or_default())]
     Migration {
         kind: MigrationErrorKind,
         context: ErrorContext,
@@ -568,6 +568,7 @@ impl BlufioError {
 /// Provider-specific overrides are supported (e.g., Anthropic 529 = RateLimited).
 pub fn http_status_to_provider_error(status: u16, provider_name: &str) -> ProviderErrorKind {
     match status {
+        400 | 422 => ProviderErrorKind::ModelNotFound, // Client errors -> Validation
         401 | 403 => ProviderErrorKind::AuthFailed,
         404 => ProviderErrorKind::ModelNotFound,
         408 => ProviderErrorKind::Timeout,
@@ -760,6 +761,28 @@ impl BlufioError {
         }
     }
 
+    /// Create a storage connection failure.
+    pub fn storage_connection_failed(
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Storage {
+            kind: StorageErrorKind::ConnectionFailed,
+            context: ErrorContext::default(),
+            source: Box::new(source),
+        }
+    }
+
+    /// Create a storage schema error.
+    pub fn storage_schema_error(
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Storage {
+            kind: StorageErrorKind::SchemaError,
+            context: ErrorContext::default(),
+            source: Box::new(source),
+        }
+    }
+
     // --- MCP constructors ---
 
     /// Create an MCP connection failure.
@@ -784,9 +807,32 @@ impl BlufioError {
         }
     }
 
+    /// Create an MCP timeout error.
+    pub fn mcp_timeout(msg: &str) -> Self {
+        Self::Mcp {
+            kind: McpErrorKind::Timeout,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
+        }
+    }
+
+    /// Create an MCP protocol error.
+    pub fn mcp_protocol_error(
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Mcp {
+            kind: McpErrorKind::ProtocolError,
+            context: ErrorContext::default(),
+            source: Some(Box::new(source)),
+        }
+    }
+
     // --- Skill constructors ---
 
-    /// Create a skill execution failure.
+    /// Create a skill execution failure with a source error.
     pub fn skill_execution_failed(
         source: impl std::error::Error + Send + Sync + 'static,
     ) -> Self {
@@ -797,9 +843,68 @@ impl BlufioError {
         }
     }
 
+    /// Create a skill execution failure from a message string (no source).
+    pub fn skill_execution_msg(msg: &str) -> Self {
+        Self::Skill {
+            kind: SkillErrorKind::ExecutionFailed,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
+        }
+    }
+
+    /// Create a skill compilation failure.
+    pub fn skill_compilation_failed(
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Skill {
+            kind: SkillErrorKind::CompilationFailed,
+            context: ErrorContext::default(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Create a skill compilation failure from a message string (no source).
+    pub fn skill_compilation_msg(msg: &str) -> Self {
+        Self::Skill {
+            kind: SkillErrorKind::CompilationFailed,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
+        }
+    }
+
+    /// Create a skill sandbox timeout error.
+    pub fn skill_sandbox_timeout(msg: &str) -> Self {
+        Self::Skill {
+            kind: SkillErrorKind::SandboxTimeout,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
+        }
+    }
+
+    /// Create a skill capability denied error.
+    pub fn skill_capability_denied(msg: &str) -> Self {
+        Self::Skill {
+            kind: SkillErrorKind::CapabilityDenied,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
+        }
+    }
+
     // --- Migration constructors ---
 
-    /// Create a migration schema failure.
+    /// Create a migration schema failure from a message.
     pub fn migration_schema_failed(msg: &str) -> Self {
         Self::Migration {
             kind: MigrationErrorKind::SchemaFailed,
@@ -810,80 +915,28 @@ impl BlufioError {
         }
     }
 
-    // --- Temporary deprecated fallback constructors ---
-    // These exist so downstream crates compile while they still use old shapes.
-    // Plans 02/03 will replace all usage with typed constructors.
-
-    /// Temporary fallback: creates a Provider error with ServerError kind.
-    #[deprecated(note = "Use typed constructor (e.g., provider_server_error) instead")]
-    pub fn provider_generic(
-        _message: String,
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    ) -> Self {
-        Self::Provider {
-            kind: ProviderErrorKind::ServerError,
-            context: ErrorContext::default(),
-            source,
-        }
-    }
-
-    /// Temporary fallback: creates a Channel error with DeliveryFailed kind.
-    #[deprecated(note = "Use typed constructor (e.g., channel_delivery_failed) instead")]
-    pub fn channel_generic(
-        _message: String,
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    ) -> Self {
-        Self::Channel {
-            kind: ChannelErrorKind::DeliveryFailed,
-            context: ErrorContext::default(),
-            source,
-        }
-    }
-
-    /// Temporary fallback: creates a Storage error with Busy kind.
-    #[deprecated(note = "Use typed constructor (e.g., storage_busy) instead")]
-    pub fn storage_generic(source: Box<dyn std::error::Error + Send + Sync>) -> Self {
-        Self::Storage {
-            kind: StorageErrorKind::Busy,
-            context: ErrorContext::default(),
-            source,
-        }
-    }
-
-    /// Temporary fallback: creates a Skill error with ExecutionFailed kind.
-    #[deprecated(note = "Use typed constructor (e.g., skill_execution_failed) instead")]
-    pub fn skill_generic(
-        _message: String,
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    ) -> Self {
-        Self::Skill {
-            kind: SkillErrorKind::ExecutionFailed,
-            context: ErrorContext::default(),
-            source,
-        }
-    }
-
-    /// Temporary fallback: creates an Mcp error with ToolExecutionFailed kind.
-    #[deprecated(note = "Use typed constructor (e.g., mcp_tool_failed) instead")]
-    pub fn mcp_generic(
-        _message: String,
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    ) -> Self {
-        Self::Mcp {
-            kind: McpErrorKind::ToolExecutionFailed,
-            context: ErrorContext::default(),
-            source,
-        }
-    }
-
-    /// Temporary fallback: creates a Migration error with SchemaFailed kind.
-    #[deprecated(note = "Use typed constructor (e.g., migration_schema_failed) instead")]
-    pub fn migration_generic(_message: String) -> Self {
+    /// Create a migration version mismatch error.
+    pub fn migration_version_mismatch(msg: &str) -> Self {
         Self::Migration {
-            kind: MigrationErrorKind::SchemaFailed,
-            context: ErrorContext::default(),
+            kind: MigrationErrorKind::VersionMismatch,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
         }
     }
+
+    /// Create a migration data corruption error.
+    pub fn migration_data_corruption(msg: &str) -> Self {
+        Self::Migration {
+            kind: MigrationErrorKind::DataCorruption,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+        }
+    }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -1566,49 +1619,34 @@ mod tests {
         error_log!(err);
     }
 
-    // -- Deprecated fallback constructors --
+    // -- Typed constructor tests (replaced deprecated fallbacks) --
 
     #[test]
-    #[allow(deprecated)]
-    fn deprecated_provider_generic() {
-        let err = BlufioError::provider_generic("test message".into(), None);
-        assert_eq!(err.category(), ErrorCategory::Provider);
-        assert_eq!(err.failure_mode(), FailureMode::Unavailable); // ServerError -> Unavailable
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn deprecated_channel_generic() {
-        let err = BlufioError::channel_generic("test".into(), None);
-        assert_eq!(err.category(), ErrorCategory::Channel);
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn deprecated_storage_generic() {
-        let err = BlufioError::storage_generic(Box::new(std::io::Error::other("test")));
+    fn storage_connection_failed_constructor() {
+        let err = BlufioError::storage_connection_failed(std::io::Error::other("test"));
         assert_eq!(err.category(), ErrorCategory::Storage);
+        assert_eq!(err.failure_mode(), FailureMode::Network);
     }
 
     #[test]
-    #[allow(deprecated)]
-    fn deprecated_skill_generic() {
-        let err = BlufioError::skill_generic("test".into(), None);
+    fn skill_execution_msg_constructor() {
+        let err = BlufioError::skill_execution_msg("test message");
         assert_eq!(err.category(), ErrorCategory::Skill);
+        assert!(err.to_string().contains("test message"));
     }
 
     #[test]
-    #[allow(deprecated)]
-    fn deprecated_mcp_generic() {
-        let err = BlufioError::mcp_generic("test".into(), None);
+    fn mcp_timeout_constructor() {
+        let err = BlufioError::mcp_timeout("test timeout");
         assert_eq!(err.category(), ErrorCategory::Mcp);
+        assert!(err.to_string().contains("test timeout"));
     }
 
     #[test]
-    #[allow(deprecated)]
-    fn deprecated_migration_generic() {
-        let err = BlufioError::migration_generic("test".into());
+    fn migration_schema_failed_includes_message() {
+        let err = BlufioError::migration_schema_failed("test schema");
         assert_eq!(err.category(), ErrorCategory::Migration);
+        assert!(err.to_string().contains("test schema"));
     }
 }
 
