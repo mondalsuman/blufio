@@ -152,8 +152,8 @@ Plans:
   4. All 8 channel adapters report accurate extended capability fields (streaming_type, formatting_support, rate_limit)
 **Plans:** 2/2 plans complete
 Plans:
-- [ ] 49-01-PLAN.md -- detect_and_format() auto-detection, split_at_paragraphs() utility, HTML Tier 0
-- [ ] 49-02-PLAN.md -- Wire pipeline into all 8 channel adapters with escaping, splitting, and CAP-04 verification
+- [x] 49-01-PLAN.md -- detect_and_format() auto-detection, split_at_paragraphs() utility, HTML Tier 0
+- [x] 49-02-PLAN.md -- Wire pipeline into all 8 channel adapters with escaping, splitting, and CAP-04 verification
 
 ### Phase 50: ADRs & Documentation
 **Goal**: Architectural decisions for ORT RC pinning and plugin architecture are formally documented with rationale, trade-offs, and upgrade plans
@@ -162,9 +162,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. An ADR exists documenting why ORT is pinned at rc.11 over Candle, the trade-offs of each approach, and a concrete upgrade plan for when stable 2.0.0 lands
   2. An ADR exists documenting the Phase 1 compiled-in plugin architecture, why dynamic loading was deferred, and the migration path to libloading in the future
-**Plans:** 0/?
+**Plans:** 1 plan
 Plans:
-- (not yet planned)
+- [ ] 50-01-PLAN.md -- ADR-001 (ORT ONNX inference), ADR-002 (compiled-in plugin architecture), index, project doc updates
 
 ## Progress
 
@@ -222,9 +222,9 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 46. Core Types & Error Hierarchy | v1.4 | 4/4 | Complete | 2026-03-09 |
 | 47. Accurate Token Counting | v1.4 | 3/3 | Complete | 2026-03-09 |
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 4/4 | Complete | 2026-03-09 |
-| 49. FormatPipeline Integration | 2/2 | Complete    | 2026-03-09 | - |
-| 50. ADRs & Documentation | v1.4 | 0/? | Not started | - |
+| 49. FormatPipeline Integration | v1.4 | 2/2 | Complete | 2026-03-09 |
+| 50. ADRs & Documentation | v1.4 | 0/1 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-09 after Phase 49 planning complete*
+*Last updated: 2026-03-09 after Phase 50 planning complete*
