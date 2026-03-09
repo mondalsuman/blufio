@@ -9,7 +9,7 @@
 
 use std::pin::Pin;
 
-use blufio_core::BlufioError;
+use blufio_core::{BlufioError, ErrorContext, ProviderErrorKind};
 use bytes::BytesMut;
 use futures::StreamExt;
 use futures::stream::Stream;
@@ -36,7 +36,11 @@ pub fn parse_ndjson_stream(
                 parse_complete_lines(&mut buffer)
             }
             Err(e) => vec![Err(BlufioError::Provider {
-                message: format!("NDJSON stream read error: {e}"),
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some("ollama".into()),
+                    ..Default::default()
+                },
                 source: Some(Box::new(e)),
             })],
         };
@@ -72,7 +76,11 @@ fn parse_complete_lines(buffer: &mut BytesMut) -> Vec<Result<OllamaResponse, Blu
                 match serde_json::from_str::<OllamaResponse>(trimmed) {
                     Ok(resp) => results.push(Ok(resp)),
                     Err(e) => results.push(Err(BlufioError::Provider {
-                        message: format!("NDJSON parse error: {e} (line: {trimmed})"),
+                        kind: ProviderErrorKind::ServerError,
+                        context: ErrorContext {
+                            provider_name: Some("ollama".into()),
+                            ..Default::default()
+                        },
                         source: Some(Box::new(e)),
                     })),
                 }
@@ -164,8 +172,9 @@ mod tests {
         let results = parse_complete_lines(&mut buffer);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_err());
-        let err = results[0].as_ref().unwrap_err().to_string();
-        assert!(err.contains("NDJSON parse error"), "got: {err}");
+        let err = results[0].as_ref().unwrap_err();
+        // Typed error: Provider { kind: ServerError, provider_name: "ollama" }
+        assert_eq!(err.category(), blufio_core::ErrorCategory::Provider);
     }
 
     #[test]

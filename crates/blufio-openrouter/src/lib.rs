@@ -214,7 +214,11 @@ impl ProviderAdapter for OpenRouterProvider {
             .choices
             .first()
             .ok_or_else(|| BlufioError::Provider {
-                message: "OpenRouter response contained no choices".into(),
+                kind: blufio_core::ProviderErrorKind::ServerError,
+                context: blufio_core::ErrorContext {
+                    provider_name: Some("openrouter".into()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
