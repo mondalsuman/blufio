@@ -104,29 +104,22 @@ fn default_entry() -> String {
 /// characters and hyphens.
 pub fn parse_manifest(toml_content: &str) -> Result<SkillManifest, BlufioError> {
     let manifest_file: ManifestFile =
-        toml::from_str(toml_content).map_err(|e| BlufioError::Skill {
-            message: format!("failed to parse skill manifest: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        toml::from_str(toml_content).map_err(BlufioError::skill_execution_failed)?;
 
     // Validate skill name.
     let name = &manifest_file.skill.name;
     if name.is_empty() {
-        return Err(BlufioError::Skill {
-            message: "skill name must not be empty".to_string(),
-            source: None,
-        });
+        return Err(BlufioError::skill_execution_msg(
+            "skill name must not be empty",
+        ));
     }
     if !name
         .chars()
         .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(BlufioError::Skill {
-            message: format!(
-                "skill name '{name}' contains invalid characters (only alphanumeric, hyphens, underscores allowed)"
-            ),
-            source: None,
-        });
+        return Err(BlufioError::skill_execution_msg(&format!(
+            "skill name '{name}' contains invalid characters (only alphanumeric, hyphens, underscores allowed)"
+        )));
     }
 
     // Convert capabilities.
@@ -165,10 +158,7 @@ pub fn parse_manifest(toml_content: &str) -> Result<SkillManifest, BlufioError> 
 
 /// Loads and parses a skill manifest from a file path.
 pub fn load_manifest(path: &Path) -> Result<SkillManifest, BlufioError> {
-    let content = std::fs::read_to_string(path).map_err(|e| BlufioError::Skill {
-        message: format!("failed to read manifest file '{}': {e}", path.display()),
-        source: Some(Box::new(e)),
-    })?;
+    let content = std::fs::read_to_string(path).map_err(BlufioError::skill_execution_failed)?;
     parse_manifest(&content)
 }
 

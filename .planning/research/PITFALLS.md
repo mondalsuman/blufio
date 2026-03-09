@@ -1,491 +1,571 @@
-# Pitfalls Research: v1.3 Ecosystem Expansion
+# Domain Pitfalls: v1.4 Quality & Resilience
 
-**Domain:** Adding OpenAI-compatible API, multi-provider LLM, multi-channel adapters, Docker, event bus, skill registry, node system, and migration tooling to existing Rust AI agent platform (39K LOC, 21 crates)
-**Researched:** 2026-03-05
-**Confidence:** HIGH for Rust/axum/SQLite specifics (verified against existing codebase); MEDIUM for provider format differences (official docs + community); MEDIUM for channel platform specifics (official rate limit docs + known issues)
+**Domain:** Adding circuit breakers, graceful degradation ladders, typed error hierarchy, accurate token counting, format pipeline integration, ChannelCapabilities extension, and ORT upgrade to an existing 71,808 LOC Rust async agent platform (35 crates)
+**Researched:** 2026-03-08
+**Confidence:** HIGH for Rust async/tokio/thiserror specifics (verified against codebase); HIGH for ORT RC-to-stable changes (verified against GitHub release notes); MEDIUM for circuit breaker/degradation patterns (established industry patterns + Rust-specific verification)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, data loss, broken integrations, or security incidents.
+Mistakes that cause rewrites, cascading failures, or make the system worse than before the "improvement."
 
 ---
 
-### Pitfall 1: OpenAI stop_reason vs finish_reason Field Name Mismatch Breaks Every Client
+### Pitfall 1: Token Counting on the Hot Path Blocks Tokio Worker Threads
 
 **What goes wrong:**
-The existing Blufio `ProviderResponse` type uses `stop_reason: Option<String>` (Anthropic's field name). The OpenAI `/v1/chat/completions` specification uses `finish_reason` (not `stop_reason`) in the response body. When implementing the OpenAI-compatible endpoint, developers copy-paste the existing response struct and rename it, but forget to change the JSON field name — so clients receive `stop_reason` where they expect `finish_reason`. Every OpenAI-compatible client that uses the stop condition (LangChain, LlamaIndex, OpenWebUI, most SDKs) silently treats responses as incomplete or loops forever.
-
-Additionally, the OpenAI spec uses `"tool_calls"` as the stop reason string value while Anthropic uses `"tool_use"`. An OpenAI-compatible client sending a request expecting `finish_reason: "tool_calls"` will receive `finish_reason: "tool_use"` from a naively proxied Anthropic response, causing infinite retries or silent tool-call drops.
+The `tokenizers` crate's `encode()` method is a synchronous, CPU-bound operation. The current codebase calls it synchronously in the embedder (`OnnxEmbedder::embed_text` at `crates/blufio-memory/src/embedder.rs:83`). Replacing the `len() / 4` heuristic in `DynamicZone::assemble_messages` (`crates/blufio-context/src/dynamic.rs:64`) with accurate tokenizer-based counting means calling `tokenizer.encode()` for every message in the conversation history on every turn. For a 50-message history, that is 50 synchronous encode calls. Each call takes 50-200 microseconds for short text, but 1-5ms for long messages (1K+ chars, CJK text, or code). If these calls happen on a tokio worker thread (inside an async fn), they block the cooperative scheduler. With 4 worker threads (default on a 4-core VPS), 4 concurrent sessions doing token counting simultaneously stall the entire runtime -- no other tasks can make progress, including channel polling, heartbeats, and health checks.
 
 **Why it happens:**
-The existing `ProviderResponse` and `ProviderStreamChunk` types in `blufio-core/src/types.rs` are designed around Anthropic's format. When adding the OpenAI shim layer in `blufio-gateway`, developers reuse these types rather than defining a separate OpenAI wire format, leaking Anthropic field names into the external API surface.
+The `tokenizers` crate is a Rust library that performs CPU-bound work. It has no async interface. Developers wrap the call in an `async fn` and assume it is safe because "it's fast" (sub-millisecond per call). But cooperative scheduling in tokio means any work that does not yield at an `.await` point starves other tasks. The problem is invisible in testing (single session, fast messages) and manifests only under concurrent load.
 
-**How to avoid:**
-Define completely separate wire types for the OpenAI-compatible response in the gateway crate. Never expose internal `ProviderResponse` directly — always translate through an explicit `OpenAiChatResponse` struct with `#[serde(rename = "finish_reason")]` and value mapping: `"tool_use"` → `"tool_calls"`, `"end_turn"` → `"stop"`, `"max_tokens"` → `"length"`. Write a test that sends an OpenAI-format request and asserts the response contains `finish_reason` (not `stop_reason`).
+**Consequences:**
+- Heartbeat timer fires late, triggering unnecessary heartbeat messages (cost waste)
+- Channel adapter `receive()` calls delayed, causing message delivery latency spikes
+- P99 latency grows nonlinearly with session count
+- sd-notify watchdog timeout triggers if worker threads are blocked for >30s
 
-**Warning signs:**
-- Client SDKs loop or hang after receiving a response
-- Tool invocations never trigger even when LLM requests them
-- `grep "stop_reason"` appears in OpenAI response JSON in integration tests
+**Prevention:**
+Use `tokio::task::spawn_blocking` for all token counting operations. Create a dedicated `TokenCounter` struct that owns a `tokenizers::Tokenizer` (it is `Send` but not `Sync`, so wrap in `Arc<Mutex<Tokenizer>>` or clone per call -- the tokenizer is lightweight to clone). Batch all messages into a single `spawn_blocking` call rather than spawning one per message:
+
+```rust
+let messages = messages.clone();
+let tokenizer = self.tokenizer.clone();
+let counts = tokio::task::spawn_blocking(move || {
+    messages.iter().map(|m| tokenizer.encode(&m.content, false)
+        .map(|e| e.get_ids().len())
+        .unwrap_or(m.content.len() / 4) // fallback on error
+    ).collect::<Vec<_>>()
+}).await?;
+```
+
+Never call `tokenizer.encode()` directly inside an `async fn` body. Add a test that measures elapsed wall time of token counting with 100 messages and asserts it does not block the tokio runtime (use `tokio::time::timeout` around a concurrent health check).
+
+**Detection:**
+- `tokio::runtime::metrics::RuntimeMetrics::worker_noop_count` increasing (workers starving)
+- P99 latency spikes correlating with conversation length
+- Heartbeat firing late (cost ledger shows heartbeat intervals > 2x configured)
 
 **Phase to address:**
-OpenAI-compatible API layer phase (first phase of v1.3). Must be defined before any provider is wired up.
+Token counting phase (first phase of v1.4). Must be designed with spawn_blocking from the start.
 
 ---
 
-### Pitfall 2: Ollama Streaming + Tool Calls Silently Drops Tool Invocations
+### Pitfall 2: Circuit Breaker Thresholds Tuned for Development Cause Production Cascading Failures
 
 **What goes wrong:**
-Ollama's OpenAI compatibility layer (`/v1/chat/completions` with `stream: true`) does not correctly forward tool call data when streaming is enabled. The model decides to call a tool, but the streaming response returns an empty content block with `finish_reason: "stop"` — the tool call is silently lost. This was confirmed as an active issue in Ollama's GitHub tracker (issue #12557). Blufio always streams by default for latency reasons. When the Ollama provider is wired with stream enabled, tool-augmented conversations stop working without any error surfaced to the user.
+Circuit breakers with thresholds set during development (e.g., "open after 3 failures in 60 seconds") are either too aggressive or too lenient for production. Too aggressive: a single Anthropic API hiccup (502 during deployment) opens the circuit, and the agent becomes unresponsive for the entire cooldown period. Too lenient: the circuit stays closed during a sustained outage, sending requests into a black hole while accumulating timeouts that eat the budget. The half-open state is particularly dangerous: if the single probe request happens to succeed (lucky timing), the circuit closes and immediately floods the recovering service with backed-up requests -- the thundering herd problem.
 
 **Why it happens:**
-Ollama's OpenAI compatibility layer is partial. The native Ollama API (`/api/chat`) supports streaming + tool calling since May 2025, but the OpenAI shim does not. Developers assume "OpenAI-compatible" means fully compatible. It does not.
+Developers test circuit breakers with artificial failure injection (mock returning errors). Real API failures have different characteristics: they come in bursts (provider deployment), they affect some endpoints but not others (rate limit on streaming but not non-streaming), and recovery is gradual (first request succeeds but second times out because the provider is warming caches). Thresholds that "feel right" in testing (3 failures = open, 30s cooldown) don't account for the bursty, partial-failure reality.
 
-**How to avoid:**
-For the Ollama provider crate (`blufio-ollama`), use Ollama's native API (`/api/chat`) rather than the OpenAI shim. Implement a separate response parser for Ollama's native format. Add a specific integration test that verifies tool calls are received when `stream: true` — this will fail immediately if you accidentally use the shim endpoint. Document clearly in code comments that the native endpoint must be used.
+**Consequences:**
+- Agent goes dark for 30-60 seconds on every minor provider hiccup (too aggressive)
+- Agent burns budget sending requests to a down provider for minutes (too lenient)
+- Thundering herd after half-open probe success crashes the recovering provider
+- All 5 providers (Anthropic, OpenAI, Ollama, OpenRouter, Gemini) have different failure characteristics but share the same thresholds
 
-**Warning signs:**
-- Agent responds as if it received no tool results when Ollama is active provider
-- No `ToolUse` events appear in `ProviderStreamChunk` stream with Ollama
-- Provider health check passes but tool invocations never execute
+**Prevention:**
+1. Make thresholds per-provider and configurable in TOML, not hardcoded:
+   ```toml
+   [provider.anthropic.circuit_breaker]
+   failure_threshold = 5
+   success_threshold = 3
+   cooldown_secs = 30
+   half_open_max_requests = 1
+   ```
+2. Use a sliding window (not a simple counter) to avoid the "3 failures across 3 hours trips the breaker" problem.
+3. In half-open state, allow exactly 1 request through. If it succeeds, allow 2, then 4 (exponential ramp-up, not instant close). This prevents the thundering herd.
+4. Add jitter to the cooldown period: `cooldown_secs * (1.0 + random(0.0, 0.3))` so that if multiple providers open their circuits simultaneously (e.g., during a network partition), they don't all probe at the same time.
+5. Emit Prometheus metrics for circuit state transitions: `blufio_circuit_state{provider="anthropic"} 0|1|2` (closed/open/half_open).
+6. The circuit breaker MUST be below the retry logic layer, not above it. Retries should not count as separate failures for the circuit breaker -- only the final retry failure should increment the failure count.
+
+**Detection:**
+- Provider that was briefly unavailable causes agent to be unresponsive for the full cooldown
+- Cost spikes during provider outages (too lenient -- keeps sending)
+- Prometheus `blufio_circuit_state` transitions happening too frequently (threshold too low)
 
 **Phase to address:**
-Multi-provider LLM phase. Ollama crate must explicitly test tool calling with streaming before being considered complete.
+Circuit breaker phase. Thresholds must be configurable from day one; do not hardcode and plan to make configurable later.
 
 ---
 
-### Pitfall 3: Provider Trait Tool Format Leaks Anthropic-Specific Structure
+### Pitfall 3: Degradation Ladder That Never Recovers (Ratchet Effect)
 
 **What goes wrong:**
-The existing `ProviderRequest.tools` field is `Option<Vec<serde_json::Value>>` with the comment "Anthropic format." When implementing OpenAI, Ollama, or Gemini providers, developers pass these Anthropic-format tool definitions through unchanged, or attempt to serialize them and hit provider-specific schema rejections. Gemini's native API requires `FunctionDeclaration` objects with a different schema shape. OpenAI requires `{"type": "function", "function": {...}}` wrapping. Anthropic uses bare `{"name": ..., "description": ..., "input_schema": ...}` without the `"function"` key wrapper.
+A 6-level degradation ladder escalates through levels (e.g., 0=Normal, 1=ReduceContext, 2=DisableMemory, 3=SimplifyRouting, 4=MinimalPrompt, 5=EmergencyMode). Escalation triggers are well-defined (budget threshold, provider errors, latency spikes). But de-escalation is forgotten or implemented with a simple "if condition cleared, go to level 0." The system escalates to level 3 during a brief provider outage, the outage resolves, but the de-escalation check only runs on the next message. If the operator's sessions are idle, the system stays at level 3 indefinitely. When the next message arrives, it gets the degraded experience even though the system is healthy. Worse: if de-escalation goes directly from level 3 to level 0, all the features snap back simultaneously, potentially triggering the same overload that caused escalation (memory queries + full context + complex routing all hitting at once).
 
 **Why it happens:**
-The `ProviderRequest` type was designed for Anthropic. The `tools` field as `serde_json::Value` appears flexible, but each provider requires a completely different JSON schema for tool definitions. Developers assume "it's just JSON, it'll work" and test only with Anthropic-style definitions.
+Escalation is event-driven (error occurs -> escalate). De-escalation requires proactive polling (is the system healthy now?). Developers implement the exciting escalation logic but treat de-escalation as "just set it back to 0." The asymmetry between event-driven escalation and polling-based de-escalation means recovery logic is always weaker than failure logic.
 
-**How to avoid:**
-Define a provider-agnostic `ToolDefinition` type in `blufio-core` with fields: `name: String`, `description: String`, `parameters: serde_json::Value` (JSON Schema). Each provider adapter crate implements its own serialization to the provider's wire format. The Anthropic adapter wraps it in `{input_schema: ...}`, the OpenAI adapter in `{type: "function", function: {name, description, parameters}}`, the Gemini adapter in `{functionDeclarations: [{name, description, parameters}]}`. Add a test in each provider crate asserting the wire format matches the provider's documented spec.
+**Consequences:**
+- System permanently stuck at a degraded level after a transient issue
+- Users experience degraded service long after the underlying problem is resolved
+- If de-escalation is too aggressive (jump to 0), it causes the same overload that triggered escalation -- creating an oscillation loop between levels 0 and 3
+- Memory search disabled at level 2+ means the agent loses personality, which operators notice and report as a bug
 
-**Warning signs:**
-- Provider returns 400 Bad Request when tools are passed
-- Tool calls work with Anthropic but not OpenAI or Gemini provider
-- JSON deserialization errors on provider responses mentioning unknown fields
+**Prevention:**
+1. Implement de-escalation as a background timer task (not message-driven). Every 60 seconds, check if conditions for the current level still hold. If not, drop ONE level (not to 0).
+2. Step-wise de-escalation: 5->4->3->2->1->0, with a minimum dwell time at each level (e.g., 2 minutes) before dropping further. This prevents oscillation.
+3. Add hysteresis: the condition to escalate from level 1 to 2 should be stricter than the condition to stay at level 2. For example, escalate at 80% budget utilization, but de-escalate only when below 70%.
+4. Log every level transition with `tracing::info!` including the reason and dwell time at the previous level.
+5. Expose current degradation level as a Prometheus gauge: `blufio_degradation_level{} 0-5`.
+6. Add a `blufio status` CLI command that shows the current degradation level and reason.
+7. Include a manual override: `blufio degrade reset` to force level 0 (operator escape hatch for stuck states).
+
+**Detection:**
+- `blufio_degradation_level` gauge stays above 0 for hours after the triggering condition cleared
+- Users report "agent seems dumber than usual" or "agent forgot my preferences" (memory disabled)
+- Oscillation visible as rapid level transitions in metrics (0->3->0->3 every few minutes)
 
 **Phase to address:**
-Multi-provider LLM phase. Must fix the trait before implementing any non-Anthropic provider.
+Degradation ladder phase. De-escalation timer and step-wise recovery must be in the initial design, not added later.
 
 ---
 
-### Pitfall 4: SQLite Single-Writer Becomes Latency Bottleneck Under Concurrent API Load
+### Pitfall 4: Typed Error Hierarchy Creates Variant Explosion That Makes Match Ergonomics Painful
 
 **What goes wrong:**
-The existing system uses `tokio-rusqlite` with a dedicated single-writer thread — correct for the current single-channel, sequential conversation model. When the OpenAI-compatible API is exposed, callers can send concurrent requests (multiple clients, batch operations, webhook triggers). Each API request needs to write session/message data. All writes queue behind the single writer. At 5-10 concurrent requests, P99 latency climbs above the 120-second gateway timeout. The system appears to work in testing (sequential requests) but fails under real concurrent load.
+The current `BlufioError` enum has 14 variants (Config, Storage, Channel, Provider, AdapterNotFound, HealthCheckFailed, Timeout, Vault, Security, Signature, BudgetExhausted, Skill, Mcp, Update, Migration, Internal). Adding typed metadata (is_retryable, severity, category) seems to require either: (a) adding sub-enums to each variant (ProviderError::RateLimit, ProviderError::AuthFailed, ProviderError::ModelNotFound...), creating a two-level match nightmare, or (b) adding methods like `is_retryable()` to the enum, which requires matching all 14+ variants to determine retryability. Either approach makes every `match` statement across 35 crates that handles `BlufioError` require updating. Since `BlufioError` is in `blufio-core` (the root dependency), any new variant requires recompiling the entire workspace.
 
 **Why it happens:**
-The single-writer pattern is correct for SQLite WAL mode and was a deliberate decision. The failure is not the pattern itself, but the assumption that it scales to concurrent write loads introduced by an API layer. The gateway currently has a 120s response timeout; if writes queue, LLM calls succeed but response routing times out, leaving orphaned oneshot channels in `response_map`.
+The existing error type is designed as a flat enum -- simple to construct, simple to display. Adding behavioral traits (retryability, severity) to a flat enum forces each variant to carry enough context to answer the question. Developers either add nested enums (complex to construct, painful to match) or add fields to existing variants (breaking change across all crates), or add methods that use a giant match (fragile -- new variant means updating the method).
 
-**How to avoid:**
-Add a write queue depth Prometheus gauge metric. Add a write latency histogram. Set an alert threshold at 50% queue depth. Audit all database write paths triggered by API requests and identify which can be deferred (async queue rather than synchronous write). For example: cost tracking writes can be batched and written every N seconds rather than per-request. Session creation writes are on the critical path and cannot be deferred — keep them fast by minimizing schema joins.
+**Consequences:**
+- Adding a new error variant forces updating `is_retryable()`, `severity()`, and `category()` methods -- each is a match with 15+ arms
+- Downstream crates that match on `BlufioError` break when variants are added (non-exhaustive helps but makes matching weaker)
+- Two-level matching (`BlufioError::Provider(ProviderError::RateLimit { ... })`) is verbose and discourages proper error handling -- developers use `_ => false` for `is_retryable`, making everything non-retryable by default
+- Error context is lost: `BlufioError::Provider { message: "rate limited" }` has the same type as `BlufioError::Provider { message: "model not found" }` but completely different retry semantics
 
-**Warning signs:**
-- P99 latency grows with concurrent client count
-- `response_map` accumulates entries that never get consumed (memory leak symptom)
-- Gateway timeout errors appear under load but not sequential testing
+**Prevention:**
+1. Do NOT nest enums. Keep `BlufioError` flat. Instead, add an `ErrorContext` struct that carries behavioral metadata:
+   ```rust
+   pub struct ErrorContext {
+       pub retryable: bool,
+       pub severity: ErrorSeverity,
+       pub category: ErrorCategory,
+       pub retry_after: Option<Duration>,
+   }
+   ```
+2. Add a single new variant or modify existing variants to optionally carry context:
+   ```rust
+   Provider {
+       message: String,
+       source: Option<Box<dyn std::error::Error + Send + Sync>>,
+       context: Option<ErrorContext>,
+   }
+   ```
+3. Provide builder methods on `BlufioError` for constructing with context:
+   ```rust
+   BlufioError::provider("rate limited").retryable().with_retry_after(Duration::from_secs(30))
+   ```
+4. Make `is_retryable()` a method on `BlufioError` with sensible defaults: Timeout is always retryable, BudgetExhausted is never retryable, Provider uses the context if present or defaults to false. This avoids the exhaustive match problem -- defaults are safe, context overrides when available.
+5. Mark the enum `#[non_exhaustive]` to prevent downstream crates from relying on exhaustive matching.
+
+**Detection:**
+- PR review shows 15-arm match statements in `is_retryable()`
+- Developers adding `_ => false` wildcard arms in error classification
+- New variant added to BlufioError but `is_retryable()` not updated -- silent regression
 
 **Phase to address:**
-OpenAI-compatible API layer phase (concurrent request testing must be in acceptance criteria) and event bus phase (event bus should drain writes asynchronously where possible).
+Typed error hierarchy phase. Must be designed before circuit breakers (circuit breakers consume `is_retryable()`).
 
 ---
 
-### Pitfall 5: Event Bus Broadcast Receiver Lag Causes Silent Message Loss
+### Pitfall 5: ORT RC-to-Stable Upgrade Breaks Module Paths, Value Extraction, and Feature Flags
 
 **What goes wrong:**
-`tokio::sync::broadcast` is the natural choice for an internal event bus — it supports multiple receivers and is already in the dependency tree. However, if any receiver is slow (e.g., a metrics aggregator blocked on a Prometheus scrape, or a webhook dispatcher waiting for an HTTP round-trip), the broadcast channel's ring buffer fills. Tokio's broadcast channel returns `RecvError::Lagged` — not an error that panics or logs visibly by default. The receiver that lagged misses events silently. If the webhook dispatcher misses 50 events and never logs, operators have no idea until they notice missing webhooks.
+The current codebase pins `ort = "=2.0.0-rc.11"` and uses:
+- `ort::session::Session` and `ort::session::builder::GraphOptimizationLevel` (embedder.rs:13-14)
+- `ort::value::TensorRef` (embedder.rs:15)
+- `ort::inputs!` macro (embedder.rs:128)
+- `session.run()` with named inputs
+- `outputs[0].try_extract_tensor::<f32>()` returning `(shape, data)` (embedder.rs:136-138)
+
+ORT rc.12 (released 2026-03-05) introduced breaking changes: module reorganization (`ort::tensor` -> `ort::value`), env var renaming (`ORT_LIB_LOCATION` -> `ORT_LIB_PATH`), session option renames, and new feature flag requirements (`api-24` must be enabled for latest features). The rc.11-to-rc.12 changes also updated `ndarray` from 0.16 to 0.17 (already done in this codebase, so safe). The stable 2.0.0 release (when it ships) will remove backward-compatibility re-exports for renamed items that are still available in rc.12 as deprecated.
+
+If upgrading to rc.12 or stable, the following code breaks:
+1. `try_extract_tensor::<f32>()` API may change return type (rc.9 changed from owned to borrowed references)
+2. `with_denormal_as_zero` renamed to `with_flush_to_zero` (not used in current code, but future usage would break)
+3. Feature flags: current features `["std", "ndarray", "download-binaries", "copy-dylibs", "tls-rustls"]` may need `api-24` added for full feature access under the new multiversioning system
+4. The `unsafe impl Send for OnnxEmbedder` (embedder.rs:38) relies on `Session` being non-Send -- if the stable release makes `Session: Send`, the unsafe impl becomes unsound
 
 **Why it happens:**
-`tokio::sync::broadcast` trades reliability for low latency. It does not block senders when receivers lag — it drops the oldest messages and records a lag count. New Rust developers familiar with mpsc channels (which apply backpressure) assume broadcast does the same. It does not.
+RC versions are explicitly unstable. Each RC can break API surfaces. The project pinned to rc.11 with `=2.0.0-rc.11` (exact version) which prevents accidental upgrades but also means no bug fixes or security patches land. The ORT project is actively reorganizing APIs before the stable release.
 
-**How to avoid:**
-Treat `RecvError::Lagged(n)` as an observable error — log it as `tracing::warn!` with the receiver name and lag count, and emit a Prometheus counter. Set broadcast channel capacity generously (1024+ for event bus). For receivers that must not miss events (webhook dispatcher, audit log), use mpsc instead: the event bus sends to a dedicated mpsc channel per critical subscriber, maintaining per-subscriber backpressure. Use broadcast only for fire-and-forget subscribers (metrics, debug logging).
+**Consequences:**
+- Compilation failure on upgrade (module paths changed)
+- Potential unsoundness if `Session` Send/Sync status changes and the `unsafe impl` is not re-evaluated
+- Docker builds break if `ORT_LIB_LOCATION` env var is used in CI (renamed to `ORT_LIB_PATH`)
+- Upgraded binary may not load existing ONNX models if ONNX Runtime version expectations change (rc.12 supports v1.17-v1.24 via multiversioning)
 
-**Warning signs:**
-- Webhook delivery counts don't match published event counts
-- No errors logged but downstream systems report gaps
-- `RecvError::Lagged` appears in traces only when searching explicitly
+**Prevention:**
+1. Before upgrading, audit all `ort::` imports in the workspace: `grep -r "ort::" crates/blufio-memory/src/`
+2. Check if `Session` gains `Send` in the target version. If it does, remove the `unsafe impl Send` and `unsafe impl Sync` and the `Mutex<Session>` wrapper.
+3. Add `api-24` feature flag if upgrading to rc.12+ and needing latest ONNX Runtime features.
+4. If stable 2.0.0 is not yet released when v1.4 ships, upgrade to rc.12 (not stable) and document the pinned RC status in the ADR. Do not block v1.4 on ORT stable -- it may not ship for months.
+5. Write an integration test that loads the quantized all-MiniLM-L6-v2 model, embeds a test string, and asserts the output shape is `[384]`. This catches API breakage at test time, not production time.
+6. Pin the exact version (`=2.0.0-rc.12`) to prevent cargo update from pulling a future RC.
+
+**Detection:**
+- `cargo build` fails with "unresolved import `ort::session::Session`"
+- Runtime panic in embedder with "failed to extract tensor" (API return type changed)
+- Docker build fails with "ORT_LIB_LOCATION: unknown environment variable"
 
 **Phase to address:**
-Event bus phase. Must be designed with lag handling from day one — retrofitting is harder than preventing.
+ORT upgrade phase (should be a separate, small phase with its own ADR). Do not combine with other feature work.
 
 ---
 
-### Pitfall 6: WhatsApp Unofficial Library Results in Account Ban
+### Pitfall 6: FormatPipeline Integration Silently Changes Existing Adapter Output
 
 **What goes wrong:**
-Implementing a WhatsApp adapter using an unofficial Rust library (reverse-engineered protocol) appears to work in development. In production, Meta's anti-abuse systems detect the non-standard client within days to weeks and permanently ban the phone number. The number loses WhatsApp access entirely. There is no appeal process for numbers banned for TOS violations. Operators who invested in a WhatsApp-first deployment lose their business number.
+The existing `FormatPipeline` (at `crates/blufio-core/src/format.rs`) converts `RichContent` to `FormattedOutput` based on `ChannelCapabilities`. Currently, no adapter uses it -- the pipeline exists but is not wired in. When wiring it into the 8 channel adapters, developers insert the pipeline into the send path: `RichContent -> FormatPipeline::format() -> FormattedOutput -> adapter.send()`. The problem: the existing adapters already handle formatting internally. The Telegram adapter applies MarkdownV2 escaping. The Discord adapter constructs embeds. The Slack adapter builds Block Kit structures. Inserting the FormatPipeline before the adapter's own formatting creates double-formatting: text gets MarkdownV2-escaped, then the embed degradation adds `**bold**` markers which themselves need escaping. The output is garbled: `\*\*Status\*\*` instead of **Status**.
 
 **Why it happens:**
-Meta aggressively monitors for unofficial clients in 2025. The WhatsApp Business API requires going through a BSP (Business Solution Provider) or official Meta Tech Partner. Unofficial libraries like `whatsapp-web.rs` or `baileys` ports mimic the WhatsApp Web protocol and are detectable. The risk is categorically different from Telegram (open Bot API) or Discord (open developer API).
+The FormatPipeline was designed as a standalone component. The adapters were designed as standalone components. Neither knows about the other's formatting. The pipeline outputs markdown-style formatting (`**bold**`) which is correct for channels that support markdown, but the adapters then apply their own channel-specific escaping on top.
 
-**How to avoid:**
-Use only the official WhatsApp Business API (`graph.facebook.com/v22.0/{phone-number-id}/messages`). This requires Meta Business account, WhatsApp Business App setup, and BSP approval. Accept that unverified business portfolios start at 250 messages/24h. Do not ship a WhatsApp adapter using unofficial libraries even for local testing — the ban risk applies to any number used. Document the official API requirement prominently in the adapter's README and in the TOML config validation.
+**Consequences:**
+- Telegram messages show raw markdown instead of formatted text (double-escaping)
+- Discord embeds get degraded to text even though the channel supports embeds (pipeline runs before the adapter checks capabilities)
+- Slack messages lose Block Kit formatting because the pipeline converts to plain text
+- IRC messages get markdown syntax that IRC does not render
 
-**Warning signs:**
-- Library uses WebSocket to `web.whatsapp.com` rather than `graph.facebook.com`
-- Library documentation mentions "multi-device" session scanning
-- No mention of official Meta developer approval in the library's documentation
+**Prevention:**
+1. The FormatPipeline must be the LAST step before the raw send, NOT an input to the adapter's existing formatting.
+2. Better: make each adapter opt-in to the FormatPipeline rather than inserting it globally. The adapter calls `FormatPipeline::format()` internally when it receives `RichContent`, using its own `capabilities()` to drive degradation. The adapter is responsible for converting `FormattedOutput` to its platform-specific format.
+3. Do not change the existing `send(OutboundMessage)` signature. Instead, add a new method `send_rich(RichContent)` with a default implementation that calls `FormatPipeline::format()` then `send()`. Adapters override `send_rich()` to handle rich content natively (Discord embeds, Slack blocks).
+4. Add a test for EACH adapter that sends a `RichContent::Embed` and verifies the output is formatted correctly for that platform (not garbled by double-escaping).
+
+**Detection:**
+- `**bold**` appearing literally in Telegram messages (not rendered as bold)
+- Discord adapter producing text blocks where embeds are expected
+- Test that compares send output before and after FormatPipeline wiring shows different results
 
 **Phase to address:**
-Multi-channel adapter phase (Discord/WhatsApp/Slack). WhatsApp must use official API or be deferred to a future milestone when official API integration is resourced.
+FormatPipeline integration phase. Must audit each adapter's existing formatting before wiring in the pipeline.
 
 ---
 
-### Pitfall 7: Discord Message Content Intent Not Requested Silently Breaks Text Reception
+## Moderate Pitfalls
+
+---
+
+### Pitfall 7: ChannelCapabilities Extension Breaks All Existing Adapter Implementations
 
 **What goes wrong:**
-Discord bots created after April 2022 must explicitly request the `MESSAGE_CONTENT` privileged intent to read message content in servers. Without this intent, `message.content` is always an empty string for messages not directed at the bot via mention or DM. A Blufio Discord adapter that does not request this intent appears to work in DMs (bots always see DM content) but silently receives empty strings for all server messages. Operators report "bot not responding" without any error in logs.
+The current `ChannelCapabilities` struct has 9 boolean fields. Adding new fields (streaming_type, formatting_support, rate_limits) means every adapter that constructs a `ChannelCapabilities` value needs updating. There are 10 places in the codebase that construct `ChannelCapabilities` (8 adapters + gateway + test-utils mock). Since `ChannelCapabilities` has no `Default` impl and no builder pattern, adding a new field is a compile error in all 10 locations simultaneously. This is correct behavior (the compiler catches it), but it means a "simple" capability extension touches 10 files across 10 crates.
 
 **Why it happens:**
-The intent is not enabled by default in the Discord Developer Portal, and many Discord library wrappers don't fail loudly when content is empty — they simply process an empty string as if it were a valid message. Developers test in DMs, find it working, and only discover the problem in production server deployments.
+`ChannelCapabilities` was designed as a simple struct with public fields. No `#[non_exhaustive]`, no `Default`, no builder. Every consumer constructs it with struct literal syntax: `ChannelCapabilities { supports_edit: true, ... }`. Adding a field breaks every construction site.
 
-**How to avoid:**
-Enable `MESSAGE_CONTENT` in the Discord Developer Portal at bot creation time. In the adapter code, assert the intent is present in the gateway connection, and add a startup check: if the bot is in any guild and receives a non-DM message with empty content, emit a `tracing::error!` with explicit guidance to enable the intent. Add a Discord-specific integration test that verifies content is received from guild messages.
+**Prevention:**
+1. Add `#[derive(Default)]` to `ChannelCapabilities` with sensible defaults (all false, None for optionals, streaming_type defaults to None).
+2. Add `#[non_exhaustive]` to prevent future breakage when adding more fields.
+3. Provide a builder or `new()` method that returns the default, with chainable setters:
+   ```rust
+   ChannelCapabilities::default()
+       .with_edit(true)
+       .with_embeds(true)
+       .with_streaming_type(StreamingType::EditInPlace)
+   ```
+4. In the PR that adds new fields, migrate all 10 construction sites to use `..Default::default()` syntax to future-proof against further additions.
+5. Keep new fields as `Option<T>` not `T` -- this allows adapters to signal "I don't know" rather than forcing a potentially incorrect boolean.
 
-**Warning signs:**
-- Bot responds to DMs but not server messages
-- Incoming messages always have empty content in logs
-- No errors — just empty string processing
+**Detection:**
+- Adding a field to ChannelCapabilities causes 10+ compilation errors across the workspace
+- New adapters always construct ChannelCapabilities with all new fields set to false/None because the developer didn't know what to put
 
 **Phase to address:**
-Multi-channel adapter phase. This check must be in the adapter's `connect()` implementation.
+ChannelCapabilities extension phase. Add Default + non_exhaustive BEFORE adding new fields.
 
 ---
 
-### Pitfall 8: Slack Rate Limit Tier Mismatch Causes Invisible Throttling
+### Pitfall 8: Circuit Breaker State Shared Across Sessions Causes One User's Failure to Block All Users
 
 **What goes wrong:**
-Slack's Web API has tiered rate limits per method. As of May 2025, `conversations.history` and `conversations.replies` are limited to 1 request/minute for non-Marketplace apps. A Blufio Slack adapter that polls these endpoints for conversation context hits the limit within seconds of startup, causing subsequent calls to return HTTP 429. If the adapter treats 429 as a transient error and retries without exponential backoff + jitter, it enters a retry storm that worsens rate limiting. Messages are delayed or dropped. Operators see the bot responding but slowly and incompletely.
+A global per-provider circuit breaker is the obvious design: one `CircuitBreaker` per provider, shared by all sessions via `Arc<Mutex<CircuitBreaker>>`. But if provider failures are user-specific (e.g., one user's API key is rate-limited because of their usage on another platform, or one user's content triggers a safety filter), the global circuit breaker opens for ALL users. One user's API key hitting rate limits causes the circuit to open, blocking a different user whose key has headroom.
 
 **Why it happens:**
-Most developers test Slack adapters with lightweight usage that doesn't trigger rate limits. The 1 req/min limit for conversation history feels impossibly low until you have multiple active sessions all trying to load context simultaneously.
+The existing architecture uses a single provider adapter per provider type (one `Arc<dyn ProviderAdapter>` for Anthropic, shared by all sessions). The circuit breaker wraps the provider, so it naturally becomes global.
 
-**How to avoid:**
-Design the Slack adapter to use push-based event delivery (Slack Events API or Socket Mode) rather than polling. Cache conversation history locally in SQLite and only fetch from Slack on cache miss. Implement per-method rate limit tracking using the `Retry-After` header Slack returns on 429. Add a `slack_api_calls` Prometheus counter with method label so operators can see approach to limits.
+**Prevention:**
+1. Circuit breakers should be per-provider, not per-session. Per-session is too granular (1000 sessions = 1000 circuit breakers, hard to monitor). Per-provider is correct for the single-binary, single-API-key model that Blufio uses (all sessions share one Anthropic API key).
+2. However, differentiate between errors that indicate provider-wide problems (503, network errors, timeout) and errors that indicate request-specific problems (400 bad request, 413 content too long, safety filter). Only provider-wide errors should increment the circuit breaker failure count. Request-specific errors should be returned to the caller without affecting the circuit.
+3. This is where `is_retryable()` on `BlufioError` matters: the circuit breaker should only count errors where `is_retryable() == true` as failures. Non-retryable errors (auth failed, invalid request) are the caller's problem, not the provider's.
+4. Emit a Prometheus counter `blufio_circuit_failure{provider, error_class}` that separates counted vs uncounted errors.
 
-**Warning signs:**
-- HTTP 429 responses in Slack adapter logs
-- Message processing latency grows over the session lifetime
-- Bot falls behind in responding to busy channels
+**Detection:**
+- All sessions fail when one session gets a 400 error
+- Circuit opens due to non-transient errors (auth failure, content filter)
+- Prometheus shows circuit opening with error_class="client_error" (should only open on server errors)
 
 **Phase to address:**
-Multi-channel adapter phase (Slack specifically). Rate limit strategy must be in the adapter design, not retrofitted.
+Circuit breaker phase. Must classify errors before counting them, which depends on the typed error hierarchy.
 
 ---
 
-### Pitfall 9: Signal Adapter Has No Stable Rust Library
+### Pitfall 9: Token Counter Initialization Fails Silently When Model File Missing
 
 **What goes wrong:**
-Signal has no official bot API. All Rust Signal integrations rely on reverse-engineered protocols or brittle bridges to `signal-cli` (a Java process). Signal protocol updates can break all unofficial clients simultaneously with no warning. A `signal-cli` subprocess dependency violates the single-binary constraint and introduces a Java runtime dependency. Matrix bridges exist but require a running Matrix homeserver.
+The `tokenizers` crate requires a `tokenizer.json` file for each model. The accurate token counter will need tokenizer files for Claude (Anthropic uses a custom BPE tokenizer), GPT-4/GPT-4o (cl100k_base or o200k_base), Gemini (SentencePiece), and Ollama models (varies). If any tokenizer file is missing at startup, the system has two bad options: (a) fail to start entirely (too aggressive -- the agent should work even without perfect counting), or (b) fall back to `len() / 4` silently (defeats the purpose of accurate counting, and the operator thinks they have accurate counting when they don't).
 
 **Why it happens:**
-Signal is not a developer-friendly platform. The organization's position is that bots and automation are not supported use cases, and they actively resist unofficial API access.
+Different LLM providers use different tokenizers. There is no universal tokenizer. The `tokenizers` crate supports BPE (OpenAI, Anthropic) and SentencePiece (Gemini), but each requires its own model file. Shipping all tokenizer files in the binary increases binary size. Downloading them at runtime requires network access at startup.
 
-**How to avoid:**
-Do not implement a direct Signal adapter for v1.3. The only viable path is through `signal-cli` as a subprocess (Java dependency, violates single-binary) or a Matrix bridge (homeserver dependency). Defer Signal to a future milestone when/if an official API exists, or implement as a plugin that accepts the subprocess dependency explicitly. Document this as an ecosystem gap in the v1.3 release notes.
+**Prevention:**
+1. Ship the cl100k_base tokenizer (GPT-4) embedded in the binary using `include_bytes!`. It is ~1.5MB and covers OpenAI and Anthropic approximately (within 5% accuracy for English, 10% for CJK). This is the default fallback.
+2. For other providers, use the provider's own token counting API if available (Anthropic's `/v1/messages/count_tokens`, Gemini's `countTokens` endpoint) for pre-flight budget checks, and the embedded tokenizer for hot-path estimation.
+3. When a provider-specific tokenizer is missing, log `tracing::warn!` ONCE per provider (not per message) and fall back to the embedded tokenizer. Never fall back silently to `len() / 4` -- that defeats the purpose.
+4. Add a Prometheus gauge `blufio_token_counter_accuracy{provider, method}` where method is "exact", "approximate", or "heuristic" so operators can see which counting method is active per provider.
+5. The `blufio doctor` command should report tokenizer availability per provider.
 
-**Warning signs:**
-- Any Rust Signal crate that hasn't been updated in 3+ months
-- Library documentation mentions running `signal-cli` or registering a phone number via a third-party relay
-- No official Signal developer documentation referenced
+**Detection:**
+- Cost tracking shows significant over/under-estimation compared to provider invoices
+- `blufio doctor` reports "token counting: heuristic" when operator expected "exact"
+- Budget gates trigger too early or too late due to inaccurate counting
 
 **Phase to address:**
-Multi-channel adapter phase. Signal should be removed from v1.3 scope or explicitly scoped as `signal-cli` bridge with documented Java dependency.
+Token counting phase. Fallback strategy must be designed before implementation.
 
 ---
 
-### Pitfall 10: Skill Registry Code Signing Does Not Prevent Capability Escalation
+### Pitfall 10: Degradation Ladder Interacts Badly with Model Router Budget Downgrade
 
 **What goes wrong:**
-Ed25519 signatures verify that a skill package was signed by a known key — they do not verify that the skill's manifest accurately describes its actual capabilities. A malicious skill author signs a WASM module that calls host functions not declared in its capability manifest. If the WASM sandbox only checks declared capabilities at install time rather than at each host function call, the skill bypasses the sandbox. The existing `wasmtime` sandbox with fuel/memory/epoch limits is correct, but the host function dispatch must validate the calling skill's declared capabilities on every call.
+The existing `ModelRouter` already downgrades models when budget utilization is high (e.g., Opus -> Sonnet when daily spend > 80%). The new degradation ladder also reacts to budget pressure (level 3 = SimplifyRouting). If both systems act independently, they compound: the router downgrades from Opus to Sonnet, AND the degradation ladder disables memory + reduces context. The user gets a dramatically worse experience (wrong model + no memory + short context) when either system alone would have been sufficient. Worse: the degradation ladder's "SimplifyRouting" might override the router's decision, creating a conflict about which model to use.
 
 **Why it happens:**
-Signature verification is conflated with capability verification. Developers implement signing as a separate pre-install step and assume that a signed skill is trusted to run with its declared capabilities unchecked. The attack vector is: publish v1.0 with minimal capabilities and earn user trust, then publish v1.1 signed by the same key but with a manifest that declares no new capabilities while the WASM binary actually calls `network_fetch` — if dispatch doesn't check per-call, the call succeeds.
+The model router and the degradation ladder are designed as independent systems. Neither knows about the other's state. Both react to the same signal (budget utilization) but take different actions. Without coordination, they stack.
 
-**How to avoid:**
-In `blufio-skill`'s WASM host function dispatch, check the calling skill's capability manifest on every host function invocation (not just at install time). The manifest is loaded once and cached in the sandbox context. Host functions that require network capability must verify `manifest.capabilities.network.is_some()` before executing. This is enforcement, not just declaration. Add a test that installs a skill without network capability and verifies that attempting a `network_fetch` host call returns a sandbox error rather than succeeding.
+**Prevention:**
+1. The degradation ladder MUST be aware of the model router's state. If the router has already downgraded the model, the degradation ladder should not apply routing-related degradation (level 3 SimplifyRouting becomes a no-op).
+2. Define a clear precedence: the degradation ladder controls which features are available; the model router controls which model is used. They should not overlap in responsibility.
+3. Budget utilization thresholds must be different: if the router downgrades at 80%, the degradation ladder should escalate at 90% (not also at 80%).
+4. Add a combined state view: `blufio status` shows both router state and degradation level together so operators can see the full picture.
+5. Test the interaction explicitly: set budget to 85% and verify that EITHER the router downgrades OR the ladder escalates, but not both simultaneously.
 
-**Warning signs:**
-- Host function dispatch uses a single global "is skill trusted?" boolean rather than per-function capability check
-- Skills can make network calls regardless of their declared capabilities
-- Capability checks only run at `blufio skill install` time
+**Detection:**
+- User experiences both model downgrade AND feature degradation simultaneously
+- Cost savings from router downgrade are insufficient because degradation ladder also activates
+- `blufio status` shows router at "downgraded" AND degradation at level 3
 
 **Phase to address:**
-Skill registry phase. Must be verified before code signing is advertised as a security feature.
+Degradation ladder phase. Must integrate with ModelRouter, not operate independently.
 
 ---
 
-### Pitfall 11: Docker Image for SQLCipher Binary Requires Non-Scratch Base
+### Pitfall 11: Format Pipeline Table/List Content Types Have No Fallback for Length-Limited Channels
 
 **What goes wrong:**
-The standard advice for static Rust binaries is to use `FROM scratch` — the most minimal base. However, Blufio uses SQLCipher which requires the `libsqlcipher` shared library unless the crate is built with the `bundled` feature. More critically, the binary makes HTTPS connections to LLM APIs and needs CA certificates. A `FROM scratch` image has no `/etc/ssl/certs/ca-certificates.crt`, causing all outbound TLS connections to fail with certificate validation errors. The binary starts, reports healthy, but every LLM call fails.
+Adding `RichContent::Table` and `RichContent::List` content types to the FormatPipeline seems straightforward: render to markdown tables/lists, fall back to text if the channel doesn't support them. But IRC has a 512-byte line limit. A table with 5 columns and 10 rows renders to ~800 characters of text. The fallback exceeds the channel's `max_message_length` and either gets truncated (losing data) or rejected by the channel API (silent failure). List items with long text have the same problem. The FormatPipeline does not currently check `max_message_length` during degradation.
 
 **Why it happens:**
-The "use scratch for static Rust binaries" advice is correct for pure-Rust binaries with no system library dependencies and no TLS. Blufio has both: SQLCipher (via rusqlite's SQLCipher feature) links to libsqlcipher unless bundled, and reqwest's TLS stack needs CA certs regardless of static/dynamic linking.
+The existing FormatPipeline degrades based on capability booleans (supports_embeds, supports_images) but does not consider length constraints. Adding new content types that produce variable-length text output exposes this gap.
 
-**How to avoid:**
-Use `gcr.io/distroless/static-debian12:nonroot` as the final stage base. It provides CA certificates, `/etc/passwd` for the non-root user, and timezone data — nothing else. Alternatively, use `FROM scratch` and explicitly COPY the CA bundle: `COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/`. Build SQLCipher with the `bundled` feature (`RUSQLITE_BUNDLED_SQLCIPHER=1`) to eliminate the shared library dependency. Verify the image works by running `docker run blufio blufio doctor` in CI before tagging a release.
+**Prevention:**
+1. The FormatPipeline must check `caps.max_message_length` after every degradation and truncate or split if the output exceeds the limit.
+2. For tables: truncate columns that are too wide, then truncate rows if still too long, adding a `... (N more rows)` footer.
+3. For lists: truncate after N items with `... and N more`.
+4. Add a `FormattedOutput::MultiPart(Vec<String>)` variant for cases where degraded content exceeds the length limit and must be split across multiple messages.
+5. Test with IRC's 512-byte limit: send a 10-row table and verify the output fits in 512 bytes or is properly split.
 
-**Warning signs:**
-- `docker run blufio blufio doctor` reports LLM provider unhealthy
-- reqwest errors mentioning certificate validation failure
-- Binary works on host (has system certs) but not in container
+**Detection:**
+- IRC messages truncated mid-word after FormatPipeline wiring
+- Table data silently lost on length-limited channels
+- Adapter returns error on send because message exceeds platform limit
 
 **Phase to address:**
-Docker image phase. The Dockerfile must be validated with an actual LLM call, not just a health endpoint check.
+FormatPipeline integration phase. Length-aware degradation must be added alongside new content types.
 
 ---
 
-### Pitfall 12: Node Pairing Token Has No Expiry — Leaked Token = Permanent Access
+## Minor Pitfalls
+
+---
+
+### Pitfall 12: Token Counter Disagrees with Provider's Count, Causing Budget Miscalculation
 
 **What goes wrong:**
-A node pairing system typically involves generating a one-time or short-lived pairing token. If the pairing token does not expire, an operator who accidentally logs or displays the token during setup provides an attacker with permanent ability to pair a malicious node. Paired nodes receive the gateway's Ed25519 public key and can issue signed inter-agent messages. A malicious node could flood the agent with crafted messages, extract session data, or trigger tool invocations with operator-level trust.
+Local token counting with the `tokenizers` crate uses a tokenizer model that may not exactly match the provider's tokenizer. Anthropic's tokenizer is proprietary (not published as a tokenizer.json). OpenAI's o200k_base (used for GPT-4o) is different from cl100k_base (GPT-4). If the local counter says a message is 1,000 tokens but Anthropic reports 1,100 tokens, the budget tracker under-counts by 10%. Over thousands of messages, this accumulates into real money.
 
-**Why it happens:**
-Pairing tokens are often implemented as a UUID stored in SQLite with no `expires_at` column. Adding expiry is easy to defer ("we'll add it later") and the system works without it during development.
-
-**How to avoid:**
-All pairing tokens must have an `expires_at` timestamp, default 15 minutes. Store tokens in a `node_pairing_tokens` table with columns: `token TEXT PRIMARY KEY`, `created_at TEXT`, `expires_at TEXT`, `used BOOLEAN`. Mark token as used after successful pairing (one-time use). Add a Prometheus counter for expired tokens and failed pairings. Reject any token older than its `expires_at` at the cryptographic verification layer — not just at the API layer.
-
-**Warning signs:**
-- Pairing token has no time component in its data
-- Token table has no `expires_at` column
-- Same token can be used multiple times
+**Prevention:**
+Use the provider's reported `TokenUsage` from responses as the source of truth for cost tracking (already done in `session.rs:399`). Use local counting ONLY for pre-flight estimation (budget gate check, compaction threshold). Never use local counting for billing. Log the discrepancy between estimated and actual token counts as a metric: `blufio_token_estimate_error{provider} = (estimated - actual) / actual`. If discrepancy exceeds 15%, log a warning.
 
 **Phase to address:**
-Node system phase. Expiry and single-use enforcement must be in the initial implementation.
+Token counting phase. Pre-flight vs post-flight counting distinction must be clear in the architecture.
 
 ---
 
-### Pitfall 13: OpenClaw Migration Loses Daily Memory and Long-Term Context Files
+### Pitfall 13: Circuit Breaker Prometheus Metrics Use Labels That Cause Cardinality Explosion
 
 **What goes wrong:**
-OpenClaw stores agent personality and memory in `~/.openclaw/` as flat files: `config.json`, `MEMORY.md` (long-term memory), `LESSONS.md` (learned behaviors), `CONTEXT.md` (active discussion), and per-day `workspace/YYYY-MM-DD.md` files. A migration tool that only exports `config.json` and database records misses the MEMORY.md, LESSONS.md, and workspace files entirely. After migration, the agent in Blufio has no memory of anything that happened in OpenClaw. Users who valued their agent's personalization lose months of accumulated context.
+Adding labels like `{provider, endpoint, model, session_id}` to circuit breaker metrics creates a unique time series per session per model per endpoint. With 100 sessions and 5 models, that is 500+ time series per metric. Prometheus scrape becomes slow and memory usage grows. On a $4/month VPS with limited RAM, Prometheus OOMs.
 
-**Why it happens:**
-The migration tool developer focuses on structured data (sessions, messages, credentials) and overlooks the unstructured flat files that represent the "personality" of an OpenClaw agent. The tool passes its own integration tests (which don't include memory file migration) but fails the operator's actual use case.
-
-**How to avoid:**
-The OpenClaw migration tool must explicitly enumerate and export: `config.yaml`, `credentials.json` (if present, with encryption), `MEMORY.md`, `LESSONS.md`, `CONTEXT.md`, all `workspace/YYYY-MM-DD.md` files, and session/message data. Import these into Blufio's memory system by injecting MEMORY.md and LESSONS.md as static context zone entries (read-only, high-priority). Add a migration dry-run mode that lists all files that will be migrated before executing. Add a post-migration verification that confirms the count of migrated items against the source.
-
-**Warning signs:**
-- Migration tool documentation mentions only "config and sessions"
-- No memory file enumeration in the export step
-- Post-migration agent has no knowledge of past conversations
+**Prevention:**
+Labels should be `{provider}` only for circuit state metrics. Error counters can add `{error_class}` (transient/permanent) but NOT session_id or model. Keep total label cardinality under 50 per metric.
 
 **Phase to address:**
-OpenClaw migration phase (last phase of v1.3). Must include a detailed checklist of OpenClaw artifacts to migrate.
+Circuit breaker phase. Define metric labels in the design document before implementation.
 
 ---
 
-### Pitfall 14: OpenAI-Compatible API Exposes Internal Session IDs to External Callers
+### Pitfall 14: Error Hierarchy Breaking Change Not Gated Behind a Major Version
 
 **What goes wrong:**
-The OpenAI chat completions spec includes an optional `user` field and returns a `system_fingerprint` and response `id`. Developers mapping these to Blufio internals often expose the internal SQLite session UUID as the `id` or attach it to the OpenAI response. This leaks the internal session identifier to API callers, which then use it to directly query `GET /v1/sessions/{id}`, bypassing any access control that would normally scope session access to the originating channel's user. A caller who receives another session's ID can read that session's messages.
+Modifying `BlufioError` variants (adding context fields, changing variant shapes) is a breaking change for any external consumer of `blufio-core`. If Blufio ever publishes crates to crates.io, this breaks semver. Even internally, it forces recompilation of all 35 crates.
 
-**Why it happens:**
-It's convenient to return the internal session ID as the OpenAI response ID. The IDs are UUIDs — they look random and non-guessable — so developers assume they're safe to expose. But any caller who receives their own session ID might use it to guess neighboring session IDs.
-
-**How to avoid:**
-Return opaque, externally-scoped IDs for all OpenAI-compatible responses. Never expose the internal SQLite `session_id` directly. Use a separate `external_id` column in the sessions table that is a different UUID, generated fresh at session creation, distinct from the internal primary key. The `/v1/sessions` list endpoint should be scoped by the authenticated API key's scope — a scoped key for caller X should only see sessions created by caller X.
-
-**Warning signs:**
-- OpenAI response `id` matches the internal SQLite `session_id` in the database
-- Any caller can list all sessions via GET /v1/sessions without filtering
-- No per-API-key session scoping in the sessions query
+**Prevention:**
+Mark `BlufioError` as `#[non_exhaustive]` before making changes. Add new variants rather than modifying existing ones. Use `Option<ErrorContext>` in existing variants to add metadata without changing the variant shape. Document in the ADR that this is a one-time migration and future additions will use the non_exhaustive escape hatch.
 
 **Phase to address:**
-OpenAI-compatible API layer phase and scoped API key phase. Both must be designed together.
+Typed error hierarchy phase. `#[non_exhaustive]` must be added as the FIRST commit.
 
 ---
 
-## Technical Debt Patterns
+## Phase-Specific Warnings
 
-Shortcuts that seem reasonable during v1.3 but create long-term problems.
-
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Reuse `ProviderRequest` for all providers | Avoids defining new types | Anthropic-specific fields leak into all providers; every new provider requires hacks | Never — define a provider-agnostic request type now |
-| Use `CorsLayer::permissive()` on OpenAI endpoints | Fastest to ship | Any website can call your API endpoints with user's credentials via browser | Only acceptable on endpoints that require API key auth (bearer token) |
-| Blocking write to SQLite per API request | Simplest implementation | Write queue depth grows with concurrent callers; P99 latency spikes | Acceptable for writes that are on the critical path; defer all others |
-| Single Ed25519 signing key for skill registry | One key to manage | Key compromise invalidates all skills; no rotation path | Acceptable if key rotation is planned within 2 phases |
-| `DashMap` for event bus subscriber state | Simple, fast | Subscribers that die leave stale entries; memory grows indefinitely | Acceptable if subscribers have explicit deregistration and health checks |
-| Skip WhatsApp official API and use unofficial | Faster development | Account ban within weeks; no recovery | Never — TOS violation with irreversible consequences |
-| Hardcode provider base URLs | Avoids config complexity | No air-gap support, no proxy support, no testing against local mocks | Acceptable only if URLs are in TOML config with documented override mechanism |
-| Broadcast channel for all event types | Single simple API | Slow subscribers cause lag for all; hard to add per-event backpressure | Acceptable for pure fire-and-forget events; not for reliable delivery |
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Token counting | Blocking tokio workers with CPU-bound encode calls | `spawn_blocking` for all tokenizer operations |
+| Token counting | Tokenizer file missing for specific provider | Embedded fallback tokenizer + per-provider accuracy metric |
+| Token counting | Local count disagrees with provider count | Use provider count for billing, local for estimation only |
+| Circuit breakers | Thresholds too aggressive/lenient for production | Per-provider configurable thresholds in TOML |
+| Circuit breakers | Non-retryable errors counted as failures | Only count `is_retryable() == true` errors |
+| Circuit breakers | Half-open thundering herd | Exponential ramp-up in half-open, not instant close |
+| Circuit breakers | Prometheus cardinality explosion | Labels: `{provider}` only, not per-session |
+| Degradation ladder | Ratchet effect -- never de-escalates | Background timer with step-wise de-escalation + hysteresis |
+| Degradation ladder | Compounds with model router downgrade | Coordinate thresholds; don't overlap responsibilities |
+| Typed errors | Variant explosion / match ergonomics | ErrorContext struct, not nested enums; non_exhaustive |
+| Typed errors | Breaking change across 35 crates | Add #[non_exhaustive] first; use Option fields |
+| FormatPipeline | Double-formatting with existing adapter output | Adapter calls pipeline internally, not externally imposed |
+| FormatPipeline | Table/List exceeds max_message_length | Length-aware degradation with truncation/splitting |
+| ChannelCapabilities | Adding fields breaks 10 construction sites | Add Default + non_exhaustive before new fields |
+| ORT upgrade | Module path changes break compilation | Audit all ort:: imports; pin exact version |
+| ORT upgrade | unsafe Send impl becomes unsound | Re-evaluate if Session gains Send in new version |
+| ORT upgrade | Feature flags change | Add api-24 feature; test model loading in CI |
 
 ---
 
-## Integration Gotchas
+## Integration Pitfalls
 
-Common mistakes when connecting to external services or wiring internal components.
+Mistakes when these features interact with each other and with the existing system.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Ollama provider | Using `/v1/chat/completions` shim with stream+tools | Use native `/api/chat` endpoint for tool support |
-| OpenRouter | Not forwarding `X-Title` and `X-HTTP-Referer` headers | Include these headers for OpenRouter leaderboard and rate limiting |
-| Gemini API | Sending OpenAI-format `{type: "function", function: {...}}` tool definitions | Translate to Gemini native `{functionDeclarations: [...]}` format |
-| Discord adapter | Testing only in DMs | Test in a guild server with MESSAGE_CONTENT intent explicitly enabled |
-| Slack adapter | Polling `conversations.history` per session | Use Slack Events API webhooks or Socket Mode for push delivery |
-| WhatsApp | Using unofficial library | Use only official Meta Graph API; document BSP requirement |
-| Matrix SDK | Calling `/sync` in a busy loop | Use `matrix-sdk`'s built-in sync loop; manual sync bypasses sync token management |
-| IRC adapter | Not handling server PING/PONG | The `irc` crate handles this automatically; do not implement manually |
-| axum OpenAI routes | Applying permissive CORS globally | Apply permissive CORS only to non-authenticated routes; API key routes need restrictive CORS |
-| Event bus | Using `tokio::sync::broadcast` for all subscribers | Use mpsc for reliable delivery, broadcast only for fire-and-forget |
-| Scoped API keys | Using global rate limiter instance | Each API key needs an independent rate limit bucket (use `tower-governor` or `DashMap<key_id, bucket>`) |
-| Node pairing | Storing pairing token as plain UUID | Store with `expires_at` + `used` flag; reject expired/used tokens at verification |
-
----
-
-## Performance Traps
-
-Patterns that work at small scale but degrade as usage grows.
-
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Synchronous SQLite write per API request | P99 latency grows with concurrent callers | Defer non-critical writes (cost tracking, audit log) to async queue | 5+ concurrent API callers |
-| No rate limiting on `/v1/chat/completions` | Runaway LLM cost; provider rate limit bans | Implement per-key token bucket rate limiting before exposing API | First external caller who scripts the endpoint |
-| DashMap `response_map` with no TTL cleanup | Memory grows on timeout (orphaned oneshot senders) | Add a background task that sweeps entries older than 130s | 50+ concurrent requests with frequent timeouts |
-| Loading all sessions for `GET /v1/sessions` | Full table scan on large session table | Add pagination (`?limit=50&cursor=...`) from day one | 1000+ sessions |
-| Event bus with all subscribers on same tokio thread pool | Slow subscriber (HTTP webhook) blocks all events | Run webhook dispatch on a dedicated thread pool or spawn per-event | First slow external webhook receiver |
-| Compiling all channel adapters into single binary | 50MB+ binary; 10+ second cold start | Use feature flags per adapter (`cargo build --features discord,slack`) | When adding 6 channel adapters simultaneously |
-| Broadcasting every internal event to all subscribers | Broadcast channel fills when any subscriber is slow | Use mpsc per subscriber for reliable delivery | First subscriber that does IO (webhook, metrics flush) |
-| No connection pooling for LLM provider HTTP clients | New TCP connection per LLM request | Use `reqwest::Client` as a long-lived singleton (already done for Anthropic; do same for all providers) | >1 req/sec per provider |
-
----
-
-## Security Mistakes
-
-Domain-specific security issues beyond general web security.
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Exposing internal session IDs via OpenAI response `id` | Session enumeration — callers can probe neighboring sessions | Use separate external UUID distinct from internal primary key |
-| Scoped API key stored as plaintext in SQLite | Key theft from DB compromise grants full API access | Store SHA-256 hash of key in DB; verify hash on each request |
-| Skill registry key embedded in binary without rotation mechanism | Single key compromise invalidates all skills permanently | Implement key ID + version in signatures; support multiple active public keys |
-| Node pairing tokens without expiry | Leaked token = permanent node compromise | Enforce 15-minute expiry and single-use; use time-based HMAC |
-| Permissive CORS on OpenAI API endpoints | Browser-based CSRF attacks using operator's API key | Apply restrictive CORS on key-authenticated routes; use `CorsLayer::new()` with explicit allowed origins |
-| Docker container running as root | Container escape gives host root access | Use `distroless/static-debian12:nonroot`; add `USER nonroot` in Dockerfile |
-| Provider API keys in container environment without secrets management | Plaintext keys visible in `docker inspect` | Use Docker secrets or environment injection from vault; never bake keys into image layers |
-| Skill WASM capability check only at install time | Malicious v1.1 update bypasses sandbox | Check capabilities per host function call, not once at install |
-| WhatsApp unofficial library | Account ban + potential TOS legal risk | Official Meta Graph API only |
-| No webhook signature verification | Fake webhooks trigger agent actions | Verify webhook signatures (HMAC-SHA256 for Slack/Discord, Meta signature for WhatsApp) |
+| Circuit breaker + typed errors | Building circuit breaker before error hierarchy exists | Build typed errors first; circuit breaker consumes `is_retryable()` |
+| Degradation ladder + circuit breaker | Degradation reacts to circuit state AND to errors independently | Degradation watches circuit state as an input, not raw errors |
+| Token counting + context engine | Replacing `len()/4` in DynamicZone without maintaining backward-compatible threshold | Recalibrate compaction_threshold after switching to accurate counting (tokens != chars/4) |
+| Token counting + cost ledger | Using estimated tokens for billing | Always use provider-reported TokenUsage for cost; local estimate for budget gate only |
+| FormatPipeline + streaming | Running format pipeline on partial streaming chunks | Pipeline runs on complete messages only, not streaming deltas |
+| ChannelCapabilities + FormatPipeline | Adding Table/List to FormatPipeline without adding corresponding capability flags | Add `supports_tables: bool`, `supports_lists: bool` to ChannelCapabilities first |
+| Circuit breaker + degradation ladder | Both react to same signal (provider errors) | Circuit breaker owns provider health; ladder reads circuit state |
+| ORT upgrade + token counting | Both touch blufio-memory dependencies | Do ORT upgrade in isolation first; then token counting in a separate phase |
+| Typed errors + all provider crates | New error variants in blufio-core require all providers to update | Use #[non_exhaustive] and Option<ErrorContext> to minimize blast radius |
+| Degradation level + heartbeat | Heartbeat continues at full cost during degradation | Degradation level 4+ should reduce heartbeat frequency or disable it |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
+- [ ] **Token counting:** Call `tokenizer.encode()` on CJK text (Chinese, Japanese, Korean) -- CJK has dramatically different token-to-char ratios (1 char = 1-3 tokens, not 0.25). If tests only use English, the counter "works" but is 4-12x wrong for CJK users.
 
-- [ ] **OpenAI-compatible endpoint:** Test it with an actual OpenAI SDK client (not just curl) — SDK clients parse response fields differently than raw HTTP callers. Verify `finish_reason` appears in streaming chunks and in final response.
+- [ ] **Token counting on hot path:** Run a 50-message conversation and verify tokio worker threads are NOT blocked (use `tokio::runtime::Handle::current().metrics()` to check `worker_noop_count` or `tokio-console`).
 
-- [ ] **Ollama provider with tools:** Test tool calling with `stream: true` explicitly — silent failure mode means manual tests without streaming look fine while the real usage pattern is broken.
+- [ ] **Circuit breaker half-open:** After circuit opens and cools down, send exactly 1 probe request. If it fails, verify the circuit returns to OPEN (not stays in HALF_OPEN). If it succeeds, verify only a limited number of requests pass (ramp-up, not flood).
 
-- [ ] **Discord adapter:** Deploy to a test guild server (not just DMs) and verify `message.content` is non-empty. Check `MESSAGE_CONTENT` intent is enabled in Developer Portal.
+- [ ] **Circuit breaker error classification:** Send a 400 Bad Request to the provider and verify it does NOT increment the circuit breaker failure count. Only 429/500/502/503/timeout should count.
 
-- [ ] **Scoped API keys:** Verify that Key A cannot list sessions created by Key B. Verify rate limiting applies per-key independently, not globally.
+- [ ] **Degradation de-escalation:** Set degradation to level 3. Clear the triggering condition. Wait 5 minutes. Verify the system has de-escalated (not stuck at level 3).
 
-- [ ] **Skill code signing:** Verify that a skill with no network capability cannot make a `network_fetch` call (test the enforcement, not just the signing ceremony).
+- [ ] **Degradation + router interaction:** Set budget to 85%. Verify either the router downgrades OR the ladder escalates, not both.
 
-- [ ] **Docker image:** Run `docker run blufio blufio doctor` and verify the Anthropic provider reports healthy (actual TLS certificate validation with CA bundle).
+- [ ] **Typed errors retryable:** Construct a `BlufioError::Timeout` and verify `is_retryable()` returns true. Construct `BlufioError::BudgetExhausted` and verify `is_retryable()` returns false.
 
-- [ ] **Node pairing:** Attempt to reuse an already-used pairing token — verify it is rejected. Attempt to use a token after 15 minutes — verify it is rejected.
+- [ ] **FormatPipeline + Telegram:** Send a `RichContent::Embed` through the Telegram adapter. Verify the output does NOT contain raw `**bold**` markdown that Telegram doesn't render (Telegram uses MarkdownV2 with different escaping).
 
-- [ ] **Event bus:** Subscribe a slow consumer (sleep 5s in handler) and verify the fast consumer on the same broadcast does not lag. Verify `RecvError::Lagged` is logged as a warning metric.
+- [ ] **FormatPipeline + IRC:** Send a `RichContent::Table` with 10 rows through IRC. Verify the output fits within 512 bytes or is properly split across messages.
 
-- [ ] **OpenClaw migration:** Run migration on an OpenClaw instance with 90 days of `workspace/` files and verify all files appear in Blufio's static context zone.
+- [ ] **ChannelCapabilities Default:** After adding new fields, verify that an adapter constructed with `..Default::default()` has sensible values (not accidentally claiming capability it doesn't have).
 
-- [ ] **WhatsApp adapter:** Confirm it uses `graph.facebook.com` (official API), not `web.whatsapp.com` or `ws.web.whatsapp.net` (unofficial). Document BSP setup requirement in config validation error.
+- [ ] **ORT upgrade:** After upgrading, run the embedding integration test that loads all-MiniLM-L6-v2 and produces a 384-dim vector. Verify the vector is identical (within f32 epsilon) to the vector produced by the old version -- ORT upgrades should not change inference results.
 
-- [ ] **Multi-provider routing:** Send a request that triggers tool use with each provider independently (Anthropic, OpenAI, Ollama, Gemini). Verify tool result appears in conversation history.
-
-- [ ] **Rate limiting on `/v1/chat/completions`:** Verify that a burst of 100 requests from one API key is throttled, and a burst from a different API key is independently throttled without affecting the first key.
+- [ ] **ORT unsafe Send:** After upgrade, check if `ort::session::Session` implements `Send`. If yes, remove the `unsafe impl Send for OnnxEmbedder` and the `Mutex<Session>` wrapper (replace with direct field).
 
 ---
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
-
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| OpenAI field name mismatch in production | MEDIUM | Deploy corrected wire types, no data migration needed; bump API version if clients cached schema |
-| Ollama tool call silent drops | LOW | Switch provider crate to native `/api/chat` endpoint; redeploy without data changes |
-| WhatsApp account banned | HIGH | Phone number permanently lost; obtain new number + new Meta Business verification; no automated recovery |
-| SQLite write queue saturation under load | MEDIUM | Enable async write deferral for non-critical paths; restart to clear queue backlog |
-| Skill capability bypass discovered | HIGH | Emergency revoke of signing key; re-audit all installed skills; push patched runtime; notify all users |
-| Docker image TLS failure in prod | LOW | Rebuild with correct base image (distroless or with CA bundle); 5-minute fix once identified |
-| Leaked pairing token exploited | HIGH | Revoke all pairing tokens; audit paired nodes for unauthorized entries; rotate gateway keypair |
-| Event bus subscriber lag causing dropped webhooks | MEDIUM | Switch affected subscriber from broadcast to dedicated mpsc channel; replay missed events from SQLite audit log |
-| OpenClaw migration missing memory files | MEDIUM | Re-run migration with updated tool that includes memory file enumeration; inject into context zone |
-| Node pairing token no-expiry exploited | HIGH | Force re-pairing all nodes; rotate signing key; audit all signed messages from the pairing window |
+| Token counting blocking workers | LOW | Wrap in spawn_blocking; no data changes needed |
+| Circuit breaker too aggressive | LOW | Adjust thresholds in TOML config; restart |
+| Circuit breaker too lenient | MEDIUM | Tighten thresholds; may need to add sliding window if using simple counter |
+| Degradation ladder stuck | LOW | `blufio degrade reset` manual override; fix de-escalation timer |
+| Degradation + router double-downgrade | MEDIUM | Coordinate threshold ranges; may need to restructure both systems |
+| Error hierarchy breaks 35 crates | HIGH | If done wrong (nested enums), requires rewriting all error handling; plan carefully |
+| FormatPipeline double-formatting | MEDIUM | Revert pipeline wiring; redesign as adapter-internal rather than external |
+| ChannelCapabilities breaks 10 files | LOW | Add Default impl retroactively; mechanical fix |
+| ORT upgrade compilation failure | LOW | Mechanical import path fixes; audit all ort:: usages |
+| ORT unsafe Send unsoundness | MEDIUM | Requires careful evaluation of Session thread safety; may need architectural change |
 
 ---
 
-## Pitfall-to-Phase Mapping
+## Dependency Ordering (Critical)
 
-How roadmap phases should address these pitfalls.
+These features have strict dependencies that constrain implementation order:
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| OpenAI field name mismatch (stop_reason vs finish_reason) | Phase 1: OpenAI-compatible API | Integration test with actual OpenAI SDK client |
-| Provider tool format leaks Anthropic structure | Phase 1: Before any non-Anthropic provider | Compile-time type check + per-provider wire format test |
-| SQLite single-writer bottleneck under concurrent API load | Phase 1 + concurrent load test | P99 latency stays <2s under 10 concurrent callers |
-| Ollama streaming + tools silent drop | Phase 2: Multi-provider LLM | Tool-call integration test with stream: true for Ollama |
-| Gemini native tool format differences | Phase 2: Multi-provider LLM | Wire format unit test for Gemini tool schema translation |
-| Discord MESSAGE_CONTENT intent | Phase 3: Multi-channel adapters | Guild message reception test (not DM-only test) |
-| WhatsApp unofficial library ban risk | Phase 3: Multi-channel adapters | Verify `graph.facebook.com` in adapter; block unofficial library in cargo-deny |
-| Slack rate limit tier throttling | Phase 3: Multi-channel adapters | Verify Events API or Socket Mode (not polling) in adapter design |
-| Signal no stable Rust library | Phase 3: Multi-channel adapters | Document as deferred in phase acceptance criteria |
-| Docker CA bundle missing | Phase 4: Docker image | CI runs `docker run blufio blufio doctor` with LLM health check |
-| Docker root user | Phase 4: Docker image | CI verifies `whoami` returns `nonroot` inside container |
-| Event bus broadcast receiver lag | Phase 5: Event bus | Slow subscriber test verifies `RecvError::Lagged` is logged |
-| Skill capability bypass (signing != sandbox enforcement) | Phase 6: Skill registry | Unit test: skill without network capability cannot call network host function |
-| Code signing key without rotation mechanism | Phase 6: Skill registry | Key ID versioning in signature format from day one |
-| Node pairing token no-expiry | Phase 7: Node system | Token expiry test: token rejected after 15 minutes |
-| Node pairing token reuse | Phase 7: Node system | Token single-use test: second use of valid token rejected |
-| Internal session ID exposure via OpenAI response | Phase 1: OpenAI-compatible API | Verify `response.id` != internal SQLite `session_id` |
-| Scoped API key session cross-access | Phase 1: Scoped API keys | Key A cannot list Key B's sessions (authorization test) |
-| OpenClaw missing memory file migration | Phase 8: Migration tooling | Migration dry-run output includes MEMORY.md, LESSONS.md, workspace/ files |
-| Cargo workspace feature unification surprises | Every phase with new crates | Run `cargo build --features X` per adapter; check for unexpected feature unification |
+```
+1. Typed Error Hierarchy (no deps -- enables everything else)
+   |
+   v
+2. Circuit Breakers (depends on is_retryable() from typed errors)
+   |
+   v
+3. Degradation Ladder (depends on circuit state as input)
+   |
+   |-- 4a. Token Counting (independent, but recalibrates context engine thresholds)
+   |
+   |-- 4b. ChannelCapabilities Extension (independent, but must precede FormatPipeline)
+   |       |
+   |       v
+   |-- 5. FormatPipeline Integration (depends on ChannelCapabilities extension)
+   |
+   v
+6. ORT Upgrade (independent -- do in isolation, ideally last to minimize risk)
+```
+
+**Do NOT** implement circuit breakers before typed errors. The circuit breaker needs `is_retryable()` to classify errors. Without it, all errors count as failures, making the breaker too aggressive.
+
+**Do NOT** implement FormatPipeline before ChannelCapabilities extension. The pipeline needs capability flags for new content types (tables, lists).
 
 ---
 
 ## Sources
 
-- Ollama tool calling + streaming issue: https://github.com/ollama/ollama/issues/12557
-- Ollama OpenAI compatibility documentation: https://docs.ollama.com/api/openai-compatibility
-- OpenAI Chat Completions `finish_reason` spec: https://platform.openai.com/docs/api-reference/chat/create
-- OpenAI Responses API vs Chat Completions: https://platform.openai.com/docs/guides/responses-vs-chat-completions
-- OpenAI Responses API tool schema differences: https://medium.com/@laurentkubaski/openai-tool-schema-differences-between-the-response-api-and-the-chat-completion-api-8f99ce8a9371
-- WhatsApp Business API unofficial vs official risk: https://wisemelon.ai/blog/whatsapp-business-api-vs-unofficial-whatsapp-tools
-- WhatsApp messaging limits (October 2025 portfolio-level): https://chatarmin.com/en/blog/whats-app-messaging-limits
-- Discord rate limits: https://docs.discord.com/developers/topics/rate-limits
-- Slack rate limit changes (May 2025, 1 req/min for non-Marketplace): https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps/
-- Tokio broadcast channel lag behavior: https://docs.rs/tokio/latest/tokio/sync/broadcast/index.html
-- Event bus implementation in Tokio (lag handling): https://blog.digital-horror.com/blog/event-bus-in-tokio/
-- Docker static Rust binary with CA certs: https://dev.to/abhishekpareek/build-statically-linked-rust-binary-with-musl-and-avoid-a-common-pitfall-ahc
-- SQLite single-writer bottleneck under concurrent load: https://www.bugsink.com/blog/database-transactions/
-- Gemini OpenAI compatibility and function calling: https://ai.google.dev/gemini-api/docs/openai
-- Gemini function calling schema format: https://ai.google.dev/gemini-api/docs/function-calling
-- Cargo workspace feature unification pitfall: https://nickb.dev/blog/cargo-workspace-and-the-feature-unification-pitfall/
-- OpenClaw migration broken state (issue #5103): https://github.com/openclaw/openclaw/issues/5103
-- Axum rate limiting with tower-governor: https://github.com/benwis/tower-governor
-- IRC Rust crate (active): https://crates.io/crates/irc
-- Matrix SDK Rust crate: https://crates.io/crates/matrix-sdk
-- Blufio codebase: existing `ProviderRequest.tools` in `blufio-core/src/types.rs` (Anthropic-format comment)
-- Blufio codebase: `GatewayState.response_map` DashMap with no TTL cleanup in `blufio-gateway/src/server.rs`
-- Blufio codebase: `ChannelCapabilities` in `blufio-core/src/types.rs` (format degradation surface)
+- ORT 2.0.0-rc.12 release notes (breaking changes): https://github.com/pykeio/ort/releases/tag/v2.0.0-rc.12
+- ORT 2.0.0-rc.11 release notes (ndarray update, metadata API changes): https://github.com/pykeio/ort/releases/tag/v2.0.0-rc.11
+- ORT documentation (Session API, value extraction): https://ort.pyke.io/
+- tokio spawn_blocking documentation: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
+- tokio cooperative scheduling and blocking: https://tokio.rs/tokio/tutorial/spawning
+- HuggingFace tokenizers crate: https://crates.io/crates/tokenizers
+- Circuit breaker pattern (Microsoft): https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+- Graceful degradation in distributed systems: https://www.geeksforgeeks.org/system-design/graceful-degradation-in-distributed-systems/
+- AWS graceful degradation best practices: https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_mitigate_interaction_failure_graceful_degradation.html
+- Rust error handling with thiserror (anti-patterns): https://nrc.github.io/error-docs/error-design/error-type-design.html
+- Effective Rust error design: https://effective-rust.com/errors.html
+- Iroh project error handling (backtraces + thiserror): https://www.iroh.computer/blog/error-handling-in-iroh
+- Circuit breaker thundering herd prevention: https://iam.slys.dev/p/how-systems-handle-failure-retries
+- tower-circuitbreaker crate: https://lib.rs/crates/tower-circuitbreaker
+- Blufio codebase: `BlufioError` enum at `crates/blufio-core/src/error.rs` (14 variants, no behavioral methods)
+- Blufio codebase: `FormatPipeline` at `crates/blufio-core/src/format.rs` (exists but not wired into adapters)
+- Blufio codebase: `ChannelCapabilities` at `crates/blufio-core/src/types.rs:107` (9 fields, no Default, no non_exhaustive)
+- Blufio codebase: `DynamicZone::assemble_messages` at `crates/blufio-context/src/dynamic.rs:64` (len()/4 heuristic)
+- Blufio codebase: `OnnxEmbedder` at `crates/blufio-memory/src/embedder.rs` (unsafe Send, Mutex<Session>, ort rc.11 APIs)
+- Blufio codebase: ort pinned at `=2.0.0-rc.11` in workspace Cargo.toml line 49
+- Blufio codebase: tokenizers at `0.21` in workspace Cargo.toml line 50
 
 ---
-*Pitfalls research for: v1.3 Ecosystem Expansion — adding OpenAI-compatible API, multi-provider LLM, multi-channel adapters, Docker, event bus, skill registry, node system, migration tooling to existing 39K LOC Rust AI agent platform*
-*Researched: 2026-03-05*
+*Pitfalls research for: v1.4 Quality & Resilience -- adding circuit breakers, graceful degradation, typed errors, accurate token counting, format pipeline integration, ChannelCapabilities extension, and ORT upgrade to existing 71,808 LOC Rust AI agent platform*
+*Researched: 2026-03-08*

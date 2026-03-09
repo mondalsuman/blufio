@@ -10,7 +10,7 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use blufio_core::BlufioError;
+use blufio_core::{BlufioError, ErrorContext, ProviderErrorKind};
 use bytes::BytesMut;
 use futures::stream::Stream;
 
@@ -70,7 +70,11 @@ impl Stream for GeminiStreamParser {
                 }
                 Poll::Ready(Some(Err(e))) => {
                     return Poll::Ready(Some(Err(BlufioError::Provider {
-                        message: format!("stream read error: {e}"),
+                        kind: ProviderErrorKind::ServerError,
+                        context: ErrorContext {
+                            provider_name: Some("gemini".into()),
+                            ..Default::default()
+                        },
                         source: Some(Box::new(e)),
                     })));
                 }
@@ -159,7 +163,11 @@ impl GeminiStreamParser {
                         let obj_bytes = &buf[start..=scan_pos];
                         let result = serde_json::from_slice::<GenerateContentResponse>(obj_bytes)
                             .map_err(|e| BlufioError::Provider {
-                                message: format!("failed to parse Gemini stream chunk: {e}"),
+                                kind: ProviderErrorKind::ServerError,
+                                context: ErrorContext {
+                                    provider_name: Some("gemini".into()),
+                                    ..Default::default()
+                                },
                                 source: Some(Box::new(e)),
                             });
 

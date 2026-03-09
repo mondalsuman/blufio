@@ -16,10 +16,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use blufio_config::model::DiscordConfig;
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
+    OutboundMessage, RateLimit, StreamingType,
 };
 use serenity::all::{ChannelId, CreateMessage, EditMessage, GatewayIntents};
 use serenity::model::channel::Message;
@@ -192,6 +193,14 @@ impl ChannelAdapter for DiscordChannel {
             supports_embeds: true,
             supports_reactions: true,
             supports_threads: true,
+            streaming_type: StreamingType::EditBased,
+            formatting_support: FormattingSupport::FullMarkdown,
+            rate_limit: Some(RateLimit {
+                messages_per_second: Some(5.0),
+                burst_limit: Some(5),
+                daily_limit: None,
+            }),
+            supports_code_blocks: true,
         }
     }
 
@@ -224,10 +233,7 @@ impl ChannelAdapter for DiscordChannel {
         let mut client = Client::builder(&token, intents)
             .event_handler(handler)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to create Discord client: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
 
         // Clone the HTTP client BEFORE start() consumes the client.
         self.http = Some(client.http.clone());
@@ -245,10 +251,10 @@ impl ChannelAdapter for DiscordChannel {
     }
 
     async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
-        let http = self.http.as_ref().ok_or_else(|| BlufioError::Channel {
-            message: "Discord not connected".into(),
-            source: None,
-        })?;
+        let http = self
+            .http
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("discord"))?;
 
         let channel_id = extract_channel_id(&msg)?;
         let formatted = markdown::format_for_discord(&msg.content);
@@ -256,20 +262,16 @@ impl ChannelAdapter for DiscordChannel {
         let sent = channel_id
             .send_message(http, CreateMessage::new().content(&formatted))
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to send Discord message: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
 
         Ok(MessageId(sent.id.to_string()))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::Channel {
-            message: "Discord inbound channel closed".into(),
-            source: None,
-        })
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("discord"))
     }
 
     async fn edit_message(
@@ -279,19 +281,27 @@ impl ChannelAdapter for DiscordChannel {
         text: &str,
         _parse_mode: Option<&str>,
     ) -> Result<(), BlufioError> {
-        let http = self.http.as_ref().ok_or_else(|| BlufioError::Channel {
-            message: "Discord not connected".into(),
-            source: None,
-        })?;
+        let http = self
+            .http
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("discord"))?;
 
-        let channel_id: u64 = chat_id.parse().map_err(|e| BlufioError::Channel {
-            message: format!("invalid Discord channel_id: {e}"),
+        let channel_id: u64 = chat_id.parse().map_err(|_e| BlufioError::Channel {
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext {
+                channel_name: Some("discord".to_string()),
+                ..Default::default()
+            },
             source: None,
         })?;
         let channel_id = ChannelId::new(channel_id);
 
-        let msg_id: u64 = message_id.parse().map_err(|e| BlufioError::Channel {
-            message: format!("invalid Discord message_id: {e}"),
+        let msg_id: u64 = message_id.parse().map_err(|_e| BlufioError::Channel {
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext {
+                channel_name: Some("discord".to_string()),
+                ..Default::default()
+            },
             source: None,
         })?;
         let msg_id = serenity::model::id::MessageId::new(msg_id);
@@ -301,22 +311,23 @@ impl ChannelAdapter for DiscordChannel {
         channel_id
             .edit_message(http, msg_id, EditMessage::new().content(&formatted))
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to edit Discord message: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
 
         Ok(())
     }
 
     async fn send_typing(&self, chat_id: &str) -> Result<(), BlufioError> {
-        let http = self.http.as_ref().ok_or_else(|| BlufioError::Channel {
-            message: "Discord not connected".into(),
-            source: None,
-        })?;
+        let http = self
+            .http
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("discord"))?;
 
-        let channel_id: u64 = chat_id.parse().map_err(|e| BlufioError::Channel {
-            message: format!("invalid Discord channel_id: {e}"),
+        let channel_id: u64 = chat_id.parse().map_err(|_e| BlufioError::Channel {
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext {
+                channel_name: Some("discord".to_string()),
+                ..Default::default()
+            },
             source: None,
         })?;
         let channel_id = ChannelId::new(channel_id);
@@ -324,10 +335,7 @@ impl ChannelAdapter for DiscordChannel {
         channel_id
             .broadcast_typing(http)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to send Discord typing indicator: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
 
         Ok(())
     }
@@ -342,8 +350,12 @@ fn extract_channel_id(msg: &OutboundMessage) -> Result<ChannelId, BlufioError> {
     {
         let id = chat_id_str
             .parse::<u64>()
-            .map_err(|e| BlufioError::Channel {
-                message: format!("invalid chat_id in metadata: {e}"),
+            .map_err(|_e| BlufioError::Channel {
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("discord".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
         return Ok(ChannelId::new(id));
@@ -354,7 +366,11 @@ fn extract_channel_id(msg: &OutboundMessage) -> Result<ChannelId, BlufioError> {
         .parse::<u64>()
         .map(ChannelId::new)
         .map_err(|_| BlufioError::Channel {
-            message: "no valid chat_id in message metadata or channel field".into(),
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext {
+                channel_name: Some("discord".to_string()),
+                ..Default::default()
+            },
             source: None,
         })
 }
@@ -411,6 +427,10 @@ mod tests {
         assert!(caps.supports_embeds);
         assert!(caps.supports_reactions);
         assert!(caps.supports_threads);
+        assert_eq!(caps.streaming_type, StreamingType::EditBased);
+        assert_eq!(caps.formatting_support, FormattingSupport::FullMarkdown);
+        assert!(caps.rate_limit.is_some());
+        assert!(caps.supports_code_blocks);
     }
 
     #[test]

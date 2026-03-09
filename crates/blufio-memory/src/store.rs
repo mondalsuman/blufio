@@ -10,9 +10,7 @@ use crate::types::{Memory, MemorySource, MemoryStatus, blob_to_vec, vec_to_blob}
 
 /// Helper to convert tokio_rusqlite errors into BlufioError::Storage.
 fn storage_err(e: tokio_rusqlite::Error) -> BlufioError {
-    BlufioError::Storage {
-        source: Box::new(e),
-    }
+    BlufioError::storage_connection_failed(e)
 }
 
 /// Persistent store for memories in SQLite.

@@ -47,6 +47,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rustyline = "14"
 colored = "2"
 ort = { version = "=2.0.0-rc.11", default-features = false, features = ["std", "ndarray", "download-binaries", "copy-dylibs", "tls-rustls"] }
+tiktoken-rs = "0.9"
 tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
 ndarray = "0.17"
 wasmtime = "40"
@@ -71,6 +72,8 @@ qrcode = { version = "0.14", default-features = false }
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 indicatif = "0.17"
+proptest = "1"
+tracing-test = "0.2"
 
 [profile.release]
 lto = "thin"

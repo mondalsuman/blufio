@@ -129,13 +129,7 @@ pub fn save_keypair_to_file(
         hex::encode(keypair.private_bytes()),
         PRIVATE_KEY_FOOTER,
     );
-    std::fs::write(private_path, &private_content).map_err(|e| BlufioError::Skill {
-        message: format!(
-            "failed to write private key to '{}': {e}",
-            private_path.display()
-        ),
-        source: Some(Box::new(e)),
-    })?;
+    std::fs::write(private_path, &private_content).map_err(BlufioError::skill_execution_failed)?;
 
     let public_content = format!(
         "{}\n{}\n{}\n",
@@ -143,23 +137,14 @@ pub fn save_keypair_to_file(
         hex::encode(keypair.public_bytes()),
         PUBLIC_KEY_FOOTER,
     );
-    std::fs::write(public_path, &public_content).map_err(|e| BlufioError::Skill {
-        message: format!(
-            "failed to write public key to '{}': {e}",
-            public_path.display()
-        ),
-        source: Some(Box::new(e)),
-    })?;
+    std::fs::write(public_path, &public_content).map_err(BlufioError::skill_execution_failed)?;
 
     Ok(())
 }
 
 /// Load a publisher keypair from a private key file (PEM-like format).
 pub fn load_private_key_from_file(path: &Path) -> Result<PublisherKeypair, BlufioError> {
-    let content = std::fs::read_to_string(path).map_err(|e| BlufioError::Skill {
-        message: format!("failed to read private key from '{}': {e}", path.display()),
-        source: Some(Box::new(e)),
-    })?;
+    let content = std::fs::read_to_string(path).map_err(BlufioError::skill_execution_failed)?;
 
     let hex_line = extract_pem_content(&content, PRIVATE_KEY_HEADER, PRIVATE_KEY_FOOTER)?;
     let bytes = hex::decode(&hex_line).map_err(|e| {
@@ -179,10 +164,7 @@ pub fn load_private_key_from_file(path: &Path) -> Result<PublisherKeypair, Blufi
 
 /// Load a public key from a public key file (PEM-like format).
 pub fn load_public_key_from_file(path: &Path) -> Result<VerifyingKey, BlufioError> {
-    let content = std::fs::read_to_string(path).map_err(|e| BlufioError::Skill {
-        message: format!("failed to read public key from '{}': {e}", path.display()),
-        source: Some(Box::new(e)),
-    })?;
+    let content = std::fs::read_to_string(path).map_err(BlufioError::skill_execution_failed)?;
 
     let hex_line = extract_pem_content(&content, PUBLIC_KEY_HEADER, PUBLIC_KEY_FOOTER)?;
     let bytes = hex::decode(&hex_line).map_err(|e| {

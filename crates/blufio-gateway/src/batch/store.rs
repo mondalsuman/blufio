@@ -235,9 +235,7 @@ fn response_json_to_error(response: Option<String>) -> Option<String> {
 }
 
 fn map_err(e: tokio_rusqlite::Error<rusqlite::Error>) -> BlufioError {
-    BlufioError::Storage {
-        source: Box::new(e),
-    }
+    BlufioError::storage_connection_failed(e)
 }
 
 /// Extension trait for rusqlite to add `.optional()` to query results.

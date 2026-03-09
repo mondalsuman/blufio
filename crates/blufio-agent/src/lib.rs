@@ -137,16 +137,13 @@ impl AgentLoop {
                             if let Err(e) = self.handle_inbound(inbound).await {
                                 error!(error = %e, "failed to handle inbound message");
                                 #[cfg(feature = "prometheus")]
-                                {
-                                    let error_type = classify_error_type(&e);
-                                    blufio_prometheus::record_error(error_type);
-                                }
+                                blufio_prometheus::record_classified_error(&e);
                             }
                         }
                         Err(e) => {
                             error!(error = %e, "channel receive error");
                             #[cfg(feature = "prometheus")]
-                            blufio_prometheus::record_error("channel");
+                            blufio_prometheus::record_classified_error(&e);
                             // If the channel is closed, break out of the loop.
                             if e.to_string().contains("closed") {
                                 break;
@@ -742,23 +739,6 @@ fn extract_chat_id_from_metadata(metadata: &Option<String>) -> Option<String> {
             .ok()
             .and_then(|v| v.get("chat_id").and_then(|c| c.as_str()).map(String::from))
     })
-}
-
-/// Classify a [`BlufioError`] into a Prometheus-compatible error type label.
-///
-/// Used for the `blufio_errors_total` counter's `type` label.
-#[cfg(feature = "prometheus")]
-fn classify_error_type(error: &BlufioError) -> &'static str {
-    match error {
-        BlufioError::Provider { .. } => "provider",
-        BlufioError::Security(_) => "security",
-        BlufioError::Storage { .. } => "storage",
-        BlufioError::Channel { .. } => "channel",
-        BlufioError::Skill { .. } => "skill",
-        BlufioError::BudgetExhausted { .. } => "budget",
-        BlufioError::Timeout { .. } => "timeout",
-        _ => "agent",
-    }
 }
 
 #[cfg(test)]

@@ -17,8 +17,8 @@ use blufio_config::model::SignalConfig;
 use blufio_core::error::BlufioError;
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageContent, MessageId,
-    OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage,
+    MessageContent, MessageId, OutboundMessage, StreamingType,
 };
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
@@ -106,6 +106,10 @@ impl ChannelAdapter for SignalChannel {
             supports_embeds: false,
             supports_reactions: false,
             supports_threads: false,
+            streaming_type: StreamingType::None,
+            formatting_support: FormattingSupport::PlainText,
+            rate_limit: None,
+            supports_code_blocks: false,
         }
     }
 
@@ -269,10 +273,9 @@ impl ChannelAdapter for SignalChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::Channel {
-            message: "Signal inbound channel closed".into(),
-            source: None,
-        })
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("signal"))
     }
 
     async fn edit_message(

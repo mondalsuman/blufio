@@ -3,7 +3,7 @@
 
 //! Meta Graph API client for sending WhatsApp messages.
 
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use serde_json::json;
 
 /// Send a text message via the WhatsApp Cloud API (Meta Graph API v21.0).
@@ -32,24 +32,25 @@ pub async fn send_whatsapp_message(
         .json(&body)
         .send()
         .await
-        .map_err(|e| BlufioError::Channel {
-            message: format!("WhatsApp API request failed: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        .map_err(|e| BlufioError::channel_delivery_failed("whatsapp", e))?;
 
     if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
+        let _status = resp.status();
+        let _body = resp.text().await.unwrap_or_default();
         return Err(BlufioError::Channel {
-            message: format!("WhatsApp API returned {status}: {body}"),
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext {
+                channel_name: Some("whatsapp".to_string()),
+                ..Default::default()
+            },
             source: None,
         });
     }
 
-    let resp_json: serde_json::Value = resp.json().await.map_err(|e| BlufioError::Channel {
-        message: format!("WhatsApp API response parse error: {e}"),
-        source: Some(Box::new(e)),
-    })?;
+    let resp_json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| BlufioError::channel_delivery_failed("whatsapp", e))?;
 
     // Extract message ID from response: { "messages": [{ "id": "wamid.xxx" }] }
     let message_id = resp_json

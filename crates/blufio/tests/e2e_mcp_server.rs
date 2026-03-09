@@ -237,7 +237,9 @@ async fn test_mcp_tool_invocation_via_bridge() {
             assert!(
                 e.to_string().contains("not found")
                     || e.to_string().contains("No such file")
-                    || e.to_string().contains("error"),
+                    || e.to_string().contains("error")
+                    || e.to_string().contains("ExecutionFailed")
+                    || e.to_string().contains("missing required"),
                 "unexpected error: {e}"
             );
         }

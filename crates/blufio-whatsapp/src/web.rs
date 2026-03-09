@@ -12,10 +12,11 @@
 
 use async_trait::async_trait;
 use blufio_config::model::WhatsAppConfig;
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
+    OutboundMessage, RateLimit, StreamingType,
 };
 
 /// Experimental WhatsApp Web channel adapter (stub).
@@ -78,27 +79,26 @@ impl ChannelAdapter for WhatsAppWebChannel {
             supports_embeds: false,
             supports_reactions: false,
             supports_threads: false,
+            streaming_type: StreamingType::None,
+            formatting_support: FormattingSupport::BasicMarkdown,
+            rate_limit: Some(RateLimit {
+                messages_per_second: Some(80.0),
+                burst_limit: Some(80),
+                daily_limit: Some(1000),
+            }),
+            supports_code_blocks: false,
         }
     }
 
     async fn connect(&mut self) -> Result<(), BlufioError> {
-        Err(BlufioError::Channel {
-            message: "WhatsApp Web adapter is experimental and not yet implemented".into(),
-            source: None,
-        })
+        Err(BlufioError::channel_unsupported_content("whatsapp-web"))
     }
 
     async fn send(&self, _msg: OutboundMessage) -> Result<MessageId, BlufioError> {
-        Err(BlufioError::Channel {
-            message: "WhatsApp Web adapter is experimental and not yet implemented".into(),
-            source: None,
-        })
+        Err(BlufioError::channel_unsupported_content("whatsapp-web"))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
-        Err(BlufioError::Channel {
-            message: "WhatsApp Web adapter is experimental and not yet implemented".into(),
-            source: None,
-        })
+        Err(BlufioError::channel_unsupported_content("whatsapp-web"))
     }
 }

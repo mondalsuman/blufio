@@ -16,8 +16,11 @@ pub mod conditional;
 pub mod dynamic;
 pub mod static_zone;
 
+use std::sync::Arc;
+
 use blufio_config::model::{AgentConfig, ContextConfig};
 use blufio_core::error::BlufioError;
+use blufio_core::token_counter::TokenizerCache;
 use blufio_core::traits::{ProviderAdapter, StorageAdapter};
 use blufio_core::types::{InboundMessage, ProviderRequest, TokenUsage};
 
@@ -56,6 +59,9 @@ pub struct ContextEngine {
     dynamic_zone: DynamicZone,
     /// Model used for compaction (from config).
     compaction_model: String,
+    /// Cached tokenizer instances for accurate token counting.
+    #[allow(dead_code)]
+    token_cache: Arc<TokenizerCache>,
 }
 
 impl ContextEngine {
@@ -66,15 +72,17 @@ impl ContextEngine {
     pub async fn new(
         agent_config: &AgentConfig,
         context_config: &ContextConfig,
+        token_cache: Arc<TokenizerCache>,
     ) -> Result<Self, BlufioError> {
         let static_zone = StaticZone::new(agent_config).await?;
-        let dynamic_zone = DynamicZone::new(context_config);
+        let dynamic_zone = DynamicZone::new(context_config, token_cache.clone());
 
         Ok(Self {
             static_zone,
             conditional_providers: Vec::new(),
             dynamic_zone,
             compaction_model: context_config.compaction_model.clone(),
+            token_cache,
         })
     }
 
@@ -104,7 +112,7 @@ impl ContextEngine {
         // 3. Get dynamic messages with compaction.
         let dynamic_result = self
             .dynamic_zone
-            .assemble_messages(provider, storage, session_id, inbound)
+            .assemble_messages(provider, storage, session_id, inbound, model)
             .await?;
 
         // 4. Combine conditional + dynamic messages.
@@ -154,6 +162,7 @@ impl ContextEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
 
     #[tokio::test]
     async fn context_engine_new() {
@@ -162,8 +171,9 @@ mod tests {
             ..Default::default()
         };
         let context_config = ContextConfig::default();
+        let token_cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
 
-        let engine = ContextEngine::new(&agent_config, &context_config)
+        let engine = ContextEngine::new(&agent_config, &context_config, token_cache)
             .await
             .unwrap();
         assert_eq!(engine.static_zone().system_prompt(), "Test engine.");

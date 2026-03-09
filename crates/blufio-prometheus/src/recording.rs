@@ -102,9 +102,34 @@ pub fn set_memory_pressure(pressure: f64) {
     metrics::gauge!("blufio_memory_pressure").set(pressure);
 }
 
-/// Record an error by type.
+/// Record an error by type (legacy single-label API).
 pub fn record_error(error_type: &str) {
     metrics::counter!("blufio_errors_total", "type" => error_type.to_string()).increment(1);
+}
+
+/// Record an error with structured classification labels.
+///
+/// Uses 3 labels: `category`, `failure_mode`, `severity`.
+pub fn record_error_classified(category: &str, failure_mode: &str, severity: &str) {
+    metrics::counter!(
+        "blufio_errors_total",
+        "category" => category.to_string(),
+        "failure_mode" => failure_mode.to_string(),
+        "severity" => severity.to_string(),
+    )
+    .increment(1);
+}
+
+/// Convenience: record a classified error directly from a [`BlufioError`].
+///
+/// Extracts `category()`, `failure_mode()`, and `severity()` from the error
+/// and calls [`record_error_classified`].
+pub fn record_classified_error(error: &blufio_core::BlufioError) {
+    record_error_classified(
+        &error.category().to_string(),
+        &error.failure_mode().to_string(),
+        &error.severity().to_string(),
+    );
 }
 
 // ---- MCP metrics (INTG-04) ----

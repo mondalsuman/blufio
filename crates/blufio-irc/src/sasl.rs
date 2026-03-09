@@ -25,10 +25,7 @@ pub async fn request_sasl_cap(client: &irc::client::Client) -> Result<(), Blufio
             None,
             Some("sasl".into()),
         ))
-        .map_err(|e| BlufioError::Channel {
-            message: format!("failed to send CAP REQ :sasl: {e}"),
-            source: Some(Box::new(e)),
-        })
+        .map_err(|e| BlufioError::channel_delivery_failed("irc", e))
 }
 
 /// Encode SASL PLAIN credentials.
@@ -51,10 +48,7 @@ pub async fn send_authenticate(
             "AUTHENTICATE".into(),
             vec![encoded.to_string()],
         ))
-        .map_err(|e| BlufioError::Channel {
-            message: format!("failed to send AUTHENTICATE: {e}"),
-            source: Some(Box::new(e)),
-        })
+        .map_err(|e| BlufioError::channel_delivery_failed("irc", e))
 }
 
 /// Send CAP END to finish capability negotiation.
@@ -67,10 +61,7 @@ pub async fn finish_cap(client: &irc::client::Client) -> Result<(), BlufioError>
             None,
             None,
         ))
-        .map_err(|e| BlufioError::Channel {
-            message: format!("failed to send CAP END: {e}"),
-            source: Some(Box::new(e)),
-        })
+        .map_err(|e| BlufioError::channel_delivery_failed("irc", e))
 }
 
 #[cfg(test)]

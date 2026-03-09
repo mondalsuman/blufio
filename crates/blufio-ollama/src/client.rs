@@ -15,12 +15,15 @@
 use std::pin::Pin;
 use std::time::Duration;
 
-use blufio_core::BlufioError;
+use blufio_core::{BlufioError, ErrorContext, ProviderErrorKind};
 use futures::Stream;
 use tracing::debug;
 
 use crate::stream::parse_ndjson_stream;
 use crate::types::{OllamaRequest, OllamaResponse, TagsResponse};
+
+/// Provider name used in error context.
+const PROVIDER_NAME: &str = "ollama";
 
 /// HTTP client for Ollama API communication.
 ///
@@ -44,10 +47,7 @@ impl OllamaClient {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(300))
             .build()
-            .map_err(|e| BlufioError::Provider {
-                message: format!("failed to build HTTP client: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::provider_server_error(PROVIDER_NAME, e))?;
 
         Ok(Self {
             client,
@@ -89,27 +89,43 @@ impl OllamaClient {
             .json(&req)
             .send()
             .await
-            .map_err(|e| BlufioError::Provider {
-                message: format!("Ollama HTTP request failed: {e}"),
-                source: Some(Box::new(e)),
+            .map_err(|e| {
+                // Connection refused indicates the local Ollama server is down.
+                BlufioError::Provider {
+                    kind: ProviderErrorKind::ServerError,
+                    context: ErrorContext {
+                        provider_name: Some(PROVIDER_NAME.into()),
+                        ..Default::default()
+                    },
+                    source: Some(Box::new(e)),
+                }
             })?;
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(BlufioError::Provider {
-                message: format!("Ollama API returned {status}: {body}"),
-                source: None,
-            });
+            let _body = response.text().await.unwrap_or_default();
+            return Err(BlufioError::provider_from_http(
+                status.as_u16(),
+                PROVIDER_NAME,
+                None,
+            ));
         }
 
         let body = response.text().await.map_err(|e| BlufioError::Provider {
-            message: format!("failed to read Ollama response body: {e}"),
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
             source: Some(Box::new(e)),
         })?;
 
         serde_json::from_str(&body).map_err(|e| BlufioError::Provider {
-            message: format!("failed to parse Ollama response: {e}"),
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
             source: Some(Box::new(e)),
         })
     }
@@ -135,17 +151,22 @@ impl OllamaClient {
             .send()
             .await
             .map_err(|e| BlufioError::Provider {
-                message: format!("Ollama HTTP request failed: {e}"),
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some(PROVIDER_NAME.into()),
+                    ..Default::default()
+                },
                 source: Some(Box::new(e)),
             })?;
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(BlufioError::Provider {
-                message: format!("Ollama API returned {status}: {body}"),
-                source: None,
-            });
+            let _body = response.text().await.unwrap_or_default();
+            return Err(BlufioError::provider_from_http(
+                status.as_u16(),
+                PROVIDER_NAME,
+                None,
+            ));
         }
 
         Ok(parse_ndjson_stream(response))
@@ -162,26 +183,39 @@ impl OllamaClient {
             .send()
             .await
             .map_err(|e| BlufioError::Provider {
-                message: format!("Ollama HTTP request failed: {e}"),
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some(PROVIDER_NAME.into()),
+                    ..Default::default()
+                },
                 source: Some(Box::new(e)),
             })?;
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(BlufioError::Provider {
-                message: format!("Ollama API returned {status}: {body}"),
-                source: None,
-            });
+            let _body = response.text().await.unwrap_or_default();
+            return Err(BlufioError::provider_from_http(
+                status.as_u16(),
+                PROVIDER_NAME,
+                None,
+            ));
         }
 
         let body = response.text().await.map_err(|e| BlufioError::Provider {
-            message: format!("failed to read Ollama tags response: {e}"),
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
             source: Some(Box::new(e)),
         })?;
 
         serde_json::from_str(&body).map_err(|e| BlufioError::Provider {
-            message: format!("failed to parse Ollama tags response: {e}"),
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
             source: Some(Box::new(e)),
         })
     }
@@ -340,8 +374,9 @@ mod tests {
         let client = test_client(&server.uri());
         let result = client.chat(&test_request()).await;
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("404"), "got: {err}");
+        // 404 maps to ModelNotFound via provider_from_http
+        let err = result.unwrap_err();
+        assert!(!err.is_retryable());
     }
 
     #[tokio::test]

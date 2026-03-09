@@ -14,6 +14,7 @@ use blufio_config::model::{
     AgentConfig, BlufioConfig, ContextConfig, CostConfig, RoutingConfig, StorageConfig,
 };
 use blufio_context::ContextEngine;
+use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
 use blufio_core::types::{
     InboundMessage, MessageContent, ProviderStreamChunk, StreamEventType, TokenUsage,
 };
@@ -65,8 +66,7 @@ impl TestHarnessBuilder {
     /// Build the test harness, creating all required subsystems.
     pub async fn build(self) -> Result<TestHarness, BlufioError> {
         // Create temp directory for SQLite
-        let temp_dir =
-            tempfile::TempDir::new().map_err(|e| BlufioError::Storage { source: e.into() })?;
+        let temp_dir = tempfile::TempDir::new().map_err(BlufioError::storage_connection_failed)?;
         let db_path = temp_dir.path().join("test.db");
         let db_path_str = db_path.to_string_lossy().to_string();
 
@@ -98,7 +98,9 @@ impl TestHarnessBuilder {
             ..AgentConfig::default()
         };
         let context_config = ContextConfig::default();
-        let context_engine = Arc::new(ContextEngine::new(&agent_config, &context_config).await?);
+        let token_cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
+        let context_engine =
+            Arc::new(ContextEngine::new(&agent_config, &context_config, token_cache).await?);
 
         // Create model router with routing disabled
         let routing_config = RoutingConfig {

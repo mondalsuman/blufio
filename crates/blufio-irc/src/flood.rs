@@ -74,10 +74,7 @@ impl FloodProtectedSender {
         self.queue_tx
             .send((target.to_string(), message.to_string()))
             .await
-            .map_err(|_| BlufioError::Channel {
-                message: "IRC flood sender queue closed".into(),
-                source: None,
-            })
+            .map_err(|_| BlufioError::channel_connection_lost("irc"))
     }
 }
 

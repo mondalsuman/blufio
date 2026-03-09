@@ -38,22 +38,16 @@ impl Tool for BashTool {
     }
 
     async fn invoke(&self, input: serde_json::Value) -> Result<ToolOutput, BlufioError> {
-        let command = input["command"]
-            .as_str()
-            .ok_or_else(|| BlufioError::Skill {
-                message: "missing required 'command' parameter".to_string(),
-                source: None,
-            })?;
+        let command = input["command"].as_str().ok_or_else(|| {
+            BlufioError::skill_execution_msg("missing required 'command' parameter")
+        })?;
 
         let output = tokio::process::Command::new("bash")
             .arg("-c")
             .arg(command)
             .output()
             .await
-            .map_err(|e| BlufioError::Skill {
-                message: format!("failed to execute bash command: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(BlufioError::skill_execution_failed)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

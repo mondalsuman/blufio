@@ -54,6 +54,9 @@ pub async fn post_responses(
                     code: Some("streaming_required".into()),
                     provider: None,
                     retry_after: None,
+                    category: None,
+                    retryable: None,
+                    failure_mode: None,
                 },
             }),
         )
@@ -74,6 +77,9 @@ pub async fn post_responses(
                         code: Some("api_not_configured".into()),
                         provider: None,
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )
@@ -98,6 +104,9 @@ pub async fn post_responses(
                         code: Some("provider_not_found".into()),
                         provider: Some(provider_name),
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )
@@ -119,6 +128,9 @@ pub async fn post_responses(
                         code: None,
                         provider: None,
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )

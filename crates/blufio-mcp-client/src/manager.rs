@@ -243,9 +243,8 @@ async fn connect_server(
     server: &McpServerEntry,
 ) -> Result<RunningService<RoleClient, ()>, BlufioError> {
     let timeout = Duration::from_secs(server.connect_timeout_secs);
-    let url = server.url.as_deref().ok_or_else(|| BlufioError::Skill {
-        message: format!("MCP server '{}': no URL configured", server.name),
-        source: None,
+    let url = server.url.as_deref().ok_or_else(|| {
+        BlufioError::mcp_timeout(&format!("MCP server '{}': no URL configured", server.name))
     })?;
 
     let result = tokio::time::timeout(timeout, async {
@@ -262,22 +261,25 @@ async fn connect_server(
                 );
                 connect_streamable_http(url, server.auth_token.as_deref()).await
             }
-            other => Err(BlufioError::Skill {
-                message: format!(
-                    "MCP server '{}': unsupported transport '{other}'",
-                    server.name
-                ),
+            other => Err(BlufioError::Mcp {
+                kind: blufio_core::error::McpErrorKind::ProtocolError,
+                context: blufio_core::error::ErrorContext {
+                    request_id: Some(format!(
+                        "MCP server '{}': unsupported transport '{other}'",
+                        server.name
+                    )),
+                    ..Default::default()
+                },
                 source: None,
             }),
         }
     })
     .await
-    .map_err(|_| BlufioError::Skill {
-        message: format!(
+    .map_err(|_| {
+        BlufioError::mcp_timeout(&format!(
             "MCP server '{}': connection timed out after {}s",
             server.name, server.connect_timeout_secs
-        ),
-        source: None,
+        ))
     })??;
 
     Ok(result)
@@ -297,10 +299,9 @@ async fn connect_streamable_http(
     }
     let transport = StreamableHttpClientTransport::from_config(config);
 
-    ().serve(transport).await.map_err(|e| BlufioError::Skill {
-        message: format!("Streamable HTTP connection failed: {e}"),
-        source: None,
-    })
+    ().serve(transport)
+        .await
+        .map_err(BlufioError::mcp_connection_failed)
 }
 
 /// Discover tools from a connected server and register them in the ToolRegistry.
@@ -316,10 +317,7 @@ async fn discover_and_register(
     let tools_result = session
         .list_all_tools()
         .await
-        .map_err(|e| BlufioError::Skill {
-            message: format!("tools/list failed for '{}': {e}", server.name),
-            source: None,
-        })?;
+        .map_err(BlufioError::mcp_tool_failed)?;
 
     let mut registered_names = Vec::new();
     let mut registry = tool_registry.write().await;
@@ -354,14 +352,11 @@ async fn discover_and_register(
                         "SECURITY: tool schema mutated (rug pull detected) -- blocking entire server"
                     );
                     // Block the entire server: return error so no tools from this server are registered.
-                    return Err(BlufioError::Skill {
-                        message: format!(
-                            "SECURITY: rug pull detected on server '{}' tool '{}'. \
-                             Use 'blufio mcp re-pin' to re-trust.",
-                            server.name, tool_name
-                        ),
-                        source: None,
-                    });
+                    return Err(BlufioError::Security(format!(
+                        "SECURITY: rug pull detected on server '{}' tool '{}'. \
+                         Use 'blufio mcp re-pin' to re-trust.",
+                        server.name, tool_name
+                    )));
                 }
                 Err(e) => {
                     warn!(

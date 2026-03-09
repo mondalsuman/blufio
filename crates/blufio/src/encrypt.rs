@@ -37,33 +37,28 @@ pub fn run_keygen() {
 /// destination, then swaps files after verification.
 pub fn run_encrypt(db_path: &str, skip_confirm: bool) -> Result<(), BlufioError> {
     // Pre-checks.
-    let key = std::env::var("BLUFIO_DB_KEY").map_err(|_| BlufioError::Storage {
-        source: Box::new(std::io::Error::new(
+    let key = std::env::var("BLUFIO_DB_KEY").map_err(|_| {
+        BlufioError::storage_connection_failed(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "BLUFIO_DB_KEY environment variable must be set before encrypting",
-        )),
+        ))
     })?;
 
     let path = std::path::Path::new(db_path);
     if !path.exists() {
-        return Err(BlufioError::Storage {
-            source: Box::new(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("database not found: {db_path}"),
-            )),
-        });
+        return Err(BlufioError::storage_connection_failed(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("database not found: {db_path}"),
+        )));
     }
 
-    let is_plain = blufio_storage::is_plaintext_sqlite(path).map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    let is_plain = blufio_storage::is_plaintext_sqlite(path)
+        .map_err(BlufioError::storage_connection_failed)?;
     if !is_plain {
-        return Err(BlufioError::Storage {
-            source: Box::new(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                "database is already encrypted",
-            )),
-        });
+        return Err(BlufioError::storage_connection_failed(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "database is already encrypted",
+        )));
     }
 
     let encrypting_path = format!("{db_path}.encrypting");
@@ -77,9 +72,8 @@ pub fn run_encrypt(db_path: &str, skip_confirm: bool) -> Result<(), BlufioError>
 
     // Interactive confirmation.
     if !skip_confirm {
-        let metadata = std::fs::metadata(db_path).map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        let metadata =
+            std::fs::metadata(db_path).map_err(BlufioError::storage_connection_failed)?;
         let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
         eprintln!("Database: {db_path}");
         eprintln!("Size: {size_mb:.1} MB");
@@ -95,9 +89,7 @@ pub fn run_encrypt(db_path: &str, skip_confirm: bool) -> Result<(), BlufioError>
         stdin
             .lock()
             .read_line(&mut line)
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+            .map_err(BlufioError::storage_connection_failed)?;
         if !line.trim().eq_ignore_ascii_case("y") {
             eprintln!("Aborted.");
             return Ok(());
@@ -108,9 +100,8 @@ pub fn run_encrypt(db_path: &str, skip_confirm: bool) -> Result<(), BlufioError>
     eprint!("Exporting to temp file... ");
     {
         // Open plaintext DB with no key (direct open, bypassing factory).
-        let conn = rusqlite::Connection::open(db_path).map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        let conn =
+            rusqlite::Connection::open(db_path).map_err(BlufioError::storage_connection_failed)?;
 
         // Escape key for SQL.
         let escaped_key = key.replace('\'', "''");
@@ -130,24 +121,17 @@ pub fn run_encrypt(db_path: &str, skip_confirm: bool) -> Result<(), BlufioError>
         conn.execute_batch(&format!(
             "ATTACH DATABASE '{escaped_enc_path}' AS encrypted KEY {key_expr};"
         ))
-        .map_err(|e| BlufioError::Storage {
-            source: Box::new(e),
-        })?;
+        .map_err(BlufioError::storage_connection_failed)?;
 
         // Export all data.
         conn.execute_batch("SELECT sqlcipher_export('encrypted');")
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+            .map_err(BlufioError::storage_connection_failed)?;
 
         conn.execute_batch("DETACH DATABASE encrypted;")
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+            .map_err(BlufioError::storage_connection_failed)?;
     }
-    let enc_meta = std::fs::metadata(&encrypting_path).map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    let enc_meta =
+        std::fs::metadata(&encrypting_path).map_err(BlufioError::storage_connection_failed)?;
     let size_mb = enc_meta.len() as f64 / (1024.0 * 1024.0);
     eprintln!("done ({size_mb:.1} MB)");
 
@@ -160,18 +144,14 @@ pub fn run_encrypt(db_path: &str, skip_confirm: bool) -> Result<(), BlufioError>
         )?;
         let result: String = verify_conn
             .query_row("PRAGMA integrity_check(1);", [], |row| row.get(0))
-            .map_err(|e| BlufioError::Storage {
-                source: Box::new(e),
-            })?;
+            .map_err(BlufioError::storage_connection_failed)?;
         if result != "ok" {
             // Clean up failed temp file.
             let _ = std::fs::remove_file(&encrypting_path);
-            return Err(BlufioError::Storage {
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("encrypted copy failed integrity check: {result}"),
-                )),
-            });
+            return Err(BlufioError::storage_connection_failed(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("encrypted copy failed integrity check: {result}"),
+            )));
         }
     }
     eprintln!("ok");
@@ -179,13 +159,9 @@ pub fn run_encrypt(db_path: &str, skip_confirm: bool) -> Result<(), BlufioError>
     // Step 3: Swap files.
     eprint!("Swapping files... ");
     // Move original to .pre-encrypt (safety backup).
-    std::fs::rename(db_path, &pre_encrypt_path).map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    std::fs::rename(db_path, &pre_encrypt_path).map_err(BlufioError::storage_connection_failed)?;
     // Move encrypted to original path.
-    std::fs::rename(&encrypting_path, db_path).map_err(|e| BlufioError::Storage {
-        source: Box::new(e),
-    })?;
+    std::fs::rename(&encrypting_path, db_path).map_err(BlufioError::storage_connection_failed)?;
     // Also clean up WAL and SHM files from plaintext DB.
     let _ = std::fs::remove_file(format!("{db_path}-wal"));
     let _ = std::fs::remove_file(format!("{db_path}-shm"));

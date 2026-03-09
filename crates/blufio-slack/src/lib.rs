@@ -17,10 +17,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use blufio_config::model::SlackConfig;
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
+    OutboundMessage, RateLimit, StreamingType,
 };
 use slack_morphism::prelude::*;
 use tokio::sync::mpsc;
@@ -135,6 +136,14 @@ impl ChannelAdapter for SlackChannel {
             supports_embeds: true,
             supports_reactions: true,
             supports_threads: true,
+            streaming_type: StreamingType::EditBased,
+            formatting_support: FormattingSupport::FullMarkdown,
+            rate_limit: Some(RateLimit {
+                messages_per_second: Some(1.0),
+                burst_limit: Some(1),
+                daily_limit: None,
+            }),
+            supports_code_blocks: true,
         }
     }
 
@@ -159,8 +168,12 @@ impl ChannelAdapter for SlackChannel {
 
         // Create Slack client.
         let client = Arc::new(SlackClient::new(SlackClientHyperConnector::new().map_err(
-            |e| BlufioError::Channel {
-                message: format!("failed to create Slack HTTP connector: {e}"),
+            |_e| BlufioError::Channel {
+                kind: ChannelErrorKind::ConnectionLost,
+                context: ErrorContext {
+                    channel_name: Some("slack".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             },
         )?));
@@ -176,9 +189,13 @@ impl ChannelAdapter for SlackChannel {
                     info!(bot_user_id = %user_id, "Slack auth.test succeeded");
                     self.bot_user_id = Some(user_id);
                 }
-                Err(e) => {
+                Err(_e) => {
                     return Err(BlufioError::Channel {
-                        message: format!("Slack auth.test failed: {e}"),
+                        kind: ChannelErrorKind::ConnectionLost,
+                        context: ErrorContext {
+                            channel_name: Some("slack".to_string()),
+                            ..Default::default()
+                        },
                         source: None,
                     });
                 }
@@ -219,8 +236,12 @@ impl ChannelAdapter for SlackChannel {
         socket_mode_listener
             .listen_for(&app_token)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to start Slack Socket Mode: {e}"),
+            .map_err(|_e| BlufioError::Channel {
+                kind: ChannelErrorKind::ConnectionLost,
+                context: ErrorContext {
+                    channel_name: Some("slack".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
@@ -233,17 +254,14 @@ impl ChannelAdapter for SlackChannel {
     }
 
     async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
-        let client = self.client.as_ref().ok_or_else(|| BlufioError::Channel {
-            message: "Slack not connected".into(),
-            source: None,
-        })?;
+        let client = self
+            .client
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
         let token = self
             .bot_token
             .as_ref()
-            .ok_or_else(|| BlufioError::Channel {
-                message: "Slack not connected".into(),
-                source: None,
-            })?;
+            .ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
 
         let channel_id = extract_channel_id(&msg)?;
         let formatted = markdown::markdown_to_mrkdwn(&msg.content);
@@ -257,8 +275,12 @@ impl ChannelAdapter for SlackChannel {
         let resp = session
             .chat_post_message(&req)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to send Slack message: {e}"),
+            .map_err(|_e| BlufioError::Channel {
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("slack".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
@@ -267,10 +289,9 @@ impl ChannelAdapter for SlackChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::Channel {
-            message: "Slack inbound channel closed".into(),
-            source: None,
-        })
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("slack"))
     }
 
     async fn edit_message(
@@ -280,17 +301,14 @@ impl ChannelAdapter for SlackChannel {
         text: &str,
         _parse_mode: Option<&str>,
     ) -> Result<(), BlufioError> {
-        let client = self.client.as_ref().ok_or_else(|| BlufioError::Channel {
-            message: "Slack not connected".into(),
-            source: None,
-        })?;
+        let client = self
+            .client
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
         let token = self
             .bot_token
             .as_ref()
-            .ok_or_else(|| BlufioError::Channel {
-                message: "Slack not connected".into(),
-                source: None,
-            })?;
+            .ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
 
         let channel_id = SlackChannelId::new(chat_id.to_string());
         let ts: SlackTs = message_id.to_string().into();
@@ -306,8 +324,12 @@ impl ChannelAdapter for SlackChannel {
         session
             .chat_update(&req)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to edit Slack message: {e}"),
+            .map_err(|_e| BlufioError::Channel {
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("slack".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
@@ -455,7 +477,11 @@ fn extract_channel_id(msg: &OutboundMessage) -> Result<SlackChannelId, BlufioErr
     }
 
     Err(BlufioError::Channel {
-        message: "no valid chat_id in message metadata or channel field".into(),
+        kind: ChannelErrorKind::DeliveryFailed,
+        context: ErrorContext {
+            channel_name: Some("slack".to_string()),
+            ..Default::default()
+        },
         source: None,
     })
 }
@@ -532,6 +558,10 @@ mod tests {
         assert!(caps.supports_embeds);
         assert!(caps.supports_reactions);
         assert!(caps.supports_threads);
+        assert_eq!(caps.streaming_type, StreamingType::EditBased);
+        assert_eq!(caps.formatting_support, FormattingSupport::FullMarkdown);
+        assert!(caps.rate_limit.is_some());
+        assert!(caps.supports_code_blocks);
     }
 
     #[test]

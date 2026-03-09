@@ -122,13 +122,7 @@ impl BlufioTool for ExternalTool {
                 task: None,
             })
             .await
-            .map_err(|e| BlufioError::Skill {
-                message: format!(
-                    "external tool '{}' invocation failed: {}",
-                    self.namespaced_name, e
-                ),
-                source: None,
-            })?;
+            .map_err(BlufioError::mcp_tool_failed)?;
 
         // Extract text content from MCP response.
         let content = Self::extract_text(&result);

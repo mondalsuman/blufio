@@ -6,7 +6,7 @@
 //! Downloads files from Telegram servers and converts them to
 //! [`MessageContent`] variants for the channel adapter.
 
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::types::MessageContent;
 use teloxide::net::Download;
 use teloxide::prelude::*;
@@ -21,18 +21,12 @@ pub async fn download_file(bot: &Bot, file_meta: &FileMeta) -> Result<Vec<u8>, B
     let file = bot
         .get_file(file_meta.id.clone())
         .await
-        .map_err(|e| BlufioError::Channel {
-            message: format!("failed to get file info: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
 
     let mut buf = Vec::new();
     bot.download_file(&file.path, &mut buf)
         .await
-        .map_err(|e| BlufioError::Channel {
-            message: format!("failed to download file: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
 
     debug!(
         file_id = %file_meta.id,
@@ -53,7 +47,11 @@ pub async fn extract_photo_content(
 ) -> Result<MessageContent, BlufioError> {
     // Telegram provides multiple sizes; the last one is the largest.
     let largest = photos.last().ok_or_else(|| BlufioError::Channel {
-        message: "photo array is empty".into(),
+        kind: ChannelErrorKind::DeliveryFailed,
+        context: ErrorContext {
+            channel_name: Some("telegram".to_string()),
+            ..Default::default()
+        },
         source: None,
     })?;
 

@@ -127,6 +127,10 @@ pub struct BlufioConfig {
     /// Node system configuration for paired device mesh.
     #[serde(default)]
     pub node: NodeConfig,
+
+    /// Performance tuning settings.
+    #[serde(default)]
+    pub performance: PerformanceConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -1608,6 +1612,32 @@ fn default_node_approval_timeout() -> u64 {
     300
 }
 
+// --- Performance tuning configuration ---
+
+/// Performance tuning configuration.
+///
+/// Controls tokenizer accuracy/speed tradeoff. Set at startup, not switchable at runtime.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PerformanceConfig {
+    /// Tokenizer mode: "accurate" uses real tokenizers, "fast" uses len/3.5 heuristic.
+    /// Set at startup, not switchable at runtime.
+    #[serde(default = "default_tokenizer_mode")]
+    pub tokenizer_mode: String,
+}
+
+impl Default for PerformanceConfig {
+    fn default() -> Self {
+        Self {
+            tokenizer_mode: default_tokenizer_mode(),
+        }
+    }
+}
+
+fn default_tokenizer_mode() -> String {
+    "accurate".to_string()
+}
+
 #[cfg(test)]
 mod providers_config_tests {
     use super::*;
@@ -2044,5 +2074,42 @@ trusted = true
             config.mcp.servers[0].trusted,
             "trusted should be true when set"
         );
+    }
+}
+
+#[cfg(test)]
+mod performance_config_tests {
+    use super::*;
+
+    #[test]
+    fn performance_config_defaults_tokenizer_mode_accurate() {
+        let config = PerformanceConfig::default();
+        assert_eq!(config.tokenizer_mode, "accurate");
+    }
+
+    #[test]
+    fn performance_config_deserializes_fast_mode() {
+        let toml_str = r#"
+[performance]
+tokenizer_mode = "fast"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.performance.tokenizer_mode, "fast");
+    }
+
+    #[test]
+    fn blufio_config_with_performance_section_parses() {
+        let toml_str = r#"
+[performance]
+tokenizer_mode = "accurate"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.performance.tokenizer_mode, "accurate");
+    }
+
+    #[test]
+    fn blufio_config_without_performance_section_uses_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert_eq!(config.performance.tokenizer_mode, "accurate");
     }
 }

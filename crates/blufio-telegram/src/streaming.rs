@@ -13,7 +13,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::streaming::{StreamingBuffer, StreamingEditorOps};
 use teloxide::prelude::*;
 use teloxide::types::{ChatAction, ChatId, ParseMode};
@@ -54,10 +54,7 @@ impl StreamingEditorOps for TelegramStreamOps {
             .await
             .map_err(|e| {
                 debug!(error = %e, "MarkdownV2 send failed, will retry as plain text");
-                BlufioError::Channel {
-                    message: format!("failed to send message: {e}"),
-                    source: Some(Box::new(e)),
-                }
+                BlufioError::channel_delivery_failed("telegram", e)
             });
 
         match sent {
@@ -68,18 +65,19 @@ impl StreamingEditorOps for TelegramStreamOps {
                     .bot
                     .send_message(self.chat_id, text)
                     .await
-                    .map_err(|e| BlufioError::Channel {
-                        message: format!("failed to send plain text message: {e}"),
-                        source: Some(Box::new(e)),
-                    })?;
+                    .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
                 Ok(sent.id.0.to_string())
             }
         }
     }
 
     async fn edit_message(&mut self, msg_id: &str, text: &str) -> Result<(), BlufioError> {
-        let msg_id: i32 = msg_id.parse().map_err(|e| BlufioError::Channel {
-            message: format!("invalid message_id: {e}"),
+        let msg_id: i32 = msg_id.parse().map_err(|_e| BlufioError::Channel {
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext {
+                channel_name: Some("telegram".to_string()),
+                ..Default::default()
+            },
             source: None,
         })?;
         let msg_id = teloxide::types::MessageId(msg_id);
@@ -105,16 +103,10 @@ impl StreamingEditorOps for TelegramStreamOps {
                     self.bot
                         .edit_message_text(self.chat_id, msg_id, text)
                         .await
-                        .map_err(|e| BlufioError::Channel {
-                            message: format!("failed to edit message: {e}"),
-                            source: Some(Box::new(e)),
-                        })?;
+                        .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
                     Ok(())
                 } else {
-                    Err(BlufioError::Channel {
-                        message: format!("failed to edit message: {e}"),
-                        source: Some(Box::new(e)),
-                    })
+                    Err(BlufioError::channel_delivery_failed("telegram", e))
                 }
             }
         }

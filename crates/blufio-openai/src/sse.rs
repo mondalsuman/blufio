@@ -9,7 +9,7 @@
 
 use std::pin::Pin;
 
-use blufio_core::BlufioError;
+use blufio_core::{BlufioError, ErrorContext, ProviderErrorKind};
 use eventsource_stream::Eventsource;
 use futures::stream::{Stream, StreamExt};
 
@@ -49,13 +49,21 @@ pub fn parse_openai_sse_stream(
                 match serde_json::from_str::<SseChunk>(&data) {
                     Ok(chunk) => Some(Ok(chunk)),
                     Err(e) => Some(Err(BlufioError::Provider {
-                        message: format!("failed to parse OpenAI SSE chunk: {e}"),
+                        kind: ProviderErrorKind::ServerError,
+                        context: ErrorContext {
+                            provider_name: Some("openai".into()),
+                            ..Default::default()
+                        },
                         source: Some(Box::new(e)),
                     })),
                 }
             }
-            Err(e) => Some(Err(BlufioError::Provider {
-                message: format!("SSE stream error: {e}"),
+            Err(_e) => Some(Err(BlufioError::Provider {
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some("openai".into()),
+                    ..Default::default()
+                },
                 source: None,
             })),
         }

@@ -8,7 +8,7 @@
 
 use std::pin::Pin;
 
-use blufio_core::BlufioError;
+use blufio_core::{BlufioError, ErrorContext, ProviderErrorKind};
 use eventsource_stream::Eventsource;
 use futures::stream::{Stream, StreamExt};
 
@@ -53,58 +53,52 @@ pub fn parse_sse_stream(
     let mapped = event_stream.filter_map(|result| async move {
         match result {
             Ok(event) => {
+                let parse_err = |e: serde_json::Error| BlufioError::Provider {
+                    kind: ProviderErrorKind::ServerError,
+                    context: ErrorContext {
+                        provider_name: Some("anthropic".into()),
+                        ..Default::default()
+                    },
+                    source: Some(Box::new(e)),
+                };
                 let parsed = match event.event.as_str() {
                     "message_start" => serde_json::from_str::<SseMessageStart>(&event.data)
                         .map(StreamEvent::MessageStart)
-                        .map_err(|e| BlufioError::Provider {
-                            message: format!("failed to parse message_start: {e}"),
-                            source: Some(Box::new(e)),
-                        }),
+                        .map_err(parse_err),
                     "content_block_start" => {
                         serde_json::from_str::<SseContentBlockStart>(&event.data)
                             .map(StreamEvent::ContentBlockStart)
-                            .map_err(|e| BlufioError::Provider {
-                                message: format!("failed to parse content_block_start: {e}"),
-                                source: Some(Box::new(e)),
-                            })
+                            .map_err(parse_err)
                     }
                     "content_block_delta" => {
                         serde_json::from_str::<SseContentBlockDelta>(&event.data)
                             .map(StreamEvent::ContentBlockDelta)
-                            .map_err(|e| BlufioError::Provider {
-                                message: format!("failed to parse content_block_delta: {e}"),
-                                source: Some(Box::new(e)),
-                            })
+                            .map_err(parse_err)
                     }
                     "content_block_stop" => {
                         serde_json::from_str::<SseContentBlockStop>(&event.data)
                             .map(StreamEvent::ContentBlockStop)
-                            .map_err(|e| BlufioError::Provider {
-                                message: format!("failed to parse content_block_stop: {e}"),
-                                source: Some(Box::new(e)),
-                            })
+                            .map_err(parse_err)
                     }
                     "message_delta" => serde_json::from_str::<SseMessageDelta>(&event.data)
                         .map(StreamEvent::MessageDelta)
-                        .map_err(|e| BlufioError::Provider {
-                            message: format!("failed to parse message_delta: {e}"),
-                            source: Some(Box::new(e)),
-                        }),
+                        .map_err(parse_err),
                     "message_stop" => Ok(StreamEvent::MessageStop),
                     "ping" => Ok(StreamEvent::Ping),
                     "error" => serde_json::from_str::<SseError>(&event.data)
                         .map(StreamEvent::Error)
-                        .map_err(|e| BlufioError::Provider {
-                            message: format!("failed to parse error event: {e}"),
-                            source: Some(Box::new(e)),
-                        }),
+                        .map_err(parse_err),
                     // Unknown event types are silently ignored per Anthropic versioning policy.
                     _ => return None,
                 };
                 Some(parsed)
             }
-            Err(e) => Some(Err(BlufioError::Provider {
-                message: format!("SSE stream error: {e}"),
+            Err(_e) => Some(Err(BlufioError::Provider {
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some("anthropic".into()),
+                    ..Default::default()
+                },
                 source: None,
             })),
         }

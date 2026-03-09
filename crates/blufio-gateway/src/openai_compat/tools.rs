@@ -103,6 +103,9 @@ pub async fn post_tool_invoke(
                         code: Some("tools_not_configured".into()),
                         provider: None,
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )
@@ -122,6 +125,9 @@ pub async fn post_tool_invoke(
                     code: Some("tool_not_allowed".into()),
                     provider: None,
                     retry_after: None,
+                    category: None,
+                    retryable: None,
+                    failure_mode: None,
                 },
             }),
         )
@@ -143,6 +149,9 @@ pub async fn post_tool_invoke(
                         code: Some("tool_not_found".into()),
                         provider: None,
                         retry_after: None,
+                        category: None,
+                        retryable: None,
+                        failure_mode: None,
                     },
                 }),
             )

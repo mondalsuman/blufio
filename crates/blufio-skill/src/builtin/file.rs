@@ -51,25 +51,19 @@ impl Tool for FileTool {
     }
 
     async fn invoke(&self, input: serde_json::Value) -> Result<ToolOutput, BlufioError> {
-        let action = input["action"].as_str().ok_or_else(|| BlufioError::Skill {
-            message: "missing required 'action' parameter".to_string(),
-            source: None,
+        let action = input["action"].as_str().ok_or_else(|| {
+            BlufioError::skill_execution_msg("missing required 'action' parameter")
         })?;
 
-        let path = input["path"].as_str().ok_or_else(|| BlufioError::Skill {
-            message: "missing required 'path' parameter".to_string(),
-            source: None,
-        })?;
+        let path = input["path"]
+            .as_str()
+            .ok_or_else(|| BlufioError::skill_execution_msg("missing required 'path' parameter"))?;
 
         match action {
             "read" => {
-                let contents =
-                    tokio::fs::read_to_string(path)
-                        .await
-                        .map_err(|e| BlufioError::Skill {
-                            message: format!("failed to read file '{path}': {e}"),
-                            source: Some(Box::new(e)),
-                        })?;
+                let contents = tokio::fs::read_to_string(path)
+                    .await
+                    .map_err(BlufioError::skill_execution_failed)?;
 
                 // Truncate if too large.
                 let output = if contents.len() > MAX_READ_SIZE {
@@ -89,20 +83,15 @@ impl Tool for FileTool {
                 })
             }
             "write" => {
-                let content = input["content"]
-                    .as_str()
-                    .ok_or_else(|| BlufioError::Skill {
-                        message: "missing required 'content' parameter for write action"
-                            .to_string(),
-                        source: None,
-                    })?;
+                let content = input["content"].as_str().ok_or_else(|| {
+                    BlufioError::skill_execution_msg(
+                        "missing required 'content' parameter for write action",
+                    )
+                })?;
 
                 tokio::fs::write(path, content)
                     .await
-                    .map_err(|e| BlufioError::Skill {
-                        message: format!("failed to write file '{path}': {e}"),
-                        source: Some(Box::new(e)),
-                    })?;
+                    .map_err(BlufioError::skill_execution_failed)?;
 
                 Ok(ToolOutput {
                     content: format!("Successfully wrote {} bytes to '{path}'", content.len()),

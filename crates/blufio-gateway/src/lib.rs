@@ -30,7 +30,8 @@ use blufio_core::StorageAdapter;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
+    OutboundMessage, StreamingType,
 };
 use blufio_skill::ToolRegistry;
 use tokio::sync::RwLock;
@@ -283,6 +284,10 @@ impl ChannelAdapter for GatewayChannel {
             supports_embeds: false,
             supports_reactions: false,
             supports_threads: false,
+            streaming_type: StreamingType::AppendOnly,
+            formatting_support: FormattingSupport::HTML,
+            rate_limit: None,
+            supports_code_blocks: true,
         }
     }
 
@@ -400,10 +405,9 @@ impl ChannelAdapter for GatewayChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::Channel {
-            message: "gateway inbound channel closed".to_string(),
-            source: None,
-        })
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("gateway"))
     }
 
     async fn send_typing(&self, chat_id: &str) -> Result<(), BlufioError> {
