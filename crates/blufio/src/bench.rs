@@ -229,7 +229,8 @@ fn bench_sqlite() -> Result<Duration, BlufioError> {
     })?;
     let db_path = dir.path().join("bench.db");
 
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| BlufioError::storage_connection_failed(e))?;
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| BlufioError::storage_connection_failed(e))?;
 
     conn.execute_batch("CREATE TABLE bench_data (id INTEGER PRIMARY KEY, value TEXT NOT NULL);")
         .map_err(|e| BlufioError::storage_connection_failed(e))?;

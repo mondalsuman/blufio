@@ -103,10 +103,11 @@ pub struct OutboundMessage {
 }
 
 /// How a channel supports streaming message updates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, Default)]
 #[non_exhaustive]
 pub enum StreamingType {
     /// No streaming support -- messages are sent as a whole.
+    #[default]
     None,
     /// Messages can be edited in place (e.g., Telegram, Discord, Slack).
     EditBased,
@@ -114,17 +115,12 @@ pub enum StreamingType {
     AppendOnly,
 }
 
-impl Default for StreamingType {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 /// Level of text formatting a channel supports.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, Default)]
 #[non_exhaustive]
 pub enum FormattingSupport {
     /// Plain text only.
+    #[default]
     PlainText,
     /// Bold, italic, links (e.g., WhatsApp).
     BasicMarkdown,
@@ -134,14 +130,8 @@ pub enum FormattingSupport {
     HTML,
 }
 
-impl Default for FormattingSupport {
-    fn default() -> Self {
-        Self::PlainText
-    }
-}
-
 /// Rate limit information for a channel.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct RateLimit {
     /// Maximum messages per second.
     pub messages_per_second: Option<f32>,
@@ -149,16 +139,6 @@ pub struct RateLimit {
     pub burst_limit: Option<u32>,
     /// Maximum messages per day.
     pub daily_limit: Option<u32>,
-}
-
-impl Default for RateLimit {
-    fn default() -> Self {
-        Self {
-            messages_per_second: None,
-            burst_limit: None,
-            daily_limit: None,
-        }
-    }
 }
 
 /// Capabilities reported by a channel adapter.

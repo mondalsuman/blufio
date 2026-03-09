@@ -197,11 +197,7 @@ fn format_table_unicode(table: &Table) -> String {
     let col_count = table.headers.len();
 
     // Compute column widths using char count (not byte len).
-    let mut widths: Vec<usize> = table
-        .headers
-        .iter()
-        .map(|h| h.chars().count())
-        .collect();
+    let mut widths: Vec<usize> = table.headers.iter().map(|h| h.chars().count()).collect();
 
     for row in &table.rows {
         for (i, cell) in row.iter().enumerate() {
@@ -224,7 +220,12 @@ fn format_table_unicode(table: &Table) -> String {
     out.push_str(&box_horizontal_line(&widths, '+'));
 
     // Header row: | H1  | H2  |
-    out.push_str(&box_data_row(&table.headers, &widths, &table.alignment, col_count));
+    out.push_str(&box_data_row(
+        &table.headers,
+        &widths,
+        &table.alignment,
+        col_count,
+    ));
 
     // Separator: +---+---+
     out.push_str(&box_horizontal_line(&widths, '+'));
@@ -274,9 +275,8 @@ fn box_data_row(
     col_count: usize,
 ) -> String {
     let mut line = String::new();
-    for i in 0..col_count {
+    for (i, &w) in widths.iter().enumerate().take(col_count) {
         let cell = cells.get(i).map(|s| s.as_str()).unwrap_or("");
-        let w = widths[i];
         let align = alignment.get(i).copied().unwrap_or(ColumnAlign::Left);
         line.push_str("| ");
         let cell_len = cell.chars().count();
