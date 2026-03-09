@@ -1,0 +1,19 @@
+[package]
+name = "blufio-resilience"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Circuit breaker, degradation ladder, and resilience primitives for the Blufio agent framework"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-bus = { path = "../blufio-bus" }
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "test-util", "time"] }

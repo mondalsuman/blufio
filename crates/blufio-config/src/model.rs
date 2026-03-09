@@ -131,6 +131,10 @@ pub struct BlufioConfig {
     /// Performance tuning settings.
     #[serde(default)]
     pub performance: PerformanceConfig,
+
+    /// Resilience settings (circuit breakers, degradation ladder).
+    #[serde(default)]
+    pub resilience: ResilienceConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -1638,6 +1642,160 @@ fn default_tokenizer_mode() -> String {
     "accurate".to_string()
 }
 
+// ---------------------------------------------------------------------------
+// Resilience configuration
+// ---------------------------------------------------------------------------
+
+/// Resilience configuration (circuit breakers, degradation ladder).
+///
+/// Controls circuit breaker thresholds, fallback chain, de-escalation
+/// hysteresis, drain timeout, and notification deduplication.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResilienceConfig {
+    /// Whether the resilience subsystem is enabled.
+    #[serde(default = "default_resilience_enabled")]
+    pub enabled: bool,
+
+    /// Ordered fallback provider chain (max 2 entries).
+    #[serde(default)]
+    pub fallback_chain: Vec<String>,
+
+    /// Seconds of sustained recovery before de-escalating one level.
+    #[serde(default = "default_hysteresis_secs")]
+    pub hysteresis_secs: u64,
+
+    /// Seconds to drain in-flight operations during L5 shutdown.
+    #[serde(default = "default_drain_timeout_secs")]
+    pub drain_timeout_secs: u64,
+
+    /// Seconds between duplicate notifications for the same level.
+    #[serde(default = "default_notification_dedup_secs")]
+    pub notification_dedup_secs: u64,
+
+    /// Default circuit breaker thresholds (used when no per-dep override).
+    #[serde(default)]
+    pub defaults: CircuitBreakerDefaults,
+
+    /// Per-dependency circuit breaker overrides.
+    #[serde(default)]
+    pub circuit_breakers: HashMap<String, CircuitBreakerOverride>,
+}
+
+impl Default for ResilienceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_resilience_enabled(),
+            fallback_chain: Vec::new(),
+            hysteresis_secs: default_hysteresis_secs(),
+            drain_timeout_secs: default_drain_timeout_secs(),
+            notification_dedup_secs: default_notification_dedup_secs(),
+            defaults: CircuitBreakerDefaults::default(),
+            circuit_breakers: HashMap::new(),
+        }
+    }
+}
+
+impl ResilienceConfig {
+    /// Validate the resilience configuration.
+    ///
+    /// Returns a list of validation errors (empty if valid).
+    pub fn validate(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if self.fallback_chain.len() > 2 {
+            errors.push(format!(
+                "fallback_chain has {} entries (max 2)",
+                self.fallback_chain.len()
+            ));
+        }
+        errors
+    }
+
+    /// Validate fallback chain against known provider names.
+    ///
+    /// Returns a list of validation errors for unknown providers.
+    pub fn validate_providers(&self, known_providers: &[&str]) -> Vec<String> {
+        let mut errors = self.validate();
+        for name in &self.fallback_chain {
+            if !known_providers.contains(&name.as_str()) {
+                errors.push(format!(
+                    "fallback_chain references unknown provider: {name}"
+                ));
+            }
+        }
+        errors
+    }
+}
+
+fn default_resilience_enabled() -> bool {
+    true
+}
+
+fn default_hysteresis_secs() -> u64 {
+    120
+}
+
+fn default_drain_timeout_secs() -> u64 {
+    30
+}
+
+fn default_notification_dedup_secs() -> u64 {
+    60
+}
+
+/// Default circuit breaker thresholds applied to all dependencies.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CircuitBreakerDefaults {
+    /// Consecutive failures before opening.
+    #[serde(default = "default_failure_threshold")]
+    pub failure_threshold: u32,
+
+    /// Seconds the breaker stays Open before probing HalfOpen.
+    #[serde(default = "default_reset_timeout_secs")]
+    pub reset_timeout_secs: u64,
+
+    /// Number of consecutive successful probes to close the breaker.
+    #[serde(default = "default_half_open_probes")]
+    pub half_open_probes: u32,
+}
+
+impl Default for CircuitBreakerDefaults {
+    fn default() -> Self {
+        Self {
+            failure_threshold: default_failure_threshold(),
+            reset_timeout_secs: default_reset_timeout_secs(),
+            half_open_probes: default_half_open_probes(),
+        }
+    }
+}
+
+fn default_failure_threshold() -> u32 {
+    5
+}
+
+fn default_reset_timeout_secs() -> u64 {
+    60
+}
+
+fn default_half_open_probes() -> u32 {
+    3
+}
+
+/// Per-dependency circuit breaker override.
+///
+/// All fields are optional; `None` means use the global defaults.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CircuitBreakerOverride {
+    /// Override for failure threshold.
+    pub failure_threshold: Option<u32>,
+    /// Override for reset timeout seconds.
+    pub reset_timeout_secs: Option<u64>,
+    /// Override for half-open probe count.
+    pub half_open_probes: Option<u32>,
+}
+
 #[cfg(test)]
 mod providers_config_tests {
     use super::*;
@@ -2111,5 +2269,133 @@ tokenizer_mode = "accurate"
     fn blufio_config_without_performance_section_uses_defaults() {
         let config: BlufioConfig = toml::from_str("").unwrap();
         assert_eq!(config.performance.tokenizer_mode, "accurate");
+    }
+}
+
+#[cfg(test)]
+mod resilience_config_tests {
+    use super::*;
+
+    #[test]
+    fn resilience_defaults() {
+        let config = ResilienceConfig::default();
+        assert!(config.enabled);
+        assert!(config.fallback_chain.is_empty());
+        assert_eq!(config.hysteresis_secs, 120);
+        assert_eq!(config.drain_timeout_secs, 30);
+        assert_eq!(config.notification_dedup_secs, 60);
+        assert_eq!(config.defaults.failure_threshold, 5);
+        assert_eq!(config.defaults.reset_timeout_secs, 60);
+        assert_eq!(config.defaults.half_open_probes, 3);
+        assert!(config.circuit_breakers.is_empty());
+    }
+
+    #[test]
+    fn resilience_parses_from_empty_section() {
+        let toml_str = r#"
+[resilience]
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.resilience.enabled);
+        assert_eq!(config.resilience.defaults.failure_threshold, 5);
+    }
+
+    #[test]
+    fn resilience_parses_without_section() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.resilience.enabled);
+    }
+
+    #[test]
+    fn resilience_parses_with_overrides() {
+        let toml_str = r#"
+[resilience]
+enabled = true
+fallback_chain = ["openai", "ollama"]
+hysteresis_secs = 60
+drain_timeout_secs = 15
+
+[resilience.defaults]
+failure_threshold = 10
+reset_timeout_secs = 120
+half_open_probes = 5
+
+[resilience.circuit_breakers.anthropic]
+failure_threshold = 3
+reset_timeout_secs = 30
+
+[resilience.circuit_breakers.telegram]
+half_open_probes = 1
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.resilience.enabled);
+        assert_eq!(config.resilience.fallback_chain, vec!["openai", "ollama"]);
+        assert_eq!(config.resilience.hysteresis_secs, 60);
+        assert_eq!(config.resilience.drain_timeout_secs, 15);
+        assert_eq!(config.resilience.defaults.failure_threshold, 10);
+        assert_eq!(config.resilience.defaults.reset_timeout_secs, 120);
+        assert_eq!(config.resilience.defaults.half_open_probes, 5);
+
+        let anthropic = &config.resilience.circuit_breakers["anthropic"];
+        assert_eq!(anthropic.failure_threshold, Some(3));
+        assert_eq!(anthropic.reset_timeout_secs, Some(30));
+        assert!(anthropic.half_open_probes.is_none());
+
+        let telegram = &config.resilience.circuit_breakers["telegram"];
+        assert!(telegram.failure_threshold.is_none());
+        assert!(telegram.reset_timeout_secs.is_none());
+        assert_eq!(telegram.half_open_probes, Some(1));
+    }
+
+    #[test]
+    fn resilience_validate_fallback_chain_max_two() {
+        let config = ResilienceConfig {
+            fallback_chain: vec!["a".into(), "b".into(), "c".into()],
+            ..Default::default()
+        };
+        let errors = config.validate();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("max 2"));
+    }
+
+    #[test]
+    fn resilience_validate_fallback_chain_two_ok() {
+        let config = ResilienceConfig {
+            fallback_chain: vec!["openai".into(), "ollama".into()],
+            ..Default::default()
+        };
+        let errors = config.validate();
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn resilience_validate_providers_unknown() {
+        let config = ResilienceConfig {
+            fallback_chain: vec!["openai".into(), "unknown_provider".into()],
+            ..Default::default()
+        };
+        let errors = config.validate_providers(&["anthropic", "openai", "ollama"]);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("unknown_provider"));
+    }
+
+    #[test]
+    fn resilience_validate_providers_all_known() {
+        let config = ResilienceConfig {
+            fallback_chain: vec!["openai".into(), "ollama".into()],
+            ..Default::default()
+        };
+        let errors = config.validate_providers(&["anthropic", "openai", "ollama"]);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn resilience_disabled() {
+        let toml_str = r#"
+[resilience]
+enabled = false
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(!config.resilience.enabled);
     }
 }

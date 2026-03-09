@@ -56,6 +56,10 @@ pub struct CostRecord {
     /// MCP server name for per-server cost attribution (CLNT-12).
     /// `None` for non-MCP calls.
     pub server_name: Option<String>,
+    /// Whether this call was made through a fallback provider (DEG-05).
+    /// `true` when the primary provider's circuit breaker was open.
+    #[serde(default)]
+    pub fallback: bool,
 }
 
 impl CostRecord {
@@ -85,7 +89,16 @@ impl CostRecord {
                 .to_string(),
             intended_model: None,
             server_name: None,
+            fallback: false,
         }
+    }
+
+    /// Mark this cost record as a fallback provider call (DEG-05).
+    ///
+    /// Returns `self` for builder-style chaining.
+    pub fn with_fallback(mut self, is_fallback: bool) -> Self {
+        self.fallback = is_fallback;
+        self
     }
 
     /// Set the intended model (before budget downgrades) on this record.
@@ -315,6 +328,7 @@ mod tests {
             created_at: created_at.to_string(),
             intended_model: None,
             server_name: None,
+            fallback: false,
         }
     }
 

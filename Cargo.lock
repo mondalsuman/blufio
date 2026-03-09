@@ -603,6 +603,7 @@ dependencies = [
  "blufio-openrouter",
  "blufio-plugin",
  "blufio-prometheus",
+ "blufio-resilience",
  "blufio-router",
  "blufio-security",
  "blufio-signal",
@@ -668,6 +669,7 @@ dependencies = [
  "blufio-cost",
  "blufio-memory",
  "blufio-prometheus",
+ "blufio-resilience",
  "blufio-router",
  "blufio-skill",
  "blufio-storage",
@@ -846,6 +848,7 @@ dependencies = [
  "axum-extra",
  "blufio-bus",
  "blufio-core",
+ "blufio-resilience",
  "blufio-skill",
  "blufio-whatsapp",
  "chrono",
@@ -1117,6 +1120,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "blufio-resilience"
+version = "0.1.0"
+dependencies = [
+ "blufio-bus",
+ "blufio-core",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "blufio-router"
 version = "0.1.0"
 dependencies = [
@@ -1233,6 +1247,7 @@ dependencies = [
  "blufio-core",
  "chrono",
  "futures",
+ "metrics",
  "reqwest 0.13.2",
  "semver",
  "serde",

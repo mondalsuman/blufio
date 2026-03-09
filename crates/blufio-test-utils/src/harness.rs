@@ -222,6 +222,11 @@ impl TestHarness {
             routing_enabled: self.config.routing.enabled,
             idle_timeout_secs: self.config.memory.idle_timeout_secs,
             tool_registry: self.tool_registry.clone(),
+            circuit_breaker_registry: None,
+            degradation_manager: None,
+            provider_name: "mock".to_string(),
+            provider_registry: None,
+            fallback_chain: Vec::new(),
         });
 
         // Create inbound message

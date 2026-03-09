@@ -341,6 +341,7 @@ mod tests {
             created_at: format!("{today}T12:00:00.000Z"),
             intended_model: None,
             server_name: None,
+            fallback: false,
         };
         ledger.record(&record).await.unwrap();
 

@@ -27,6 +27,7 @@ use tokio::sync::{Mutex, mpsc};
 use blufio_core::BlufioError;
 use blufio_core::ProviderRegistry;
 use blufio_core::StorageAdapter;
+use blufio_core::format::FormatPipeline;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{
@@ -122,6 +123,12 @@ pub struct GatewayChannel {
     /// Optional event bus for real-time event delivery (API-18).
     /// Set via [`set_event_bus`] before calling `connect()`.
     event_bus: Mutex<Option<Arc<blufio_bus::EventBus>>>,
+    /// Optional degradation manager for resilience visibility (DEG-05).
+    /// Set via [`set_degradation_manager`] before calling `connect()`.
+    degradation_manager: Mutex<Option<Arc<blufio_resilience::DegradationManager>>>,
+    /// Optional circuit breaker registry for per-dependency state visibility (DEG-05).
+    /// Set via [`set_circuit_breaker_registry`] before calling `connect()`.
+    circuit_breaker_registry: Mutex<Option<Arc<blufio_resilience::CircuitBreakerRegistry>>>,
 }
 
 impl GatewayChannel {
@@ -145,6 +152,8 @@ impl GatewayChannel {
             webhook_store: Mutex::new(None),
             batch_store: Mutex::new(None),
             event_bus: Mutex::new(None),
+            degradation_manager: Mutex::new(None),
+            circuit_breaker_registry: Mutex::new(None),
         }
     }
 
@@ -237,6 +246,27 @@ impl GatewayChannel {
         let mut s = self.event_bus.lock().await;
         *s = Some(bus);
     }
+
+    /// Sets the degradation manager for resilience visibility in health endpoint.
+    ///
+    /// Must be called before `connect()`. Enables degradation level reporting
+    /// in GET /v1/health responses.
+    pub async fn set_degradation_manager(&self, dm: Arc<blufio_resilience::DegradationManager>) {
+        let mut s = self.degradation_manager.lock().await;
+        *s = Some(dm);
+    }
+
+    /// Sets the circuit breaker registry for per-dependency state visibility.
+    ///
+    /// Must be called before `connect()`. Enables per-dependency circuit breaker
+    /// state reporting in GET /v1/health responses.
+    pub async fn set_circuit_breaker_registry(
+        &self,
+        registry: Arc<blufio_resilience::CircuitBreakerRegistry>,
+    ) {
+        let mut s = self.circuit_breaker_registry.lock().await;
+        *s = Some(registry);
+    }
 }
 
 #[async_trait]
@@ -285,7 +315,7 @@ impl ChannelAdapter for GatewayChannel {
             supports_reactions: false,
             supports_threads: false,
             streaming_type: StreamingType::AppendOnly,
-            formatting_support: FormattingSupport::HTML,
+            formatting_support: FormattingSupport::FullMarkdown,
             rate_limit: None,
             supports_code_blocks: true,
         }
@@ -306,6 +336,8 @@ impl ChannelAdapter for GatewayChannel {
         let webhook_store = self.webhook_store.lock().await.take();
         let batch_store = self.batch_store.lock().await.take();
         let event_bus = self.event_bus.lock().await.take();
+        let degradation_manager = self.degradation_manager.lock().await.take();
+        let circuit_breaker_registry = self.circuit_breaker_registry.lock().await.take();
 
         let state = GatewayState {
             inbound_tx: self.inbound_tx.clone(),
@@ -328,6 +360,8 @@ impl ChannelAdapter for GatewayChannel {
             webhook_store,
             batch_store,
             event_bus,
+            degradation_manager,
+            circuit_breaker_registry,
         };
 
         // Take the MCP router (if set) to pass to the server.
@@ -361,6 +395,11 @@ impl ChannelAdapter for GatewayChannel {
     }
 
     async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
+        let caps = self.capabilities();
+
+        // Pipeline: detect_and_format -> no escape -> no split (Gateway passes raw, API clients render)
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+
         // Extract request_id from metadata for response routing.
         let metadata = msg.metadata.as_deref().unwrap_or("{}");
         let meta: serde_json::Value =
@@ -379,7 +418,7 @@ impl ChannelAdapter for GatewayChannel {
         {
             let ws_msg = serde_json::json!({
                 "type": ws::message_types::MESSAGE_COMPLETE,
-                "content": msg.content,
+                "content": formatted,
                 "session_id": msg.session_id,
             });
             let _ = sender.send(ws_msg.to_string()).await;
@@ -390,7 +429,7 @@ impl ChannelAdapter for GatewayChannel {
         if !request_id.is_empty()
             && let Some((_, sender)) = self.response_map.remove(request_id)
         {
-            let _ = sender.send(msg.content);
+            let _ = sender.send(formatted);
             return Ok(MessageId(request_id.to_string()));
         }
 

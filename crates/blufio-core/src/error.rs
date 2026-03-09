@@ -284,6 +284,13 @@ pub enum BlufioError {
     /// Requested adapter was not found in the registry.
     #[error("adapter not found: {adapter_type}/{name}")]
     AdapterNotFound { adapter_type: String, name: String },
+
+    /// Circuit breaker is open for this dependency (fast-fail).
+    ///
+    /// Not retryable (caller should use fallback) and does not trip the
+    /// circuit breaker itself (avoids counting fast-fails as additional failures).
+    #[error("circuit breaker open for {dependency}")]
+    CircuitOpen { dependency: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -341,6 +348,9 @@ impl BlufioError {
             Self::Internal(_) => FailureMode::Internal,
             Self::Update(_) => FailureMode::Network,
             Self::AdapterNotFound { .. } => FailureMode::Validation,
+            // CircuitOpen is a fast-fail signal, not a real failure mode.
+            // Internal maps to is_retryable()=false and trips_circuit_breaker()=false.
+            Self::CircuitOpen { .. } => FailureMode::Internal,
         }
     }
 
@@ -399,6 +409,7 @@ impl BlufioError {
             Self::Internal(_) => ErrorCategory::Internal,
             Self::Update(_) => ErrorCategory::Internal,
             Self::AdapterNotFound { .. } => ErrorCategory::Internal,
+            Self::CircuitOpen { .. } => ErrorCategory::Internal,
         }
     }
 
@@ -536,6 +547,9 @@ impl BlufioError {
             Self::Update(_) => Cow::Borrowed("An error occurred during the update process."),
             Self::AdapterNotFound { .. } => {
                 Cow::Borrowed("The requested service adapter was not found.")
+            }
+            Self::CircuitOpen { .. } => {
+                Cow::Borrowed("The service is temporarily unavailable. Please try again later.")
             }
         }
     }
@@ -900,6 +914,13 @@ impl BlufioError {
                 request_id: Some(msg.to_string()),
                 ..Default::default()
             },
+        }
+    }
+
+    /// Create a circuit-open fast-fail error for the given dependency.
+    pub fn circuit_open(dependency: impl Into<String>) -> Self {
+        Self::CircuitOpen {
+            dependency: dependency.into(),
         }
     }
 }
@@ -1720,6 +1741,8 @@ mod proptest_tests {
                 kind,
                 context: ErrorContext::default(),
             }),
+            Just("test-dep".to_string())
+                .prop_map(|dep| BlufioError::CircuitOpen { dependency: dep }),
         ]
     }
 

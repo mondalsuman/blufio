@@ -23,6 +23,9 @@ use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
 use blufio_core::{ChannelAdapter, StorageAdapter};
 use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_plugin::{PluginRegistry, PluginStatus, builtin_catalog};
+use blufio_resilience::{
+    CircuitBreakerConfig, CircuitBreakerRegistry, DegradationManager, EscalationConfig,
+};
 use blufio_router::ModelRouter;
 use blufio_skill::{SkillProvider, ToolRegistry};
 use tracing::{debug, error, info, warn};
@@ -57,8 +60,8 @@ use blufio_matrix::MatrixChannel;
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
-#[cfg(feature = "gateway")]
 use crate::providers::ConcreteProviderRegistry;
+
 #[cfg(feature = "gateway")]
 use blufio_core::ProviderRegistry;
 
@@ -116,6 +119,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         match blufio_vault::vault_startup_check(vault_conn, &config.vault).await {
             Ok(Some(_vault)) => {
                 info!("vault unlocked -- secrets available");
+                #[cfg(unix)]
                 blufio_agent::sdnotify::notify_status("Initializing: vault unlocked");
             }
             Ok(None) => {
@@ -232,6 +236,200 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Create global event bus shared across all subsystems.
     let event_bus = Arc::new(blufio_bus::EventBus::new(1024));
     info!("global event bus created (capacity=1024)");
+
+    // --- Resilience subsystem ---
+    // Construct CircuitBreakerRegistry and DegradationManager if enabled.
+    let (resilience_registry, resilience_manager, resilience_cancel_token): (
+        Option<Arc<CircuitBreakerRegistry>>,
+        Option<Arc<DegradationManager>>,
+        Option<tokio_util::sync::CancellationToken>,
+    ) = if config.resilience.enabled {
+        // Build per-dependency CircuitBreakerConfig from ResilienceConfig.
+        // Collect all known provider + channel names.
+        let mut cb_configs = std::collections::HashMap::new();
+        let defaults = &config.resilience.defaults;
+
+        // Providers: anthropic is always present; others by feature flags.
+        let mut provider_names: Vec<String> = vec!["anthropic".to_string()];
+        #[cfg(feature = "openai")]
+        if config.providers.openai.api_key.is_some() {
+            provider_names.push("openai".to_string());
+        }
+        #[cfg(feature = "ollama")]
+        if config.providers.ollama.default_model.is_some() {
+            provider_names.push("ollama".to_string());
+        }
+        #[cfg(feature = "openrouter")]
+        if config.providers.openrouter.api_key.is_some() {
+            provider_names.push("openrouter".to_string());
+        }
+        #[cfg(feature = "gemini")]
+        if config.providers.gemini.api_key.is_some() {
+            provider_names.push("gemini".to_string());
+        }
+
+        // Channels: add configured channels.
+        let mut channel_names: Vec<String> = Vec::new();
+        #[cfg(feature = "telegram")]
+        if config.telegram.bot_token.is_some() {
+            channel_names.push("telegram".to_string());
+        }
+        #[cfg(feature = "discord")]
+        if config.discord.bot_token.is_some() {
+            channel_names.push("discord".to_string());
+        }
+        #[cfg(feature = "slack")]
+        if config.slack.bot_token.is_some() {
+            channel_names.push("slack".to_string());
+        }
+        #[cfg(feature = "whatsapp")]
+        if config.whatsapp.phone_number_id.is_some() {
+            channel_names.push("whatsapp".to_string());
+        }
+        #[cfg(feature = "signal")]
+        if config.signal.socket_path.is_some() || config.signal.host.is_some() {
+            channel_names.push("signal".to_string());
+        }
+        #[cfg(feature = "irc")]
+        if config.irc.server.is_some() {
+            channel_names.push("irc".to_string());
+        }
+        #[cfg(feature = "matrix")]
+        if config.matrix.homeserver_url.is_some() {
+            channel_names.push("matrix".to_string());
+        }
+        #[cfg(feature = "gateway")]
+        if config.gateway.enabled {
+            channel_names.push("gateway".to_string());
+        }
+
+        // Build config entries for all deps.
+        for name in provider_names.iter().chain(channel_names.iter()) {
+            let override_config = config.resilience.circuit_breakers.get(name);
+            let cb_config = CircuitBreakerConfig {
+                failure_threshold: override_config
+                    .and_then(|o| o.failure_threshold)
+                    .unwrap_or(defaults.failure_threshold),
+                reset_timeout: Duration::from_secs(
+                    override_config
+                        .and_then(|o| o.reset_timeout_secs)
+                        .unwrap_or(defaults.reset_timeout_secs),
+                ),
+                half_open_probes: override_config
+                    .and_then(|o| o.half_open_probes)
+                    .unwrap_or(defaults.half_open_probes),
+            };
+            cb_configs.insert(name.clone(), cb_config);
+        }
+
+        let registry = Arc::new(CircuitBreakerRegistry::new(cb_configs));
+        info!(
+            deps = provider_names.len() + channel_names.len(),
+            "circuit breaker registry initialized"
+        );
+
+        // Determine primary provider and primary channel.
+        let primary_provider = provider_names
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "anthropic".to_string());
+        let primary_channel = channel_names.first().cloned().unwrap_or_default();
+
+        let escalation_config = EscalationConfig {
+            primary_provider,
+            primary_channel,
+            hysteresis_secs: config.resilience.hysteresis_secs,
+            drain_timeout_secs: config.resilience.drain_timeout_secs,
+            provider_names: provider_names.clone(),
+        };
+
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let dm = Arc::new(DegradationManager::new(
+            registry.clone(),
+            escalation_config,
+            cancel_token.clone(),
+        ));
+
+        // Subscribe DegradationManager to EventBus (reliable mpsc, buffer 256).
+        let dm_rx = event_bus.subscribe_reliable(256).await;
+        let dm_ref = dm.clone();
+        let dm_bus = event_bus.clone();
+        tokio::spawn(async move {
+            dm_ref.run(dm_rx, dm_bus).await;
+        });
+        info!("degradation manager background task spawned");
+
+        // Spawn sd-notify STATUS updater: subscribes to DegradationLevelChanged events.
+        {
+            let status_rx = event_bus.subscribe_reliable(64).await;
+            tokio::spawn(async move {
+                let mut rx = status_rx;
+                while let Some(event) = rx.recv().await {
+                    if let blufio_bus::events::BusEvent::Resilience(
+                        blufio_bus::events::ResilienceEvent::DegradationLevelChanged {
+                            to_level,
+                            to_name,
+                            ..
+                        },
+                    ) = &event
+                    {
+                        #[cfg(unix)]
+                        {
+                            let status = format!("Degradation: L{} {}", to_level, to_name);
+                            blufio_agent::sdnotify::notify_status(&status);
+                        }
+
+                        // Record Prometheus degradation level.
+                        #[cfg(feature = "prometheus")]
+                        blufio_prometheus::recording::record_degradation_level(*to_level);
+                    }
+                    // Also record circuit breaker state changes for Prometheus.
+                    if let blufio_bus::events::BusEvent::Resilience(
+                        blufio_bus::events::ResilienceEvent::CircuitBreakerStateChanged {
+                            dependency,
+                            from_state,
+                            to_state,
+                            ..
+                        },
+                    ) = &event
+                    {
+                        #[cfg(feature = "prometheus")]
+                        {
+                            // Map state string to numeric for gauge.
+                            let state_num = match to_state.as_str() {
+                                "closed" => 0,
+                                "half_open" => 1,
+                                "open" => 2,
+                                _ => 0,
+                            };
+                            blufio_prometheus::recording::record_circuit_breaker_state(
+                                dependency, state_num,
+                            );
+                            blufio_prometheus::recording::record_circuit_breaker_transition(
+                                dependency, from_state, to_state,
+                            );
+                        }
+                    }
+                }
+            });
+            info!("sd-notify status updater spawned for degradation events");
+        }
+
+        // Validate fallback chain against known providers.
+        let known_providers: Vec<&str> = provider_names.iter().map(|s| s.as_str()).collect();
+        let validation_errors = config.resilience.validate_providers(&known_providers);
+        for err in &validation_errors {
+            warn!(error = err.as_str(), "resilience config validation warning");
+        }
+
+        (Some(registry), Some(dm), Some(cancel_token))
+    } else {
+        info!("resilience subsystem disabled by configuration");
+        (None, None, None)
+    };
+
+    // Extract notification dedup config before config is moved later.
+    let notification_dedup_secs = config.resilience.notification_dedup_secs;
 
     // Register SkillProvider with context engine for progressive tool discovery.
     let skill_provider =
@@ -680,6 +878,14 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             gateway.set_webhook_store(webhook_store.clone()).await;
             gateway.set_batch_store(batch_store).await;
             gateway.set_event_bus(event_bus.clone()).await;
+
+            // Wire resilience subsystem into gateway for /v1/health visibility.
+            if let Some(ref dm) = resilience_manager {
+                gateway.set_degradation_manager(dm.clone()).await;
+            }
+            if let Some(ref reg) = resilience_registry {
+                gateway.set_circuit_breaker_registry(reg.clone()).await;
+            }
             info!("gateway stores wired (api_keys, webhooks, batch, event_bus)");
 
             // Spawn webhook delivery background loop (API-16).
@@ -784,6 +990,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         channels = mux.channel_count(),
         "channel multiplexer connected"
     );
+    #[cfg(unix)]
     {
         let ready_status = format!(
             "Ready: {} channel{}{}",
@@ -796,6 +1003,94 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             }
         );
         blufio_agent::sdnotify::notify_ready(&ready_status);
+    }
+
+    // Grab channel references for notification delivery BEFORE mux is moved.
+    let notification_channels = mux.connected_channels_ref();
+
+    // Spawn degradation notification task (if resilience enabled) -- DEG-05.
+    // Sends user-facing messages to all active channels on degradation level transitions.
+    if resilience_manager.is_some() {
+        let notif_rx = event_bus.subscribe_reliable(64).await;
+        let channels = notification_channels.clone();
+        let dedup_secs = notification_dedup_secs;
+        tokio::spawn(async move {
+            let mut rx = notif_rx;
+            let mut last_notified: std::collections::HashMap<u8, tokio::time::Instant> =
+                std::collections::HashMap::new();
+
+            while let Some(event) = rx.recv().await {
+                if let blufio_bus::events::BusEvent::Resilience(
+                    blufio_bus::events::ResilienceEvent::DegradationLevelChanged {
+                        from_level,
+                        to_level,
+                        to_name,
+                        reason,
+                        ..
+                    },
+                ) = &event
+                {
+                    // Dedup: skip if we notified about this level within dedup_secs.
+                    let now = tokio::time::Instant::now();
+                    if let Some(last) = last_notified.get(to_level)
+                        && now.duration_since(*last).as_secs() < dedup_secs
+                    {
+                        tracing::debug!(
+                            to_level = to_level,
+                            "skipping duplicate degradation notification"
+                        );
+                        continue;
+                    }
+                    last_notified.insert(*to_level, now);
+
+                    // Build notification message.
+                    let message = if to_level > from_level {
+                        // Escalation
+                        format!(
+                            "[Blufio] Degraded: {}. Current level: L{} {}.",
+                            reason, to_level, to_name
+                        )
+                    } else {
+                        // Recovery
+                        format!(
+                            "[Blufio] Recovered: {}. Current level: L{} {}.",
+                            reason, to_level, to_name
+                        )
+                    };
+
+                    // Send to ALL active channels (best-effort).
+                    for (channel_name, adapter) in channels.iter() {
+                        let outbound = blufio_core::types::OutboundMessage {
+                            session_id: None,
+                            channel: channel_name.clone(),
+                            content: message.clone(),
+                            reply_to: None,
+                            parse_mode: None,
+                            metadata: Some(
+                                serde_json::json!({"is_degradation_notification": true})
+                                    .to_string(),
+                            ),
+                        };
+                        if let Err(e) = adapter.send(outbound).await {
+                            tracing::warn!(
+                                channel = %channel_name,
+                                error = %e,
+                                "failed to send degradation notification"
+                            );
+                            // Best-effort: continue to other channels
+                        }
+                    }
+
+                    tracing::info!(
+                        from_level = from_level,
+                        to_level = to_level,
+                        channels = channels.len(),
+                        "degradation notification sent"
+                    );
+                }
+            }
+        });
+        info!("degradation notification sender spawned");
     }
 
     // --- Bridge system ---
@@ -997,6 +1292,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     }
 
     // Spawn sd_notify watchdog ping task (if systemd watchdog is enabled).
+    #[cfg(unix)]
     {
         let wd_cancel = cancel.clone();
         let _watchdog_handle = blufio_agent::sdnotify::spawn_watchdog(wd_cancel);
@@ -1043,6 +1339,61 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         });
     }
 
+    // Extract resilience drain timeout before config is moved into AgentLoop.
+    let resilience_drain_secs = if resilience_cancel_token.is_some() {
+        Some(config.resilience.drain_timeout_secs)
+    } else {
+        None
+    };
+
+    // Extract fallback chain before config is moved.
+    let fallback_chain = config.resilience.fallback_chain.clone();
+
+    // Build fallback provider registry before config is moved (DEG-06).
+    let fallback_provider_registry: Option<
+        Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>,
+    > = if !fallback_chain.is_empty() && resilience_registry.is_some() {
+        // Reuse gateway's provider_registry if available, else create a new one.
+        #[cfg(feature = "gateway")]
+        {
+            if let Some(ref reg) = provider_registry {
+                Some(reg.clone())
+            } else {
+                match ConcreteProviderRegistry::from_config(&config).await {
+                    Ok(reg) => {
+                        info!("fallback provider registry initialized (non-gateway)");
+                        Some(Arc::new(reg)
+                            as Arc<
+                                dyn blufio_core::traits::ProviderRegistry + Send + Sync,
+                            >)
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");
+                        None
+                    }
+                }
+            }
+        }
+        #[cfg(not(feature = "gateway"))]
+        {
+            match ConcreteProviderRegistry::from_config(&config).await {
+                Ok(reg) => {
+                    info!("fallback provider registry initialized");
+                    Some(Arc::new(reg)
+                        as Arc<
+                            dyn blufio_core::traits::ProviderRegistry + Send + Sync,
+                        >)
+                }
+                Err(e) => {
+                    warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");
+                    None
+                }
+            }
+        }
+    } else {
+        None
+    };
+
     // Create and run agent loop with channel multiplexer.
     let mut agent_loop = AgentLoop::new(
         Box::new(mux),
@@ -1063,6 +1414,25 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Wire EventBus into AgentLoop for publishing MessageSent events.
     agent_loop.set_event_bus(event_bus.clone());
 
+    // Wire resilience subsystem into AgentLoop for SessionActor circuit breaker integration.
+    if let Some(ref registry) = resilience_registry {
+        agent_loop.set_circuit_breaker_registry(registry.clone());
+    }
+    if let Some(ref dm) = resilience_manager {
+        agent_loop.set_degradation_manager(dm.clone());
+    }
+    agent_loop.set_provider_name("anthropic".to_string());
+
+    // Wire fallback chain and provider registry for fallback provider routing (DEG-06).
+    if let Some(reg) = fallback_provider_registry {
+        agent_loop.set_provider_registry(reg);
+        agent_loop.set_fallback_chain(fallback_chain.clone());
+        info!(
+            chain = ?fallback_chain,
+            "fallback provider chain configured"
+        );
+    }
+
     // Log integration status summary.
     {
         let security_status = "OK (TLS 1.2+ / SSRF protection)";
@@ -1082,6 +1452,25 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             metrics = metrics_status,
             "integration status"
         );
+    }
+
+    // If resilience L5 shutdown is wired, propagate it to the main cancel token.
+    if let Some(ref l5_token) = resilience_cancel_token {
+        let l5 = l5_token.clone();
+        let main_cancel = cancel.clone();
+        let drain_secs = resilience_drain_secs.unwrap_or(30);
+        tokio::spawn(async move {
+            l5.cancelled().await;
+            error!(
+                drain_timeout_secs = drain_secs,
+                "resilience L5 safe shutdown triggered -- stopping agent"
+            );
+            #[cfg(unix)]
+            blufio_agent::sdnotify::notify_stopping("L5 SafeShutdown: draining in-flight requests");
+            // Give in-flight requests time to complete before cancelling main loop.
+            tokio::time::sleep(Duration::from_secs(drain_secs)).await;
+            main_cancel.cancel();
+        });
     }
 
     agent_loop.run(cancel).await?;
@@ -1233,6 +1622,7 @@ async fn memory_monitor(
 /// Read the process RSS in bytes from /proc/self/statm (Linux only).
 ///
 /// Returns None on non-Linux platforms or if the file cannot be read.
+#[cfg(not(target_env = "msvc"))]
 fn read_rss_bytes() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {

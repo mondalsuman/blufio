@@ -17,22 +17,22 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 
 ### Circuit Breaker
 
-- [ ] **CB-01**: CircuitBreaker implements 3-state FSM (Closed, Open, HalfOpen) with configurable thresholds
-- [ ] **CB-02**: Each external dependency (5 providers, 8 channels) has an independent circuit breaker instance
-- [ ] **CB-03**: Circuit breaker uses `is_retryable()` from typed errors — non-retryable errors (auth, config) do not count as failures
-- [ ] **CB-04**: Circuit breaker publishes state transitions to EventBus as Resilience events
-- [ ] **CB-05**: Prometheus gauge `blufio_circuit_breaker_state` emitted per dependency with state label
-- [ ] **CB-06**: Circuit breaker thresholds configurable via TOML config `[resilience.circuit_breakers.<name>]`
-- [ ] **CB-07**: HalfOpen state allows a configurable number of probe requests before transitioning to Closed
+- [x] **CB-01**: CircuitBreaker implements 3-state FSM (Closed, Open, HalfOpen) with configurable thresholds
+- [x] **CB-02**: Each external dependency (5 providers, 8 channels) has an independent circuit breaker instance
+- [x] **CB-03**: Circuit breaker uses `is_retryable()` from typed errors — non-retryable errors (auth, config) do not count as failures
+- [x] **CB-04**: Circuit breaker publishes state transitions to EventBus as Resilience events
+- [x] **CB-05**: Prometheus gauge `blufio_circuit_breaker_state` emitted per dependency with state label
+- [x] **CB-06**: Circuit breaker thresholds configurable via TOML config `[resilience.circuit_breakers.<name>]`
+- [x] **CB-07**: HalfOpen state allows a configurable number of probe requests before transitioning to Closed
 
 ### Degradation Ladder
 
-- [ ] **DEG-01**: DegradationLevel enum with 6 levels (L0 FullyOperational through L5 SafeShutdown)
-- [ ] **DEG-02**: DegradationManager tracks current level and auto-escalates based on circuit breaker state changes
-- [ ] **DEG-03**: De-escalation uses hysteresis timer — level drops only after sustained recovery period
-- [ ] **DEG-04**: Degradation state changes published to EventBus and visible via `/v1/health` API
-- [ ] **DEG-05**: User-facing degradation messages delivered to primary channel at each level transition
-- [ ] **DEG-06**: Configurable fallback provider via `[resilience.fallback_provider]` activated at L2+
+- [x] **DEG-01**: DegradationLevel enum with 6 levels (L0 FullyOperational through L5 SafeShutdown)
+- [x] **DEG-02**: DegradationManager tracks current level and auto-escalates based on circuit breaker state changes
+- [x] **DEG-03**: De-escalation uses hysteresis timer — level drops only after sustained recovery period
+- [x] **DEG-04**: Degradation state changes published to EventBus and visible via `/v1/health` API
+- [x] **DEG-05**: User-facing degradation messages delivered to primary channel at each level transition
+- [x] **DEG-06**: Configurable fallback provider via `[resilience.fallback_provider]` activated at L2+
 
 ### Token Counting
 
@@ -51,16 +51,16 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 - [x] **FMT-01**: FormatPipeline extended with Table and BulletList/OrderedList RichContent variants
 - [x] **FMT-02**: Table content degrades to aligned text for channels without table support
 - [x] **FMT-03**: List content renders as channel-native list format or plain text fallback
-- [ ] **FMT-04**: FormatPipeline called inside each channel adapter's `send()` method
+- [x] **FMT-04**: FormatPipeline called inside each channel adapter's `send()` method
 - [ ] **FMT-05**: Message length splitting integrated — content split at paragraph boundaries respecting `max_message_length`
-- [ ] **FMT-06**: Adapter-specific formatting (MarkdownV2, mrkdwn, etc.) applied after FormatPipeline degradation
+- [x] **FMT-06**: Adapter-specific formatting (MarkdownV2, mrkdwn, etc.) applied after FormatPipeline degradation
 
 ### Channel Capabilities Extension
 
 - [x] **CAP-01**: ChannelCapabilities extended with `streaming_type` field (enum: None, BlockOnly, FullStreaming)
 - [x] **CAP-02**: ChannelCapabilities extended with `formatting_support` field (enum: PlainText, BasicMarkdown, FullMarkdown, HTML)
 - [x] **CAP-03**: ChannelCapabilities extended with `rate_limit` field (struct: messages_per_second, requests_per_minute)
-- [ ] **CAP-04**: All 8 channel adapters updated to report extended capability fields accurately
+- [x] **CAP-04**: All 8 channel adapters updated to report extended capability fields accurately
 
 ### Documentation
 
@@ -126,23 +126,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TOK-07 | Phase 47 | Complete |
 | TOK-08 | Phase 47 | Complete |
 | TOK-09 | Phase 47 | Complete |
-| CB-01 | Phase 48 | Pending |
-| CB-02 | Phase 48 | Pending |
-| CB-03 | Phase 48 | Pending |
-| CB-04 | Phase 48 | Pending |
-| CB-05 | Phase 48 | Pending |
-| CB-06 | Phase 48 | Pending |
-| CB-07 | Phase 48 | Pending |
-| DEG-01 | Phase 48 | Pending |
-| DEG-02 | Phase 48 | Pending |
-| DEG-03 | Phase 48 | Pending |
-| DEG-04 | Phase 48 | Pending |
-| DEG-05 | Phase 48 | Pending |
-| DEG-06 | Phase 48 | Pending |
-| FMT-04 | Phase 49 | Pending |
+| CB-01 | Phase 48 | Complete |
+| CB-02 | Phase 48 | Complete |
+| CB-03 | Phase 48 | Complete |
+| CB-04 | Phase 48 | Complete |
+| CB-05 | Phase 48 | Complete |
+| CB-06 | Phase 48 | Complete |
+| CB-07 | Phase 48 | Complete |
+| DEG-01 | Phase 48 | Complete |
+| DEG-02 | Phase 48 | Complete |
+| DEG-03 | Phase 48 | Complete |
+| DEG-04 | Phase 48 | Complete |
+| DEG-05 | Phase 48 | Complete |
+| DEG-06 | Phase 48 | Complete |
+| FMT-04 | Phase 49 | Complete |
 | FMT-05 | Phase 49 | Pending |
-| FMT-06 | Phase 49 | Pending |
-| CAP-04 | Phase 49 | Pending |
+| FMT-06 | Phase 49 | Complete |
+| CAP-04 | Phase 49 | Complete |
 | DOC-01 | Phase 50 | Pending |
 | DOC-02 | Phase 50 | Pending |
 

@@ -17,6 +17,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use blufio_config::model::TelegramConfig;
 use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
@@ -190,34 +191,62 @@ impl ChannelAdapter for TelegramChannel {
 
     async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
         let chat_id = extract_chat_id(&msg)?;
-        let escaped = markdown::format_for_telegram(&msg.content);
+        let caps = self.capabilities();
 
-        let result = if msg.parse_mode.as_deref() == Some("MarkdownV2") || msg.parse_mode.is_none()
-        {
-            // Try MarkdownV2 first, fall back to plain text
-            match self
-                .bot
-                .send_message(Recipient::Id(chat_id), &escaped)
-                .parse_mode(ParseMode::MarkdownV2)
-                .await
-            {
-                Ok(sent) => Ok(sent),
-                Err(e) => {
-                    warn!(error = %e, "MarkdownV2 failed, sending as plain text");
-                    self.bot
-                        .send_message(Recipient::Id(chat_id), &msg.content)
-                        .await
-                        .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))
+        // Pipeline: detect_and_format -> adapter_escape -> split -> send each chunk
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+        let escaped = markdown::format_for_telegram(&formatted);
+        let chunks = split_at_paragraphs(&escaped, caps.max_message_length);
+
+        let mut first_id = None;
+
+        for chunk in &chunks {
+            if msg.parse_mode.as_deref() == Some("MarkdownV2") || msg.parse_mode.is_none() {
+                // Try MarkdownV2 first, fall back to plain text on parse error
+                match self
+                    .bot
+                    .send_message(Recipient::Id(chat_id), chunk)
+                    .parse_mode(ParseMode::MarkdownV2)
+                    .await
+                {
+                    Ok(sent) => {
+                        if first_id.is_none() {
+                            first_id = Some(MessageId(sent.id.0.to_string()));
+                        }
+                    }
+                    Err(e) => {
+                        let err_str = e.to_string();
+                        if err_str.contains("can't parse entities") {
+                            warn!(error = %e, "MarkdownV2 failed, sending chunk as plain text");
+                            metrics::counter!("blufio_format_fallback_total", "channel" => "telegram").increment(1);
+                            let sent = self
+                                .bot
+                                .send_message(Recipient::Id(chat_id), chunk)
+                                .await
+                                .map_err(|e| {
+                                BlufioError::channel_delivery_failed("telegram", e)
+                            })?;
+                            if first_id.is_none() {
+                                first_id = Some(MessageId(sent.id.0.to_string()));
+                            }
+                        } else {
+                            return Err(BlufioError::channel_delivery_failed("telegram", e));
+                        }
+                    }
+                }
+            } else {
+                let sent = self
+                    .bot
+                    .send_message(Recipient::Id(chat_id), chunk)
+                    .await
+                    .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
+                if first_id.is_none() {
+                    first_id = Some(MessageId(sent.id.0.to_string()));
                 }
             }
-        } else {
-            self.bot
-                .send_message(Recipient::Id(chat_id), &msg.content)
-                .await
-                .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))
-        }?;
+        }
 
-        Ok(MessageId(result.id.0.to_string()))
+        Ok(first_id.unwrap_or_else(|| MessageId(String::new())))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
@@ -258,7 +287,9 @@ impl ChannelAdapter for TelegramChannel {
                 source: None,
             })?;
 
-        let escaped = markdown::format_for_telegram(text);
+        let caps = self.capabilities();
+        let formatted = FormatPipeline::detect_and_format(text, &caps);
+        let escaped = markdown::format_for_telegram(&formatted);
 
         let use_markdown = parse_mode.map(|p| p == "MarkdownV2").unwrap_or(true);
 

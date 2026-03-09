@@ -14,6 +14,7 @@ pub mod channel_mux;
 pub mod context;
 pub mod delegation;
 pub mod heartbeat;
+#[cfg(unix)]
 pub mod sdnotify;
 pub mod session;
 pub mod shutdown;
@@ -71,6 +72,16 @@ pub struct AgentLoop {
     event_bus: Option<Arc<blufio_bus::EventBus>>,
     config: BlufioConfig,
     sessions: HashMap<String, SessionActor>,
+    /// Circuit breaker registry for resilience integration.
+    circuit_breaker_registry: Option<Arc<blufio_resilience::CircuitBreakerRegistry>>,
+    /// Degradation manager for resilience level checks.
+    degradation_manager: Option<Arc<blufio_resilience::DegradationManager>>,
+    /// Name of the primary provider (for circuit breaker lookups).
+    provider_name: String,
+    /// Provider registry for fallback provider lookup.
+    provider_registry: Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>,
+    /// Fallback chain of provider names to try when primary breaker is open.
+    fallback_chain: Vec<String>,
 }
 
 impl AgentLoop {
@@ -111,12 +122,48 @@ impl AgentLoop {
             event_bus: None,
             config,
             sessions: HashMap::new(),
+            circuit_breaker_registry: None,
+            degradation_manager: None,
+            provider_name: "anthropic".to_string(),
+            provider_registry: None,
+            fallback_chain: Vec::new(),
         })
     }
 
     /// Sets the EventBus for publishing channel lifecycle events.
     pub fn set_event_bus(&mut self, bus: Arc<blufio_bus::EventBus>) {
         self.event_bus = Some(bus);
+    }
+
+    /// Sets the circuit breaker registry for resilience integration.
+    pub fn set_circuit_breaker_registry(
+        &mut self,
+        registry: Arc<blufio_resilience::CircuitBreakerRegistry>,
+    ) {
+        self.circuit_breaker_registry = Some(registry);
+    }
+
+    /// Sets the degradation manager for resilience level checks.
+    pub fn set_degradation_manager(&mut self, dm: Arc<blufio_resilience::DegradationManager>) {
+        self.degradation_manager = Some(dm);
+    }
+
+    /// Sets the primary provider name for circuit breaker lookups.
+    pub fn set_provider_name(&mut self, name: String) {
+        self.provider_name = name;
+    }
+
+    /// Sets the provider registry for fallback provider lookup.
+    pub fn set_provider_registry(
+        &mut self,
+        registry: Arc<dyn blufio_core::ProviderRegistry + Send + Sync>,
+    ) {
+        self.provider_registry = Some(registry);
+    }
+
+    /// Sets the fallback chain of provider names.
+    pub fn set_fallback_chain(&mut self, chain: Vec<String>) {
+        self.fallback_chain = chain;
     }
 
     /// Runs the main agent loop until the cancellation token is triggered.
@@ -622,6 +669,11 @@ impl AgentLoop {
                     routing_enabled: self.config.routing.enabled,
                     idle_timeout_secs: self.config.memory.idle_timeout_secs,
                     tool_registry: self.tool_registry.clone(),
+                    circuit_breaker_registry: self.circuit_breaker_registry.clone(),
+                    degradation_manager: self.degradation_manager.clone(),
+                    provider_name: self.provider_name.clone(),
+                    provider_registry: self.provider_registry.clone(),
+                    fallback_chain: self.fallback_chain.clone(),
                 });
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
@@ -670,6 +722,11 @@ impl AgentLoop {
             routing_enabled: self.config.routing.enabled,
             idle_timeout_secs: self.config.memory.idle_timeout_secs,
             tool_registry: self.tool_registry.clone(),
+            circuit_breaker_registry: self.circuit_breaker_registry.clone(),
+            degradation_manager: self.degradation_manager.clone(),
+            provider_name: self.provider_name.clone(),
+            provider_registry: self.provider_registry.clone(),
+            fallback_chain: self.fallback_chain.clone(),
         });
         self.sessions.insert(session_key, actor);
         #[cfg(feature = "prometheus")]

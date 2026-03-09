@@ -45,6 +45,8 @@ fn build_test_router() -> Router {
         webhook_store: None,
         batch_store: None,
         event_bus: None,
+        degradation_manager: None,
+        circuit_breaker_registry: None,
     };
 
     // Build routes matching the gateway server setup (without auth middleware for testing).

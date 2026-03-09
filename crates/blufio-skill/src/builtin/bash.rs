@@ -71,6 +71,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[cfg(unix)]
     async fn bash_tool_echo_hello() {
         let tool = BashTool;
         let input = serde_json::json!({"command": "echo hello"});
@@ -80,6 +81,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(unix)]
     async fn bash_tool_exit_nonzero_returns_error() {
         let tool = BashTool;
         let input = serde_json::json!({"command": "exit 1"});

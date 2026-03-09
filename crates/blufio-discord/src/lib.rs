@@ -17,6 +17,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use blufio_config::model::DiscordConfig;
 use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
@@ -257,14 +258,26 @@ impl ChannelAdapter for DiscordChannel {
             .ok_or_else(|| BlufioError::channel_connection_lost("discord"))?;
 
         let channel_id = extract_channel_id(&msg)?;
-        let formatted = markdown::format_for_discord(&msg.content);
+        let caps = self.capabilities();
 
-        let sent = channel_id
-            .send_message(http, CreateMessage::new().content(&formatted))
-            .await
-            .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
+        // Pipeline: detect_and_format -> adapter_escape -> split -> send each chunk
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+        let escaped = markdown::format_for_discord(&formatted);
+        let chunks = split_at_paragraphs(&escaped, caps.max_message_length);
 
-        Ok(MessageId(sent.id.to_string()))
+        let mut first_id = None;
+
+        for chunk in &chunks {
+            let sent = channel_id
+                .send_message(http, CreateMessage::new().content(chunk))
+                .await
+                .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
+            if first_id.is_none() {
+                first_id = Some(MessageId(sent.id.to_string()));
+            }
+        }
+
+        Ok(first_id.unwrap_or_else(|| MessageId(String::new())))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
@@ -306,10 +319,12 @@ impl ChannelAdapter for DiscordChannel {
         })?;
         let msg_id = serenity::model::id::MessageId::new(msg_id);
 
-        let formatted = markdown::format_for_discord(text);
+        let caps = self.capabilities();
+        let formatted = FormatPipeline::detect_and_format(text, &caps);
+        let escaped = markdown::format_for_discord(&formatted);
 
         channel_id
-            .edit_message(http, msg_id, EditMessage::new().content(&formatted))
+            .edit_message(http, msg_id, EditMessage::new().content(&escaped))
             .await
             .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
 
