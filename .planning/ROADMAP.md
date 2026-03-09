@@ -79,13 +79,13 @@
 
 </details>
 
-### 🚧 v1.4 Quality & Resilience (In Progress)
+### v1.4 Quality & Resilience (In Progress)
 
 **Milestone Goal:** Address QA audit deviations -- accurate token counting, circuit breakers, graceful degradation, typed errors, format pipeline integration, and architectural decision records.
 
 - [x] **Phase 46: Core Types & Error Hierarchy** - Typed error hierarchy with retryable/severity/category classification, extended ChannelCapabilities, and Table/List content types (completed 2026-03-09)
 - [x] **Phase 47: Accurate Token Counting** - Replace len()/4 heuristic with real tokenizer-backed counting for all 5 LLM providers (completed 2026-03-09)
-- [x] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (completed 2026-03-09)
+- [ ] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (gap closure in progress)
 - [ ] **Phase 49: FormatPipeline Integration** - Wire FormatPipeline into all 8 channel adapters with message splitting and adapter-specific formatting
 - [ ] **Phase 50: ADRs & Documentation** - Architectural decision records for ORT pinning and plugin architecture
 
@@ -120,9 +120,9 @@ Plans:
   5. Token counting runs via spawn_blocking so synchronous tokenizer.encode() never blocks tokio worker threads
 **Plans:** 3/3 plans complete
 Plans:
-- [ ] 47-01-PLAN.md -- TokenCounter trait, HeuristicCounter, TokenizerCache, PerformanceConfig, workspace deps, Claude vocabulary
-- [ ] 47-02-PLAN.md -- TiktokenCounter, HuggingFaceCounter, DelegatingCounter implementations with spawn_blocking
-- [ ] 47-03-PLAN.md -- DynamicZone + ContextEngine integration, all caller wiring, len()/4 removal
+- [x] 47-01-PLAN.md -- TokenCounter trait, HeuristicCounter, TokenizerCache, PerformanceConfig, workspace deps, Claude vocabulary
+- [x] 47-02-PLAN.md -- TiktokenCounter, HuggingFaceCounter, DelegatingCounter implementations with spawn_blocking
+- [x] 47-03-PLAN.md -- DynamicZone + ContextEngine integration, all caller wiring, len()/4 removal
 
 ### Phase 48: Circuit Breaker & Degradation Ladder
 **Goal**: Every external dependency has an independent circuit breaker, and the system automatically degrades through 6 levels when dependencies fail
@@ -134,11 +134,12 @@ Plans:
   3. Circuit breaker thresholds (failure count, reset timeout, half-open probes) are configurable per dependency via TOML `[resilience.circuit_breakers.<name>]`
   4. DegradationManager tracks current level (L0-L5), auto-escalates based on circuit breaker state changes, and de-escalates only after sustained recovery (hysteresis)
   5. Degradation state is visible via `/v1/health` API, published to EventBus, and user-facing messages are delivered to the primary channel at each level transition
-**Plans:** 3/3 plans complete
+**Plans:** 4 plans (3 complete + 1 gap closure)
 Plans:
-- [ ] 48-01-PLAN.md -- CircuitBreaker FSM, registry, ResilienceEvent, ResilienceConfig
-- [ ] 48-02-PLAN.md -- DegradationManager, Prometheus metrics, /v1/health extension
-- [ ] 48-03-PLAN.md -- serve.rs wiring, SessionActor integration, fallback routing, notifications, L5 shutdown
+- [x] 48-01-PLAN.md -- CircuitBreaker FSM, registry, ResilienceEvent, ResilienceConfig
+- [x] 48-02-PLAN.md -- DegradationManager, Prometheus metrics, /v1/health extension
+- [x] 48-03-PLAN.md -- serve.rs wiring, SessionActor integration, L4+ canned response, cost tagging, L5 shutdown
+- [ ] 48-04-PLAN.md -- Gap closure: fallback provider routing (DEG-06) + degradation notifications (DEG-05)
 
 ### Phase 49: FormatPipeline Integration
 **Goal**: Every channel adapter uses FormatPipeline to format outbound messages, with content splitting at paragraph boundaries and adapter-specific rendering applied after degradation
@@ -149,11 +150,9 @@ Plans:
   2. Messages exceeding a channel's max_message_length are split at paragraph boundaries, not mid-sentence
   3. Adapter-specific formatting (Telegram MarkdownV2, Slack mrkdwn, Discord Markdown, etc.) is applied after FormatPipeline degradation, not before
   4. All 8 channel adapters report accurate extended capability fields (streaming_type, formatting_support, rate_limit)
-**Plans:** 3 plans
+**Plans:** 0/?
 Plans:
-- [ ] 48-01-PLAN.md -- CircuitBreaker FSM, registry, ResilienceEvent, ResilienceConfig
-- [ ] 48-02-PLAN.md -- DegradationManager, Prometheus metrics, /v1/health extension
-- [ ] 48-03-PLAN.md -- serve.rs wiring, SessionActor integration, fallback routing, notifications, L5 shutdown
+- (not yet planned)
 
 ### Phase 50: ADRs & Documentation
 **Goal**: Architectural decisions for ORT RC pinning and plugin architecture are formally documented with rationale, trade-offs, and upgrade plans
@@ -162,11 +161,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. An ADR exists documenting why ORT is pinned at rc.11 over Candle, the trade-offs of each approach, and a concrete upgrade plan for when stable 2.0.0 lands
   2. An ADR exists documenting the Phase 1 compiled-in plugin architecture, why dynamic loading was deferred, and the migration path to libloading in the future
-**Plans:** 3 plans
+**Plans:** 0/?
 Plans:
-- [ ] 48-01-PLAN.md -- CircuitBreaker FSM, registry, ResilienceEvent, ResilienceConfig
-- [ ] 48-02-PLAN.md -- DegradationManager, Prometheus metrics, /v1/health extension
-- [ ] 48-03-PLAN.md -- serve.rs wiring, SessionActor integration, fallback routing, notifications, L5 shutdown
+- (not yet planned)
 
 ## Progress
 
@@ -222,11 +219,11 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 44. Node Approval Wiring | v1.3 | 2/2 | Complete | 2026-03-08 |
 | 45. Documentation & Traceability Sync | v1.3 | 2/2 | Complete | 2026-03-08 |
 | 46. Core Types & Error Hierarchy | v1.4 | 4/4 | Complete | 2026-03-09 |
-| 47. Accurate Token Counting | 3/3 | Complete    | 2026-03-09 | - |
-| 48. Circuit Breaker & Degradation Ladder | 3/3 | Complete   | 2026-03-09 | - |
+| 47. Accurate Token Counting | v1.4 | 3/3 | Complete | 2026-03-09 |
+| 48. Circuit Breaker & Degradation Ladder | v1.4 | 3/4 | Gap closure | - |
 | 49. FormatPipeline Integration | v1.4 | 0/? | Not started | - |
 | 50. ADRs & Documentation | v1.4 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-09 after Phase 48 Plan 01 complete*
+*Last updated: 2026-03-09 after Phase 48 gap closure plan created*
