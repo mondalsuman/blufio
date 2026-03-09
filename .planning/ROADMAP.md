@@ -85,7 +85,7 @@
 
 - [x] **Phase 46: Core Types & Error Hierarchy** - Typed error hierarchy with retryable/severity/category classification, extended ChannelCapabilities, and Table/List content types (completed 2026-03-09)
 - [x] **Phase 47: Accurate Token Counting** - Replace len()/4 heuristic with real tokenizer-backed counting for all 5 LLM providers (completed 2026-03-09)
-- [ ] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (gap closure in progress)
+- [x] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (gap closure in progress) (completed 2026-03-09)
 - [ ] **Phase 49: FormatPipeline Integration** - Wire FormatPipeline into all 8 channel adapters with message splitting and adapter-specific formatting
 - [ ] **Phase 50: ADRs & Documentation** - Architectural decision records for ORT pinning and plugin architecture
 
@@ -134,12 +134,12 @@ Plans:
   3. Circuit breaker thresholds (failure count, reset timeout, half-open probes) are configurable per dependency via TOML `[resilience.circuit_breakers.<name>]`
   4. DegradationManager tracks current level (L0-L5), auto-escalates based on circuit breaker state changes, and de-escalates only after sustained recovery (hysteresis)
   5. Degradation state is visible via `/v1/health` API, published to EventBus, and user-facing messages are delivered to the primary channel at each level transition
-**Plans:** 4 plans (3 complete + 1 gap closure)
+**Plans:** 4/4 plans complete
 Plans:
 - [x] 48-01-PLAN.md -- CircuitBreaker FSM, registry, ResilienceEvent, ResilienceConfig
 - [x] 48-02-PLAN.md -- DegradationManager, Prometheus metrics, /v1/health extension
 - [x] 48-03-PLAN.md -- serve.rs wiring, SessionActor integration, L4+ canned response, cost tagging, L5 shutdown
-- [ ] 48-04-PLAN.md -- Gap closure: fallback provider routing (DEG-06) + degradation notifications (DEG-05)
+- [x] 48-04-PLAN.md -- Gap closure: fallback provider routing (DEG-06) + degradation notifications (DEG-05)
 
 ### Phase 49: FormatPipeline Integration
 **Goal**: Every channel adapter uses FormatPipeline to format outbound messages, with content splitting at paragraph boundaries and adapter-specific rendering applied after degradation
@@ -220,7 +220,7 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 45. Documentation & Traceability Sync | v1.3 | 2/2 | Complete | 2026-03-08 |
 | 46. Core Types & Error Hierarchy | v1.4 | 4/4 | Complete | 2026-03-09 |
 | 47. Accurate Token Counting | v1.4 | 3/3 | Complete | 2026-03-09 |
-| 48. Circuit Breaker & Degradation Ladder | v1.4 | 3/4 | Gap closure | - |
+| 48. Circuit Breaker & Degradation Ladder | 4/4 | Complete   | 2026-03-09 | - |
 | 49. FormatPipeline Integration | v1.4 | 0/? | Not started | - |
 | 50. ADRs & Documentation | v1.4 | 0/? | Not started | - |
 
