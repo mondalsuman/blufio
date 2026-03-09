@@ -19,7 +19,7 @@ pub use error::{
     MigrationErrorKind, ProviderErrorKind, Severity, SkillErrorKind, StorageErrorKind,
     http_status_to_provider_error,
 };
-pub use format::{FormatPipeline, FormattedOutput, RichContent};
+pub use format::{ColumnAlign, FormatPipeline, FormattedOutput, List, ListStyle, RichContent, Table};
 pub use streaming::{StreamingBuffer, StreamingEditorOps, split_at_paragraph_boundary};
 pub use types::{
     AdapterType, ChannelCapabilities, ContentBlock, FormattingSupport, HealthStatus, ImageRequest,
