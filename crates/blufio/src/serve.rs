@@ -415,6 +415,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         (None, None, None)
     };
 
+    // Extract notification dedup config before config is moved later.
+    let notification_dedup_secs = config.resilience.notification_dedup_secs;
+
     // Register SkillProvider with context engine for progressive tool discovery.
     let skill_provider =
         SkillProvider::new(tool_registry.clone(), config.skill.max_skills_in_prompt);
@@ -988,6 +991,94 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         blufio_agent::sdnotify::notify_ready(&ready_status);
     }
 
+    // Grab channel references for notification delivery BEFORE mux is moved.
+    let notification_channels = mux.connected_channels_ref();
+
+    // Spawn degradation notification task (if resilience enabled) -- DEG-05.
+    // Sends user-facing messages to all active channels on degradation level transitions.
+    if resilience_manager.is_some() {
+        let notif_rx = event_bus.subscribe_reliable(64).await;
+        let channels = notification_channels.clone();
+        let dedup_secs = notification_dedup_secs;
+        tokio::spawn(async move {
+            let mut rx = notif_rx;
+            let mut last_notified: std::collections::HashMap<u8, tokio::time::Instant> =
+                std::collections::HashMap::new();
+
+            while let Some(event) = rx.recv().await {
+                if let blufio_bus::events::BusEvent::Resilience(
+                    blufio_bus::events::ResilienceEvent::DegradationLevelChanged {
+                        from_level,
+                        to_level,
+                        to_name,
+                        reason,
+                        ..
+                    },
+                ) = &event
+                {
+                    // Dedup: skip if we notified about this level within dedup_secs.
+                    let now = tokio::time::Instant::now();
+                    if let Some(last) = last_notified.get(to_level) {
+                        if now.duration_since(*last).as_secs() < dedup_secs {
+                            tracing::debug!(
+                                to_level = to_level,
+                                "skipping duplicate degradation notification"
+                            );
+                            continue;
+                        }
+                    }
+                    last_notified.insert(*to_level, now);
+
+                    // Build notification message.
+                    let message = if to_level > from_level {
+                        // Escalation
+                        format!(
+                            "[Blufio] Degraded: {}. Current level: L{} {}.",
+                            reason, to_level, to_name
+                        )
+                    } else {
+                        // Recovery
+                        format!(
+                            "[Blufio] Recovered: {}. Current level: L{} {}.",
+                            reason, to_level, to_name
+                        )
+                    };
+
+                    // Send to ALL active channels (best-effort).
+                    for (channel_name, adapter) in channels.iter() {
+                        let outbound = blufio_core::types::OutboundMessage {
+                            session_id: None,
+                            channel: channel_name.clone(),
+                            content: message.clone(),
+                            reply_to: None,
+                            parse_mode: None,
+                            metadata: Some(
+                                serde_json::json!({"is_degradation_notification": true})
+                                    .to_string(),
+                            ),
+                        };
+                        if let Err(e) = adapter.send(outbound).await {
+                            tracing::warn!(
+                                channel = %channel_name,
+                                error = %e,
+                                "failed to send degradation notification"
+                            );
+                            // Best-effort: continue to other channels
+                        }
+                    }
+
+                    tracing::info!(
+                        from_level = from_level,
+                        to_level = to_level,
+                        channels = channels.len(),
+                        "degradation notification sent"
+                    );
+                }
+            }
+        });
+        info!("degradation notification sender spawned");
+    }
+
     // --- Bridge system ---
     #[cfg(feature = "bridge")]
     let _bridge_handles = if !config.bridge.is_empty() {
@@ -1240,9 +1331,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         None
     };
 
-    // Extract fallback chain and notification dedup before config is moved.
+    // Extract fallback chain before config is moved.
     let fallback_chain = config.resilience.fallback_chain.clone();
-    let notification_dedup_secs = config.resilience.notification_dedup_secs;
 
     // Build fallback provider registry before config is moved (DEG-06).
     let fallback_provider_registry: Option<Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>> =
