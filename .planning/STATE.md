@@ -10,8 +10,8 @@ progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 12
-  percent: 93
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.4 Quality & Resilience -- Phase 49 (FormatPipeline Integration)
+**Current focus:** v1.4 Quality & Resilience -- Phase 49 complete (FormatPipeline Integration)
 
 ## Current Position
 
 Phase: 49 of 50 (FormatPipeline Integration) -- 4 of 5 in v1.4
-Plan: 1 of 2 complete
-Status: In Progress
-Last activity: 2026-03-09 -- Phase 49 Plan 01 complete (detect_and_format, split_at_paragraphs, HTML Tier 0)
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-03-09 -- Phase 49 Plan 02 complete (all 8 adapters wired with FormatPipeline)
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Recent decisions affecting current work:
 - Phase 48-03: sd-notify STATUS via EventBus subscriber (not in resilience crate); CostRecord.fallback with serde(default) for backward compat; L4+ canned response avoids provider calls; setter-based resilience wiring on AgentLoop
 - Phase 48-04: Clone ProviderRequest for fallback iteration (Rust ownership); Tier mapping via contains() for model family detection; Fallback registry reuses gateway ConcreteProviderRegistry; Notification channels grabbed after mux.connect() before move
 - [Phase 49]: Conservative regex detection for markdown structures; HTML Tier 0 before Tier 1 dispatch; split_at_paragraphs as free function with greedy sentence packing
+- [Phase 49-02]: Gateway FormattingSupport changed to FullMarkdown (API clients render); Matrix uses text_html for HTML-containing output; 4-step pipeline enforced in all 8 adapters
 
 ### Pending Todos
 
@@ -96,10 +97,11 @@ None.
 | Phase 48 P02 | 15min | 2 tasks | 9 files |
 | Phase 48 P03 | 20min | 2 tasks | 11 files |
 | Phase 48 P04 | 12min | 2 tasks | 5 files |
-| Phase 49 P01 | 391 | 2 tasks | 1 files |
+| Phase 49 P01 | 8min | 2 tasks | 1 files |
+| Phase 49 P02 | 8min | 2 tasks | 10 files |
 
 ## Session Continuity
 
-Last session: 2026-03-09T15:51:00.343Z
-Stopped at: Phase 49 context gathered
-Resume file: .planning/phases/49-formatpipeline-integration/49-CONTEXT.md
+Last session: 2026-03-09T16:22:00Z
+Stopped at: Phase 49 Plan 02 complete
+Resume file: .planning/phases/49-formatpipeline-integration/49-02-SUMMARY.md

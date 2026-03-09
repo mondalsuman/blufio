@@ -86,7 +86,7 @@
 - [x] **Phase 46: Core Types & Error Hierarchy** - Typed error hierarchy with retryable/severity/category classification, extended ChannelCapabilities, and Table/List content types (completed 2026-03-09)
 - [x] **Phase 47: Accurate Token Counting** - Replace len()/4 heuristic with real tokenizer-backed counting for all 5 LLM providers (completed 2026-03-09)
 - [x] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (gap closure in progress) (completed 2026-03-09)
-- [ ] **Phase 49: FormatPipeline Integration** - Wire FormatPipeline into all 8 channel adapters with message splitting and adapter-specific formatting
+- [x] **Phase 49: FormatPipeline Integration** - Wire FormatPipeline into all 8 channel adapters with message splitting and adapter-specific formatting (completed 2026-03-09)
 - [ ] **Phase 50: ADRs & Documentation** - Architectural decision records for ORT pinning and plugin architecture
 
 ## Phase Details
@@ -150,7 +150,7 @@ Plans:
   2. Messages exceeding a channel's max_message_length are split at paragraph boundaries, not mid-sentence
   3. Adapter-specific formatting (Telegram MarkdownV2, Slack mrkdwn, Discord Markdown, etc.) is applied after FormatPipeline degradation, not before
   4. All 8 channel adapters report accurate extended capability fields (streaming_type, formatting_support, rate_limit)
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 49-01-PLAN.md -- detect_and_format() auto-detection, split_at_paragraphs() utility, HTML Tier 0
 - [ ] 49-02-PLAN.md -- Wire pipeline into all 8 channel adapters with escaping, splitting, and CAP-04 verification
@@ -222,7 +222,7 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 46. Core Types & Error Hierarchy | v1.4 | 4/4 | Complete | 2026-03-09 |
 | 47. Accurate Token Counting | v1.4 | 3/3 | Complete | 2026-03-09 |
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 4/4 | Complete | 2026-03-09 |
-| 49. FormatPipeline Integration | v1.4 | 0/2 | Not started | - |
+| 49. FormatPipeline Integration | 2/2 | Complete   | 2026-03-09 | - |
 | 50. ADRs & Documentation | v1.4 | 0/? | Not started | - |
 
 ---
