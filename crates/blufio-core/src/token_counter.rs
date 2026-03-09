@@ -488,17 +488,23 @@ mod tests {
     #[test]
     fn tokenizer_cache_accurate_mode_resolves_openai_model() {
         let cache = TokenizerCache::new(TokenizerMode::Accurate);
-        // Plan 02 will replace this with TiktokenCounter; for now it's heuristic placeholder
         let counter = cache.get_counter("gpt-4o");
-        assert_eq!(counter.counter_name(), "heuristic");
+        assert!(
+            counter.counter_name().contains("tiktoken"),
+            "Expected tiktoken counter for gpt-4o, got: {}",
+            counter.counter_name()
+        );
     }
 
     #[test]
     fn tokenizer_cache_accurate_mode_resolves_openrouter_prefix() {
         let cache = TokenizerCache::new(TokenizerMode::Accurate);
-        // OpenRouter format: "openai/gpt-4o" -> strips prefix -> detects OpenAI
         let counter = cache.get_counter("openai/gpt-4o");
-        assert_eq!(counter.counter_name(), "heuristic"); // placeholder until Plan 02
+        assert!(
+            counter.counter_name().contains("tiktoken"),
+            "Expected tiktoken counter for openai/gpt-4o, got: {}",
+            counter.counter_name()
+        );
     }
 
     #[test]
@@ -508,5 +514,102 @@ mod tests {
         let c2 = cache.get_counter("claude-3-sonnet");
         // Different models should get different Arc instances
         assert!(!std::sync::Arc::ptr_eq(&c1, &c2));
+    }
+
+    // --- TiktokenCounter tests (Plan 02) ---
+
+    #[tokio::test]
+    async fn tiktoken_o200k_tokenizes_hello_world() {
+        let counter = TiktokenCounter::for_model("gpt-4o");
+        let tokens = counter.count_tokens("Hello, world!").await.unwrap();
+        assert!(tokens > 0, "Expected positive token count, got {tokens}");
+    }
+
+    #[tokio::test]
+    async fn tiktoken_cl100k_tokenizes_hello_world() {
+        let counter = TiktokenCounter::for_model("gpt-4");
+        let tokens = counter.count_tokens("Hello, world!").await.unwrap();
+        assert!(tokens > 0, "Expected positive token count, got {tokens}");
+    }
+
+    #[test]
+    fn tiktoken_for_model_gpt4o_selects_o200k() {
+        let counter = TiktokenCounter::for_model("gpt-4o");
+        assert_eq!(counter.counter_name(), "tiktoken-o200k");
+    }
+
+    #[test]
+    fn tiktoken_for_model_gpt4_selects_cl100k() {
+        let counter = TiktokenCounter::for_model("gpt-4");
+        assert_eq!(counter.counter_name(), "tiktoken-cl100k");
+    }
+
+    #[tokio::test]
+    async fn tiktoken_empty_string_returns_zero() {
+        let counter = TiktokenCounter::for_model("gpt-4o");
+        let tokens = counter.count_tokens("").await.unwrap();
+        assert_eq!(tokens, 0);
+    }
+
+    // --- HuggingFaceCounter tests (Plan 02) ---
+
+    #[tokio::test]
+    async fn hf_claude_tokenizes_hello_world() {
+        let counter = HuggingFaceCounter;
+        let tokens = counter.count_tokens("Hello, world!").await.unwrap();
+        assert!(tokens > 0, "Expected positive token count, got {tokens}");
+    }
+
+    #[tokio::test]
+    async fn hf_claude_reuses_singleton() {
+        // Calling count_tokens twice should reuse the same OnceLock tokenizer.
+        // If OnceLock is broken, the second call would fail or panic.
+        let counter = HuggingFaceCounter;
+        let t1 = counter.count_tokens("Hello").await.unwrap();
+        let t2 = counter.count_tokens("Hello").await.unwrap();
+        assert_eq!(t1, t2, "Singleton should produce identical results");
+    }
+
+    #[tokio::test]
+    async fn hf_claude_empty_string_returns_zero_or_small() {
+        let counter = HuggingFaceCounter;
+        let tokens = counter.count_tokens("").await.unwrap();
+        assert!(tokens <= 1, "Empty string should produce 0 or at most 1 token, got {tokens}");
+    }
+
+    #[test]
+    fn hf_claude_counter_name() {
+        let counter = HuggingFaceCounter;
+        assert_eq!(counter.counter_name(), "hf-claude");
+    }
+
+    // --- count_with_fallback tests (Plan 02) ---
+
+    #[tokio::test]
+    async fn count_with_fallback_uses_primary_on_success() {
+        let counter = HeuristicCounter::default();
+        let result = count_with_fallback(&counter, "Hello, world!").await;
+        assert!(result > 0);
+    }
+
+    #[tokio::test]
+    async fn count_with_fallback_degrades_to_heuristic_on_error() {
+        // Create a counter that always fails
+        struct FailingCounter;
+
+        #[async_trait]
+        impl TokenCounter for FailingCounter {
+            async fn count_tokens(&self, _text: &str) -> Result<usize, BlufioError> {
+                Err(BlufioError::Internal("intentional failure".into()))
+            }
+            fn counter_name(&self) -> &str {
+                "failing"
+            }
+        }
+
+        let counter = FailingCounter;
+        let result = count_with_fallback(&counter, "Hello, world!").await;
+        // Should fall back to heuristic -- 13 chars / 3.5 = ceil(3.71) = 4
+        assert!(result > 0, "Fallback should produce a positive count");
     }
 }
