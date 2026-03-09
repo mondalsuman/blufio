@@ -119,6 +119,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         match blufio_vault::vault_startup_check(vault_conn, &config.vault).await {
             Ok(Some(_vault)) => {
                 info!("vault unlocked -- secrets available");
+                #[cfg(unix)]
                 blufio_agent::sdnotify::notify_status("Initializing: vault unlocked");
             }
             Ok(None) => {
@@ -373,6 +374,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                     ) = &event
                     {
                         let status = format!("Degradation: L{} {}", to_level, to_name);
+                        #[cfg(unix)]
                         blufio_agent::sdnotify::notify_status(&status);
 
                         // Record Prometheus degradation level.
@@ -997,6 +999,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 ""
             }
         );
+        #[cfg(unix)]
         blufio_agent::sdnotify::notify_ready(&ready_status);
     }
 
@@ -1287,6 +1290,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     }
 
     // Spawn sd_notify watchdog ping task (if systemd watchdog is enabled).
+    #[cfg(unix)]
     {
         let wd_cancel = cancel.clone();
         let _watchdog_handle = blufio_agent::sdnotify::spawn_watchdog(wd_cancel);
@@ -1459,6 +1463,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 drain_timeout_secs = drain_secs,
                 "resilience L5 safe shutdown triggered -- stopping agent"
             );
+            #[cfg(unix)]
             blufio_agent::sdnotify::notify_stopping("L5 SafeShutdown: draining in-flight requests");
             // Give in-flight requests time to complete before cancelling main loop.
             tokio::time::sleep(Duration::from_secs(drain_secs)).await;

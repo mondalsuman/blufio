@@ -14,6 +14,7 @@ pub mod channel_mux;
 pub mod context;
 pub mod delegation;
 pub mod heartbeat;
+#[cfg(unix)]
 pub mod sdnotify;
 pub mod session;
 pub mod shutdown;
