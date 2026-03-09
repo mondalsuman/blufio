@@ -127,6 +127,10 @@ pub struct BlufioConfig {
     /// Node system configuration for paired device mesh.
     #[serde(default)]
     pub node: NodeConfig,
+
+    /// Performance tuning settings.
+    #[serde(default)]
+    pub performance: PerformanceConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -1606,6 +1610,32 @@ impl Default for NodeApprovalConfig {
 
 fn default_node_approval_timeout() -> u64 {
     300
+}
+
+// --- Performance tuning configuration ---
+
+/// Performance tuning configuration.
+///
+/// Controls tokenizer accuracy/speed tradeoff. Set at startup, not switchable at runtime.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PerformanceConfig {
+    /// Tokenizer mode: "accurate" uses real tokenizers, "fast" uses len/3.5 heuristic.
+    /// Set at startup, not switchable at runtime.
+    #[serde(default = "default_tokenizer_mode")]
+    pub tokenizer_mode: String,
+}
+
+impl Default for PerformanceConfig {
+    fn default() -> Self {
+        Self {
+            tokenizer_mode: default_tokenizer_mode(),
+        }
+    }
+}
+
+fn default_tokenizer_mode() -> String {
+    "accurate".to_string()
 }
 
 #[cfg(test)]
