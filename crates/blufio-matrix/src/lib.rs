@@ -23,6 +23,7 @@ use matrix_sdk::{
     ruma::events::room::message::RoomMessageEventContent,
     ruma::{OwnedRoomId, RoomId},
 };
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
@@ -247,13 +248,31 @@ impl ChannelAdapter for MatrixChannel {
                 source: None,
             })?;
 
-        let content = RoomMessageEventContent::text_plain(&msg.content);
-        let response = room
-            .send(content)
-            .await
-            .map_err(|e| BlufioError::channel_delivery_failed("matrix", e))?;
+        let caps = self.capabilities();
 
-        Ok(MessageId(response.event_id.to_string()))
+        // Pipeline: detect_and_format -> no additional escape (HTML is native) -> split -> send
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+        let chunks = split_at_paragraphs(&formatted, caps.max_message_length);
+
+        let mut first_id = None;
+
+        for chunk in &chunks {
+            // Send as HTML when FormatPipeline produces HTML, plain text otherwise
+            let content = if chunk.contains('<') && chunk.contains('>') {
+                RoomMessageEventContent::text_html(chunk, chunk)
+            } else {
+                RoomMessageEventContent::text_plain(chunk)
+            };
+            let response = room
+                .send(content)
+                .await
+                .map_err(|e| BlufioError::channel_delivery_failed("matrix", e))?;
+            if first_id.is_none() {
+                first_id = Some(MessageId(response.event_id.to_string()));
+            }
+        }
+
+        Ok(first_id.unwrap_or_else(|| MessageId(String::new())))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
@@ -295,10 +314,19 @@ impl ChannelAdapter for MatrixChannel {
                 source: None,
             })?;
 
+        // Pipeline: detect_and_format -> no additional escape -> send (no split for edits)
+        let caps = self.capabilities();
+        let formatted = FormatPipeline::detect_and_format(text, &caps);
+
         // Matrix supports editing via replacement events.
         // For simplicity, we send a new message with the edit prefix.
         // Full replacement event support requires the original event ID.
-        let content = RoomMessageEventContent::text_plain(format!("(edited) {text}"));
+        let content = if formatted.contains('<') && formatted.contains('>') {
+            let html = format!("(edited) {formatted}");
+            RoomMessageEventContent::text_html(&html, &html)
+        } else {
+            RoomMessageEventContent::text_plain(format!("(edited) {formatted}"))
+        };
         room.send(content)
             .await
             .map_err(|e| BlufioError::channel_delivery_failed("matrix", e))?;

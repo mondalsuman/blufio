@@ -24,6 +24,7 @@ use blufio_core::types::{
     OutboundMessage, RateLimit, StreamingType,
 };
 use slack_morphism::prelude::*;
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -264,27 +265,40 @@ impl ChannelAdapter for SlackChannel {
             .ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
 
         let channel_id = extract_channel_id(&msg)?;
-        let formatted = markdown::markdown_to_mrkdwn(&msg.content);
+        let caps = self.capabilities();
 
-        let session = client.open_session(token);
-        let req = SlackApiChatPostMessageRequest::new(
-            channel_id,
-            SlackMessageContent::new().with_text(formatted),
-        );
+        // Pipeline: detect_and_format -> adapter_escape -> split -> send each chunk
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+        let escaped = markdown::markdown_to_mrkdwn(&formatted);
+        let chunks = split_at_paragraphs(&escaped, caps.max_message_length);
 
-        let resp = session
-            .chat_post_message(&req)
-            .await
-            .map_err(|_e| BlufioError::Channel {
-                kind: ChannelErrorKind::DeliveryFailed,
-                context: ErrorContext {
-                    channel_name: Some("slack".to_string()),
-                    ..Default::default()
-                },
-                source: None,
-            })?;
+        let mut first_id = None;
 
-        Ok(MessageId(resp.ts.to_string()))
+        for chunk in &chunks {
+            let session = client.open_session(token);
+            let req = SlackApiChatPostMessageRequest::new(
+                channel_id.clone(),
+                SlackMessageContent::new().with_text(chunk.clone()),
+            );
+
+            let resp = session
+                .chat_post_message(&req)
+                .await
+                .map_err(|_e| BlufioError::Channel {
+                    kind: ChannelErrorKind::DeliveryFailed,
+                    context: ErrorContext {
+                        channel_name: Some("slack".to_string()),
+                        ..Default::default()
+                    },
+                    source: None,
+                })?;
+
+            if first_id.is_none() {
+                first_id = Some(MessageId(resp.ts.to_string()));
+            }
+        }
+
+        Ok(first_id.unwrap_or_else(|| MessageId(String::new())))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
@@ -312,12 +326,14 @@ impl ChannelAdapter for SlackChannel {
 
         let channel_id = SlackChannelId::new(chat_id.to_string());
         let ts: SlackTs = message_id.to_string().into();
-        let formatted = markdown::markdown_to_mrkdwn(text);
+        let caps = self.capabilities();
+        let formatted = FormatPipeline::detect_and_format(text, &caps);
+        let escaped = markdown::markdown_to_mrkdwn(&formatted);
 
         let session = client.open_session(token);
         let req = SlackApiChatUpdateRequest::new(
             channel_id,
-            SlackMessageContent::new().with_text(formatted),
+            SlackMessageContent::new().with_text(escaped),
             ts,
         );
 
