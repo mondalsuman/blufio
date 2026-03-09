@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Quality & Resilience
-status: active
-stopped_at: Defining requirements
-last_updated: "2026-03-08T23:00:00.000Z"
-last_activity: 2026-03-08 -- Milestone v1.4 started
+status: executing
+stopped_at: Completed 46-01-PLAN.md
+last_updated: "2026-03-09T08:19:36Z"
+last_activity: 2026-03-09 -- Phase 46 Plan 01 executed (core types & error hierarchy)
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 4
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -21,14 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.4 Quality & Resilience
+**Current focus:** v1.4 Quality & Resilience -- Phase 46 (Core Types & Error Hierarchy)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-08 — Milestone v1.4 started
+Phase: 46 of 50 (Core Types & Error Hierarchy) -- 1 of 5 in v1.4
+Plan: 1 of 4 complete
+Status: Executing
+Last activity: 2026-03-09 -- Phase 46 Plan 01 executed (core types & error hierarchy)
+
+Progress: [##░░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -58,13 +60,22 @@ Last activity: 2026-03-08 — Milestone v1.4 started
 
 All decisions logged in PROJECT.md Key Decisions table.
 
+Recent decisions affecting current work:
+- v1.4: tiktoken-rs for OpenAI counting, HuggingFace tokenizers for Claude counting (research validated)
+- v1.4: Custom circuit breaker (~200 LOC) over crate dependencies (failsafe/tower incompatible with dyn dispatch)
+- v1.4: ORT stays pinned at rc.11 -- no stable 2.0.0 yet, ADR to document
+- 46-01: user_message() returns Cow<'static, str> for zero-allocation static messages
+- 46-01: ChannelCapabilities derives Default for ergonomic ..Default::default() usage
+- 46-01: Deprecated fallback constructors map to sensible default sub-enum kinds
+
 ### Pending Todos
 
 None.
 
 ### Blockers/Concerns
 
-None.
+- Claude tokenizer accuracy: Xenova/claude-tokenizer is community artifact (~80-95% accuracy for Claude 3+). Monitor and calibrate.
+- tiktoken-rs binary size: Embeds BPE vocabulary data. Measure impact against <50MB binary constraint.
 
 ### Quick Tasks Completed
 
@@ -74,5 +85,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-08
-Stopped at: Milestone v1.4 started — defining requirements
+Last session: 2026-03-09T08:19:36Z
+Stopped at: Completed 46-01-PLAN.md
+Resume file: .planning/phases/46-core-types-error-hierarchy/46-02-PLAN.md
