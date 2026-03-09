@@ -71,6 +71,12 @@ pub struct AgentLoop {
     event_bus: Option<Arc<blufio_bus::EventBus>>,
     config: BlufioConfig,
     sessions: HashMap<String, SessionActor>,
+    /// Circuit breaker registry for resilience integration.
+    circuit_breaker_registry: Option<Arc<blufio_resilience::CircuitBreakerRegistry>>,
+    /// Degradation manager for resilience level checks.
+    degradation_manager: Option<Arc<blufio_resilience::DegradationManager>>,
+    /// Name of the primary provider (for circuit breaker lookups).
+    provider_name: String,
 }
 
 impl AgentLoop {
@@ -111,12 +117,33 @@ impl AgentLoop {
             event_bus: None,
             config,
             sessions: HashMap::new(),
+            circuit_breaker_registry: None,
+            degradation_manager: None,
+            provider_name: "anthropic".to_string(),
         })
     }
 
     /// Sets the EventBus for publishing channel lifecycle events.
     pub fn set_event_bus(&mut self, bus: Arc<blufio_bus::EventBus>) {
         self.event_bus = Some(bus);
+    }
+
+    /// Sets the circuit breaker registry for resilience integration.
+    pub fn set_circuit_breaker_registry(
+        &mut self,
+        registry: Arc<blufio_resilience::CircuitBreakerRegistry>,
+    ) {
+        self.circuit_breaker_registry = Some(registry);
+    }
+
+    /// Sets the degradation manager for resilience level checks.
+    pub fn set_degradation_manager(&mut self, dm: Arc<blufio_resilience::DegradationManager>) {
+        self.degradation_manager = Some(dm);
+    }
+
+    /// Sets the primary provider name for circuit breaker lookups.
+    pub fn set_provider_name(&mut self, name: String) {
+        self.provider_name = name;
     }
 
     /// Runs the main agent loop until the cancellation token is triggered.
@@ -622,6 +649,9 @@ impl AgentLoop {
                     routing_enabled: self.config.routing.enabled,
                     idle_timeout_secs: self.config.memory.idle_timeout_secs,
                     tool_registry: self.tool_registry.clone(),
+                    circuit_breaker_registry: self.circuit_breaker_registry.clone(),
+                    degradation_manager: self.degradation_manager.clone(),
+                    provider_name: self.provider_name.clone(),
                 });
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
@@ -670,6 +700,9 @@ impl AgentLoop {
             routing_enabled: self.config.routing.enabled,
             idle_timeout_secs: self.config.memory.idle_timeout_secs,
             tool_registry: self.tool_registry.clone(),
+            circuit_breaker_registry: self.circuit_breaker_registry.clone(),
+            degradation_manager: self.degradation_manager.clone(),
+            provider_name: self.provider_name.clone(),
         });
         self.sessions.insert(session_key, actor);
         #[cfg(feature = "prometheus")]

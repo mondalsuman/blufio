@@ -1260,6 +1260,15 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // Wire EventBus into AgentLoop for publishing MessageSent events.
     agent_loop.set_event_bus(event_bus.clone());
 
+    // Wire resilience subsystem into AgentLoop for SessionActor circuit breaker integration.
+    if let Some(ref registry) = resilience_registry {
+        agent_loop.set_circuit_breaker_registry(registry.clone());
+    }
+    if let Some(ref dm) = resilience_manager {
+        agent_loop.set_degradation_manager(dm.clone());
+    }
+    agent_loop.set_provider_name("anthropic".to_string());
+
     // Log integration status summary.
     {
         let security_status = "OK (TLS 1.2+ / SSRF protection)";

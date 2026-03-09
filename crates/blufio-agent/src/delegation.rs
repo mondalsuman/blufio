@@ -185,6 +185,9 @@ impl DelegationRouter {
             routing_enabled: false,   // routing disabled for specialists
             idle_timeout_secs: 300,   // idle timeout (irrelevant for ephemeral)
             tool_registry,
+            circuit_breaker_registry: None, // resilience not wired for delegated actors
+            degradation_manager: None,
+            provider_name: "anthropic".to_string(),
         });
 
         // 5. Build inbound message from the delegation request

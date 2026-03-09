@@ -669,6 +669,7 @@ dependencies = [
  "blufio-cost",
  "blufio-memory",
  "blufio-prometheus",
+ "blufio-resilience",
  "blufio-router",
  "blufio-skill",
  "blufio-storage",

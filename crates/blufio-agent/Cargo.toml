@@ -17,6 +17,7 @@ blufio-context = { path = "../blufio-context" }
 blufio-cost = { path = "../blufio-cost" }
 blufio-memory = { path = "../blufio-memory" }
 blufio-router = { path = "../blufio-router" }
+blufio-resilience = { path = "../blufio-resilience" }
 blufio-skill = { path = "../blufio-skill" }
 async-trait.workspace = true
 semver.workspace = true

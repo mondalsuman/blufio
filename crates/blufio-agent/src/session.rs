@@ -24,6 +24,7 @@ use blufio_cost::CostLedger;
 use blufio_cost::ledger::{CostRecord, FeatureType};
 use blufio_cost::pricing;
 use blufio_memory::{MemoryExtractor, MemoryProvider};
+use blufio_resilience::{CircuitBreakerRegistry, DegradationLevel, DegradationManager};
 use blufio_router::{ModelRouter, RoutingDecision};
 use blufio_skill::{ToolOutput, ToolRegistry};
 use futures::Stream;
@@ -100,6 +101,12 @@ pub struct SessionActorConfig {
     pub idle_timeout_secs: u64,
     /// Registry of available tools (built-in and WASM skills).
     pub tool_registry: Arc<RwLock<ToolRegistry>>,
+    /// Circuit breaker registry for checking/recording external call results.
+    pub circuit_breaker_registry: Option<Arc<CircuitBreakerRegistry>>,
+    /// Degradation manager for checking current degradation level.
+    pub degradation_manager: Option<Arc<DegradationManager>>,
+    /// Name of the primary provider for circuit breaker lookups.
+    pub provider_name: String,
 }
 
 /// Manages the state and message processing for a single conversation session.
@@ -144,6 +151,14 @@ pub struct SessionActor {
     tool_registry: Arc<RwLock<ToolRegistry>>,
     /// Maximum number of tool call iterations per message.
     max_tool_iterations: usize,
+    /// Circuit breaker registry for checking/recording external call results.
+    circuit_breaker_registry: Option<Arc<CircuitBreakerRegistry>>,
+    /// Degradation manager for checking current degradation level.
+    degradation_manager: Option<Arc<DegradationManager>>,
+    /// Name of the primary provider for circuit breaker lookups.
+    provider_name: String,
+    /// Whether the last provider call was a fallback.
+    last_call_was_fallback: bool,
 }
 
 impl SessionActor {
@@ -169,6 +184,10 @@ impl SessionActor {
             idle_timeout: Duration::from_secs(config.idle_timeout_secs),
             tool_registry: config.tool_registry,
             max_tool_iterations: MAX_TOOL_ITERATIONS,
+            circuit_breaker_registry: config.circuit_breaker_registry,
+            degradation_manager: config.degradation_manager,
+            provider_name: config.provider_name,
+            last_call_was_fallback: false,
         }
     }
 
@@ -375,8 +394,107 @@ impl SessionActor {
             );
         }
 
+        // Check degradation level for L4+ canned response.
+        if let Some(ref dm) = self.degradation_manager {
+            let level = dm.current_level();
+            if level.as_u8() >= DegradationLevel::Emergency.as_u8() {
+                warn!(
+                    session_id = %self.session_id,
+                    level = %level,
+                    "L4+ emergency: returning canned response"
+                );
+                self.state = SessionState::Responding;
+                let canned = "I'm temporarily unavailable. Please try again later.";
+                let canned_stream: Pin<Box<dyn Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>> =
+                    Box::pin(futures::stream::once(async {
+                        Ok(ProviderStreamChunk {
+                            event_type: blufio_core::types::StreamEventType::ContentBlockDelta,
+                            text: Some(canned.to_string()),
+                            usage: None,
+                            tool_use: None,
+                            stop_reason: Some("end_turn".to_string()),
+                            error: None,
+                        })
+                    }));
+                return Ok(canned_stream);
+            }
+        }
+
+        // Check circuit breaker before provider call (if resilience enabled).
+        if let Some(ref registry) = self.circuit_breaker_registry {
+            if let Err(e) = registry.check(&self.provider_name) {
+                warn!(
+                    session_id = %self.session_id,
+                    provider = %self.provider_name,
+                    "circuit breaker open, provider call blocked: {}",
+                    e
+                );
+                return Err(e);
+            }
+        }
+
         // Stream from provider using the assembled request.
-        let stream = self.provider.stream(assembled.request).await?;
+        let stream_result = self.provider.stream(assembled.request).await;
+
+        // Record result in circuit breaker (if resilience enabled).
+        match &stream_result {
+            Ok(_) => {
+                if let Some(ref registry) = self.circuit_breaker_registry {
+                    if let Some(transition) = registry.record_result(&self.provider_name, true) {
+                        info!(
+                            session_id = %self.session_id,
+                            provider = %self.provider_name,
+                            from = %transition.from_state,
+                            to = %transition.to_state,
+                            "circuit breaker state transition"
+                        );
+                        #[cfg(feature = "prometheus")]
+                        {
+                            blufio_prometheus::recording::record_circuit_breaker_state(
+                                &self.provider_name,
+                                transition.to_state.as_numeric(),
+                            );
+                            blufio_prometheus::recording::record_circuit_breaker_transition(
+                                &self.provider_name,
+                                transition.from_state.as_str(),
+                                transition.to_state.as_str(),
+                            );
+                        }
+                    }
+                }
+                self.last_call_was_fallback = false;
+            }
+            Err(e) => {
+                if let Some(ref registry) = self.circuit_breaker_registry {
+                    // Only count as failure if error trips the circuit breaker.
+                    let trips = e.trips_circuit_breaker();
+                    if let Some(transition) = registry.record_result(&self.provider_name, !trips) {
+                        warn!(
+                            session_id = %self.session_id,
+                            provider = %self.provider_name,
+                            from = %transition.from_state,
+                            to = %transition.to_state,
+                            error = %e,
+                            "circuit breaker state transition on error"
+                        );
+                        #[cfg(feature = "prometheus")]
+                        {
+                            blufio_prometheus::recording::record_circuit_breaker_state(
+                                &self.provider_name,
+                                transition.to_state.as_numeric(),
+                            );
+                            blufio_prometheus::recording::record_circuit_breaker_transition(
+                                &self.provider_name,
+                                transition.from_state.as_str(),
+                                transition.to_state.as_str(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let stream = stream_result?;
 
         // Transition: Processing -> Responding
         self.state = SessionState::Responding;
@@ -427,6 +545,9 @@ impl SessionActor {
             );
             if let Some(intended) = intended_model {
                 record = record.with_intended_model(intended);
+            }
+            if self.last_call_was_fallback {
+                record = record.with_fallback(true);
             }
 
             self.cost_ledger.record(&record).await?;
