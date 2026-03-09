@@ -31,8 +31,8 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 - [x] **DEG-02**: DegradationManager tracks current level and auto-escalates based on circuit breaker state changes
 - [x] **DEG-03**: De-escalation uses hysteresis timer — level drops only after sustained recovery period
 - [x] **DEG-04**: Degradation state changes published to EventBus and visible via `/v1/health` API
-- [ ] **DEG-05**: User-facing degradation messages delivered to primary channel at each level transition
-- [ ] **DEG-06**: Configurable fallback provider via `[resilience.fallback_provider]` activated at L2+
+- [x] **DEG-05**: User-facing degradation messages delivered to primary channel at each level transition
+- [x] **DEG-06**: Configurable fallback provider via `[resilience.fallback_provider]` activated at L2+
 
 ### Token Counting
 
@@ -137,8 +137,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEG-02 | Phase 48 | Complete |
 | DEG-03 | Phase 48 | Complete |
 | DEG-04 | Phase 48 | Complete |
-| DEG-05 | Phase 48 | Pending |
-| DEG-06 | Phase 48 | Pending |
+| DEG-05 | Phase 48 | Complete |
+| DEG-06 | Phase 48 | Complete |
 | FMT-04 | Phase 49 | Pending |
 | FMT-05 | Phase 49 | Pending |
 | FMT-06 | Phase 49 | Pending |
