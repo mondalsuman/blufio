@@ -77,8 +77,7 @@ impl Tool for HttpTool {
             .ok_or_else(|| BlufioError::skill_execution_msg("missing required 'url' parameter"))?;
 
         // Validate URL scheme (http/https only).
-        let parsed_url =
-            reqwest::Url::parse(url).map_err(|e| BlufioError::skill_execution_failed(e))?;
+        let parsed_url = reqwest::Url::parse(url).map_err(BlufioError::skill_execution_failed)?;
 
         let scheme = parsed_url.scheme();
         if scheme != "http" && scheme != "https" {
@@ -101,7 +100,7 @@ impl Tool for HttpTool {
         let method_str = input["method"].as_str().unwrap_or("GET");
         let method = method_str
             .parse::<reqwest::Method>()
-            .map_err(|e| BlufioError::skill_execution_failed(e))?;
+            .map_err(BlufioError::skill_execution_failed)?;
 
         let mut request_builder = self.client.request(method, url);
 
@@ -122,13 +121,13 @@ impl Tool for HttpTool {
         let response = request_builder
             .send()
             .await
-            .map_err(|e| BlufioError::skill_execution_failed(e))?;
+            .map_err(BlufioError::skill_execution_failed)?;
 
         let status = response.status();
         let body = response
             .text()
             .await
-            .map_err(|e| BlufioError::skill_execution_failed(e))?;
+            .map_err(BlufioError::skill_execution_failed)?;
 
         // Truncate response body if too large.
         let truncated = if body.len() > MAX_RESPONSE_SIZE {

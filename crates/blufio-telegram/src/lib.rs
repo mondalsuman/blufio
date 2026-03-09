@@ -237,7 +237,7 @@ impl ChannelAdapter for TelegramChannel {
         let chat_id = chat_id
             .parse::<i64>()
             .map(ChatId)
-            .map_err(|e| BlufioError::Channel {
+            .map_err(|_e| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
                 context: ErrorContext {
                     channel_name: Some("telegram".to_string()),
@@ -249,7 +249,7 @@ impl ChannelAdapter for TelegramChannel {
         let msg_id = message_id
             .parse::<i32>()
             .map(teloxide::types::MessageId)
-            .map_err(|e| BlufioError::Channel {
+            .map_err(|_e| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
                 context: ErrorContext {
                     channel_name: Some("telegram".to_string()),
@@ -300,7 +300,7 @@ impl ChannelAdapter for TelegramChannel {
         let chat_id = chat_id
             .parse::<i64>()
             .map(ChatId)
-            .map_err(|e| BlufioError::Channel {
+            .map_err(|_e| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
                 context: ErrorContext {
                     channel_name: Some("telegram".to_string()),
@@ -327,7 +327,7 @@ fn extract_chat_id(msg: &OutboundMessage) -> Result<ChatId, BlufioError> {
     {
         let id = chat_id_str
             .parse::<i64>()
-            .map_err(|e| BlufioError::Channel {
+            .map_err(|_e| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
                 context: ErrorContext {
                     channel_name: Some("telegram".to_string()),

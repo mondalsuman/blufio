@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use blufio_config::model::SignalConfig;
-use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
+use blufio_core::error::BlufioError;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, warn};
 

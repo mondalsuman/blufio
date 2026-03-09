@@ -63,7 +63,7 @@ impl Tool for FileTool {
             "read" => {
                 let contents = tokio::fs::read_to_string(path)
                     .await
-                    .map_err(|e| BlufioError::skill_execution_failed(e))?;
+                    .map_err(BlufioError::skill_execution_failed)?;
 
                 // Truncate if too large.
                 let output = if contents.len() > MAX_READ_SIZE {
@@ -91,7 +91,7 @@ impl Tool for FileTool {
 
                 tokio::fs::write(path, content)
                     .await
-                    .map_err(|e| BlufioError::skill_execution_failed(e))?;
+                    .map_err(BlufioError::skill_execution_failed)?;
 
                 Ok(ToolOutput {
                     content: format!("Successfully wrote {} bytes to '{path}'", content.len()),

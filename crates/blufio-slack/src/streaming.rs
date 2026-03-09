@@ -36,7 +36,7 @@ impl StreamingEditorOps for SlackStreamOps {
             SlackMessageContent::new().with_text(formatted),
         );
 
-        let resp = session.chat_post_message(&req).await.map_err(|e| {
+        let resp = session.chat_post_message(&req).await.map_err(|_e| {
             use blufio_core::error::{ChannelErrorKind, ErrorContext};
             BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
@@ -64,7 +64,7 @@ impl StreamingEditorOps for SlackStreamOps {
             ts,
         );
 
-        session.chat_update(&req).await.map_err(|e| {
+        session.chat_update(&req).await.map_err(|_e| {
             use blufio_core::error::{ChannelErrorKind, ErrorContext};
             BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,

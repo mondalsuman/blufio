@@ -168,7 +168,7 @@ impl ChannelAdapter for SlackChannel {
 
         // Create Slack client.
         let client = Arc::new(SlackClient::new(SlackClientHyperConnector::new().map_err(
-            |e| BlufioError::Channel {
+            |_e| BlufioError::Channel {
                 kind: ChannelErrorKind::ConnectionLost,
                 context: ErrorContext {
                     channel_name: Some("slack".to_string()),
@@ -189,7 +189,7 @@ impl ChannelAdapter for SlackChannel {
                     info!(bot_user_id = %user_id, "Slack auth.test succeeded");
                     self.bot_user_id = Some(user_id);
                 }
-                Err(e) => {
+                Err(_e) => {
                     return Err(BlufioError::Channel {
                         kind: ChannelErrorKind::ConnectionLost,
                         context: ErrorContext {
@@ -236,7 +236,7 @@ impl ChannelAdapter for SlackChannel {
         socket_mode_listener
             .listen_for(&app_token)
             .await
-            .map_err(|e| BlufioError::Channel {
+            .map_err(|_e| BlufioError::Channel {
                 kind: ChannelErrorKind::ConnectionLost,
                 context: ErrorContext {
                     channel_name: Some("slack".to_string()),
@@ -275,7 +275,7 @@ impl ChannelAdapter for SlackChannel {
         let resp = session
             .chat_post_message(&req)
             .await
-            .map_err(|e| BlufioError::Channel {
+            .map_err(|_e| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
                 context: ErrorContext {
                     channel_name: Some("slack".to_string()),
@@ -324,7 +324,7 @@ impl ChannelAdapter for SlackChannel {
         session
             .chat_update(&req)
             .await
-            .map_err(|e| BlufioError::Channel {
+            .map_err(|_e| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
                 context: ErrorContext {
                     channel_name: Some("slack".to_string()),

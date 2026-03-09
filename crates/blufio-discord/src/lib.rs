@@ -286,7 +286,7 @@ impl ChannelAdapter for DiscordChannel {
             .as_ref()
             .ok_or_else(|| BlufioError::channel_connection_lost("discord"))?;
 
-        let channel_id: u64 = chat_id.parse().map_err(|e| BlufioError::Channel {
+        let channel_id: u64 = chat_id.parse().map_err(|_e| BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
             context: ErrorContext {
                 channel_name: Some("discord".to_string()),
@@ -296,7 +296,7 @@ impl ChannelAdapter for DiscordChannel {
         })?;
         let channel_id = ChannelId::new(channel_id);
 
-        let msg_id: u64 = message_id.parse().map_err(|e| BlufioError::Channel {
+        let msg_id: u64 = message_id.parse().map_err(|_e| BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
             context: ErrorContext {
                 channel_name: Some("discord".to_string()),
@@ -322,7 +322,7 @@ impl ChannelAdapter for DiscordChannel {
             .as_ref()
             .ok_or_else(|| BlufioError::channel_connection_lost("discord"))?;
 
-        let channel_id: u64 = chat_id.parse().map_err(|e| BlufioError::Channel {
+        let channel_id: u64 = chat_id.parse().map_err(|_e| BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
             context: ErrorContext {
                 channel_name: Some("discord".to_string()),
@@ -350,7 +350,7 @@ fn extract_channel_id(msg: &OutboundMessage) -> Result<ChannelId, BlufioError> {
     {
         let id = chat_id_str
             .parse::<u64>()
-            .map_err(|e| BlufioError::Channel {
+            .map_err(|_e| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
                 context: ErrorContext {
                     channel_name: Some("discord".to_string()),

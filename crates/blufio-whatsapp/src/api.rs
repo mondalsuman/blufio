@@ -35,8 +35,8 @@ pub async fn send_whatsapp_message(
         .map_err(|e| BlufioError::channel_delivery_failed("whatsapp", e))?;
 
     if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
+        let _status = resp.status();
+        let _body = resp.text().await.unwrap_or_default();
         return Err(BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
             context: ErrorContext {

@@ -47,7 +47,7 @@ impl Tool for BashTool {
             .arg(command)
             .output()
             .await
-            .map_err(|e| BlufioError::skill_execution_failed(e))?;
+            .map_err(BlufioError::skill_execution_failed)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

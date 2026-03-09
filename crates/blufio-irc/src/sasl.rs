@@ -8,7 +8,7 @@
 //! authenticates before the connection is fully registered.
 
 use base64::Engine;
-use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
+use blufio_core::error::BlufioError;
 use irc::proto::Command;
 use tracing::debug;
 

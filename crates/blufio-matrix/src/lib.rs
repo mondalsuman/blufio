@@ -227,7 +227,7 @@ impl ChannelAdapter for MatrixChannel {
             msg.channel.clone()
         };
 
-        let room_id: OwnedRoomId = room_id_str.parse().map_err(|e| BlufioError::Channel {
+        let room_id: OwnedRoomId = room_id_str.parse().map_err(|_e| BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
             context: ErrorContext {
                 channel_name: Some("matrix".to_string()),
@@ -275,7 +275,7 @@ impl ChannelAdapter for MatrixChannel {
             .as_ref()
             .ok_or_else(|| BlufioError::channel_connection_lost("matrix"))?;
 
-        let room_id: OwnedRoomId = chat_id.parse().map_err(|e| BlufioError::Channel {
+        let room_id: OwnedRoomId = chat_id.parse().map_err(|_e| BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
             context: ErrorContext {
                 channel_name: Some("matrix".to_string()),

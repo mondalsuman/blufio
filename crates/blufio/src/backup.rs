@@ -35,11 +35,11 @@ pub fn run_integrity_check(path: &Path) -> Result<(), BlufioError> {
 
     let mut stmt = conn
         .prepare("PRAGMA integrity_check(1)")
-        .map_err(|e| BlufioError::storage_connection_failed(e))?;
+        .map_err(BlufioError::storage_connection_failed)?;
 
     let rows: Vec<String> = stmt
         .query_map([], |row| row.get(0))
-        .map_err(|e| BlufioError::storage_connection_failed(e))?
+        .map_err(BlufioError::storage_connection_failed)?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -77,13 +77,13 @@ pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
         blufio_storage::open_connection_sync(backup_path, rusqlite::OpenFlags::default())?;
 
     let backup = rusqlite::backup::Backup::new(&src, &mut dst)
-        .map_err(|e| BlufioError::storage_connection_failed(e))?;
+        .map_err(BlufioError::storage_connection_failed)?;
 
     // Copy 100 pages per step, sleep 10ms between steps.
     // This allows the running instance to continue writing.
     backup
         .run_to_completion(100, Duration::from_millis(10), None)
-        .map_err(|e| BlufioError::storage_connection_failed(e))?;
+        .map_err(BlufioError::storage_connection_failed)?;
 
     // Drop connections before integrity check to release file locks.
     drop(backup);
@@ -100,7 +100,7 @@ pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
 
     // Report file size with integrity and encryption status.
     let metadata =
-        std::fs::metadata(backup_path).map_err(|e| BlufioError::storage_connection_failed(e))?;
+        std::fs::metadata(backup_path).map_err(BlufioError::storage_connection_failed)?;
     let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
     let encrypted = std::env::var("BLUFIO_DB_KEY").is_ok();
     let enc_status = if encrypted { "enabled" } else { "none" };
@@ -154,11 +154,11 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
     let mut dst = blufio_storage::open_connection_sync(db_path, rusqlite::OpenFlags::default())?;
 
     let backup = rusqlite::backup::Backup::new(&src, &mut dst)
-        .map_err(|e| BlufioError::storage_connection_failed(e))?;
+        .map_err(BlufioError::storage_connection_failed)?;
 
     backup
         .run_to_completion(100, Duration::from_millis(10), None)
-        .map_err(|e| BlufioError::storage_connection_failed(e))?;
+        .map_err(BlufioError::storage_connection_failed)?;
 
     // Drop connections before post-check to release file locks.
     drop(backup);
@@ -173,7 +173,7 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
         // Restore from .pre-restore if it exists.
         if Path::new(&pre_restore_path).exists() {
             std::fs::copy(&pre_restore_path, db_path)
-                .map_err(|copy_err| BlufioError::storage_connection_failed(copy_err))?;
+                .map_err(BlufioError::storage_connection_failed)?;
             eprintln!("Restore FAILED: {e}. Database rolled back to pre-restore state.");
         } else {
             eprintln!("Restore FAILED: {e}. Corrupt database removed.");
@@ -182,8 +182,7 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
         return Err(e);
     }
 
-    let metadata =
-        std::fs::metadata(db_path).map_err(|e| BlufioError::storage_connection_failed(e))?;
+    let metadata = std::fs::metadata(db_path).map_err(BlufioError::storage_connection_failed)?;
     let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
     let encrypted = std::env::var("BLUFIO_DB_KEY").is_ok();
     let enc_status = if encrypted { "enabled" } else { "none" };

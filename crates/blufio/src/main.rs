@@ -1084,12 +1084,12 @@ async fn handle_skill_command(
         } => {
             // Read and parse the manifest.
             let manifest_content = std::fs::read_to_string(&manifest_path)
-                .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                .map_err(blufio_core::BlufioError::skill_execution_failed)?;
             let manifest = blufio_skill::parse_manifest(&manifest_content)?;
 
             // Read the WASM file.
             let wasm_bytes = std::fs::read(&wasm_path)
-                .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                .map_err(blufio_core::BlufioError::skill_execution_failed)?;
 
             // Compute content hash.
             let content_hash = blufio_skill::compute_content_hash(&wasm_bytes);
@@ -1098,7 +1098,7 @@ async fn handle_skill_command(
             let sig_path = format!("{}.sig", wasm_path);
             let (signature, publisher_id) = if std::path::Path::new(&sig_path).exists() {
                 let sig_content = std::fs::read_to_string(&sig_path)
-                    .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                    .map_err(blufio_core::BlufioError::skill_execution_failed)?;
                 let (pub_id, sig_hash, sig_hex) = parse_sig_file(&sig_content)?;
 
                 // Verify the hash in .sig matches our computed hash.
@@ -1204,11 +1204,11 @@ async fn handle_skill_command(
             manifest_path,
         } => {
             let manifest_content = std::fs::read_to_string(&manifest_path)
-                .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                .map_err(blufio_core::BlufioError::skill_execution_failed)?;
             let manifest = blufio_skill::parse_manifest(&manifest_content)?;
 
             let wasm_bytes = std::fs::read(&wasm_path)
-                .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                .map_err(blufio_core::BlufioError::skill_execution_failed)?;
 
             let content_hash = blufio_skill::compute_content_hash(&wasm_bytes);
 
@@ -1216,7 +1216,7 @@ async fn handle_skill_command(
             let sig_path = format!("{}.sig", wasm_path);
             let (signature, publisher_id) = if std::path::Path::new(&sig_path).exists() {
                 let sig_content = std::fs::read_to_string(&sig_path)
-                    .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                    .map_err(blufio_core::BlufioError::skill_execution_failed)?;
                 let (pub_id, sig_hash, sig_hex) = parse_sig_file(&sig_content)?;
                 if sig_hash != content_hash {
                     return Err(blufio_core::BlufioError::Security(format!(
@@ -1281,7 +1281,7 @@ async fn handle_skill_command(
             private_key_path,
         } => {
             let wasm_bytes = std::fs::read(&wasm_path)
-                .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                .map_err(blufio_core::BlufioError::skill_execution_failed)?;
 
             let keypair =
                 blufio_skill::load_private_key_from_file(std::path::Path::new(&private_key_path))?;
@@ -1297,7 +1297,7 @@ async fn handle_skill_command(
                 publisher_id, content_hash, sig_hex
             );
             std::fs::write(&sig_path, &sig_content)
-                .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                .map_err(blufio_core::BlufioError::skill_execution_failed)?;
 
             eprintln!("Signed: {}", wasm_path);
             eprintln!("  Publisher: {}...", &publisher_id[..16]);
@@ -1333,7 +1333,7 @@ async fn handle_skill_command(
 
             // Read WASM file and verify hash.
             let wasm_bytes = std::fs::read(&skill.wasm_path)
-                .map_err(|e| blufio_core::BlufioError::skill_execution_failed(e))?;
+                .map_err(blufio_core::BlufioError::skill_execution_failed)?;
 
             let actual_hash = blufio_skill::compute_content_hash(&wasm_bytes);
 
