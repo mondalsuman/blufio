@@ -10,6 +10,7 @@
 pub mod error;
 pub mod format;
 pub mod streaming;
+pub mod token_counter;
 pub mod traits;
 pub mod types;
 
