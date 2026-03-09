@@ -2046,3 +2046,40 @@ trusted = true
         );
     }
 }
+
+#[cfg(test)]
+mod performance_config_tests {
+    use super::*;
+
+    #[test]
+    fn performance_config_defaults_tokenizer_mode_accurate() {
+        let config = PerformanceConfig::default();
+        assert_eq!(config.tokenizer_mode, "accurate");
+    }
+
+    #[test]
+    fn performance_config_deserializes_fast_mode() {
+        let toml_str = r#"
+[performance]
+tokenizer_mode = "fast"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.performance.tokenizer_mode, "fast");
+    }
+
+    #[test]
+    fn blufio_config_with_performance_section_parses() {
+        let toml_str = r#"
+[performance]
+tokenizer_mode = "accurate"
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.performance.tokenizer_mode, "accurate");
+    }
+
+    #[test]
+    fn blufio_config_without_performance_section_uses_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert_eq!(config.performance.tokenizer_mode, "accurate");
+    }
+}

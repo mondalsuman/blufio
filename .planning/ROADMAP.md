@@ -103,10 +103,10 @@
   5. FormatPipeline accepts Table and BulletList/OrderedList content and degrades them to aligned text or plain text for channels without native support
 **Plans:** 4/4 plans complete
 Plans:
-- [ ] 46-01-PLAN.md -- Core error types, sub-enums, classification methods, ErrorContext, ChannelCapabilities extension
-- [ ] 46-02-PLAN.md -- Provider crate migration (5 crates) to typed ProviderErrorKind
-- [ ] 46-03-PLAN.md -- Channel/storage/MCP/skill migration to typed sub-enums + extended capabilities
-- [ ] 46-04-PLAN.md -- FormatPipeline Table/List + error consumer updates + comprehensive tests
+- [x] 46-01-PLAN.md -- Core error types, sub-enums, classification methods, ErrorContext, ChannelCapabilities extension
+- [x] 46-02-PLAN.md -- Provider crate migration (5 crates) to typed ProviderErrorKind
+- [x] 46-03-PLAN.md -- Channel/storage/MCP/skill migration to typed sub-enums + extended capabilities
+- [x] 46-04-PLAN.md -- FormatPipeline Table/List + error consumer updates + comprehensive tests
 
 ### Phase 47: Accurate Token Counting
 **Goal**: Context engine counts tokens accurately for all supported LLM providers instead of estimating with len()/4
@@ -118,12 +118,11 @@ Plans:
   3. Ollama models use per-model tokenizer.json when available and a calibrated heuristic as fallback; Gemini uses calibrated heuristic; OpenRouter delegates to the underlying model's tokenizer
   4. Tokenizer instances are lazy-loaded, cached, and reused across calls -- not created per request
   5. Token counting runs via spawn_blocking so synchronous tokenizer.encode() never blocks tokio worker threads
-**Plans:** 4 plans
+**Plans:** 3 plans
 Plans:
-- [ ] 46-01-PLAN.md -- Core error types, sub-enums, classification methods, ErrorContext, ChannelCapabilities extension
-- [ ] 46-02-PLAN.md -- Provider crate migration (5 crates) to typed ProviderErrorKind
-- [ ] 46-03-PLAN.md -- Channel/storage/MCP/skill migration to typed sub-enums + extended capabilities
-- [ ] 46-04-PLAN.md -- FormatPipeline Table/List + error consumer updates + comprehensive tests
+- [ ] 47-01-PLAN.md -- TokenCounter trait, HeuristicCounter, TokenizerCache, PerformanceConfig, workspace deps, Claude vocabulary
+- [ ] 47-02-PLAN.md -- TiktokenCounter, HuggingFaceCounter, DelegatingCounter implementations with spawn_blocking
+- [ ] 47-03-PLAN.md -- DynamicZone + ContextEngine integration, all caller wiring, len()/4 removal
 
 ### Phase 48: Circuit Breaker & Degradation Ladder
 **Goal**: Every external dependency has an independent circuit breaker, and the system automatically degrades through 6 levels when dependencies fail
@@ -135,12 +134,7 @@ Plans:
   3. Circuit breaker thresholds (failure count, reset timeout, half-open probes) are configurable per dependency via TOML `[resilience.circuit_breakers.<name>]`
   4. DegradationManager tracks current level (L0-L5), auto-escalates based on circuit breaker state changes, and de-escalates only after sustained recovery (hysteresis)
   5. Degradation state is visible via `/v1/health` API, published to EventBus, and user-facing messages are delivered to the primary channel at each level transition
-**Plans:** 4 plans
-Plans:
-- [ ] 46-01-PLAN.md -- Core error types, sub-enums, classification methods, ErrorContext, ChannelCapabilities extension
-- [ ] 46-02-PLAN.md -- Provider crate migration (5 crates) to typed ProviderErrorKind
-- [ ] 46-03-PLAN.md -- Channel/storage/MCP/skill migration to typed sub-enums + extended capabilities
-- [ ] 46-04-PLAN.md -- FormatPipeline Table/List + error consumer updates + comprehensive tests
+**Plans:** [To be planned]
 
 ### Phase 49: FormatPipeline Integration
 **Goal**: Every channel adapter uses FormatPipeline to format outbound messages, with content splitting at paragraph boundaries and adapter-specific rendering applied after degradation
@@ -151,12 +145,7 @@ Plans:
   2. Messages exceeding a channel's max_message_length are split at paragraph boundaries, not mid-sentence
   3. Adapter-specific formatting (Telegram MarkdownV2, Slack mrkdwn, Discord Markdown, etc.) is applied after FormatPipeline degradation, not before
   4. All 8 channel adapters report accurate extended capability fields (streaming_type, formatting_support, rate_limit)
-**Plans:** 4 plans
-Plans:
-- [ ] 46-01-PLAN.md -- Core error types, sub-enums, classification methods, ErrorContext, ChannelCapabilities extension
-- [ ] 46-02-PLAN.md -- Provider crate migration (5 crates) to typed ProviderErrorKind
-- [ ] 46-03-PLAN.md -- Channel/storage/MCP/skill migration to typed sub-enums + extended capabilities
-- [ ] 46-04-PLAN.md -- FormatPipeline Table/List + error consumer updates + comprehensive tests
+**Plans:** [To be planned]
 
 ### Phase 50: ADRs & Documentation
 **Goal**: Architectural decisions for ORT RC pinning and plugin architecture are formally documented with rationale, trade-offs, and upgrade plans
@@ -165,12 +154,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. An ADR exists documenting why ORT is pinned at rc.11 over Candle, the trade-offs of each approach, and a concrete upgrade plan for when stable 2.0.0 lands
   2. An ADR exists documenting the Phase 1 compiled-in plugin architecture, why dynamic loading was deferred, and the migration path to libloading in the future
-**Plans:** 4 plans
-Plans:
-- [ ] 46-01-PLAN.md -- Core error types, sub-enums, classification methods, ErrorContext, ChannelCapabilities extension
-- [ ] 46-02-PLAN.md -- Provider crate migration (5 crates) to typed ProviderErrorKind
-- [ ] 46-03-PLAN.md -- Channel/storage/MCP/skill migration to typed sub-enums + extended capabilities
-- [ ] 46-04-PLAN.md -- FormatPipeline Table/List + error consumer updates + comprehensive tests
+**Plans:** [To be planned]
 
 ## Progress
 
@@ -225,12 +209,12 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 43. Wire EventBus Event Publishers | v1.3 | 1/1 | Complete | 2026-03-08 |
 | 44. Node Approval Wiring | v1.3 | 2/2 | Complete | 2026-03-08 |
 | 45. Documentation & Traceability Sync | v1.3 | 2/2 | Complete | 2026-03-08 |
-| 46. Core Types & Error Hierarchy | 4/4 | Complete   | 2026-03-09 | - |
-| 47. Accurate Token Counting | v1.4 | 0/? | Not started | - |
+| 46. Core Types & Error Hierarchy | v1.4 | 4/4 | Complete | 2026-03-09 |
+| 47. Accurate Token Counting | v1.4 | 0/3 | Not started | - |
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 0/? | Not started | - |
 | 49. FormatPipeline Integration | v1.4 | 0/? | Not started | - |
 | 50. ADRs & Documentation | v1.4 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-08 after v1.4 Quality & Resilience roadmap creation*
+*Last updated: 2026-03-09 after Phase 47 planning -- 3 plans in 3 waves*
