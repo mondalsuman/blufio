@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Quality & Resilience
 status: executing
-stopped_at: Completed 46-01-PLAN.md
-last_updated: "2026-03-09T08:19:36Z"
-last_activity: 2026-03-09 -- Phase 46 Plan 01 executed (core types & error hierarchy)
+stopped_at: Completed 46-02-PLAN.md
+last_updated: "2026-03-09T08:32:54Z"
+last_activity: 2026-03-09 -- Phase 46 Plan 02 executed (provider error migration)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
-  percent: 25
+  completed_plans: 2
+  percent: 50
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 ## Current Position
 
 Phase: 46 of 50 (Core Types & Error Hierarchy) -- 1 of 5 in v1.4
-Plan: 1 of 4 complete
+Plan: 2 of 4 complete
 Status: Executing
-Last activity: 2026-03-09 -- Phase 46 Plan 01 executed (core types & error hierarchy)
+Last activity: 2026-03-09 -- Phase 46 Plan 02 executed (provider error migration)
 
-Progress: [##░░░░░░░░] 25%
+Progress: [#####░░░░░] 50%
 
 ## Performance Metrics
 
@@ -67,6 +67,9 @@ Recent decisions affecting current work:
 - 46-01: user_message() returns Cow<'static, str> for zero-allocation static messages
 - 46-01: ChannelCapabilities derives Default for ergonomic ..Default::default() usage
 - 46-01: Deprecated fallback constructors map to sensible default sub-enum kinds
+- 46-02: Timeout errors detected via reqwest is_timeout() and mapped to provider_timeout()
+- 46-02: Ollama connection errors map to ServerError (local server down, not network)
+- 46-02: retry-after header extracted into ErrorContext for cloud providers
 
 ### Pending Todos
 
@@ -85,6 +88,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-09T08:19:36Z
-Stopped at: Completed 46-01-PLAN.md
-Resume file: .planning/phases/46-core-types-error-hierarchy/46-02-PLAN.md
+Last session: 2026-03-09T08:32:54Z
+Stopped at: Completed 46-02-PLAN.md
+Resume file: .planning/phases/46-core-types-error-hierarchy/46-03-PLAN.md
