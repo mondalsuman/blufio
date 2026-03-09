@@ -78,12 +78,12 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ Typed error hierarchy with is_retryable(), severity(), category() classification — v1.4 Phase 46
 - ✓ ChannelCapabilities extension (streaming_type, formatting_support, rate_limit, supports_code_blocks) — v1.4 Phase 46
 - ✓ FormatPipeline Table/List content types with 3-tier degradation — v1.4 Phase 46
+- ✓ Accurate token counting via tiktoken-rs and HuggingFace tokenizers (replace len()/4 heuristic) — v1.4 Phase 47
+- ✓ Per-dependency circuit breaker FSM with configurable thresholds and Prometheus metrics — v1.4 Phase 48
+- ✓ 6-level graceful degradation ladder with automatic escalation/de-escalation, fallback routing, and notifications — v1.4 Phase 48
 
 ### Active
 
-- [ ] Accurate token counting via tokenizers crate (replace len()/4 heuristic)
-- [ ] Circuit breaker state machine for external dependencies
-- [ ] Graceful degradation ladder (6 levels, automatic escalation)
 - [ ] FormatPipeline integration into channel adapters
 - [ ] ORT upgrade from RC to stable release + ADR
 - [ ] Plugin architecture ADR (Phase 1 compiled-in vs future dynamic loading)
@@ -126,7 +126,7 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.3 Ecosystem Expansion with 71,808 LOC Rust across 35 crates. 219 requirements verified across 4 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71). v1.4 Phase 46 complete: typed error hierarchy with 6 sub-enums, classification methods, extended ChannelCapabilities, and FormatPipeline Table/List content types.
+Shipped v1.3 Ecosystem Expansion with 71,808 LOC Rust across 35 crates. 219+ requirements verified across 4 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71). v1.4 Phases 46-48 complete: typed error hierarchy, extended ChannelCapabilities, FormatPipeline Table/List content types, accurate token counting (tiktoken-rs + HuggingFace tokenizers), per-dependency circuit breakers with registry, 6-level degradation ladder with auto-escalation/hysteresis, fallback provider routing, and degradation notifications.
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc.
 
@@ -210,5 +210,9 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | signal-cli sidecar (not native Rust) | No production Rust Signal library exists | ✓ Good — JSON-RPC bridge works cleanly |
 | matrix-sdk 0.11 pinned | 0.12+ requires Rust 1.88 (not yet stable) | ✓ Good — room join + messaging work |
 
+| Custom CB over failsafe/tower crates | failsafe incompatible with dyn dispatch, tower-limit too inflexible for per-dep breakers | ✓ Good — ~200 LOC, Arc<Mutex<Clock>> injection for testing |
+| Tier-based fallback provider mapping | Model names mapped to capability tiers for cross-provider fallback | ✓ Good — contains()-based family detection, clean iteration |
+| Degradation notifications via EventBus | Background task subscribes to level changes, sends to all channels with dedup | ✓ Good — 60s dedup window prevents notification storms |
+
 ---
-*Last updated: 2026-03-09 after Phase 46*
+*Last updated: 2026-03-09 after Phase 48*
