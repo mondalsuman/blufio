@@ -1,5 +1,33 @@
 # Milestones
 
+## v1.4 Quality & Resilience (Shipped: 2026-03-09)
+
+**Delivered:** Quality and resilience hardening — typed error hierarchy with automated retry classification, accurate token counting (tiktoken-rs + HuggingFace tokenizers replacing len()/4), per-dependency circuit breakers with 6-level graceful degradation ladder, FormatPipeline integration into all 8 channel adapters, and architectural decision records.
+
+**Phases completed:** 7 phases (46-52), 16 plans
+**Timeline:** 1 day (2026-03-09)
+**Commits:** 54 total
+**Files changed:** 245 (17,645 insertions, 25,845 deletions — net refactoring)
+**Total LOC:** 80,101 Rust across 35 crates
+**Git range:** 99136db → 3f45929
+**Requirements:** 39/39 satisfied (all formally verified)
+
+**Key accomplishments:**
+1. Typed error hierarchy with `is_retryable()`, `severity()`, `category()` classification across all 35 crates, enabling automated retry decisions
+2. Accurate token counting via tiktoken-rs (OpenAI o200k/cl100k) and HuggingFace tokenizers (Claude), replacing `len()/4` heuristic for all 5 providers
+3. Per-dependency circuit breaker FSM (Closed/Open/HalfOpen) with configurable thresholds, Prometheus metrics, and EventBus integration
+4. 6-level graceful degradation ladder (L0-L5) with automatic escalation/de-escalation, hysteresis, fallback provider routing, and user notifications
+5. FormatPipeline wired into all 8 channel adapters with paragraph-boundary splitting, adapter-specific formatting, and extended ChannelCapabilities
+6. Architectural decision records (ADR-001 ORT ONNX inference, ADR-002 compiled-in plugin architecture) in MADR 4.0.0 format
+
+### Known Tech Debt
+- Carry-forward from v1.1: 5 deferred MCP integration items, 4 human verification items
+- Claude tokenizer accuracy: Xenova/claude-tokenizer is community artifact (~80-95% accuracy for Claude 3+)
+- tiktoken-rs embeds BPE vocabulary data — monitor binary size impact
+- Nyquist validation partial for Phases 46-49, 51; missing for Phases 50, 52
+
+---
+
 ## v1.3 Ecosystem Expansion (Shipped: 2026-03-08)
 
 **Delivered:** Ecosystem expansion — multi-provider LLM support (OpenAI, Ollama, OpenRouter, Gemini), OpenAI-compatible gateway API, 6 new channel adapters with cross-channel bridging, event bus, skill registry with Ed25519 code signing, Docker deployment, node system, and migration/CLI utilities.

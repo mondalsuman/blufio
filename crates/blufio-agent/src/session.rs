@@ -111,6 +111,8 @@ pub struct SessionActorConfig {
     pub provider_registry: Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>,
     /// Fallback chain of provider names to try when primary breaker is open.
     pub fallback_chain: Vec<String>,
+    /// Optional EventBus for publishing circuit breaker state transitions.
+    pub event_bus: Option<Arc<blufio_bus::EventBus>>,
 }
 
 /// Manages the state and message processing for a single conversation session.
@@ -167,6 +169,8 @@ pub struct SessionActor {
     provider_registry: Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>,
     /// Fallback chain of provider names to try when primary breaker is open.
     fallback_chain: Vec<String>,
+    /// Optional EventBus for publishing circuit breaker state transitions.
+    event_bus: Option<Arc<blufio_bus::EventBus>>,
 }
 
 impl SessionActor {
@@ -198,6 +202,7 @@ impl SessionActor {
             last_call_was_fallback: false,
             provider_registry: config.provider_registry,
             fallback_chain: config.fallback_chain,
+            event_bus: config.event_bus,
         }
     }
 
@@ -494,6 +499,7 @@ impl SessionActor {
                                                     transition.to_state.as_str(),
                                                 );
                                     }
+                                    self.publish_cb_transition(fallback_name, &transition).await;
                                 }
                                 self.last_call_was_fallback = true;
                                 self.state = SessionState::Responding;
@@ -524,6 +530,7 @@ impl SessionActor {
                                                     transition.to_state.as_str(),
                                                 );
                                     }
+                                    self.publish_cb_transition(fallback_name, &transition).await;
                                 }
                                 warn!(fallback = %fallback_name, error = %e, "fallback provider call failed");
                                 continue; // Try next fallback
@@ -564,6 +571,7 @@ impl SessionActor {
                             transition.to_state.as_str(),
                         );
                     }
+                    self.publish_cb_transition(&self.provider_name, &transition).await;
                 }
                 self.last_call_was_fallback = false;
             }
@@ -592,6 +600,7 @@ impl SessionActor {
                                 transition.to_state.as_str(),
                             );
                         }
+                        self.publish_cb_transition(&self.provider_name, &transition).await;
                     }
                 }
             }
@@ -884,6 +893,30 @@ impl SessionActor {
     pub fn set_draining(&mut self) {
         self.state = SessionState::Draining;
     }
+
+    /// Publishes a circuit breaker state transition event to the EventBus.
+    ///
+    /// Does nothing if `event_bus` is `None` (resilience disabled or tests
+    /// without EventBus). EventBus::publish() is infallible -- it logs
+    /// internally on delivery failure.
+    async fn publish_cb_transition(
+        &self,
+        dependency: &str,
+        transition: &blufio_resilience::CircuitBreakerTransition,
+    ) {
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(blufio_bus::events::BusEvent::Resilience(
+                blufio_bus::events::ResilienceEvent::CircuitBreakerStateChanged {
+                    event_id: blufio_bus::events::new_event_id(),
+                    timestamp: blufio_bus::events::now_timestamp(),
+                    dependency: dependency.to_string(),
+                    from_state: transition.from_state.as_str().to_string(),
+                    to_state: transition.to_state.as_str().to_string(),
+                },
+            ))
+            .await;
+        }
+    }
 }
 
 /// Maps a model name to an equivalent-tier model for a target provider.
@@ -938,6 +971,273 @@ fn map_model_to_tier(model: &str, target_provider: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use blufio_bus::events::{BusEvent, ResilienceEvent};
+    use blufio_resilience::circuit_breaker::CircuitBreakerConfig;
+    use std::collections::HashMap;
+    use std::pin::Pin;
+
+    /// A mock provider that always returns errors to trip circuit breakers.
+    struct FailingMockProvider;
+
+    #[async_trait::async_trait]
+    impl blufio_core::traits::adapter::PluginAdapter for FailingMockProvider {
+        fn name(&self) -> &str {
+            "failing-mock"
+        }
+        fn version(&self) -> semver::Version {
+            semver::Version::new(0, 1, 0)
+        }
+        fn adapter_type(&self) -> blufio_core::types::AdapterType {
+            blufio_core::types::AdapterType::Provider
+        }
+        async fn health_check(
+            &self,
+        ) -> Result<blufio_core::types::HealthStatus, blufio_core::error::BlufioError> {
+            Ok(blufio_core::types::HealthStatus::Healthy)
+        }
+        async fn shutdown(&self) -> Result<(), blufio_core::error::BlufioError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl blufio_core::ProviderAdapter for FailingMockProvider {
+        async fn complete(
+            &self,
+            _req: blufio_core::types::ProviderRequest,
+        ) -> Result<blufio_core::types::ProviderResponse, blufio_core::error::BlufioError> {
+            Err(BlufioError::Provider {
+                kind: blufio_core::error::ProviderErrorKind::ServerError,
+                context: blufio_core::error::ErrorContext {
+                    provider_name: Some("failing-mock".to_string()),
+                    ..Default::default()
+                },
+                source: None,
+            })
+        }
+
+        async fn stream(
+            &self,
+            _req: blufio_core::types::ProviderRequest,
+        ) -> Result<
+            Pin<
+                Box<
+                    dyn futures_core::Stream<
+                            Item = Result<ProviderStreamChunk, blufio_core::error::BlufioError>,
+                        > + Send,
+                >,
+            >,
+            blufio_core::error::BlufioError,
+        > {
+            Err(BlufioError::Provider {
+                kind: blufio_core::error::ProviderErrorKind::ServerError,
+                context: blufio_core::error::ErrorContext {
+                    provider_name: Some("failing-mock".to_string()),
+                    ..Default::default()
+                },
+                source: None,
+            })
+        }
+    }
+
+    /// Build a complete test SessionActor with the given provider, event_bus, and CB registry.
+    async fn make_test_actor(
+        provider: Arc<dyn blufio_core::ProviderAdapter + Send + Sync>,
+        event_bus: Option<Arc<blufio_bus::EventBus>>,
+        circuit_breaker_registry: Option<Arc<CircuitBreakerRegistry>>,
+    ) -> (SessionActor, Arc<dyn StorageAdapter + Send + Sync>, tempfile::TempDir) {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let storage_config = blufio_config::model::StorageConfig {
+            database_path: db_path.to_string_lossy().to_string(),
+            wal_mode: true,
+        };
+        let storage = blufio_storage::SqliteStorage::new(storage_config);
+        storage.initialize().await.unwrap();
+        let storage: Arc<dyn StorageAdapter + Send + Sync> = Arc::new(storage);
+
+        let cost_ledger = Arc::new(
+            blufio_cost::CostLedger::open(db_path.to_str().unwrap())
+                .await
+                .unwrap(),
+        );
+        let cost_config = blufio_config::model::CostConfig {
+            daily_budget_usd: None,
+            monthly_budget_usd: None,
+            track_tokens: true,
+        };
+        let budget_tracker = Arc::new(tokio::sync::Mutex::new(
+            blufio_cost::BudgetTracker::new(&cost_config),
+        ));
+
+        let agent_config = blufio_config::model::AgentConfig {
+            system_prompt: Some("Test assistant.".to_string()),
+            ..blufio_config::model::AgentConfig::default()
+        };
+        let context_config = blufio_config::model::ContextConfig::default();
+        let token_cache = Arc::new(blufio_core::token_counter::TokenizerCache::new(
+            blufio_core::token_counter::TokenizerMode::Fast,
+        ));
+        let context_engine = Arc::new(
+            blufio_context::ContextEngine::new(&agent_config, &context_config, token_cache)
+                .await
+                .unwrap(),
+        );
+
+        let routing_config = blufio_config::model::RoutingConfig {
+            enabled: false,
+            ..blufio_config::model::RoutingConfig::default()
+        };
+        let router = Arc::new(blufio_router::ModelRouter::new(routing_config));
+        let tool_registry = Arc::new(RwLock::new(blufio_skill::ToolRegistry::new()));
+
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        let session = blufio_core::types::Session {
+            id: session_id.clone(),
+            channel: "test".to_string(),
+            user_id: Some("test-user".to_string()),
+            state: "active".to_string(),
+            metadata: None,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        storage.create_session(&session).await.unwrap();
+
+        let actor = SessionActor::new(SessionActorConfig {
+            session_id,
+            storage: storage.clone(),
+            provider,
+            context_engine,
+            budget_tracker,
+            cost_ledger,
+            memory_provider: None,
+            memory_extractor: None,
+            channel: "test".to_string(),
+            router,
+            default_model: "test-model".to_string(),
+            default_max_tokens: 1024,
+            routing_enabled: false,
+            idle_timeout_secs: 300,
+            tool_registry,
+            circuit_breaker_registry,
+            degradation_manager: None,
+            provider_name: "failing-mock".to_string(),
+            provider_registry: None,
+            fallback_chain: Vec::new(),
+            event_bus,
+        });
+
+        (actor, storage, temp_dir)
+    }
+
+    fn make_cb_registry(dep: &str) -> Arc<CircuitBreakerRegistry> {
+        let mut configs = HashMap::new();
+        configs.insert(dep.to_string(), CircuitBreakerConfig::default());
+        Arc::new(CircuitBreakerRegistry::new(configs))
+    }
+
+    fn make_inbound(session_id: &str) -> InboundMessage {
+        InboundMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            session_id: Some(session_id.to_string()),
+            channel: "test".to_string(),
+            sender_id: "test-user".to_string(),
+            content: blufio_core::types::MessageContent::Text("hello".to_string()),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            metadata: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn publishes_cb_event_on_transition() {
+        // Setup: EventBus + CB registry + FailingMockProvider
+        let event_bus = Arc::new(blufio_bus::EventBus::new(64));
+        let mut rx = event_bus.subscribe();
+        let registry = make_cb_registry("failing-mock");
+        let provider: Arc<dyn blufio_core::ProviderAdapter + Send + Sync> =
+            Arc::new(FailingMockProvider);
+
+        let (mut actor, _storage, _temp) =
+            make_test_actor(provider, Some(event_bus.clone()), Some(registry.clone())).await;
+
+        // Send 5 messages to trip the breaker (failure_threshold = 5).
+        // Each call to handle_message with FailingMockProvider will return Err,
+        // and record_result(name, false) will be called.
+        let sid = actor.session_id().to_string();
+        for _ in 0..5 {
+            let inbound = make_inbound(&sid);
+            let _ = actor.handle_message(inbound).await;
+        }
+
+        // The 5th failure should have caused a Closed->Open transition and published an event.
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("timeout waiting for event")
+            .expect("channel error");
+
+        match event {
+            BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
+                dependency,
+                from_state,
+                to_state,
+                ..
+            }) => {
+                assert_eq!(dependency, "failing-mock");
+                assert_eq!(from_state, "closed");
+                assert_eq!(to_state, "open");
+            }
+            other => panic!("expected CircuitBreakerStateChanged, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn no_event_when_bus_is_none() {
+        // SessionActor with event_bus: None should not panic on CB transitions.
+        let registry = make_cb_registry("failing-mock");
+        let provider: Arc<dyn blufio_core::ProviderAdapter + Send + Sync> =
+            Arc::new(FailingMockProvider);
+
+        let (mut actor, _storage, _temp) =
+            make_test_actor(provider, None, Some(registry.clone())).await;
+
+        let sid = actor.session_id().to_string();
+        // Trip the breaker -- should not panic.
+        for _ in 0..5 {
+            let inbound = make_inbound(&sid);
+            let _ = actor.handle_message(inbound).await;
+        }
+        // If we reach here without panic, the test passes.
+    }
+
+    #[tokio::test]
+    async fn no_event_when_no_transition() {
+        // Success calls in Closed state produce no transition -> no event.
+        let event_bus = Arc::new(blufio_bus::EventBus::new(64));
+        let mut rx = event_bus.subscribe();
+        // Registry has the same name as the actor's provider_name
+        let registry = make_cb_registry("failing-mock");
+
+        let provider: Arc<dyn blufio_core::ProviderAdapter + Send + Sync> =
+            Arc::new(blufio_test_utils::MockProvider::with_responses(vec![
+                "ok".to_string(),
+            ]));
+
+        let (mut actor, _storage, _temp) =
+            make_test_actor(provider, Some(event_bus.clone()), Some(registry.clone())).await;
+
+        let sid = actor.session_id().to_string();
+        let inbound = make_inbound(&sid);
+        // This should succeed -- record_result("failing-mock", true) returns None in Closed state.
+        let _ = actor.handle_message(inbound).await;
+
+        // No event should be on the bus.
+        let result = tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await;
+        assert!(
+            result.is_err(),
+            "expected no event on bus but got one"
+        );
+    }
 
     #[test]
     fn session_state_display() {

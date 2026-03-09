@@ -196,6 +196,55 @@
 
 ---
 
+## Milestone: v1.4 -- Quality & Resilience
+
+**Shipped:** 2026-03-09
+**Phases:** 7 | **Plans:** 16
+
+### What Was Built
+- Typed error hierarchy with `is_retryable()`, `severity()`, `category()` classification across all 35 crates
+- Accurate token counting via tiktoken-rs (OpenAI o200k/cl100k) and HuggingFace tokenizers (Claude), replacing `len()/4` heuristic
+- Per-dependency circuit breaker FSM (Closed/Open/HalfOpen) with configurable thresholds and Prometheus metrics
+- 6-level graceful degradation ladder (L0-L5) with auto-escalation, hysteresis, fallback provider routing, user notifications
+- FormatPipeline wired into all 8 channel adapters with paragraph-boundary splitting and adapter-specific formatting
+- Extended ChannelCapabilities (streaming_type, formatting_support, rate_limit) and Table/List content types
+- Architectural decision records (ADR-001 ORT, ADR-002 Plugin Architecture) in MADR 4.0.0 format
+- 1 new crate (blufio-resilience), ~8,293 lines added (total: 80,101 LOC across 35 crates)
+
+### What Worked
+- **Audit-driven gap closure (again)**: Initial audit found 5 unsatisfied requirements, 1 integration gap, 1 broken flow. Phases 51-52 closed all gaps. Re-audit passed clean.
+- **Highest velocity yet**: 16 plans in 1 day (~16 plans/day), matching v1.1's record. Deep familiarity with the codebase accelerated execution.
+- **Minimal gap-closure overhead**: Only 2 gap-closure phases (51, 52) out of 7 total (29%). Phase 52 was pure bookkeeping (2 minutes). Effective integration during feature phases.
+- **Custom circuit breaker over crate deps**: Building a ~200 LOC circuit breaker instead of using failsafe/tower crates avoided dyn dispatch incompatibility. Right abstraction level for the problem.
+- **Clock trait injection for testing**: Deterministic testing of circuit breaker timeouts via MockClock. No flaky time-dependent tests.
+
+### What Was Inefficient
+- **SUMMARY one_liner still empty**: All 16 SUMMARY files lack `one_liner` frontmatter, making automated accomplishment extraction return null during milestone completion. Fifth milestone with this pattern.
+- **Phase 52 exists**: A pure metadata fix phase (checkbox and frontmatter corrections) shouldn't be needed if SUMMARY frontmatter were filled during execution.
+- **Audit found wiring gap**: SessionActor didn't publish CB events to EventBus — the same "infrastructure built, consumption deferred" pattern from v1.1/v1.3. Phase 51 fixed it.
+- **Net negative lines**: 25,845 deletions vs 17,645 insertions — significant refactoring of error handling across all crates, but the diff size suggests the typed error migration touched more code than expected.
+
+### Patterns Established
+- **Circuit breaker with Clock injection**: Arc<dyn Clock> for deterministic testing, RealClock for production
+- **DegradationManager with hysteresis**: Level changes require sustained recovery (configurable timer) before de-escalation
+- **4-step adapter pipeline**: detect → format → split → escape enforced consistently in all 8 channel adapters
+- **Tier-based fallback provider mapping**: Model names mapped to capability tiers for cross-provider failover
+- **ADR documentation convention**: MADR 4.0.0 format with docs/adr/ directory and README index
+
+### Key Lessons
+1. **SUMMARY one_liner MUST be enforced by tooling** — five milestones with the same gap. This is no longer a process issue; it requires a code fix in gsd-tools.
+2. **The "infrastructure built, consumption deferred" pattern persists** — Phase 51 (wiring CB events to EventBus) is the same pattern from v1.1 and v1.3. Feature phases should include a "verify all producers connected to all consumers" checklist item.
+3. **Refactoring milestones touch more code than feature milestones** — v1.4 changed 245 files but had net negative LOC. Error hierarchy migration across 35 crates is inherently high-touch.
+4. **Custom implementations beat external crates when trait compatibility is needed** — failsafe and tower-limit couldn't work with dyn dispatch. ~200 LOC of custom CB code was cleaner and more testable.
+5. **Gap-closure overhead is trending down** — v1.0: 28%, v1.1: 37%, v1.2: 17%, v1.3: 35%, v1.4: 29%. Integration during feature phases is improving, but wiring gaps still appear for cross-cutting concerns.
+
+### Cost Observations
+- Commits: 54 total
+- Timeline: 1 calendar day (2026-03-09)
+- Notable: Phase 52 (bookkeeping) completed in 2 minutes. Phase 51 (CB→EventBus wiring) took 15 minutes. Small, focused plans remain the fastest to execute.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -206,6 +255,7 @@
 | v1.1 | 8 | 32 | ~16/day | Security-per-phase, dual audit, gap closure phases |
 | v1.2 | 6 | 13 | ~13/day | Lowest gap-closure ratio (17%), mature audit pattern |
 | v1.3 | 17 | 47 | ~12/day | Largest milestone, three-audit pattern, provider crate decoupling |
+| v1.4 | 7 | 16 | ~16/day | Refactoring milestone, highest velocity tied with v1.1 |
 
 ### Cumulative Quality
 
@@ -215,6 +265,7 @@
 | v1.1 | 36,462 | 16 | 48 (118 total) | 48/48 | 12 |
 | v1.2 | 39,168 | 21 | 30 (148 total) | 30/30 | 12 (carry-forward) |
 | v1.3 | 71,808 | 35 | 71 (219 total) | 71/71 | 16 |
+| v1.4 | 80,101 | 35 | 39 (258 total) | 39/39 | 16 (carry-forward) |
 
 ### Gap-Closure Ratio
 
@@ -224,11 +275,13 @@
 | v1.1 | 8 | 3 | 37% | worse (but smaller milestone) |
 | v1.2 | 6 | 1 | 17% | improvement |
 | v1.3 | 17 | 6 | 35% | reverted (large milestone, complex cross-crate wiring) |
+| v1.4 | 7 | 2 | 29% | stable (one wiring gap, one bookkeeping fix) |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. **Wire integration at phase boundaries** — all four milestones had wiring gaps caught only at audit. Must be enforced as a phase gate, not just advice.
-2. **Milestone audit before completion catches gaps** — v1.0 found 33 stale requirements; v1.1 found 26 orphaned; v1.3 found 5 runtime wiring gaps. Always audit.
-3. **SUMMARY frontmatter must be filled during execution** — four milestones of empty/missing frontmatter. Tooling enforcement is overdue.
-4. **Gap-closure overhead correlates with milestone scope** — small milestones (v1.2: 17%) have less overhead than large ones (v1.3: 35%). For large milestones, integration wiring should be part of original feature phases.
-5. **Small, focused gap-closure plans execute fastest** — v1.3 phases 40-45 averaged 2-7 minutes per plan. This is the ideal plan granularity for wiring tasks.
+1. **Wire integration at phase boundaries** — all five milestones had wiring gaps caught only at audit. Must be enforced as a phase gate, not just advice.
+2. **Milestone audit before completion catches gaps** — v1.0 found 33 stale requirements; v1.1 found 26 orphaned; v1.3 found 5 runtime wiring gaps; v1.4 found CB→EventBus wiring gap. Always audit.
+3. **SUMMARY frontmatter must be filled during execution** — five milestones of empty/missing frontmatter. Tooling enforcement is overdue. This is the single most repeated lesson.
+4. **Gap-closure overhead correlates with milestone scope** — small milestones (v1.2: 17%) have less overhead than large ones (v1.3: 35%). v1.4's 29% is mid-range for a refactoring milestone.
+5. **Small, focused gap-closure plans execute fastest** — v1.3 phases 40-45 averaged 2-7 minutes per plan; v1.4 Phase 52 completed in 2 minutes. This is the ideal plan granularity for wiring tasks.
+6. **Custom implementations beat external crates when trait compatibility is needed** — v1.4's ~200 LOC circuit breaker was cleaner than using failsafe/tower crates with dyn dispatch incompatibility.

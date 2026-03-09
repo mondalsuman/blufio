@@ -674,6 +674,7 @@ impl AgentLoop {
                     provider_name: self.provider_name.clone(),
                     provider_registry: self.provider_registry.clone(),
                     fallback_chain: self.fallback_chain.clone(),
+                    event_bus: self.event_bus.clone(),
                 });
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
@@ -727,6 +728,7 @@ impl AgentLoop {
             provider_name: self.provider_name.clone(),
             provider_registry: self.provider_registry.clone(),
             fallback_chain: self.fallback_chain.clone(),
+            event_bus: self.event_bus.clone(),
         });
         self.sessions.insert(session_key, actor);
         #[cfg(feature = "prometheus")]

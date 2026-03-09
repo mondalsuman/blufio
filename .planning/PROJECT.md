@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 8 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, Prometheus observability, full MCP integration (server + client), Docker deployment, and migration/CLI utilities. 71,808 LOC Rust across 35 crates, 219 requirements verified across 4 milestones.
+Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 8 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with accurate token counting and prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, per-dependency circuit breakers with 6-level graceful degradation, Prometheus observability, full MCP integration (server + client), Docker deployment, and migration/CLI utilities. 80,101 LOC Rust across 35 crates, 258 requirements verified across 5 milestones.
 
 ## Core Value
 
@@ -83,26 +83,16 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ 6-level graceful degradation ladder with automatic escalation/de-escalation, fallback routing, and notifications — v1.4 Phase 48
 - ✓ ADR-001: ORT ONNX inference decision record with upgrade plan — v1.4 Phase 50
 - ✓ ADR-002: Compiled-in plugin architecture decision record with migration roadmap — v1.4 Phase 50
+- ✓ Circuit breaker events wired to EventBus, enabling full resilience pipeline in production — v1.4 Phase 51
+- ✓ FormatPipeline wired into all 8 channel adapters with paragraph-boundary splitting — v1.4 Phase 49
 
 ### Active
 
-- [ ] FormatPipeline integration into channel adapters
-
-## Current Milestone: v1.4 Quality & Resilience
-
-**Goal:** Address QA audit deviations — accurate token counting, circuit breakers, graceful degradation, typed errors, format pipeline integration, and documentation of architectural decisions.
-
-**Target features:**
-- Accurate token counting for all languages (CJK, code, mixed content)
-- Per-dependency circuit breakers with configurable thresholds and Prometheus metrics
-- 6-level degradation ladder with automatic escalation/de-escalation
-- Typed error hierarchy enabling automated retry decisions
-- FormatPipeline wired into all channel adapters with content type extensions
-- ChannelCapabilities enriched for streaming, formatting, and rate limit metadata
-- ORT stable release + architectural decision records
+(None — planning next milestone)
 
 ## Shipped Milestones
 
+- **v1.4 Quality & Resilience** -- 7 phases (46-52), 16 plans, 39 requirements (2026-03-09)
 - **v1.3 Ecosystem Expansion** -- 17 phases (29-45), 47 plans, 71 requirements (2026-03-05 -> 2026-03-08)
 - **v1.2 Production Hardening** -- 6 phases, 13 plans, 30 requirements (2026-03-03 -> 2026-03-04)
 - **v1.1 MCP Integration** -- 8 phases, 32 plans, 48 requirements (2026-03-02 -> 2026-03-03)
@@ -126,13 +116,13 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.3 Ecosystem Expansion with 71,808 LOC Rust across 35 crates. 219+ requirements verified across 4 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71). v1.4 Phases 46-48 complete: typed error hierarchy, extended ChannelCapabilities, FormatPipeline Table/List content types, accurate token counting (tiktoken-rs + HuggingFace tokenizers), per-dependency circuit breakers with registry, 6-level degradation ladder with auto-escalation/hysteresis, fallback provider routing, and degradation notifications.
+Shipped v1.4 Quality & Resilience with 80,101 LOC Rust across 35 crates. 258 requirements verified across 5 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39). All v1.4 features complete: typed error hierarchy with automated retry classification, accurate token counting (tiktoken-rs + HuggingFace tokenizers), per-dependency circuit breakers with 6-level graceful degradation ladder, FormatPipeline wired into all 8 channel adapters, and architectural decision records.
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc.
 
 **Architecture:** 35-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-discord, blufio-gateway, blufio-gemini, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
 
-**Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). WasmSkillRuntime EventBus wiring deferred. Media provider trait implementations deferred (EXT-03/04/05).
+**Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). WasmSkillRuntime EventBus wiring deferred. Media provider trait implementations deferred (EXT-03/04/05). Claude tokenizer accuracy (~80-95% for Claude 3+, community Xenova artifact).
 
 ### The Kill Shot
 
@@ -213,6 +203,10 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Custom CB over failsafe/tower crates | failsafe incompatible with dyn dispatch, tower-limit too inflexible for per-dep breakers | ✓ Good — ~200 LOC, Arc<Mutex<Clock>> injection for testing |
 | Tier-based fallback provider mapping | Model names mapped to capability tiers for cross-provider fallback | ✓ Good — contains()-based family detection, clean iteration |
 | Degradation notifications via EventBus | Background task subscribes to level changes, sends to all channels with dedup | ✓ Good — 60s dedup window prevents notification storms |
+| tiktoken-rs for OpenAI token counting | Exact BPE tokenizer matching OpenAI's production encoding (o200k/cl100k) | ✓ Good — zero token estimation error for OpenAI models |
+| HuggingFace tokenizers for Claude counting | Best available local tokenizer via Xenova/claude-tokenizer community vocabulary | ⚠️ Revisit — ~80-95% accuracy, monitor for official tokenizer |
+| FormatPipeline 4-step adapter pipeline | detect → format → split → escape enforced in all 8 adapters | ✓ Good — consistent formatting across all channels |
+| ADR documentation in MADR 4.0.0 format | Standardized decision records with context, options, consequences | ✓ Good — ADR-001 (ORT) and ADR-002 (plugins) documented |
 
 ---
-*Last updated: 2026-03-09 after Phase 50 -- v1.4 shipped*
+*Last updated: 2026-03-10 after v1.4 milestone*

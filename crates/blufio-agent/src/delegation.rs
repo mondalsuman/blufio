@@ -190,6 +190,7 @@ impl DelegationRouter {
             provider_name: "anthropic".to_string(),
             provider_registry: None,
             fallback_chain: Vec::new(),
+            event_bus: None,
         });
 
         // 5. Build inbound message from the delegation request

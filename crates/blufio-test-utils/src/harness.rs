@@ -227,6 +227,7 @@ impl TestHarness {
             provider_name: "mock".to_string(),
             provider_registry: None,
             fallback_chain: Vec::new(),
+            event_bus: None,
         });
 
         // Create inbound message
