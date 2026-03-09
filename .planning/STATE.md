@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Quality & Resilience
 status: completed
-stopped_at: Completed 47-03-PLAN.md (Phase 47 complete)
-last_updated: "2026-03-09T10:42:00.412Z"
+stopped_at: Phase 48 planned (3 plans, 3 waves, verified)
+last_updated: "2026-03-09T12:09:59.943Z"
 last_activity: 2026-03-09 -- Phase 47 Plan 03 complete
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
-  percent: 45
+  total_plans: 10
+  completed_plans: 8
+  percent: 50
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.4 Quality & Resilience -- Phase 47 (Accurate Token Counting)
+**Current focus:** v1.4 Quality & Resilience -- Phase 48 (Circuit Breaker & Degradation Ladder)
 
 ## Current Position
 
-Phase: 47 of 50 (Accurate Token Counting) -- 2 of 5 in v1.4
-Plan: 3 of 3 complete
-Status: Phase Complete
-Last activity: 2026-03-09 -- Phase 47 Plan 03 complete
+Phase: 48 of 50 (Circuit Breaker & Degradation Ladder) -- 3 of 5 in v1.4
+Plan: 1 of 3 complete
+Status: In Progress
+Last activity: 2026-03-09 -- Phase 48 Plan 01 complete
 
-Progress: [████▓░░░░░] 45%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Recent decisions affecting current work:
 - Phase 47-01: HeuristicCounter uses ceil() to avoid underestimation; TokenizerCache uses std::sync::RwLock (microsecond hold times); OpenRouter prefix stripping in resolve_counter
 - Phase 47-02: OnceLock get()+set() pattern for HuggingFace tokenizer singleton (stable Rust); resolve_counter lowercases model IDs for case-insensitive matching
 - Phase 47-03: Arc<TokenizerCache> injection from config through ContextEngine to DynamicZone; delegation.rs defaults to Accurate mode; test harness uses Fast mode
+- Phase 48-01: BlufioError::CircuitOpen uses FailureMode::Internal (not retryable, not circuit-tripping); Clock trait injection for deterministic testing; Registry mutex poisoning recovery with into_inner()
 
 ### Pending Todos
 
@@ -87,9 +88,10 @@ None.
 | Phase 47 P01 | 17min | 2 tasks | 6 files |
 | Phase 47 P02 | 5min | 2 tasks | 2 files |
 | Phase 47 P03 | 10min | 2 tasks | 7 files |
+| Phase 48 P01 | 13min | 2 tasks | 10 files |
 
 ## Session Continuity
 
-Last session: 2026-03-09T10:37:00.000Z
-Stopped at: Completed 47-03-PLAN.md (Phase 47 complete)
-Resume file: None
+Last session: 2026-03-09T13:19:02Z
+Stopped at: Phase 48 Plan 01 complete
+Resume file: .planning/phases/48-circuit-breaker-degradation-ladder/48-02-PLAN.md

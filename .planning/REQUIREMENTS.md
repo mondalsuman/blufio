@@ -17,13 +17,13 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 
 ### Circuit Breaker
 
-- [ ] **CB-01**: CircuitBreaker implements 3-state FSM (Closed, Open, HalfOpen) with configurable thresholds
-- [ ] **CB-02**: Each external dependency (5 providers, 8 channels) has an independent circuit breaker instance
-- [ ] **CB-03**: Circuit breaker uses `is_retryable()` from typed errors — non-retryable errors (auth, config) do not count as failures
+- [x] **CB-01**: CircuitBreaker implements 3-state FSM (Closed, Open, HalfOpen) with configurable thresholds
+- [x] **CB-02**: Each external dependency (5 providers, 8 channels) has an independent circuit breaker instance
+- [x] **CB-03**: Circuit breaker uses `is_retryable()` from typed errors — non-retryable errors (auth, config) do not count as failures
 - [ ] **CB-04**: Circuit breaker publishes state transitions to EventBus as Resilience events
 - [ ] **CB-05**: Prometheus gauge `blufio_circuit_breaker_state` emitted per dependency with state label
-- [ ] **CB-06**: Circuit breaker thresholds configurable via TOML config `[resilience.circuit_breakers.<name>]`
-- [ ] **CB-07**: HalfOpen state allows a configurable number of probe requests before transitioning to Closed
+- [x] **CB-06**: Circuit breaker thresholds configurable via TOML config `[resilience.circuit_breakers.<name>]`
+- [x] **CB-07**: HalfOpen state allows a configurable number of probe requests before transitioning to Closed
 
 ### Degradation Ladder
 
@@ -126,13 +126,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TOK-07 | Phase 47 | Complete |
 | TOK-08 | Phase 47 | Complete |
 | TOK-09 | Phase 47 | Complete |
-| CB-01 | Phase 48 | Pending |
-| CB-02 | Phase 48 | Pending |
-| CB-03 | Phase 48 | Pending |
+| CB-01 | Phase 48 | Complete |
+| CB-02 | Phase 48 | Complete |
+| CB-03 | Phase 48 | Complete |
 | CB-04 | Phase 48 | Pending |
 | CB-05 | Phase 48 | Pending |
-| CB-06 | Phase 48 | Pending |
-| CB-07 | Phase 48 | Pending |
+| CB-06 | Phase 48 | Complete |
+| CB-07 | Phase 48 | Complete |
 | DEG-01 | Phase 48 | Pending |
 | DEG-02 | Phase 48 | Pending |
 | DEG-03 | Phase 48 | Pending |
