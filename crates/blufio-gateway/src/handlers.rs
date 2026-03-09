@@ -14,6 +14,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
+use std::collections::HashMap;
+
 use blufio_core::types::{InboundMessage, MessageContent};
 
 use crate::server::GatewayState;
@@ -54,6 +56,15 @@ pub struct HealthResponse {
     pub version: String,
     /// Uptime in seconds (placeholder).
     pub uptime_secs: u64,
+    /// Current degradation level (e.g., "L0").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degradation_level: Option<String>,
+    /// Human-readable degradation level name (e.g., "FullyOperational").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degradation_name: Option<String>,
+    /// Per-dependency circuit breaker states (e.g., {"anthropic": "closed"}).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub circuit_breakers: Option<HashMap<String, String>>,
 }
 
 /// Response body for GET /v1/sessions.
@@ -192,13 +203,48 @@ pub async fn post_messages(
 
 /// GET /v1/health
 ///
-/// Returns health status of the gateway.
-pub async fn get_health(State(_state): State<GatewayState>) -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok".to_string(),
+/// Returns health status of the gateway, including degradation state when
+/// the resilience subsystem is wired in. Returns 503 for L4+ degradation.
+pub async fn get_health(State(state): State<GatewayState>) -> Response {
+    let (degradation_level, degradation_name, circuit_breakers, level_val) =
+        if let Some(dm) = &state.degradation_manager {
+            let level = dm.current_level();
+            let cb_map = state.circuit_breaker_registry.as_ref().map(|reg| {
+                reg.all_snapshots()
+                    .into_iter()
+                    .map(|(name, snap)| (name, snap.state.to_string()))
+                    .collect::<HashMap<String, String>>()
+            });
+            (
+                Some(format!("L{}", level.as_u8())),
+                Some(level.name().to_string()),
+                cb_map,
+                level.as_u8(),
+            )
+        } else {
+            (None, None, None, 0)
+        };
+
+    let status = if level_val >= 4 {
+        "degraded"
+    } else {
+        "ok"
+    };
+
+    let resp = HealthResponse {
+        status: status.to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         uptime_secs: 0, // TODO: track actual uptime
-    })
+        degradation_level,
+        degradation_name,
+        circuit_breakers,
+    };
+
+    if level_val >= 4 {
+        (StatusCode::SERVICE_UNAVAILABLE, Json(resp)).into_response()
+    } else {
+        (StatusCode::OK, Json(resp)).into_response()
+    }
 }
 
 /// Response body for GET /health (unauthenticated).
@@ -310,11 +356,37 @@ mod tests {
             status: "ok".to_string(),
             version: "0.1.0".to_string(),
             uptime_secs: 42,
+            degradation_level: None,
+            degradation_name: None,
+            circuit_breakers: None,
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"status\":\"ok\""));
         assert!(json.contains("\"version\":\"0.1.0\""));
         assert!(json.contains("\"uptime_secs\":42"));
+        // Optional fields should be omitted when None
+        assert!(!json.contains("degradation_level"));
+    }
+
+    #[test]
+    fn health_response_with_degradation_fields() {
+        let mut cb = HashMap::new();
+        cb.insert("anthropic".to_string(), "closed".to_string());
+        cb.insert("openai".to_string(), "open".to_string());
+        let resp = HealthResponse {
+            status: "ok".to_string(),
+            version: "0.1.0".to_string(),
+            uptime_secs: 100,
+            degradation_level: Some("L1".to_string()),
+            degradation_name: Some("MinorDegradation".to_string()),
+            circuit_breakers: Some(cb),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"degradation_level\":\"L1\""));
+        assert!(json.contains("\"degradation_name\":\"MinorDegradation\""));
+        assert!(json.contains("\"circuit_breakers\""));
+        assert!(json.contains("\"anthropic\":\"closed\""));
+        assert!(json.contains("\"openai\":\"open\""));
     }
 
     #[test]

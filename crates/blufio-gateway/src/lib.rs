@@ -328,6 +328,8 @@ impl ChannelAdapter for GatewayChannel {
             webhook_store,
             batch_store,
             event_bus,
+            degradation_manager: None,
+            circuit_breaker_registry: None,
         };
 
         // Take the MCP router (if set) to pass to the server.

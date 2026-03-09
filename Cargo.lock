@@ -846,6 +846,7 @@ dependencies = [
  "axum-extra",
  "blufio-bus",
  "blufio-core",
+ "blufio-resilience",
  "blufio-skill",
  "blufio-whatsapp",
  "chrono",

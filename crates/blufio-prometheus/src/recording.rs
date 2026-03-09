@@ -52,6 +52,8 @@ pub fn register_metrics() {
         "blufio_mcp_context_utilization_ratio",
         "Context window utilization ratio"
     );
+
+    register_resilience_metrics();
 }
 
 /// Record a processed message.
@@ -158,4 +160,48 @@ pub fn record_mcp_tool_response_size(bytes: f64) {
 /// Set the context window utilization ratio (0.0 to 1.0).
 pub fn set_mcp_context_utilization(ratio: f64) {
     metrics::gauge!("blufio_mcp_context_utilization_ratio").set(ratio);
+}
+
+// ---- Resilience metrics (CB-04, CB-05) ----
+
+/// Register resilience metric descriptions.
+///
+/// Called from [`register_metrics()`] at startup.
+fn register_resilience_metrics() {
+    describe_gauge!(
+        "blufio_circuit_breaker_state",
+        "Circuit breaker state per dependency (0=closed, 1=half_open, 2=open)"
+    );
+    describe_gauge!(
+        "blufio_degradation_level",
+        "Current system degradation level (0=L0 FullyOperational through 5=L5 SafeShutdown)"
+    );
+    describe_counter!(
+        "blufio_circuit_breaker_transitions_total",
+        "Total circuit breaker state transitions by dependency and direction"
+    );
+}
+
+/// Record the current state of a circuit breaker for a dependency.
+///
+/// `state` is the numeric value: 0=closed, 1=half_open, 2=open.
+pub fn record_circuit_breaker_state(dependency: &str, state: u8) {
+    metrics::gauge!("blufio_circuit_breaker_state", "dependency" => dependency.to_string())
+        .set(state as f64);
+}
+
+/// Record the current system degradation level (0-5).
+pub fn record_degradation_level(level: u8) {
+    metrics::gauge!("blufio_degradation_level").set(level as f64);
+}
+
+/// Record a circuit breaker state transition.
+pub fn record_circuit_breaker_transition(dependency: &str, from: &str, to: &str) {
+    metrics::counter!(
+        "blufio_circuit_breaker_transitions_total",
+        "dependency" => dependency.to_string(),
+        "from" => from.to_string(),
+        "to" => to.to_string(),
+    )
+    .increment(1);
 }

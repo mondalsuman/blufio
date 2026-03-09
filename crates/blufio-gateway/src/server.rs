@@ -67,6 +67,10 @@ pub struct GatewayState {
     pub batch_store: Option<Arc<batch::store::BatchStore>>,
     /// Event bus for publishing events to webhooks and batch processor.
     pub event_bus: Option<Arc<blufio_bus::EventBus>>,
+    /// Degradation manager for resilience level visibility (CB-05, DEG-01).
+    pub degradation_manager: Option<Arc<blufio_resilience::DegradationManager>>,
+    /// Circuit breaker registry for per-dependency state visibility (CB-04).
+    pub circuit_breaker_registry: Option<Arc<blufio_resilience::CircuitBreakerRegistry>>,
 }
 
 /// Gateway server configuration (mirrors GatewayConfig from blufio-config).
@@ -241,6 +245,8 @@ mod tests {
             webhook_store: None,
             batch_store: None,
             event_bus: None,
+            degradation_manager: None,
+            circuit_breaker_registry: None,
         };
         let _cloned = state.clone();
     }
