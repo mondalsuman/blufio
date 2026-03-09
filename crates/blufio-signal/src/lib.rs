@@ -15,6 +15,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use blufio_config::model::SignalConfig;
 use blufio_core::error::BlufioError;
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage,
@@ -22,7 +23,6 @@ use blufio_core::types::{
 };
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
-use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use tracing::{debug, error, info, warn};
 
 use crate::jsonrpc::JsonRpcClient;

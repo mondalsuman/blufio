@@ -17,6 +17,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use blufio_config::model::TelegramConfig;
 use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
@@ -25,7 +26,6 @@ use blufio_core::types::{
 use teloxide::prelude::*;
 use teloxide::types::{ChatAction, ChatId, ParseMode, Recipient};
 use tokio::sync::mpsc;
-use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use tracing::{debug, error, info, warn};
 
 /// Telegram channel adapter implementing [`ChannelAdapter`].
@@ -223,7 +223,9 @@ impl ChannelAdapter for TelegramChannel {
                                 .bot
                                 .send_message(Recipient::Id(chat_id), chunk)
                                 .await
-                                .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
+                                .map_err(|e| {
+                                BlufioError::channel_delivery_failed("telegram", e)
+                            })?;
                             if first_id.is_none() {
                                 first_id = Some(MessageId(sent.id.0.to_string()));
                             }

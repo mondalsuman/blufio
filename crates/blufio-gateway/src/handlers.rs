@@ -225,11 +225,7 @@ pub async fn get_health(State(state): State<GatewayState>) -> Response {
             (None, None, None, 0)
         };
 
-    let status = if level_val >= 4 {
-        "degraded"
-    } else {
-        "ok"
-    };
+    let status = if level_val >= 4 { "degraded" } else { "ok" };
 
     let resp = HealthResponse {
         status: status.to_string(),

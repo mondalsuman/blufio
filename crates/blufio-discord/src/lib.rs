@@ -17,6 +17,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use blufio_config::model::DiscordConfig;
 use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
@@ -27,7 +28,6 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 use tokio::sync::mpsc;
-use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use tracing::{debug, error, info, warn};
 
 /// Shared state accessible from the serenity EventHandler.

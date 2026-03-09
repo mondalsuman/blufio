@@ -56,21 +56,14 @@ impl CircuitBreakerRegistry {
             .breakers
             .get(name)
             .ok_or_else(|| BlufioError::Internal(format!("unknown circuit breaker: {name}")))?;
-        breaker
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .check()
+        breaker.lock().unwrap_or_else(|e| e.into_inner()).check()
     }
 
     /// Record the result of a call to the named dependency.
     ///
     /// Returns `Some(transition)` if the breaker changed state.
     /// Returns `None` if the dependency is unknown or no state change occurred.
-    pub fn record_result(
-        &self,
-        name: &str,
-        success: bool,
-    ) -> Option<CircuitBreakerTransition> {
+    pub fn record_result(&self, name: &str, success: bool) -> Option<CircuitBreakerTransition> {
         let breaker = self.breakers.get(name)?;
         breaker
             .lock()
@@ -91,12 +84,7 @@ impl CircuitBreakerRegistry {
     /// Get a read-only snapshot of the named breaker.
     pub fn snapshot(&self, name: &str) -> Option<CircuitBreakerSnapshot> {
         let breaker = self.breakers.get(name)?;
-        Some(
-            breaker
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .snapshot(),
-        )
+        Some(breaker.lock().unwrap_or_else(|e| e.into_inner()).snapshot())
     }
 
     /// Get snapshots of all breakers.
@@ -104,10 +92,7 @@ impl CircuitBreakerRegistry {
         self.breakers
             .iter()
             .map(|(name, mutex)| {
-                let snap = mutex
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .snapshot();
+                let snap = mutex.lock().unwrap_or_else(|e| e.into_inner()).snapshot();
                 (name.clone(), snap)
             })
             .collect()
@@ -130,9 +115,7 @@ mod tests {
         }
     }
 
-    fn make_registry(
-        deps: &[&str],
-    ) -> (CircuitBreakerRegistry, Arc<MockClock>) {
+    fn make_registry(deps: &[&str]) -> (CircuitBreakerRegistry, Arc<MockClock>) {
         let clock = Arc::new(MockClock::new());
         let clock_ref = clock.clone();
         let configs: HashMap<String, CircuitBreakerConfig> = deps

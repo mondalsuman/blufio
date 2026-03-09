@@ -377,14 +377,13 @@ mod tests {
             item_count: 10,
         });
 
-        let _resilience =
-            BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
-                event_id: new_event_id(),
-                timestamp: now_timestamp(),
-                dependency: "anthropic".into(),
-                from_state: "closed".into(),
-                to_state: "open".into(),
-            });
+        let _resilience = BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            dependency: "anthropic".into(),
+            from_state: "closed".into(),
+            to_state: "open".into(),
+        });
     }
 
     #[test]
@@ -616,14 +615,13 @@ mod tests {
 
     #[test]
     fn resilience_circuit_breaker_state_changed_roundtrip() {
-        let event =
-            BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
-                event_id: "evt-cb-1".into(),
-                timestamp: "2026-03-09T00:00:00Z".into(),
-                dependency: "anthropic".into(),
-                from_state: "closed".into(),
-                to_state: "open".into(),
-            });
+        let event = BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
+            event_id: "evt-cb-1".into(),
+            timestamp: "2026-03-09T00:00:00Z".into(),
+            dependency: "anthropic".into(),
+            from_state: "closed".into(),
+            to_state: "open".into(),
+        });
 
         let json = serde_json::to_string(&event).unwrap();
         let deserialized: BusEvent = serde_json::from_str(&json).unwrap();
@@ -647,16 +645,15 @@ mod tests {
 
     #[test]
     fn resilience_degradation_level_changed_roundtrip() {
-        let event =
-            BusEvent::Resilience(ResilienceEvent::DegradationLevelChanged {
-                event_id: "evt-deg-1".into(),
-                timestamp: "2026-03-09T00:00:00Z".into(),
-                from_level: 0,
-                to_level: 2,
-                from_name: "FullyOperational".into(),
-                to_name: "ReducedFunctionality".into(),
-                reason: "Primary provider breaker opened".into(),
-            });
+        let event = BusEvent::Resilience(ResilienceEvent::DegradationLevelChanged {
+            event_id: "evt-deg-1".into(),
+            timestamp: "2026-03-09T00:00:00Z".into(),
+            from_level: 0,
+            to_level: 2,
+            from_name: "FullyOperational".into(),
+            to_name: "ReducedFunctionality".into(),
+            reason: "Primary provider breaker opened".into(),
+        });
 
         let json = serde_json::to_string(&event).unwrap();
         let deserialized: BusEvent = serde_json::from_str(&json).unwrap();

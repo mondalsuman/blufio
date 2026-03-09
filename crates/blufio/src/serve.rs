@@ -23,9 +23,11 @@ use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
 use blufio_core::{ChannelAdapter, StorageAdapter};
 use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_plugin::{PluginRegistry, PluginStatus, builtin_catalog};
+use blufio_resilience::{
+    CircuitBreakerConfig, CircuitBreakerRegistry, DegradationManager, EscalationConfig,
+};
 use blufio_router::ModelRouter;
 use blufio_skill::{SkillProvider, ToolRegistry};
-use blufio_resilience::{CircuitBreakerConfig, CircuitBreakerRegistry, DegradationManager, EscalationConfig};
 use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "anthropic")]
@@ -326,7 +328,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         );
 
         // Determine primary provider and primary channel.
-        let primary_provider = provider_names.first().cloned().unwrap_or_else(|| "anthropic".to_string());
+        let primary_provider = provider_names
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "anthropic".to_string());
         let primary_channel = channel_names.first().cloned().unwrap_or_default();
 
         let escalation_config = EscalationConfig {
@@ -393,8 +398,12 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                                 "open" => 2,
                                 _ => 0,
                             };
-                            blufio_prometheus::recording::record_circuit_breaker_state(dependency, state_num);
-                            blufio_prometheus::recording::record_circuit_breaker_transition(dependency, from_state, to_state);
+                            blufio_prometheus::recording::record_circuit_breaker_state(
+                                dependency, state_num,
+                            );
+                            blufio_prometheus::recording::record_circuit_breaker_transition(
+                                dependency, from_state, to_state,
+                            );
                         }
                     }
                 }
@@ -1018,14 +1027,14 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 {
                     // Dedup: skip if we notified about this level within dedup_secs.
                     let now = tokio::time::Instant::now();
-                    if let Some(last) = last_notified.get(to_level) {
-                        if now.duration_since(*last).as_secs() < dedup_secs {
-                            tracing::debug!(
-                                to_level = to_level,
-                                "skipping duplicate degradation notification"
-                            );
-                            continue;
-                        }
+                    if let Some(last) = last_notified.get(to_level)
+                        && now.duration_since(*last).as_secs() < dedup_secs
+                    {
+                        tracing::debug!(
+                            to_level = to_level,
+                            "skipping duplicate degradation notification"
+                        );
+                        continue;
                     }
                     last_notified.insert(*to_level, now);
 
@@ -1335,32 +1344,22 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     let fallback_chain = config.resilience.fallback_chain.clone();
 
     // Build fallback provider registry before config is moved (DEG-06).
-    let fallback_provider_registry: Option<Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>> =
-        if !fallback_chain.is_empty() && resilience_registry.is_some() {
-            // Reuse gateway's provider_registry if available, else create a new one.
-            #[cfg(feature = "gateway")]
-            {
-                if let Some(ref reg) = provider_registry {
-                    Some(reg.clone())
-                } else {
-                    match ConcreteProviderRegistry::from_config(&config).await {
-                        Ok(reg) => {
-                            info!("fallback provider registry initialized (non-gateway)");
-                            Some(Arc::new(reg) as Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>)
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");
-                            None
-                        }
-                    }
-                }
-            }
-            #[cfg(not(feature = "gateway"))]
-            {
+    let fallback_provider_registry: Option<
+        Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>,
+    > = if !fallback_chain.is_empty() && resilience_registry.is_some() {
+        // Reuse gateway's provider_registry if available, else create a new one.
+        #[cfg(feature = "gateway")]
+        {
+            if let Some(ref reg) = provider_registry {
+                Some(reg.clone())
+            } else {
                 match ConcreteProviderRegistry::from_config(&config).await {
                     Ok(reg) => {
-                        info!("fallback provider registry initialized");
-                        Some(Arc::new(reg) as Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>)
+                        info!("fallback provider registry initialized (non-gateway)");
+                        Some(Arc::new(reg)
+                            as Arc<
+                                dyn blufio_core::traits::ProviderRegistry + Send + Sync,
+                            >)
                     }
                     Err(e) => {
                         warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");
@@ -1368,9 +1367,26 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                     }
                 }
             }
-        } else {
-            None
-        };
+        }
+        #[cfg(not(feature = "gateway"))]
+        {
+            match ConcreteProviderRegistry::from_config(&config).await {
+                Ok(reg) => {
+                    info!("fallback provider registry initialized");
+                    Some(Arc::new(reg)
+                        as Arc<
+                            dyn blufio_core::traits::ProviderRegistry + Send + Sync,
+                        >)
+                }
+                Err(e) => {
+                    warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");
+                    None
+                }
+            }
+        }
+    } else {
+        None
+    };
 
     // Create and run agent loop with channel multiplexer.
     let mut agent_loop = AgentLoop::new(

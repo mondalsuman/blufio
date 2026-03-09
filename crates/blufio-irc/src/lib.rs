@@ -16,6 +16,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use blufio_config::model::IrcConfig;
 use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage,
@@ -26,7 +27,6 @@ use irc::client::prelude::Config as IrcClientConfig;
 use irc::proto::{Command, Response};
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
-use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use tracing::{debug, error, info, warn};
 
 use crate::flood::FloodProtectedSender;

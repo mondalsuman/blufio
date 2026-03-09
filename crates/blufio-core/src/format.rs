@@ -127,7 +127,10 @@ enum Segment {
     Text(String),
     DetectedTable(Table),
     DetectedList(List),
-    DetectedCodeBlock { language: Option<String>, code: String },
+    DetectedCodeBlock {
+        language: Option<String>,
+        code: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -234,10 +237,10 @@ impl FormatPipeline {
         let segments = detect_segments(text);
 
         // If only one Text segment, return as-is (no structures detected)
-        if segments.len() == 1 {
-            if let Segment::Text(ref t) = segments[0] {
-                return t.clone();
-            }
+        if segments.len() == 1
+            && let Segment::Text(ref t) = segments[0]
+        {
+            return t.clone();
         }
 
         let mut out = String::new();
@@ -379,17 +382,19 @@ fn detect_segments(text: &str) -> Vec<Segment> {
         }
 
         // Try table detection: line with | and next line is separator
-        if is_table_row(lines[i]) && i + 1 < lines.len() && is_table_separator(lines[i + 1]) {
-            if let Some(table) = parse_markdown_table(&lines[i..]) {
-                if !text_buf.is_empty() {
-                    segments.push(Segment::Text(text_buf.clone()));
-                    text_buf.clear();
-                }
-                let consumed = 2 + table.rows.len(); // header + separator + data rows
-                segments.push(Segment::DetectedTable(table));
-                i += consumed;
-                continue;
+        if is_table_row(lines[i])
+            && i + 1 < lines.len()
+            && is_table_separator(lines[i + 1])
+            && let Some(table) = parse_markdown_table(&lines[i..])
+        {
+            if !text_buf.is_empty() {
+                segments.push(Segment::Text(text_buf.clone()));
+                text_buf.clear();
             }
+            let consumed = 2 + table.rows.len(); // header + separator + data rows
+            segments.push(Segment::DetectedTable(table));
+            i += consumed;
+            continue;
         }
 
         // Try list detection: consecutive lines starting with `- ` or `N. `
@@ -412,8 +417,8 @@ fn detect_segments(text: &str) -> Vec<Segment> {
                     .iter()
                     .map(|l| {
                         let trimmed = l.trim_start();
-                        if trimmed.starts_with("- ") {
-                            trimmed[2..].to_string()
+                        if let Some(stripped) = trimmed.strip_prefix("- ") {
+                            stripped.to_string()
                         } else {
                             // Strip "N. " prefix
                             if let Some(pos) = trimmed.find(". ") {
@@ -919,7 +924,7 @@ fn identify_blocks(text: &str) -> Vec<Block> {
         }
 
         let is_code_fence = trimmed.starts_with("```");
-        let is_list = trimmed.lines().all(|l| is_list_line(l));
+        let is_list = trimmed.lines().all(is_list_line);
         let is_table = {
             let lines: Vec<&str> = trimmed.lines().collect();
             lines.len() >= 2 && is_table_row(lines[0]) && is_table_separator(lines[1])
@@ -1757,7 +1762,10 @@ mod tests {
         let result = FormatPipeline::detect_and_format(text, &caps);
         assert!(result.contains("```"), "should have code fence for table");
         assert!(result.contains("Alice"), "should contain cell data");
-        assert!(result.contains("Here is a table:"), "should preserve surrounding text");
+        assert!(
+            result.contains("Here is a table:"),
+            "should preserve surrounding text"
+        );
     }
 
     #[test]
@@ -1804,7 +1812,10 @@ mod tests {
         let text = "Intro text\n| A | B |\n|---|---|\n| 1 | 2 |\nMiddle\n- item1\n- item2\nEnd";
         let result = FormatPipeline::detect_and_format(text, &caps_plain_text());
         assert!(result.contains("Intro text"), "should have intro");
-        assert!(result.contains("A: 1"), "table degrades to key:value in plain text");
+        assert!(
+            result.contains("A: 1"),
+            "table degrades to key:value in plain text"
+        );
         assert!(result.contains("Middle"), "should have middle text");
         assert!(result.contains("- item1"), "should have list");
         assert!(result.contains("End"), "should have ending");
@@ -1887,12 +1898,18 @@ mod tests {
         let result = split_at_paragraphs(&text, Some(100));
         // Code block should never be split
         let code_chunk = result.iter().find(|c| c.contains("```")).unwrap();
-        assert!(code_chunk.contains(&"x".repeat(200)), "code block must be atomic");
+        assert!(
+            code_chunk.contains(&"x".repeat(200)),
+            "code block must be atomic"
+        );
     }
 
     #[test]
     fn test_split_at_paragraphs_list_atomic() {
-        let list_text = (0..20).map(|i| format!("- item {}", i)).collect::<Vec<_>>().join("\n");
+        let list_text = (0..20)
+            .map(|i| format!("- item {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let text = format!("Before\n\n{}\n\nAfter", list_text);
         let result = split_at_paragraphs(&text, Some(100));
         // Find chunk containing list
@@ -1912,7 +1929,10 @@ mod tests {
         if result.len() > 1 {
             for chunk in &result {
                 if chunk.contains("| row") {
-                    assert!(chunk.contains("| Name | Value |"), "split table chunk must repeat headers");
+                    assert!(
+                        chunk.contains("| Name | Value |"),
+                        "split table chunk must repeat headers"
+                    );
                 }
             }
         }

@@ -9,14 +9,14 @@
 //! (hysteresis), and level changes are published back to the EventBus.
 
 use std::fmt;
-use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use blufio_bus::events::{new_event_id, now_timestamp, BusEvent, ResilienceEvent};
 use blufio_bus::EventBus;
+use blufio_bus::events::{BusEvent, ResilienceEvent, new_event_id, now_timestamp};
 
 use crate::registry::CircuitBreakerRegistry;
 use crate::snapshot::CircuitBreakerState;
@@ -150,17 +150,17 @@ impl DegradationManager {
         // Count open breakers and check specific conditions
         let primary_provider_open = snapshots
             .get(&self.config.primary_provider)
-            .map_or(false, |s| s.state == CircuitBreakerState::Open);
+            .is_some_and(|s| s.state == CircuitBreakerState::Open);
 
         let primary_channel_open = snapshots
             .get(&self.config.primary_channel)
-            .map_or(false, |s| s.state == CircuitBreakerState::Open);
+            .is_some_and(|s| s.state == CircuitBreakerState::Open);
 
         let all_providers_open = !self.config.provider_names.is_empty()
             && self.config.provider_names.iter().all(|name| {
                 snapshots
                     .get(name)
-                    .map_or(false, |s| s.state == CircuitBreakerState::Open)
+                    .is_some_and(|s| s.state == CircuitBreakerState::Open)
             });
 
         let open_provider_count = self
@@ -170,7 +170,7 @@ impl DegradationManager {
             .filter(|name| {
                 snapshots
                     .get(name.as_str())
-                    .map_or(false, |s| s.state == CircuitBreakerState::Open)
+                    .is_some_and(|s| s.state == CircuitBreakerState::Open)
             })
             .count();
 
@@ -271,15 +271,16 @@ impl DegradationManager {
             } else {
                 // No hysteresis timer, just wait for events
                 match rx.recv().await {
-                    Some(BusEvent::Resilience(
-                        ResilienceEvent::CircuitBreakerStateChanged { .. },
-                    )) => {
+                    Some(BusEvent::Resilience(ResilienceEvent::CircuitBreakerStateChanged {
+                        ..
+                    })) => {
                         let new_level = self.compute_level();
                         let current = self.current_level();
 
                         if new_level.as_u8() > current.as_u8() {
                             // Escalation: immediate
-                            self.set_level(new_level, &current, &event_bus, "escalation").await;
+                            self.set_level(new_level, &current, &event_bus, "escalation")
+                                .await;
                         } else if new_level.as_u8() < current.as_u8() {
                             // De-escalation candidate: start hysteresis timer
                             hysteresis_deadline = Some(
@@ -351,8 +352,8 @@ impl DegradationManager {
 mod tests {
     use super::*;
     use crate::circuit_breaker::CircuitBreakerConfig;
-    use crate::clock::MockClock;
     use crate::clock::Clock;
+    use crate::clock::MockClock;
     use std::collections::HashMap;
     use std::time::Duration;
 
@@ -364,9 +365,7 @@ mod tests {
         }
     }
 
-    fn make_registry_with_deps(
-        deps: &[&str],
-    ) -> (Arc<CircuitBreakerRegistry>, Arc<MockClock>) {
+    fn make_registry_with_deps(deps: &[&str]) -> (Arc<CircuitBreakerRegistry>, Arc<MockClock>) {
         let clock = Arc::new(MockClock::new());
         let clock_ref = clock.clone();
         let configs: HashMap<String, CircuitBreakerConfig> = deps
@@ -412,7 +411,10 @@ mod tests {
     #[test]
     fn level_from_u8_clamps_above_5() {
         assert_eq!(DegradationLevel::from_u8(6), DegradationLevel::SafeShutdown);
-        assert_eq!(DegradationLevel::from_u8(255), DegradationLevel::SafeShutdown);
+        assert_eq!(
+            DegradationLevel::from_u8(255),
+            DegradationLevel::SafeShutdown
+        );
     }
 
     #[test]
@@ -439,7 +441,10 @@ mod tests {
 
     #[test]
     fn level_name() {
-        assert_eq!(DegradationLevel::FullyOperational.name(), "FullyOperational");
+        assert_eq!(
+            DegradationLevel::FullyOperational.name(),
+            "FullyOperational"
+        );
         assert_eq!(DegradationLevel::Emergency.name(), "Emergency");
     }
 
@@ -607,11 +612,7 @@ mod tests {
         let mut config = default_config();
         config.hysteresis_secs = 1; // 1 second for faster testing
         let token = CancellationToken::new();
-        let dm = Arc::new(DegradationManager::new(
-            registry.clone(),
-            config,
-            token,
-        ));
+        let dm = Arc::new(DegradationManager::new(registry.clone(), config, token));
 
         let event_bus = Arc::new(EventBus::new(64));
         let (tx, rx) = mpsc::channel(64);
@@ -691,11 +692,7 @@ mod tests {
         let mut config = default_config();
         config.hysteresis_secs = 2;
         let token = CancellationToken::new();
-        let dm = Arc::new(DegradationManager::new(
-            registry.clone(),
-            config,
-            token,
-        ));
+        let dm = Arc::new(DegradationManager::new(registry.clone(), config, token));
 
         let event_bus = Arc::new(EventBus::new(64));
         let (tx, rx) = mpsc::channel(64);

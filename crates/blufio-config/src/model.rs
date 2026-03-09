@@ -2349,8 +2349,10 @@ half_open_probes = 1
 
     #[test]
     fn resilience_validate_fallback_chain_max_two() {
-        let mut config = ResilienceConfig::default();
-        config.fallback_chain = vec!["a".into(), "b".into(), "c".into()];
+        let config = ResilienceConfig {
+            fallback_chain: vec!["a".into(), "b".into(), "c".into()],
+            ..Default::default()
+        };
         let errors = config.validate();
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("max 2"));
@@ -2358,16 +2360,20 @@ half_open_probes = 1
 
     #[test]
     fn resilience_validate_fallback_chain_two_ok() {
-        let mut config = ResilienceConfig::default();
-        config.fallback_chain = vec!["openai".into(), "ollama".into()];
+        let config = ResilienceConfig {
+            fallback_chain: vec!["openai".into(), "ollama".into()],
+            ..Default::default()
+        };
         let errors = config.validate();
         assert!(errors.is_empty());
     }
 
     #[test]
     fn resilience_validate_providers_unknown() {
-        let mut config = ResilienceConfig::default();
-        config.fallback_chain = vec!["openai".into(), "unknown_provider".into()];
+        let config = ResilienceConfig {
+            fallback_chain: vec!["openai".into(), "unknown_provider".into()],
+            ..Default::default()
+        };
         let errors = config.validate_providers(&["anthropic", "openai", "ollama"]);
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("unknown_provider"));
@@ -2375,8 +2381,10 @@ half_open_probes = 1
 
     #[test]
     fn resilience_validate_providers_all_known() {
-        let mut config = ResilienceConfig::default();
-        config.fallback_chain = vec!["openai".into(), "ollama".into()];
+        let config = ResilienceConfig {
+            fallback_chain: vec!["openai".into(), "ollama".into()],
+            ..Default::default()
+        };
         let errors = config.validate_providers(&["anthropic", "openai", "ollama"]);
         assert!(errors.is_empty());
     }

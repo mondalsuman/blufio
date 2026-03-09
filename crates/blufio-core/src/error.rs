@@ -1741,9 +1741,8 @@ mod proptest_tests {
                 kind,
                 context: ErrorContext::default(),
             }),
-            Just("test-dep".to_string()).prop_map(|dep| BlufioError::CircuitOpen {
-                dependency: dep,
-            }),
+            Just("test-dep".to_string())
+                .prop_map(|dep| BlufioError::CircuitOpen { dependency: dep }),
         ]
     }
 

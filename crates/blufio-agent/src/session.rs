@@ -415,120 +415,125 @@ impl SessionActor {
                 );
                 self.state = SessionState::Responding;
                 let canned = "I'm temporarily unavailable. Please try again later.";
-                let canned_stream: Pin<Box<dyn Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>> =
-                    Box::pin(futures::stream::once(async {
-                        Ok(ProviderStreamChunk {
-                            event_type: blufio_core::types::StreamEventType::ContentBlockDelta,
-                            text: Some(canned.to_string()),
-                            usage: None,
-                            tool_use: None,
-                            stop_reason: Some("end_turn".to_string()),
-                            error: None,
-                        })
-                    }));
+                let canned_stream: Pin<
+                    Box<dyn Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>,
+                > = Box::pin(futures::stream::once(async {
+                    Ok(ProviderStreamChunk {
+                        event_type: blufio_core::types::StreamEventType::ContentBlockDelta,
+                        text: Some(canned.to_string()),
+                        usage: None,
+                        tool_use: None,
+                        stop_reason: Some("end_turn".to_string()),
+                        error: None,
+                    })
+                }));
                 return Ok(canned_stream);
             }
         }
 
         // Check circuit breaker before provider call (if resilience enabled).
         // If primary breaker is open, try fallback providers from fallback_chain.
-        if let Some(ref registry) = self.circuit_breaker_registry {
-            if let Err(primary_err) = registry.check(&self.provider_name) {
-                warn!(
-                    session_id = %self.session_id,
-                    provider = %self.provider_name,
-                    "circuit breaker open, attempting fallback chain"
-                );
+        if let Some(ref registry) = self.circuit_breaker_registry
+            && let Err(primary_err) = registry.check(&self.provider_name)
+        {
+            warn!(
+                session_id = %self.session_id,
+                provider = %self.provider_name,
+                "circuit breaker open, attempting fallback chain"
+            );
 
-                // Try fallback chain providers in order.
-                if !self.fallback_chain.is_empty() {
-                    if let Some(ref provider_registry) = self.provider_registry {
-                        for fallback_name in &self.fallback_chain {
-                            // Check if this fallback's breaker is also open.
-                            if registry.check(fallback_name).is_err() {
-                                warn!(fallback = %fallback_name, "fallback breaker also open, skipping");
-                                continue;
-                            }
-                            // Get fallback provider adapter.
-                            if let Some(fallback_provider) = provider_registry.get_provider(fallback_name) {
-                                let original_model = assembled.request.model.clone();
-                                let mapped_model = map_model_to_tier(&original_model, fallback_name);
-                                info!(
-                                    session_id = %self.session_id,
-                                    primary = %self.provider_name,
-                                    fallback = %fallback_name,
-                                    original_model = %original_model,
-                                    mapped_model = %mapped_model,
-                                    "routing to fallback provider"
-                                );
-                                // Clone the request and set the mapped model for fallback.
-                                let mut fallback_request = assembled.request.clone();
-                                fallback_request.model = mapped_model;
-                                // Call fallback provider.
-                                let fallback_result = fallback_provider.stream(fallback_request).await;
-                                // Record result in fallback's circuit breaker.
-                                match fallback_result {
-                                    Ok(stream) => {
-                                        if let Some(transition) = registry.record_result(fallback_name, true) {
-                                            info!(
-                                                session_id = %self.session_id,
-                                                provider = %fallback_name,
-                                                from = %transition.from_state,
-                                                to = %transition.to_state,
-                                                "fallback circuit breaker state transition"
-                                            );
-                                            #[cfg(feature = "prometheus")]
-                                            {
-                                                blufio_prometheus::recording::record_circuit_breaker_state(
-                                                    fallback_name,
-                                                    transition.to_state.as_numeric(),
-                                                );
-                                                blufio_prometheus::recording::record_circuit_breaker_transition(
-                                                    fallback_name,
-                                                    transition.from_state.as_str(),
-                                                    transition.to_state.as_str(),
-                                                );
-                                            }
-                                        }
-                                        self.last_call_was_fallback = true;
-                                        self.state = SessionState::Responding;
-                                        return Ok(stream);
-                                    }
-                                    Err(e) => {
-                                        let trips = e.trips_circuit_breaker();
-                                        if let Some(transition) = registry.record_result(fallback_name, !trips) {
-                                            warn!(
-                                                session_id = %self.session_id,
-                                                provider = %fallback_name,
-                                                from = %transition.from_state,
-                                                to = %transition.to_state,
-                                                error = %e,
-                                                "fallback circuit breaker state transition on error"
-                                            );
-                                            #[cfg(feature = "prometheus")]
-                                            {
-                                                blufio_prometheus::recording::record_circuit_breaker_state(
-                                                    fallback_name,
-                                                    transition.to_state.as_numeric(),
-                                                );
-                                                blufio_prometheus::recording::record_circuit_breaker_transition(
+            // Try fallback chain providers in order.
+            if !self.fallback_chain.is_empty()
+                && let Some(ref provider_registry) = self.provider_registry
+            {
+                for fallback_name in &self.fallback_chain {
+                    // Check if this fallback's breaker is also open.
+                    if registry.check(fallback_name).is_err() {
+                        warn!(fallback = %fallback_name, "fallback breaker also open, skipping");
+                        continue;
+                    }
+                    // Get fallback provider adapter.
+                    if let Some(fallback_provider) = provider_registry.get_provider(fallback_name) {
+                        let original_model = assembled.request.model.clone();
+                        let mapped_model = map_model_to_tier(&original_model, fallback_name);
+                        info!(
+                            session_id = %self.session_id,
+                            primary = %self.provider_name,
+                            fallback = %fallback_name,
+                            original_model = %original_model,
+                            mapped_model = %mapped_model,
+                            "routing to fallback provider"
+                        );
+                        // Clone the request and set the mapped model for fallback.
+                        let mut fallback_request = assembled.request.clone();
+                        fallback_request.model = mapped_model;
+                        // Call fallback provider.
+                        let fallback_result = fallback_provider.stream(fallback_request).await;
+                        // Record result in fallback's circuit breaker.
+                        match fallback_result {
+                            Ok(stream) => {
+                                if let Some(transition) =
+                                    registry.record_result(fallback_name, true)
+                                {
+                                    info!(
+                                        session_id = %self.session_id,
+                                        provider = %fallback_name,
+                                        from = %transition.from_state,
+                                        to = %transition.to_state,
+                                        "fallback circuit breaker state transition"
+                                    );
+                                    #[cfg(feature = "prometheus")]
+                                    {
+                                        blufio_prometheus::recording::record_circuit_breaker_state(
+                                            fallback_name,
+                                            transition.to_state.as_numeric(),
+                                        );
+                                        blufio_prometheus::recording::record_circuit_breaker_transition(
                                                     fallback_name,
                                                     transition.from_state.as_str(),
                                                     transition.to_state.as_str(),
                                                 );
-                                            }
-                                        }
-                                        warn!(fallback = %fallback_name, error = %e, "fallback provider call failed");
-                                        continue; // Try next fallback
                                     }
                                 }
+                                self.last_call_was_fallback = true;
+                                self.state = SessionState::Responding;
+                                return Ok(stream);
+                            }
+                            Err(e) => {
+                                let trips = e.trips_circuit_breaker();
+                                if let Some(transition) =
+                                    registry.record_result(fallback_name, !trips)
+                                {
+                                    warn!(
+                                        session_id = %self.session_id,
+                                        provider = %fallback_name,
+                                        from = %transition.from_state,
+                                        to = %transition.to_state,
+                                        error = %e,
+                                        "fallback circuit breaker state transition on error"
+                                    );
+                                    #[cfg(feature = "prometheus")]
+                                    {
+                                        blufio_prometheus::recording::record_circuit_breaker_state(
+                                            fallback_name,
+                                            transition.to_state.as_numeric(),
+                                        );
+                                        blufio_prometheus::recording::record_circuit_breaker_transition(
+                                                    fallback_name,
+                                                    transition.from_state.as_str(),
+                                                    transition.to_state.as_str(),
+                                                );
+                                    }
+                                }
+                                warn!(fallback = %fallback_name, error = %e, "fallback provider call failed");
+                                continue; // Try next fallback
                             }
                         }
                     }
                 }
-                // All fallback providers exhausted (or none configured), return original error.
-                return Err(primary_err);
             }
+            // All fallback providers exhausted (or none configured), return original error.
+            return Err(primary_err);
         }
 
         // Stream from provider using the assembled request.
@@ -537,27 +542,27 @@ impl SessionActor {
         // Record result in circuit breaker (if resilience enabled).
         match &stream_result {
             Ok(_) => {
-                if let Some(ref registry) = self.circuit_breaker_registry {
-                    if let Some(transition) = registry.record_result(&self.provider_name, true) {
-                        info!(
-                            session_id = %self.session_id,
-                            provider = %self.provider_name,
-                            from = %transition.from_state,
-                            to = %transition.to_state,
-                            "circuit breaker state transition"
+                if let Some(ref registry) = self.circuit_breaker_registry
+                    && let Some(transition) = registry.record_result(&self.provider_name, true)
+                {
+                    info!(
+                        session_id = %self.session_id,
+                        provider = %self.provider_name,
+                        from = %transition.from_state,
+                        to = %transition.to_state,
+                        "circuit breaker state transition"
+                    );
+                    #[cfg(feature = "prometheus")]
+                    {
+                        blufio_prometheus::recording::record_circuit_breaker_state(
+                            &self.provider_name,
+                            transition.to_state.as_numeric(),
                         );
-                        #[cfg(feature = "prometheus")]
-                        {
-                            blufio_prometheus::recording::record_circuit_breaker_state(
-                                &self.provider_name,
-                                transition.to_state.as_numeric(),
-                            );
-                            blufio_prometheus::recording::record_circuit_breaker_transition(
-                                &self.provider_name,
-                                transition.from_state.as_str(),
-                                transition.to_state.as_str(),
-                            );
-                        }
+                        blufio_prometheus::recording::record_circuit_breaker_transition(
+                            &self.provider_name,
+                            transition.from_state.as_str(),
+                            transition.to_state.as_str(),
+                        );
                     }
                 }
                 self.last_call_was_fallback = false;

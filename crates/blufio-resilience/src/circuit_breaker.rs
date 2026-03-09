@@ -205,7 +205,11 @@ mod tests {
     use crate::clock::MockClock;
     use std::sync::Arc;
 
-    fn make_breaker(threshold: u32, timeout_secs: u64, probes: u32) -> (CircuitBreaker, Arc<MockClock>) {
+    fn make_breaker(
+        threshold: u32,
+        timeout_secs: u64,
+        probes: u32,
+    ) -> (CircuitBreaker, Arc<MockClock>) {
         let clock = Arc::new(MockClock::new());
         let config = CircuitBreakerConfig {
             failure_threshold: threshold,
@@ -241,7 +245,11 @@ mod tests {
         // First 4 failures should not trip
         for i in 0..4 {
             let transition = breaker.record_result(false);
-            assert!(transition.is_none(), "unexpected transition at failure {}", i + 1);
+            assert!(
+                transition.is_none(),
+                "unexpected transition at failure {}",
+                i + 1
+            );
         }
         assert_eq!(breaker.snapshot().state, CircuitBreakerState::Closed);
 

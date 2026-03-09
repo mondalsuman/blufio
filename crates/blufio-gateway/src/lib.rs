@@ -25,9 +25,9 @@ use dashmap::DashMap;
 use tokio::sync::{Mutex, mpsc};
 
 use blufio_core::BlufioError;
-use blufio_core::format::FormatPipeline;
 use blufio_core::ProviderRegistry;
 use blufio_core::StorageAdapter;
+use blufio_core::format::FormatPipeline;
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
 use blufio_core::types::{

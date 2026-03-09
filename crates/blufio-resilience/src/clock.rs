@@ -6,7 +6,7 @@
 //! Production code uses [`RealClock`]; tests inject [`MockClock`] to control
 //! time advancement without `tokio::time::sleep`.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Trait abstracting the system clock for circuit breaker timeout logic.
 pub trait Clock: Send + Sync {
@@ -33,12 +33,22 @@ pub struct MockClock {
 }
 
 #[cfg(test)]
-impl MockClock {
-    /// Create a new mock clock anchored at [`Instant::now()`].
-    pub fn new() -> Self {
+use std::time::Duration;
+
+#[cfg(test)]
+impl Default for MockClock {
+    fn default() -> Self {
         Self {
             current: std::sync::Mutex::new(Instant::now()),
         }
+    }
+}
+
+#[cfg(test)]
+impl MockClock {
+    /// Create a new mock clock anchored at [`Instant::now()`].
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Advance the mock clock by the given duration.
