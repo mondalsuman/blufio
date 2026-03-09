@@ -48,9 +48,9 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 
 ### Content Formatting
 
-- [ ] **FMT-01**: FormatPipeline extended with Table and BulletList/OrderedList RichContent variants
-- [ ] **FMT-02**: Table content degrades to aligned text for channels without table support
-- [ ] **FMT-03**: List content renders as channel-native list format or plain text fallback
+- [x] **FMT-01**: FormatPipeline extended with Table and BulletList/OrderedList RichContent variants
+- [x] **FMT-02**: Table content degrades to aligned text for channels without table support
+- [x] **FMT-03**: List content renders as channel-native list format or plain text fallback
 - [ ] **FMT-04**: FormatPipeline called inside each channel adapter's `send()` method
 - [ ] **FMT-05**: Message length splitting integrated — content split at paragraph boundaries respecting `max_message_length`
 - [ ] **FMT-06**: Adapter-specific formatting (MarkdownV2, mrkdwn, etc.) applied after FormatPipeline degradation
@@ -114,9 +114,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAP-01 | Phase 46 | Complete |
 | CAP-02 | Phase 46 | Complete |
 | CAP-03 | Phase 46 | Complete |
-| FMT-01 | Phase 46 | Pending |
-| FMT-02 | Phase 46 | Pending |
-| FMT-03 | Phase 46 | Pending |
+| FMT-01 | Phase 46 | Complete |
+| FMT-02 | Phase 46 | Complete |
+| FMT-03 | Phase 46 | Complete |
 | TOK-01 | Phase 47 | Pending |
 | TOK-02 | Phase 47 | Pending |
 | TOK-03 | Phase 47 | Pending |

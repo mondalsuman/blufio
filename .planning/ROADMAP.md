@@ -83,7 +83,7 @@
 
 **Milestone Goal:** Address QA audit deviations -- accurate token counting, circuit breakers, graceful degradation, typed errors, format pipeline integration, and architectural decision records.
 
-- [ ] **Phase 46: Core Types & Error Hierarchy** - Typed error hierarchy with retryable/severity/category classification, extended ChannelCapabilities, and Table/List content types
+- [x] **Phase 46: Core Types & Error Hierarchy** - Typed error hierarchy with retryable/severity/category classification, extended ChannelCapabilities, and Table/List content types (completed 2026-03-09)
 - [ ] **Phase 47: Accurate Token Counting** - Replace len()/4 heuristic with real tokenizer-backed counting for all 5 LLM providers
 - [ ] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation
 - [ ] **Phase 49: FormatPipeline Integration** - Wire FormatPipeline into all 8 channel adapters with message splitting and adapter-specific formatting
@@ -101,7 +101,7 @@
   3. Provider errors (RateLimited, AuthFailed, ServerError, Timeout, ModelNotFound) and channel errors (DeliveryFailed, ConnectionLost, RateLimited) are distinct matchable variants
   4. ChannelCapabilities reports streaming_type, formatting_support, and rate_limit fields for capability-aware downstream decisions
   5. FormatPipeline accepts Table and BulletList/OrderedList content and degrades them to aligned text or plain text for channels without native support
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [ ] 46-01-PLAN.md -- Core error types, sub-enums, classification methods, ErrorContext, ChannelCapabilities extension
 - [ ] 46-02-PLAN.md -- Provider crate migration (5 crates) to typed ProviderErrorKind
@@ -225,7 +225,7 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 43. Wire EventBus Event Publishers | v1.3 | 1/1 | Complete | 2026-03-08 |
 | 44. Node Approval Wiring | v1.3 | 2/2 | Complete | 2026-03-08 |
 | 45. Documentation & Traceability Sync | v1.3 | 2/2 | Complete | 2026-03-08 |
-| 46. Core Types & Error Hierarchy | 3/4 | In Progress|  | - |
+| 46. Core Types & Error Hierarchy | 4/4 | Complete   | 2026-03-09 | - |
 | 47. Accurate Token Counting | v1.4 | 0/? | Not started | - |
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 0/? | Not started | - |
 | 49. FormatPipeline Integration | v1.4 | 0/? | Not started | - |
