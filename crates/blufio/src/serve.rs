@@ -58,8 +58,8 @@ use blufio_matrix::MatrixChannel;
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
-#[cfg(feature = "gateway")]
 use crate::providers::ConcreteProviderRegistry;
+
 #[cfg(feature = "gateway")]
 use blufio_core::ProviderRegistry;
 
@@ -1240,6 +1240,48 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         None
     };
 
+    // Extract fallback chain and notification dedup before config is moved.
+    let fallback_chain = config.resilience.fallback_chain.clone();
+    let notification_dedup_secs = config.resilience.notification_dedup_secs;
+
+    // Build fallback provider registry before config is moved (DEG-06).
+    let fallback_provider_registry: Option<Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>> =
+        if !fallback_chain.is_empty() && resilience_registry.is_some() {
+            // Reuse gateway's provider_registry if available, else create a new one.
+            #[cfg(feature = "gateway")]
+            {
+                if let Some(ref reg) = provider_registry {
+                    Some(reg.clone())
+                } else {
+                    match ConcreteProviderRegistry::from_config(&config).await {
+                        Ok(reg) => {
+                            info!("fallback provider registry initialized (non-gateway)");
+                            Some(Arc::new(reg) as Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>)
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");
+                            None
+                        }
+                    }
+                }
+            }
+            #[cfg(not(feature = "gateway"))]
+            {
+                match ConcreteProviderRegistry::from_config(&config).await {
+                    Ok(reg) => {
+                        info!("fallback provider registry initialized");
+                        Some(Arc::new(reg) as Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>)
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");
+                        None
+                    }
+                }
+            }
+        } else {
+            None
+        };
+
     // Create and run agent loop with channel multiplexer.
     let mut agent_loop = AgentLoop::new(
         Box::new(mux),
@@ -1268,6 +1310,16 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         agent_loop.set_degradation_manager(dm.clone());
     }
     agent_loop.set_provider_name("anthropic".to_string());
+
+    // Wire fallback chain and provider registry for fallback provider routing (DEG-06).
+    if let Some(reg) = fallback_provider_registry {
+        agent_loop.set_provider_registry(reg);
+        agent_loop.set_fallback_chain(fallback_chain.clone());
+        info!(
+            chain = ?fallback_chain,
+            "fallback provider chain configured"
+        );
+    }
 
     // Log integration status summary.
     {

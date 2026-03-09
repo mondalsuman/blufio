@@ -188,6 +188,8 @@ impl DelegationRouter {
             circuit_breaker_registry: None, // resilience not wired for delegated actors
             degradation_manager: None,
             provider_name: "anthropic".to_string(),
+            provider_registry: None,
+            fallback_chain: Vec::new(),
         });
 
         // 5. Build inbound message from the delegation request

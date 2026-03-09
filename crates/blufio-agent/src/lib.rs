@@ -77,6 +77,10 @@ pub struct AgentLoop {
     degradation_manager: Option<Arc<blufio_resilience::DegradationManager>>,
     /// Name of the primary provider (for circuit breaker lookups).
     provider_name: String,
+    /// Provider registry for fallback provider lookup.
+    provider_registry: Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>,
+    /// Fallback chain of provider names to try when primary breaker is open.
+    fallback_chain: Vec<String>,
 }
 
 impl AgentLoop {
@@ -120,6 +124,8 @@ impl AgentLoop {
             circuit_breaker_registry: None,
             degradation_manager: None,
             provider_name: "anthropic".to_string(),
+            provider_registry: None,
+            fallback_chain: Vec::new(),
         })
     }
 
@@ -144,6 +150,19 @@ impl AgentLoop {
     /// Sets the primary provider name for circuit breaker lookups.
     pub fn set_provider_name(&mut self, name: String) {
         self.provider_name = name;
+    }
+
+    /// Sets the provider registry for fallback provider lookup.
+    pub fn set_provider_registry(
+        &mut self,
+        registry: Arc<dyn blufio_core::ProviderRegistry + Send + Sync>,
+    ) {
+        self.provider_registry = Some(registry);
+    }
+
+    /// Sets the fallback chain of provider names.
+    pub fn set_fallback_chain(&mut self, chain: Vec<String>) {
+        self.fallback_chain = chain;
     }
 
     /// Runs the main agent loop until the cancellation token is triggered.
@@ -652,6 +671,8 @@ impl AgentLoop {
                     circuit_breaker_registry: self.circuit_breaker_registry.clone(),
                     degradation_manager: self.degradation_manager.clone(),
                     provider_name: self.provider_name.clone(),
+                    provider_registry: self.provider_registry.clone(),
+                    fallback_chain: self.fallback_chain.clone(),
                 });
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
@@ -703,6 +724,8 @@ impl AgentLoop {
             circuit_breaker_registry: self.circuit_breaker_registry.clone(),
             degradation_manager: self.degradation_manager.clone(),
             provider_name: self.provider_name.clone(),
+            provider_registry: self.provider_registry.clone(),
+            fallback_chain: self.fallback_chain.clone(),
         });
         self.sessions.insert(session_key, actor);
         #[cfg(feature = "prometheus")]

@@ -107,6 +107,10 @@ pub struct SessionActorConfig {
     pub degradation_manager: Option<Arc<DegradationManager>>,
     /// Name of the primary provider for circuit breaker lookups.
     pub provider_name: String,
+    /// Provider registry for fallback provider lookup.
+    pub provider_registry: Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>,
+    /// Fallback chain of provider names to try when primary breaker is open.
+    pub fallback_chain: Vec<String>,
 }
 
 /// Manages the state and message processing for a single conversation session.
@@ -159,6 +163,10 @@ pub struct SessionActor {
     provider_name: String,
     /// Whether the last provider call was a fallback.
     last_call_was_fallback: bool,
+    /// Provider registry for fallback provider lookup.
+    provider_registry: Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>,
+    /// Fallback chain of provider names to try when primary breaker is open.
+    fallback_chain: Vec<String>,
 }
 
 impl SessionActor {
@@ -188,6 +196,8 @@ impl SessionActor {
             degradation_manager: config.degradation_manager,
             provider_name: config.provider_name,
             last_call_was_fallback: false,
+            provider_registry: config.provider_registry,
+            fallback_chain: config.fallback_chain,
         }
     }
 
@@ -421,15 +431,103 @@ impl SessionActor {
         }
 
         // Check circuit breaker before provider call (if resilience enabled).
+        // If primary breaker is open, try fallback providers from fallback_chain.
         if let Some(ref registry) = self.circuit_breaker_registry {
-            if let Err(e) = registry.check(&self.provider_name) {
+            if let Err(primary_err) = registry.check(&self.provider_name) {
                 warn!(
                     session_id = %self.session_id,
                     provider = %self.provider_name,
-                    "circuit breaker open, provider call blocked: {}",
-                    e
+                    "circuit breaker open, attempting fallback chain"
                 );
-                return Err(e);
+
+                // Try fallback chain providers in order.
+                if !self.fallback_chain.is_empty() {
+                    if let Some(ref provider_registry) = self.provider_registry {
+                        for fallback_name in &self.fallback_chain {
+                            // Check if this fallback's breaker is also open.
+                            if registry.check(fallback_name).is_err() {
+                                warn!(fallback = %fallback_name, "fallback breaker also open, skipping");
+                                continue;
+                            }
+                            // Get fallback provider adapter.
+                            if let Some(fallback_provider) = provider_registry.get_provider(fallback_name) {
+                                let original_model = assembled.request.model.clone();
+                                let mapped_model = map_model_to_tier(&original_model, fallback_name);
+                                info!(
+                                    session_id = %self.session_id,
+                                    primary = %self.provider_name,
+                                    fallback = %fallback_name,
+                                    original_model = %original_model,
+                                    mapped_model = %mapped_model,
+                                    "routing to fallback provider"
+                                );
+                                // Clone the request and set the mapped model for fallback.
+                                let mut fallback_request = assembled.request.clone();
+                                fallback_request.model = mapped_model;
+                                // Call fallback provider.
+                                let fallback_result = fallback_provider.stream(fallback_request).await;
+                                // Record result in fallback's circuit breaker.
+                                match fallback_result {
+                                    Ok(stream) => {
+                                        if let Some(transition) = registry.record_result(fallback_name, true) {
+                                            info!(
+                                                session_id = %self.session_id,
+                                                provider = %fallback_name,
+                                                from = %transition.from_state,
+                                                to = %transition.to_state,
+                                                "fallback circuit breaker state transition"
+                                            );
+                                            #[cfg(feature = "prometheus")]
+                                            {
+                                                blufio_prometheus::recording::record_circuit_breaker_state(
+                                                    fallback_name,
+                                                    transition.to_state.as_numeric(),
+                                                );
+                                                blufio_prometheus::recording::record_circuit_breaker_transition(
+                                                    fallback_name,
+                                                    transition.from_state.as_str(),
+                                                    transition.to_state.as_str(),
+                                                );
+                                            }
+                                        }
+                                        self.last_call_was_fallback = true;
+                                        self.state = SessionState::Responding;
+                                        return Ok(stream);
+                                    }
+                                    Err(e) => {
+                                        let trips = e.trips_circuit_breaker();
+                                        if let Some(transition) = registry.record_result(fallback_name, !trips) {
+                                            warn!(
+                                                session_id = %self.session_id,
+                                                provider = %fallback_name,
+                                                from = %transition.from_state,
+                                                to = %transition.to_state,
+                                                error = %e,
+                                                "fallback circuit breaker state transition on error"
+                                            );
+                                            #[cfg(feature = "prometheus")]
+                                            {
+                                                blufio_prometheus::recording::record_circuit_breaker_state(
+                                                    fallback_name,
+                                                    transition.to_state.as_numeric(),
+                                                );
+                                                blufio_prometheus::recording::record_circuit_breaker_transition(
+                                                    fallback_name,
+                                                    transition.from_state.as_str(),
+                                                    transition.to_state.as_str(),
+                                                );
+                                            }
+                                        }
+                                        warn!(fallback = %fallback_name, error = %e, "fallback provider call failed");
+                                        continue; // Try next fallback
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // All fallback providers exhausted (or none configured), return original error.
+                return Err(primary_err);
             }
         }
 
@@ -780,6 +878,55 @@ impl SessionActor {
     /// Marks this session as draining (graceful shutdown).
     pub fn set_draining(&mut self) {
         self.state = SessionState::Draining;
+    }
+}
+
+/// Maps a model name to an equivalent-tier model for a target provider.
+///
+/// Preserves the quality tier (high/medium/low) when switching providers:
+/// - High: Opus-class -> gpt-4o / gemini-2.0-pro / keep original
+/// - Medium: Sonnet-class / gpt-4o -> gpt-4o-mini / claude-sonnet / gemini-2.0-flash
+/// - Low: Haiku-class / gpt-4o-mini / gpt-3.5 -> gpt-3.5-turbo / claude-haiku
+///
+/// For Ollama fallback, the original model name is kept (Ollama serves whatever is pulled locally).
+fn map_model_to_tier(model: &str, target_provider: &str) -> String {
+    // Determine the tier of the source model.
+    let tier = if model.contains("opus") || model == "gpt-4o" || model.contains("gemini-2.0-pro") {
+        "high"
+    } else if model.contains("sonnet")
+        || model == "gpt-4o-mini"
+        || model.contains("gemini-2.0-flash")
+        || model.contains("gemini-1.5-pro")
+    {
+        "medium"
+    } else if model.contains("haiku")
+        || model.starts_with("gpt-3.5")
+        || model.contains("gemini-1.5-flash")
+    {
+        "low"
+    } else {
+        // Default to medium tier for unrecognized models.
+        "medium"
+    };
+
+    match target_provider {
+        "openai" => match tier {
+            "high" => "gpt-4o".to_string(),
+            "medium" => "gpt-4o-mini".to_string(),
+            _ => "gpt-3.5-turbo".to_string(),
+        },
+        "anthropic" => match tier {
+            "high" => "claude-opus-4-20250514".to_string(),
+            "medium" => "claude-sonnet-4-20250514".to_string(),
+            _ => "claude-haiku-4-5-20250901".to_string(),
+        },
+        "gemini" => match tier {
+            "high" => "gemini-2.0-pro".to_string(),
+            "medium" => "gemini-2.0-flash".to_string(),
+            _ => "gemini-1.5-flash".to_string(),
+        },
+        "ollama" => model.to_string(), // Keep original for Ollama
+        _ => model.to_string(),        // Unknown provider: keep original
     }
 }
 
