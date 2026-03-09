@@ -14,7 +14,11 @@ pub mod traits;
 pub mod types;
 
 // Re-export key items at crate root for ergonomic imports.
-pub use error::BlufioError;
+pub use error::{
+    BlufioError, ChannelErrorKind, ErrorCategory, ErrorContext, FailureMode, McpErrorKind,
+    MigrationErrorKind, ProviderErrorKind, Severity, SkillErrorKind, StorageErrorKind,
+    http_status_to_provider_error,
+};
 pub use format::{FormatPipeline, FormattedOutput, RichContent};
 pub use streaming::{StreamingBuffer, StreamingEditorOps, split_at_paragraph_boundary};
 pub use types::{
@@ -38,17 +42,26 @@ mod tests {
 
     #[test]
     fn blufio_error_has_all_variants() {
-        // Verify all 12 error variants exist and can be constructed.
+        use error::{
+            ChannelErrorKind, ErrorContext, McpErrorKind, MigrationErrorKind, ProviderErrorKind,
+            SkillErrorKind, StorageErrorKind,
+        };
+
+        // Verify all 16 error variants exist and can be constructed.
         let _config = BlufioError::Config("test".into());
         let _storage = BlufioError::Storage {
+            kind: StorageErrorKind::Busy,
+            context: ErrorContext::default(),
             source: Box::new(std::io::Error::other("test")),
         };
         let _channel = BlufioError::Channel {
-            message: "test".into(),
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext::default(),
             source: None,
         };
         let _provider = BlufioError::Provider {
-            message: "test".into(),
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext::default(),
             source: None,
         };
         let _not_found = BlufioError::AdapterNotFound {
@@ -69,6 +82,21 @@ mod tests {
             message: "daily limit reached".into(),
         };
         let _internal = BlufioError::Internal("test".into());
+        let _skill = BlufioError::Skill {
+            kind: SkillErrorKind::ExecutionFailed,
+            context: ErrorContext::default(),
+            source: None,
+        };
+        let _mcp = BlufioError::Mcp {
+            kind: McpErrorKind::ConnectionFailed,
+            context: ErrorContext::default(),
+            source: None,
+        };
+        let _migration = BlufioError::Migration {
+            kind: MigrationErrorKind::SchemaFailed,
+            context: ErrorContext::default(),
+        };
+        let _update = BlufioError::Update("test".into());
     }
 
     #[test]

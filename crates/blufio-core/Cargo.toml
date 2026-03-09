@@ -16,3 +16,8 @@ async-trait.workspace = true
 semver.workspace = true
 strum.workspace = true
 futures-core = "0.3"
+tracing.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }
+tracing-test = { workspace = true }
