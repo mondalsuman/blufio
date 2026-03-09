@@ -14,6 +14,7 @@ use blufio_anthropic::AnthropicProvider;
 use blufio_config::model::BlufioConfig;
 use blufio_context::ContextEngine;
 use blufio_core::error::BlufioError;
+use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
 use blufio_core::types::{
     ContentBlock, InboundMessage, Message, MessageContent, ProviderMessage, ProviderRequest,
     Session, StreamEventType, TokenUsage, ToolUseData,
@@ -55,8 +56,17 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
             );
         })?);
 
+    // Initialize tokenizer cache from config.
+    let tokenizer_mode = if config.performance.tokenizer_mode == "fast" {
+        TokenizerMode::Fast
+    } else {
+        TokenizerMode::Accurate
+    };
+    let token_cache = Arc::new(TokenizerCache::new(tokenizer_mode));
+
     // Initialize context engine.
-    let mut context_engine = ContextEngine::new(&config.agent, &config.context).await?;
+    let mut context_engine =
+        ContextEngine::new(&config.agent, &config.context, token_cache).await?;
 
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]

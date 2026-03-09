@@ -19,6 +19,7 @@ use blufio_agent::{
 use blufio_config::model::BlufioConfig;
 use blufio_context::ContextEngine;
 use blufio_core::error::BlufioError;
+use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
 use blufio_core::{ChannelAdapter, StorageAdapter};
 use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_plugin::{PluginRegistry, PluginStatus, builtin_catalog};
@@ -182,8 +183,17 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         BudgetTracker::from_ledger(&config.cost, &cost_ledger).await?,
     ));
 
+    // Initialize tokenizer cache from config.
+    let tokenizer_mode = if config.performance.tokenizer_mode == "fast" {
+        TokenizerMode::Fast
+    } else {
+        TokenizerMode::Accurate
+    };
+    let token_cache = Arc::new(TokenizerCache::new(tokenizer_mode));
+
     // Initialize context engine.
-    let mut context_engine = ContextEngine::new(&config.agent, &config.context).await?;
+    let mut context_engine =
+        ContextEngine::new(&config.agent, &config.context, token_cache).await?;
 
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]

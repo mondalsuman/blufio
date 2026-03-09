@@ -18,6 +18,7 @@ use blufio_context::ContextEngine;
 use blufio_core::types::{
     InboundMessage, MessageContent, ProviderStreamChunk, StreamEventType, TokenUsage,
 };
+use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
 use blufio_core::{BlufioError, ProviderAdapter, StorageAdapter};
 use blufio_cost::{BudgetTracker, CostLedger};
 use blufio_router::ModelRouter;
@@ -153,8 +154,9 @@ impl DelegationRouter {
             ..AgentConfig::default()
         };
         let context_config = ContextConfig::default();
+        let token_cache = Arc::new(TokenizerCache::new(TokenizerMode::Accurate));
         let context_engine = Arc::new(
-            ContextEngine::new(&agent_config, &context_config)
+            ContextEngine::new(&agent_config, &context_config, token_cache)
                 .await
                 .map_err(|e| {
                     BlufioError::Internal(format!(
