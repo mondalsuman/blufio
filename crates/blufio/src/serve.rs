@@ -373,9 +373,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                         },
                     ) = &event
                     {
-                        let status = format!("Degradation: L{} {}", to_level, to_name);
                         #[cfg(unix)]
-                        blufio_agent::sdnotify::notify_status(&status);
+                        {
+                            let status = format!("Degradation: L{} {}", to_level, to_name);
+                            blufio_agent::sdnotify::notify_status(&status);
+                        }
 
                         // Record Prometheus degradation level.
                         #[cfg(feature = "prometheus")]
@@ -988,6 +990,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         channels = mux.channel_count(),
         "channel multiplexer connected"
     );
+    #[cfg(unix)]
     {
         let ready_status = format!(
             "Ready: {} channel{}{}",
@@ -999,7 +1002,6 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 ""
             }
         );
-        #[cfg(unix)]
         blufio_agent::sdnotify::notify_ready(&ready_status);
     }
 
@@ -1620,6 +1622,7 @@ async fn memory_monitor(
 /// Read the process RSS in bytes from /proc/self/statm (Linux only).
 ///
 /// Returns None on non-Linux platforms or if the file cannot be read.
+#[cfg(not(target_env = "msvc"))]
 fn read_rss_bytes() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
