@@ -22,6 +22,7 @@ use blufio_core::types::{
 };
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use tracing::{debug, error, info, warn};
 
 use crate::jsonrpc::JsonRpcClient;
@@ -230,6 +231,12 @@ impl ChannelAdapter for SignalChannel {
         // This avoids sharing the read/write client between tasks.
         let mut rpc_client = JsonRpcClient::connect(&self.config).await?;
 
+        let caps = self.capabilities();
+
+        // Pipeline: detect_and_format -> no escape (PlainText) -> split -> send each chunk
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+        let chunks = split_at_paragraphs(&formatted, caps.max_message_length);
+
         // Determine if group or DM from metadata.
         let (is_group, chat_id) = if let Some(ref metadata) = msg.metadata
             && let Ok(meta) = serde_json::from_str::<serde_json::Value>(metadata)
@@ -248,27 +255,34 @@ impl ChannelAdapter for SignalChannel {
             (false, msg.channel.clone())
         };
 
-        let params = if is_group {
-            serde_json::json!({
-                "groupId": chat_id,
-                "message": msg.content,
-            })
-        } else {
-            serde_json::json!({
-                "recipient": chat_id,
-                "message": msg.content,
-            })
-        };
+        let mut first_id = None;
 
-        let response = rpc_client.send_request("send", params).await?;
+        for chunk in &chunks {
+            let params = if is_group {
+                serde_json::json!({
+                    "groupId": chat_id,
+                    "message": chunk,
+                })
+            } else {
+                serde_json::json!({
+                    "recipient": chat_id,
+                    "message": chunk,
+                })
+            };
 
-        let msg_id = response
-            .result
-            .and_then(|v| v.get("timestamp").and_then(|t| t.as_u64()))
-            .map(|t| t.to_string())
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let response = rpc_client.send_request("send", params).await?;
 
-        Ok(MessageId(msg_id))
+            if first_id.is_none() {
+                let msg_id = response
+                    .result
+                    .and_then(|v| v.get("timestamp").and_then(|t| t.as_u64()))
+                    .map(|t| t.to_string())
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                first_id = Some(MessageId(msg_id));
+            }
+        }
+
+        Ok(first_id.unwrap_or_else(|| MessageId(uuid::Uuid::new_v4().to_string())))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {

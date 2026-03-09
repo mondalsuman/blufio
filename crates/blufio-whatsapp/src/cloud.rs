@@ -5,6 +5,7 @@
 
 use crate::api;
 use async_trait::async_trait;
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use blufio_config::model::WhatsAppConfig;
 use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
@@ -160,11 +161,24 @@ impl ChannelAdapter for WhatsAppCloudChannel {
             });
         };
 
-        let message_id =
-            api::send_whatsapp_message(client, phone_number_id, access_token, &to, &msg.content)
-                .await?;
+        let caps = self.capabilities();
 
-        Ok(MessageId(message_id))
+        // Pipeline: detect_and_format -> no escape (PlainText) -> split -> send each chunk
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+        let chunks = split_at_paragraphs(&formatted, caps.max_message_length);
+
+        let mut first_id = None;
+
+        for chunk in &chunks {
+            let message_id =
+                api::send_whatsapp_message(client, phone_number_id, access_token, &to, chunk)
+                    .await?;
+            if first_id.is_none() {
+                first_id = Some(MessageId(message_id));
+            }
+        }
+
+        Ok(first_id.unwrap_or_else(|| MessageId(String::new())))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {

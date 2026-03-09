@@ -25,6 +25,7 @@ use dashmap::DashMap;
 use tokio::sync::{Mutex, mpsc};
 
 use blufio_core::BlufioError;
+use blufio_core::format::FormatPipeline;
 use blufio_core::ProviderRegistry;
 use blufio_core::StorageAdapter;
 use blufio_core::traits::adapter::PluginAdapter;
@@ -314,7 +315,7 @@ impl ChannelAdapter for GatewayChannel {
             supports_reactions: false,
             supports_threads: false,
             streaming_type: StreamingType::AppendOnly,
-            formatting_support: FormattingSupport::HTML,
+            formatting_support: FormattingSupport::FullMarkdown,
             rate_limit: None,
             supports_code_blocks: true,
         }
@@ -394,6 +395,11 @@ impl ChannelAdapter for GatewayChannel {
     }
 
     async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
+        let caps = self.capabilities();
+
+        // Pipeline: detect_and_format -> no escape -> no split (Gateway passes raw, API clients render)
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+
         // Extract request_id from metadata for response routing.
         let metadata = msg.metadata.as_deref().unwrap_or("{}");
         let meta: serde_json::Value =
@@ -412,7 +418,7 @@ impl ChannelAdapter for GatewayChannel {
         {
             let ws_msg = serde_json::json!({
                 "type": ws::message_types::MESSAGE_COMPLETE,
-                "content": msg.content,
+                "content": formatted,
                 "session_id": msg.session_id,
             });
             let _ = sender.send(ws_msg.to_string()).await;
@@ -423,7 +429,7 @@ impl ChannelAdapter for GatewayChannel {
         if !request_id.is_empty()
             && let Some((_, sender)) = self.response_map.remove(request_id)
         {
-            let _ = sender.send(msg.content);
+            let _ = sender.send(formatted);
             return Ok(MessageId(request_id.to_string()));
         }
 

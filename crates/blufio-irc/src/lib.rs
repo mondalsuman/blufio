@@ -26,6 +26,7 @@ use irc::client::prelude::Config as IrcClientConfig;
 use irc::proto::{Command, Response};
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
+use blufio_core::format::{FormatPipeline, split_at_paragraphs};
 use tracing::{debug, error, info, warn};
 
 use crate::flood::FloodProtectedSender;
@@ -393,7 +394,17 @@ impl ChannelAdapter for IrcChannel {
             });
         }
 
-        sender.send(&target, &msg.content).await?;
+        let caps = self.capabilities();
+
+        // Pipeline: detect_and_format -> no escape (PlainText) -> split at paragraphs -> send
+        // Two-level split: split_at_paragraphs for paragraph-level, then FloodProtectedSender
+        // handles PRIVMSG line-level splitting via splitter.rs
+        let formatted = FormatPipeline::detect_and_format(&msg.content, &caps);
+        let chunks = split_at_paragraphs(&formatted, caps.max_message_length);
+
+        for chunk in &chunks {
+            sender.send(&target, chunk).await?;
+        }
 
         Ok(MessageId(uuid::Uuid::new_v4().to_string()))
     }
