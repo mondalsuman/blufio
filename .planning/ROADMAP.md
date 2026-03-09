@@ -6,7 +6,7 @@
 - ✅ **v1.1 MCP Integration** — Phases 15-22 (shipped 2026-03-03)
 - ✅ **v1.2 Production Hardening** — Phases 23-28 (shipped 2026-03-04)
 - ✅ **v1.3 Ecosystem Expansion** — Phases 29-45 (shipped 2026-03-08)
-- ✅ **v1.4 Quality & Resilience** — Phases 46-50 (shipped 2026-03-09)
+- 🔧 **v1.4 Quality & Resilience** — Phases 46-52 (gap closure in progress)
 
 ## Phases
 
@@ -80,7 +80,7 @@
 </details>
 
 <details>
-<summary>v1.4 Quality & Resilience (Phases 46-50) -- SHIPPED 2026-03-09</summary>
+<summary>v1.4 Quality & Resilience (Phases 46-52) -- gap closure in progress</summary>
 
 **Milestone Goal:** Address QA audit deviations -- accurate token counting, circuit breakers, graceful degradation, typed errors, format pipeline integration, and architectural decision records.
 
@@ -89,6 +89,8 @@
 - [x] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (completed 2026-03-09)
 - [x] **Phase 49: FormatPipeline Integration** - Wire FormatPipeline into all 8 channel adapters with message splitting and adapter-specific formatting (completed 2026-03-09)
 - [x] **Phase 50: ADRs & Documentation** - Architectural decision records for ORT pinning and plugin architecture (completed 2026-03-09)
+- [ ] **Phase 51: Wire CB Events to EventBus** - Connect SessionActor circuit breaker transitions to EventBus, unblocking degradation escalation and notifications
+- [ ] **Phase 52: Fix Tracking Gaps** - Fix REQUIREMENTS.md checkboxes and SUMMARY frontmatter for verified requirements
 
 </details>
 
@@ -170,6 +172,29 @@ Plans:
 Plans:
 - [x] 50-01-PLAN.md -- ADR-001 (ORT ONNX inference), ADR-002 (compiled-in plugin architecture), index, project doc updates
 
+### Phase 51: Wire CB Events to EventBus
+**Goal**: SessionActor publishes CircuitBreakerStateChanged events to EventBus when circuit breaker transitions occur, enabling DegradationManager to escalate and notifications to fire in production
+**Depends on**: Phase 48 (circuit breaker and degradation ladder infrastructure)
+**Requirements**: CB-04, DEG-01, DEG-02, DEG-04, DEG-05
+**Gap Closure:** Closes integration gap (SessionActor -> EventBus) and flow gap (CB State -> Degradation Escalation -> Notifications) from v1.4 audit
+**Success Criteria** (what must be TRUE):
+  1. SessionActor has access to EventBus and publishes CircuitBreakerStateChanged when record_result() returns a state transition
+  2. DegradationManager receives CB state change events and escalates/de-escalates degradation level in production (not just tests)
+  3. End-to-end flow works: provider error -> CB trip -> EventBus event -> degradation escalation -> notification sent
+Plans:
+- [ ] 51-01-PLAN.md -- TBD
+
+### Phase 52: Fix Tracking Gaps
+**Goal**: REQUIREMENTS.md checkboxes and SUMMARY frontmatter accurately reflect verified-working requirements
+**Depends on**: Nothing (bookkeeping only)
+**Requirements**: FMT-05, DOC-01, DOC-02
+**Gap Closure:** Closes tracking-only gaps from v1.4 audit (code verified working, metadata out of sync)
+**Success Criteria** (what must be TRUE):
+  1. FMT-05 checkbox is checked in REQUIREMENTS.md and listed in 49-01-SUMMARY requirements_completed
+  2. DOC-01 and DOC-02 are listed in 50-01-SUMMARY requirements_completed frontmatter
+Plans:
+- [ ] 52-01-PLAN.md -- TBD
+
 ## Progress
 
 **Execution Order:**
@@ -228,7 +253,9 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 4/4 | Complete | 2026-03-09 |
 | 49. FormatPipeline Integration | v1.4 | 2/2 | Complete | 2026-03-09 |
 | 50. ADRs & Documentation | 1/1 | Complete   | 2026-03-09 | 2026-03-09 |
+| 51. Wire CB Events to EventBus | v1.4 | 0/0 | Pending | — |
+| 52. Fix Tracking Gaps | v1.4 | 0/0 | Pending | — |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-09 after Phase 50 complete -- v1.4 shipped*
+*Last updated: 2026-03-09 after gap closure phases 51-52 added*
