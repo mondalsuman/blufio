@@ -75,15 +75,16 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ OpenClaw migration tool (migrate, preview, config translate) — v1.3
 - ✓ CLI utilities (bench, privacy evidence-report, config recipe, uninstall, bundle) — v1.3
 - ✓ All 71 v1.3 requirements verified with VERIFICATION.md reports — v1.3
+- ✓ Typed error hierarchy with is_retryable(), severity(), category() classification — v1.4 Phase 46
+- ✓ ChannelCapabilities extension (streaming_type, formatting_support, rate_limit, supports_code_blocks) — v1.4 Phase 46
+- ✓ FormatPipeline Table/List content types with 3-tier degradation — v1.4 Phase 46
 
 ### Active
 
 - [ ] Accurate token counting via tokenizers crate (replace len()/4 heuristic)
 - [ ] Circuit breaker state machine for external dependencies
 - [ ] Graceful degradation ladder (6 levels, automatic escalation)
-- [ ] Typed error hierarchy with is_retryable(), severity(), category()
-- [ ] FormatPipeline integration into channel adapters + Table/List content types
-- [ ] ChannelCapabilities extension (streaming_type, formatting_support, rate_limits)
+- [ ] FormatPipeline integration into channel adapters
 - [ ] ORT upgrade from RC to stable release + ADR
 - [ ] Plugin architecture ADR (Phase 1 compiled-in vs future dynamic loading)
 
@@ -125,7 +126,7 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.3 Ecosystem Expansion with 71,808 LOC Rust across 35 crates. 219 requirements verified across 4 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71). All 71 v1.3 requirements verified with formal VERIFICATION.md reports. 4/4 cross-feature integration flows passing.
+Shipped v1.3 Ecosystem Expansion with 71,808 LOC Rust across 35 crates. 219 requirements verified across 4 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71). v1.4 Phase 46 complete: typed error hierarchy with 6 sub-enums, classification methods, extended ChannelCapabilities, and FormatPipeline Table/List content types.
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc.
 
@@ -191,6 +192,9 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Minisign over GPG | Simpler, Ed25519-only, single embedded key fits single-binary model | ✓ Good — compile-time constant, no key distribution problem |
 | self-replace for atomic binary swap | Cross-platform atomic file replacement for running binary | ✓ Good — handles Windows locking, Unix atomic rename |
 | Health check via child process | Spawn `blufio doctor` after swap rather than in-process check | ✓ Good — tests actual new binary, 30s timeout with auto-rollback |
+| Cow<'static, str> for user_message() | Zero-allocation static messages, owned strings only when dynamic | ✓ Good — no allocation overhead for static error messages |
+| ChannelCapabilities derives Default | Ergonomic ..Default::default() for adapter capabilities | ✓ Good — reduces boilerplate in all 8 adapters |
+| Legacy record_error() kept | Backward compatibility alongside new record_error_classified() | ✓ Good — gradual migration path for Prometheus consumers |
 | sd-notify best-effort wrapper | Silent no-op on non-systemd platforms, never blocks or errors | ✓ Good — zero-impact on macOS/Docker development |
 | OpenAI wire types separate from internal | OpenAI request/response types in blufio-openai, internal types in blufio-core | ✓ Good — clean boundary, no leaky abstractions |
 | Ollama native /api/chat (not compat shim) | Full feature access including tool calling and model discovery | ✓ Good — NDJSON streaming works cleanly |
@@ -207,4 +211,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | matrix-sdk 0.11 pinned | 0.12+ requires Rust 1.88 (not yet stable) | ✓ Good — room join + messaging work |
 
 ---
-*Last updated: 2026-03-08 after v1.4 milestone start*
+*Last updated: 2026-03-09 after Phase 46*

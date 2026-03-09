@@ -1,539 +1,495 @@
-# Technology Stack: v1.3 Ecosystem Expansion
+# Technology Stack: v1.4 Quality & Resilience
 
 **Project:** Blufio
-**Researched:** 2026-03-05
-**Scope:** NEW crate additions for OpenAI-compatible API layer, multi-provider LLM support, multi-channel adapters, Docker, event bus, skill registry/marketplace, node system, and migration tooling.
+**Researched:** 2026-03-08
+**Scope:** NEW stack additions/changes for v1.4 only -- accurate token counting, circuit breakers, ORT upgrade path, degradation management, typed errors, FormatPipeline integration, ChannelCapabilities extension.
 
-> Existing stack validated through v1.2 (tokio, axum, rusqlite 0.37 with SQLCipher, reqwest 0.13, ed25519-dalek, rmcp 0.17, etc.) is UNCHANGED. This document covers ONLY what v1.3 adds.
-
----
-
-## 1. OpenAI-Compatible API Endpoints
-
-The `/v1/chat/completions`, `/v1/responses`, and `/v1/tools/invoke` endpoints are pure axum handlers. No new framework is needed — axum 0.8 already handles SSE streaming, typed headers, and JSON bodies.
-
-### New Libraries for OpenAI API Surface
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| tower-governor | 0.8.0 | Rate limiting middleware for scoped API keys | Wraps governor (GCRA algorithm) as a Tower Layer. Integrates natively with axum 0.8's tower-compatible router. Supports custom key extractors (API key header, not just IP). GCRA is better than token-bucket for API rate limiting. |
-| async-openai | 0.33.0 | Type definitions for OpenAI API schema (ChatCompletionRequest, ChatCompletionResponse, etc.) | The crate's types model the OpenAI OpenAPI spec exactly. Import the types only — use as schema reference and response serialization. Do NOT use its HTTP client for inbound requests. Version 0.33.0 released 2026-02-18. |
-
-**Why tower-governor instead of tower::limit::RateLimit:** Tower's built-in RateLimiter is global, not per-key. tower-governor supports custom key extractors needed for scoped API key rate limiting.
-
-**OpenAI API SSE streaming:** axum's built-in `axum::response::sse::Sse<S>` + `tokio::sync::broadcast` for internal fan-out. No extra crates needed. Already established pattern in codebase.
-
-**Webhook management:** reqwest 0.13 (existing) for outbound delivery. Store webhook endpoints in SQLite. No additional crates.
-
-**Batch operations:** tokio::task::JoinSet (existing, in tokio) for bounded parallel execution of batch requests.
-
-**Confidence:** HIGH — axum 0.8 SSE is documented. tower-governor 0.8.0 verified on docs.rs. async-openai 0.33.0 version verified on docs.rs (released 2026-02-18).
+> Existing stack validated through v1.3 (71,808 LOC, 35 crates, 219 requirements) is UNCHANGED. This document covers ONLY what v1.4 adds or modifies.
 
 ---
 
-## 2. Multi-Provider LLM Support
+## 1. Accurate Token Counting
 
-The existing `Provider` adapter trait abstracts LLM calls. New providers implement this trait as plugin crates.
+### New Dependency
 
-### Provider Crates
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `tiktoken-rs` | 0.9.1 | BPE tokenization for OpenAI models (GPT-4o, o1, o3, o4-mini via o200k_base encoding) | Only Rust crate with correct OpenAI vocabulary files. Provides o200k_base, cl100k_base encodings. Verified on crates.io, released 2025-11-09. |
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| async-openai | 0.33.0 | OpenAI provider client (also covers OpenRouter, Ollama via base URL override) | Single crate covers three providers. OpenAI-compatible endpoints (Ollama, OpenRouter) work by setting `OPENAI_BASE_URL`. async-openai supports `base_url` configuration. Version 0.33.0 released 2026-02-18 — verified. |
-| genai | 0.5.3 | Google Gemini provider (and fallback multi-provider utility) | The only production-stable Rust crate with native Gemini support. Also covers Anthropic, OpenAI, Ollama, Groq, DeepSeek, etc. Version 0.5.3 released 2026-01-31. Actively maintained, semver-respecting. |
+### Existing Dependency (Reused)
 
-**Architecture decision — why NOT genai for everything:**
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `tokenizers` (HuggingFace) | 0.21.4 (keep current, do NOT upgrade to 0.22) | BPE tokenization for Anthropic Claude and Ollama HF models | Already in workspace for ONNX embedding tokenization in blufio-memory. Claude tokenizer.json from Xenova/claude-tokenizer is HF tokenizers-compatible and loadable via `Tokenizer::from_file()`. |
 
-genai is a unified client. But blufio already has its own Provider trait with a built codebase. Using genai for Anthropic would displace the existing `blufio-anthropic` crate (v1.0-v1.2 investment). Use:
-- `blufio-anthropic` — keep existing, no change
-- `blufio-openai` — new crate, uses `async-openai` with configurable base URL
-- `blufio-ollama` — new crate, uses `async-openai` with `http://localhost:11434/v1` base URL (Ollama speaks OpenAI API natively)
-- `blufio-openrouter` — new crate, uses `async-openai` with `https://openrouter.ai/api/v1` base URL
-- `blufio-gemini` — new crate, uses `genai` crate for Google's native Gemini API (not OpenAI-compatible)
+**Confidence:** HIGH -- verified via official Anthropic docs, crates.io, HuggingFace, docs.rs
 
-**Why async-openai 0.33 for OpenAI/Ollama/OpenRouter:**
+### Architecture: Multi-Provider Token Counting
 
-Ollama's `/api/chat` implements the OpenAI chat completions spec. OpenRouter is an OpenAI-compatible proxy. Using `async-openai` with a custom `OPENAI_BASE_URL` or `OpenAIConfig::with_api_base()` covers all three providers with one crate and no extra dependencies.
+Blufio supports 5 LLM providers (Anthropic, OpenAI, Ollama, OpenRouter, Gemini), each with different tokenizers. The `len() / 4` heuristic currently used in `blufio-context/src/dynamic.rs:64` gives only ~75-85% accuracy for English text and degrades further for CJK, code, and mixed content.
 
-**Why genai 0.5.3 for Gemini:**
+**Provider-to-tokenizer mapping:**
 
-Google's Gemini API is NOT OpenAI-compatible (different request/response format, streaming protocol, auth mechanism). The only mature Rust options are community crates. genai 0.5.3 is the most complete, actively maintained, multi-provider crate. No official Google Rust SDK exists. genai has 0.6.0-beta.3 in flight — stick with 0.5.3 for stability.
+| Provider | Tokenizer Strategy | Accuracy vs len/4 | Rationale |
+|----------|-------------------|-------------------|-----------|
+| Anthropic (Claude) | `tokenizers` crate + `Xenova/claude-tokenizer` tokenizer.json (65K vocab, BPE) | ~80-95% vs ~75-85% | Anthropic does not publish an official tokenizer. The Xenova/claude-tokenizer on HuggingFace is the best available approximation. For Claude 3/4, accuracy is ~80-95% (the Xenova tokenizer matches Claude 2.x exactly; Claude 3+ vocabulary may differ slightly). The Anthropic `count_tokens` API is free but requires a network call -- not viable as primary path for context budget decisions. |
+| OpenAI | `tiktoken-rs` with `o200k_base` encoding | ~100% vs ~75-85% | tiktoken-rs 0.9.1 is the canonical OpenAI tokenizer in Rust. Supports GPT-4o, o1, o3, o4 via o200k_base. This matches OpenAI's server-side counting exactly. |
+| Ollama | `tokenizers` crate + per-model tokenizer.json from HuggingFace | ~95-100% vs ~75-85% | Ollama models are HuggingFace models; each has its own tokenizer.json downloadable from HF. Load at model init time. Fallback: Ollama API returns exact token counts in responses (prompt_eval_count, eval_count). |
+| OpenRouter | Same as underlying model | varies | OpenRouter proxies to various models. Use the tokenizer matching the configured backend model. |
+| Gemini | Calibrated heuristic (len/3.5 for multilingual, len/4 for English) | ~80% vs ~75% | Google does not publish Gemini tokenizers. Their API returns exact token counts in responses (promptTokenCount, candidatesTokenCount). For pre-flight estimation, a calibrated heuristic is the only viable offline option. |
 
-**Confidence:** HIGH for async-openai 0.33 (verified docs.rs). MEDIUM for genai 0.5.3 (verified docs.rs, no official backing, active development).
+**Why NOT tiktoken-rs alone for all providers:** tiktoken-rs supports ONLY OpenAI models. It has zero support for Anthropic Claude, Gemini, or Ollama models. Using it for Claude would give worse results than the current len/4 heuristic because OpenAI and Claude vocabularies overlap only ~70%.
 
----
+**Why NOT tokenizers alone for all providers:** The `tokenizers` crate cannot load tiktoken BPE files natively. OpenAI's vocabulary format (rank-based BPE) differs from HuggingFace's tokenizer.json format (merge-based BPE). tiktoken-rs wraps OpenAI's vocabulary files correctly.
 
-## 3. TTS / Transcription / Image Provider Traits
+**Why NOT the Anthropic count_tokens API as primary:** It requires a network call (adds latency), is rate-limited (100-8000 RPM depending on tier), and does not work offline. Use it for calibration/verification only, not per-message counting.
 
-These are new adapter traits on the existing plugin system — the `Provider` trait gains sibling traits: `TtsProvider`, `TranscriptionProvider`, `ImageProvider`.
+### Token Counter Trait Design
 
-### TTS/Transcription Crates
+```rust
+// New: blufio-core/src/tokenizer.rs
+pub trait TokenCounter: Send + Sync {
+    /// Count tokens in text. Must be fast (microseconds, not milliseconds).
+    fn count_tokens(&self, text: &str) -> usize;
+    /// Provider name this counter is calibrated for.
+    fn provider_name(&self) -> &str;
+}
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| async-openai | 0.33.0 (already added above) | OpenAI TTS (tts-1, gpt-4o-mini-tts) and Whisper transcription HTTP API client | async-openai models `/v1/audio/speech` (TTS) and `/v1/audio/transcriptions` (Whisper) in its type system. Same crate, no new dependency. |
+// Implementations:
+// ClaudeTokenCounter    -- tokenizers crate + bundled claude tokenizer.json
+// OpenAiTokenCounter    -- tiktoken-rs + o200k_base
+// HfModelTokenCounter   -- tokenizers crate + model-specific tokenizer.json (Ollama)
+// HeuristicTokenCounter -- calibrated chars-per-token ratio (Gemini fallback)
+```
 
-**No local TTS/STT by default:** Local whisper bindings (whisper-rs, whisper-cpp-plus) require building C/C++ code, adding significant compile time and binary size. They are appropriate as optional plugin crates that operators install separately. The default `TtsProvider` and `TranscriptionProvider` implementations target the OpenAI-compatible HTTP API.
+### Claude Tokenizer File Strategy
 
-**Why NOT whisper-rs in core:** whisper-rs 0.15 requires building whisper.cpp (C++, GGML), adding 5-15MB to binary and 3-5 minutes to builds. Violates the <50MB binary constraint. Add as a separate optional crate (`blufio-whisper`) in a future milestone if users request it.
+The `Xenova/claude-tokenizer` tokenizer.json is 1.77MB. Options for bundling:
 
-**Image generation:** Same pattern. `async-openai` covers DALL-E via `/v1/images/generations`. No new crate.
+**Recommendation: Ship alongside model files in `~/.blufio/models/`.**
 
-**Confidence:** HIGH — async-openai TTS/transcription types verified in documentation.
+The ONNX embedder already downloads `model.onnx` (8.5MB) and `tokenizer.json` (for the embedder) to `~/.blufio/models/` at first run. Adding a separate `claude-tokenizer.json` (1.77MB) to this download step is consistent and avoids inflating the binary with `include_bytes!()`.
 
----
+Fallback: If the tokenizer file is not available (first run before download, offline), fall back to the calibrated heuristic (len/3.5). This gracefully degrades without losing functionality.
 
-## 4. Channel Adapters
+### Integration Points
 
-Each adapter is a new `blufio-{name}` crate implementing the existing `Channel` trait. The trait already defines `send_message()`, `recv_message()`, and lifecycle hooks.
+| Location | Current | After v1.4 |
+|----------|---------|------------|
+| `blufio-context/src/dynamic.rs:64` | `m.content.len() / 4` | `token_counter.count_tokens(&m.content)` |
+| `blufio-cost` | Uses post-response API counts | Can also use pre-flight estimates for budget checks |
+| `blufio-router` | Heuristic context budget | Accurate context budget based on real token counts |
+| `blufio-agent/src/session.rs` | token_count stored as Option<i64> from API response | Also populate from pre-flight counter |
 
-### Discord
+### Why Keep tokenizers at 0.21 (NOT 0.22)
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| serenity | 0.12.5 | Discord API client (Gateway + REST) | The de facto Rust Discord library. 0.12.5 released 2025-12-20. MSRV 1.74 — compatible with project's Rust 1.85. Supports tokio 1.0, async/await, Gateway websocket events, REST API. Used by thousands of Discord bots. |
+The workspace currently uses `tokenizers = { version = "0.21", ... }` and resolves to 0.21.4. The latest available is 0.22.1. Reasons to stay:
 
-**Why serenity over twilight:** twilight is more modular but lower-level. serenity provides a complete bot experience with a higher-level event system. For a channel adapter that needs to receive messages and send replies, serenity's EventHandler trait is a clean fit for the Channel trait.
-
-**Confidence:** HIGH — serenity 0.12.5 verified on docs.rs, MSRV 1.74 confirmed.
-
----
-
-### WhatsApp
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| reqwest | 0.13 (existing) | Meta WhatsApp Cloud API HTTP client | WhatsApp Business Cloud API is a standard REST+webhook API. No Rust-specific library needed. Use reqwest with serde for type-safe request/response. |
-
-**Architecture:** Meta's WhatsApp Cloud API works via:
-1. Inbound: Meta POSTs webhook events to our axum server (existing HTTP gateway handles this)
-2. Outbound: We POST to `https://graph.facebook.com/v20.0/{phone_number_id}/messages`
-
-**Why NOT whatsapp-cloud-api crate (0.5.4):** Last updated ~10 months ago (May 2025), targets Facebook Graph API v20.0 specifically, small ecosystem. Meta Cloud API is simple enough to implement directly with reqwest + serde in ~300 lines. Direct implementation avoids a dependency on an unmaintained community crate.
-
-**Why NOT whatsapp-rust:** Uses unofficial WhatsApp Web protocol (reverse-engineered). Violates Meta ToS. Risk of account suspension. NOT suitable for a production platform.
-
-**Setup requirement:** Operator needs a Meta Developer account, WhatsApp Business API app, verified phone number. This is a platform requirement, not a code issue. Document it clearly.
-
-**Confidence:** HIGH for reqwest-based implementation. MEDIUM for Meta API stability (API is versioned and stable, but requires business verification).
+1. `ort` =2.0.0-rc.11 is pinned and depends on `ndarray` 0.17. Upgrading tokenizers to 0.22 could introduce dependency conflicts.
+2. `tokenizers` 0.21.4 loads tokenizer.json files correctly. No feature gap for our use case.
+3. The upgrade path is: when ort stable 2.0.0 releases, evaluate tokenizers upgrade simultaneously to ensure ndarray compatibility.
 
 ---
 
-### Slack
+## 2. Circuit Breaker Pattern
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| slack-morphism | 2.18.0 | Slack Web API + Events API + Socket Mode client | The most complete async Rust Slack library. Supports Events API (webhooks), Socket Mode (WebSocket-based, no public URL needed), Block Kit models, and OAuth. Version 2.18.0 released 2026-02-21. Actively maintained. |
+### Recommendation: Custom Implementation (~200 LOC)
 
-**Socket Mode vs Events API:** Socket Mode lets the bot connect via WebSocket without exposing a public webhook URL. This is better for development and small deployments. The blufio HTTP gateway already handles webhook delivery, so Events API (webhook mode) is also viable. slack-morphism supports both.
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| **Custom implementation** | N/A | Per-dependency circuit breakers for LLM APIs, MCP servers, channel adapters | Best fit for Blufio's adapter-trait architecture; no suitable crate covers all use cases; integrates directly with existing metrics and tracing |
 
-**Why NOT slack-rs-api:** Last major update 2022. Does not support Socket Mode. slack-morphism is significantly more complete.
+**Confidence:** HIGH -- analyzed all Rust circuit breaker crates, none fit Blufio's adapter-based architecture
 
-**Confidence:** HIGH — slack-morphism 2.18.0 verified on docs.rs (released 2026-02-21).
+### Crate Evaluation
 
----
+| Crate | Version | Last Updated | Downloads | Verdict |
+|-------|---------|-------------|-----------|---------|
+| `failsafe` | 1.3.0 | ~2024 (>1yr ago) | Moderate | **REJECT:** Unmaintained, pre-async-await API style, futures-support is a bolted-on feature |
+| `circuitbreaker-rs` | 0.1.1 | 2025 | Low | **REJECT:** Too new (0.1.x), unproven in production, low adoption |
+| `tower-circuitbreaker` | 0.2.0 | Oct 2025 | Low | **CONSIDERED:** Good tower integration, but only works for tower Service implementations |
+| `rssafecircuit` | - | Unknown | Very low | **REJECT:** Minimal adoption, unknown maintenance |
 
-### Signal
+### Why Custom Wins Over tower-circuitbreaker
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| reqwest | 0.13 (existing) | HTTP client to bridge with signal-cli JSON-RPC daemon | Signal has no public REST API. The only viable approach for Rust bots is to run signal-cli (Java daemon) and communicate with it via JSON-RPC. No Rust-native Signal crate is production-safe. |
+`tower-circuitbreaker` 0.2.0 is the strongest external option but fails on a critical architectural mismatch:
 
-**Architecture:** signal-cli runs as a sidecar daemon. Blufio communicates with it via:
-- HTTP JSON-RPC (signal-cli `--output=json --http` mode) for message retrieval
-- signal-cli REST API bridge (signal-cli-api crate, or direct JSON-RPC calls)
+1. **Blufio's adapter calls are async trait methods, not tower Services.** The `ProviderAdapter::send()`, `ChannelAdapter::send_message()`, and `EmbeddingAdapter::embed()` calls go through `dyn` trait objects with `async-trait`. Wrapping each in a tower Service just to use tower-circuitbreaker adds boilerplate without benefit.
 
-**Why NOT libsignal-service-rs (whisperfish):** Immature, no active maintenance for production use, implements the Signal protocol from scratch (complex, security-critical). Using signal-cli as a sidecar is the standard approach used by all open-source Signal bots.
+2. **Circuit breakers protect outbound calls to diverse backends.** These include: teloxide (Telegram), serenity (Discord), slack-morphism (Slack), matrix-sdk (Matrix), irc crate, signal-cli JSON-RPC, and reqwest HTTP calls. Each has its own connection management. tower-circuitbreaker would only work for the reqwest-based calls.
 
-**Why NOT direct Signal protocol:** Signal's protocol is reverse-engineered, not officially documented for third-party use. Implementing it directly creates maintenance burden and ToS risk.
+3. **tower-circuitbreaker brings tower-resilience-core 0.2 as a dependency.** This is a new transitive dependency for a pattern that is ~200 lines of straightforward Rust.
 
-**Operator requirement:** signal-cli must be installed separately. Document clearly. This is a soft dependency (not a Rust crate).
+4. **Integration with existing infrastructure is free with custom.** Blufio already has `metrics` 0.24 (Prometheus), `tracing` 0.1 (structured logging), `dashmap` 6 (concurrent maps). The custom implementation wires directly into these without adaptation layers.
 
-**Confidence:** MEDIUM — reqwest-based bridge to signal-cli is the established pattern. Signal ecosystem is fragile; signal-cli is Java (not a Rust concern) but is the only reliable option.
+### Custom Circuit Breaker Design
 
----
+```rust
+// blufio-core/src/circuit_breaker.rs
 
-### IRC
+use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
+use std::time::Duration;
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| irc | 1.1.0 | Async IRC client (RFC 2812, IRCv3.1/3.2) | The standard async Rust IRC library. Version 1.1.0 released 2025-03-24. 100% documentation coverage. Supports tokio async/await, TLS, rate limiting, SASL auth, multiple configuration formats. Thread-safe. |
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum CircuitState {
+    Closed = 0,    // Normal operation, calls pass through
+    Open = 1,      // Failures exceeded threshold, calls rejected
+    HalfOpen = 2,  // Testing recovery with limited calls
+}
 
-**Confidence:** HIGH — irc 1.1.0 verified on docs.rs with release date 2025-03-24.
+pub struct CircuitBreaker {
+    name: String,
+    state: AtomicU8,
+    failure_count: AtomicU32,
+    success_count: AtomicU32,
+    last_failure_ts: AtomicU64,  // epoch millis
+    config: CircuitBreakerConfig,
+}
 
----
+#[derive(Debug, Clone)]
+pub struct CircuitBreakerConfig {
+    /// Number of consecutive failures before opening the circuit.
+    pub failure_threshold: u32,         // default: 5
+    /// Duration to stay Open before transitioning to HalfOpen.
+    pub reset_timeout: Duration,        // default: 30s
+    /// Number of test calls allowed in HalfOpen state.
+    pub half_open_max_calls: u32,       // default: 3
+    /// Successes needed in HalfOpen to close the circuit.
+    pub success_threshold: u32,         // default: 2
+}
+```
 
-### Matrix
+**No new crate dependencies.** Uses existing:
+- `std::sync::atomic` for lock-free state management
+- `tokio::time::Instant` for timeout tracking
+- `metrics::counter!("blufio_circuit_breaker_trips_total", "dependency" => name)` for Prometheus
+- `tracing::warn!("circuit breaker opened for {}", name)` for logging
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| matrix-sdk | 0.11.0 | Matrix client (E2EE, sync, room management) | Official Matrix Rust SDK from matrix-org. Version 0.11.0 released 2025-04-11. MSRV 1.85 — exactly matches project's Rust 1.85. Version 0.12+ bumps MSRV to 1.88 (incompatible). |
+### Per-Dependency Circuit Breaker Registry
 
-**CRITICAL VERSION CONSTRAINT:** matrix-sdk 0.11.0 is the highest version compatible with the project's `rust-version = "1.85"` workspace setting. Version 0.12.0 (released 2025-06-10) bumped MSRV to 1.88. Do NOT use 0.12+. Pin to `matrix-sdk = "0.11"` and add a comment explaining the constraint.
+```rust
+// blufio-core/src/circuit_breaker.rs
+pub struct CircuitBreakerRegistry {
+    breakers: DashMap<String, Arc<CircuitBreaker>>,
+    default_config: CircuitBreakerConfig,
+}
 
-**If MSRV is bumped to 1.88 later:** Can upgrade to matrix-sdk 0.16.0 (latest as of 2025-12-04). But that is a separate decision with workspace-wide implications.
+impl CircuitBreakerRegistry {
+    pub fn get_or_create(&self, name: &str) -> Arc<CircuitBreaker>;
+    pub fn record_success(&self, name: &str);
+    pub fn record_failure(&self, name: &str);
+    pub fn is_call_permitted(&self, name: &str) -> bool;
+}
+```
 
-**E2EE note:** matrix-sdk includes E2EE (matrix-sdk-crypto) via the `e2e-encryption` feature. Enable it — Matrix without E2EE is not suitable for a privacy-focused platform. This adds a build dependency on vodozemac (E2EE crypto library, pure Rust).
-
-**Confidence:** HIGH — matrix-sdk 0.11.0 MSRV 1.85 confirmed from search results and changelog. Version pinning is mandatory.
-
----
-
-## 5. Event Bus (Internal Pub/Sub)
-
-**No new crate needed.** Use `tokio::sync::broadcast` channel directly.
-
-**Rationale:**
-
-The existing codebase already uses tokio channels extensively. The "event bus" pattern for an internal pub/sub system is a thin wrapper around `tokio::sync::broadcast::channel<BusEvent>`:
-- Multi-producer, multi-consumer
-- Backpressure via bounded capacity
-- Clone the sender anywhere; subscribe by calling `.subscribe()` on the sender
-- Events: `SessionStarted`, `SessionEnded`, `MessageReceived`, `SkillExecuted`, `CostThresholdReached`, etc.
-
-A new crate `blufio-events` defines the `BusEvent` enum and a `EventBus` wrapper (essentially `Arc<tokio::sync::broadcast::Sender<BusEvent>>`). This is ~100 lines, zero new dependencies.
-
-**Why NOT external event bus crates (event_bus_rs, tokio-pubsub):** These wrap what tokio already provides. Adding a dependency for a 100-line wrapper violates the minimal audit surface constraint.
-
-**Slow receiver handling:** Broadcast channels drop messages to lagging receivers. Set capacity to 1024+ and document that adapters must process events promptly. Log lag metrics via existing Prometheus integration.
-
-**Confidence:** HIGH — tokio::sync::broadcast is a core tokio primitive, documented and production-proven.
-
----
-
-## 6. Skill Registry / Marketplace + Code Signing
-
-### Registry Architecture
-
-The skill registry is a static TOML/JSON index served over HTTPS, plus a CLI (`blufio skill search`, `blufio skill install`). No new database crates needed — SQLite tracks installed skills (already in blufio-skill).
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| minisign-verify | 0.2.5 (existing from v1.2) | Verify skill package Ed25519 signatures before installation | Already in workspace. Reuse the same Minisign verification flow used for binary self-update. Skills are signed with a developer keypair; public key embedded in the registry index. |
-| reqwest | 0.13 (existing) | Download skill packages from registry | Already in workspace with stream support. |
-| flate2 | 1 (existing from v1.2) | Decompress .wasm.gz skill packages | Already in workspace from self-update feature. |
-| tar | 0.4 (existing from v1.2) | Extract skill archives | Already in workspace from self-update feature. |
-
-**No new crates needed for skill registry.** All capabilities are in the existing stack.
-
-**Code signing flow:**
-1. Skill author signs their `.wasm` with `minisign -S` using their Ed25519 keypair
-2. Registry index (TOML) stores: skill name, version, WASM URL, `.minisig` URL, author public key
-3. `blufio skill install` downloads WASM + `.minisig`, verifies with minisign-verify, installs if valid
-4. Verification uses the same `minisign_verify::PublicKey` + streaming verify pattern from v1.2 self-update
-
-**Registry index format (TOML):**
+**Integration with TOML config:**
 ```toml
-[[skills]]
-name = "weather"
-version = "1.2.0"
-author = "alice"
-author_pubkey = "RWQ..."  # Ed25519 public key (base64)
-wasm_url = "https://registry.blufio.dev/skills/weather-1.2.0.wasm.gz"
-sig_url   = "https://registry.blufio.dev/skills/weather-1.2.0.wasm.gz.minisig"
-description = "Get current weather for any city"
+[resilience.circuit_breaker]
+failure_threshold = 5
+reset_timeout_secs = 30
+half_open_max_calls = 3
+
+[resilience.circuit_breaker.overrides.anthropic]
+failure_threshold = 3
+reset_timeout_secs = 60
 ```
 
-**Confidence:** HIGH — reuses existing dependencies and patterns.
+---
+
+## 3. ORT Stable Upgrade Path
+
+### Recommendation: Stay Pinned at rc.11
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `ort` | =2.0.0-rc.11 (KEEP PINNED) | ONNX Runtime bindings for local embedding inference | No stable 2.0.0 release exists. rc.12 has breaking API changes. Upgrading twice (rc.11 -> rc.12 -> stable) wastes effort. |
+
+**Confidence:** HIGH -- verified via GitHub releases page (pykeio/ort), crates.io
+
+### Current State
+
+| Property | Value |
+|----------|-------|
+| Pinned version | `=2.0.0-rc.11` (released January 7, 2025) |
+| Latest RC | `2.0.0-rc.12` (released March 5, 2025) |
+| Stable 2.0.0 | **Does NOT exist** |
+| Maintainer statement | rc.11 notes: "the next big release of ort should be, finally, 2.0.0" |
+
+### Breaking Changes in rc.12 (Impact Analysis)
+
+| rc.12 Change | Blufio Impact | Action Needed |
+|-------------|--------------|---------------|
+| `ORT_LIB_LOCATION` env var renamed to `ORT_LIB_PATH` | **NONE** -- Blufio uses `download-binaries` feature, not env var | None |
+| Items moved from `ort::tensor` to `ort::value` | **NONE** -- Blufio already uses `ort::value::TensorRef` (see blufio-memory/src/embedder.rs) | None |
+| `with_denormal_as_zero` renamed to `with_flush_to_zero` | **NONE** -- not used by Blufio | None |
+| `with_device_allocator_for_initializers` renamed | **NONE** -- not used by Blufio | None |
+| `api-24` feature may be required for some capabilities | **LOW** -- need to verify feature flags at upgrade time | Test at upgrade |
+
+### Recommendation Details
+
+**Do NOT upgrade to rc.12 in v1.4.** Rationale:
+
+1. Zero functional benefit: rc.12 changes are naming/organizational, not feature additions that Blufio needs.
+2. Double migration risk: If we upgrade to rc.12 now, we will need another migration when stable 2.0.0 lands.
+3. The current rc.11 works correctly: `OnnxEmbedder` in blufio-memory/src/embedder.rs passes all tests, produces correct 384-dim embeddings.
+
+**ADR (Architecture Decision Record) for v1.4:**
+- **Decision:** Pin `ort` at `=2.0.0-rc.11` until stable 2.0.0 releases
+- **Context:** No stable release exists; rc.12 has minor API renames but zero new features needed by Blufio
+- **Consequences:** Must monitor `pykeio/ort` GitHub releases for stable 2.0.0 announcement
+- **Migration plan when stable lands:** Update version pin, adjust any renamed APIs (likely minimal based on rc.12 analysis), run embedding inference tests, update ONNX model download URLs if needed
+
+### Version Compatibility Lock
+
+These three crates must upgrade together:
+
+| Crate | Current | Constraint |
+|-------|---------|------------|
+| `ort` | =2.0.0-rc.11 | Requires ndarray 0.17 |
+| `ndarray` | 0.17 | Required by ort for tensor arrays |
+| `tokenizers` | 0.21.4 | No direct ort dependency, but shares ndarray transitively |
+
+When ort stable 2.0.0 releases, check whether it bumps ndarray to 0.18. If so, tokenizers may need upgrading simultaneously.
 
 ---
 
-## 7. Node System (Paired Devices)
+## 4. Degradation Level Management
 
-The node system enables multiple Blufio instances to share sessions, route messages, and sync memory across a trusted network of paired devices.
+### Recommendation: No New Dependencies
 
-**No new networking crates needed.** The node system uses the existing HTTP gateway (axum) for inbound connections and reqwest for outbound calls. Nodes discover each other via a static registry (TOML config), not P2P gossip.
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| **No new dependencies** | N/A | 6-level degradation ladder with automatic escalation/de-escalation | Pure state machine pattern using existing workspace primitives |
 
-**Design rationale — why NOT libp2p:**
-libp2p (and p2panda-net) add significant complexity: DHT, gossipsub, NAT traversal, mDNS. For Blufio's use case (a small trusted cluster of 2-10 personal devices), the complexity is not justified. A static peer list in TOML config with mutual Ed25519 authentication covers the use case.
+**Confidence:** HIGH -- architectural pattern, no external deps needed
 
-**Node protocol (built on existing stack):**
-- Pairing: Ed25519 keypair exchange via QR code or manual public key entry
-- Node-to-node: HTTPS POST to `/v1/node/relay` with `Authorization: Bearer {ed25519-signed-token}` (same signing as agent delegation in v1.0)
-- Sync: periodic pull of session summaries via `/v1/node/sync`
-- Config: `[nodes]` section in blufio TOML
+### Degradation Levels
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| ed25519-dalek | 2.1 (existing) | Sign/verify node-to-node messages | Already used for agent delegation. Same pattern. |
-| reqwest | 0.13 (existing) | Outbound node HTTP calls | Already in workspace. |
-
-**Confidence:** HIGH for reqwest+ed25519 approach. MEDIUM for overall node design (no precedent in codebase — first implementation of multi-instance coordination).
-
----
-
-## 8. Docker Deployment
-
-### Docker Build Strategy
-
-| Tool | Purpose | Why |
-|------|---------|-----|
-| cargo-chef | Docker layer caching for Rust dependencies | Splits dependency build from source build. Dependencies (unchanged between code commits) cache as a Docker layer. Reduces incremental Docker build time from 5-15min to 30-90s. Industry standard for Rust Docker builds. |
-
-**Dockerfile pattern (three-stage):**
-```dockerfile
-# Stage 1: compute recipe
-FROM lukemathwalker/cargo-chef:latest-rust-1.85 AS planner
-WORKDIR /app
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
-# Stage 2: build dependencies (cached layer)
-FROM lukemathwalker/cargo-chef:latest-rust-1.85 AS builder
-WORKDIR /app
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
-# Then build actual binary
-COPY . .
-RUN cargo build --release --target x86_64-unknown-linux-musl
-
-# Stage 3: minimal runtime image
-FROM gcr.io/distroless/static-debian12:nonroot AS runtime
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/blufio /blufio
-ENTRYPOINT ["/blufio"]
+```
+Level 0: Normal       -- all systems operational
+Level 1: Elevated     -- non-critical failures detected (e.g., memory search slow)
+Level 2: Degraded     -- some features disabled (e.g., memory search off, skills limited)
+Level 3: Limited      -- model downgraded (Opus -> Sonnet -> Haiku)
+Level 4: Minimal      -- text-only responses, no tools, no skills
+Level 5: Emergency    -- canned responses, no LLM calls
 ```
 
-**Runtime base image — distroless/static over scratch:**
-- `gcr.io/distroless/static-debian12:nonroot` includes: CA certificates (for HTTPS), `/etc/passwd` (non-root user), timezone data
-- `scratch` requires manually copying CA certs; missing them breaks all TLS connections
-- distroless:nonroot runs as UID 65532 by default (security best practice)
-- Final image size: 10-15MB (musl binary + distroless base)
+### Implementation Uses Only Existing Primitives
 
-**Musl target:** The existing `profile.release-musl` in Cargo.toml is already configured for static linking. Use `cross` (already likely in CI) with `x86_64-unknown-linux-musl` target.
+| Need | Existing Solution |
+|------|-------------------|
+| Atomic level storage | `std::sync::atomic::AtomicU8` |
+| Level change notifications | `tokio::sync::watch::channel` |
+| Prometheus gauge | `metrics::gauge!("blufio_degradation_level")` (already using metrics 0.24) |
+| System-wide event broadcast | `EventBus` (blufio-bus, already uses tokio::sync::broadcast) |
+| Structured logging | `tracing::warn!()` (already using tracing 0.1) |
+| Health status per-adapter | `HealthStatus::Degraded(String)` already exists in blufio-core |
 
-**Docker Compose for development:**
-```yaml
-services:
-  blufio:
-    image: blufio:latest
-    volumes:
-      - ./data:/data
-    environment:
-      - BLUFIO_DB_KEY=${BLUFIO_DB_KEY}
-      - BLUFIO_VAULT_KEY=${BLUFIO_VAULT_KEY}
-    ports:
-      - "3000:3000"
+### Integration with Circuit Breakers
+
+The degradation ladder and circuit breakers compose:
+- Circuit breaker opens on dependency X -> emit `CircuitBreakerTripped(x)` event via EventBus
+- Degradation manager listens to events, counts open breakers
+- 1 open breaker = Level 1 (Elevated), 2+ = Level 2 (Degraded), primary LLM breaker open = Level 3+ (Limited)
+- When breakers close -> de-escalate levels automatically
+
+---
+
+## 5. Typed Error Hierarchy
+
+### Recommendation: No New Dependencies
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `thiserror` | 2 (already in workspace) | Derive Error implementations | Already used for `BlufioError` in blufio-core/src/error.rs |
+
+**Confidence:** HIGH -- extends existing pattern
+
+### Current Error Enum
+
+`BlufioError` in `blufio-core/src/error.rs` has 13 variants (Config, Storage, Channel, Provider, AdapterNotFound, HealthCheckFailed, Timeout, Vault, Security, Signature, BudgetExhausted, Skill, Mcp, Update, Migration, Internal). None carry retryability or severity metadata.
+
+### Extension Approach
+
+Add methods to `BlufioError` without new dependencies:
+
+```rust
+impl BlufioError {
+    pub fn is_retryable(&self) -> bool { ... }
+    pub fn severity(&self) -> ErrorSeverity { ... }
+    pub fn category(&self) -> ErrorCategory { ... }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ErrorSeverity { Low, Medium, High, Critical }
+
+#[derive(Debug, Clone, Copy)]
+pub enum ErrorCategory { Network, Auth, RateLimit, Internal, Configuration, External }
 ```
 
-**No new Rust crates needed for Docker.** Docker is a build/deployment concern, not a code concern.
-
-**Confidence:** HIGH — cargo-chef is the industry standard pattern for Rust Docker builds, well-documented and actively maintained.
+No new crates. `thiserror` 2 (existing) handles the derive macros. The new enums are pure Rust with no dependencies.
 
 ---
 
-## 9. OpenClaw Migration Tooling
+## 6. FormatPipeline Integration + ChannelCapabilities Extension
 
-### What Needs to Migrate
+### Recommendation: No New Dependencies
 
-OpenClaw stores its state in a directory (`$OPENCLAW_STATE_DIR`) containing:
-- `openclaw.json` — main config (JSON format)
-- `credentials/` — per-provider credentials
-- `agents/{agentId}/` — session history, memory, skills notes, channel state
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| **No new dependencies** | N/A | Wire FormatPipeline into channel adapters, add Table/List content types, extend ChannelCapabilities | All types already exist in blufio-core; this is wiring work |
 
-### Crates for Migration
+**Confidence:** HIGH -- code already exists, needs extension and wiring
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| serde_json | 1 (via serde) | Parse openclaw.json config | serde_json is already transitively available via serde. Add as direct dep in the migration crate. |
-| walkdir | 2 | Recursively walk OpenClaw state directory | Pure Rust, zero unsafe code. Standard for directory traversal. |
+### Existing Code
 
-**New crate:** `blufio-openclaw-migrate` (or as a subcommand of the main binary: `blufio migrate openclaw`).
+- `FormatPipeline` struct in `blufio-core/src/format.rs` -- already implements format/degrade for Text, Embed, Image, CodeBlock
+- `ChannelCapabilities` struct in `blufio-core/src/types.rs` -- 9 boolean/option fields (supports_edit, supports_typing, supports_images, etc.)
+- Every channel adapter already implements `fn capabilities(&self) -> ChannelCapabilities`
 
-**Migration scope:**
-1. Parse `openclaw.json` → emit equivalent `blufio.toml` sections
-2. Map OpenClaw channel configs (Telegram, Discord, etc.) → blufio channel plugin configs
-3. Map OpenClaw provider configs (OpenAI, Anthropic) → blufio provider configs
-4. Convert OpenClaw session/memory JSONL files → INSERT into blufio SQLite schema
-5. Emit clear warnings for OpenClaw features with no blufio equivalent (Node.js plugins)
+### Extensions Needed (No New Crates)
 
-**Why NOT openclaw-core crate:** The `openclaw-core` crate on crates.io is a community project, not official OpenClaw. Using it would add a dependency on an unofficial crate to read OpenClaw's format. Better to parse the JSON directly with serde_json — the format is simple.
+**New RichContent variants:** `Table { headers, rows }`, `List { items, ordered }`
+**New ChannelCapabilities fields:** `streaming_type: StreamingType`, `formatting_support: FormattingSupport`, `rate_limits: Option<ChannelRateLimits>`
 
-**`--dry-run` mode:** Required. Show what would be migrated without writing anything. Users need confidence before committing.
-
-**Confidence:** MEDIUM — OpenClaw config format is JSON (parseable), but specific schema details require testing against real openclaw.json files. The migration approach is sound; exact field mappings need implementation discovery.
+These are pure struct/enum additions to existing blufio-core types. Zero dependency impact.
 
 ---
 
-## 10. Summary: All New Dependencies for v1.3
+## Complete New Dependencies Summary
 
-### New Crates
+| Crate | Version | Added To | Purpose | Binary Size Impact |
+|-------|---------|----------|---------|-------------------|
+| `tiktoken-rs` | 0.9.1 | workspace + blufio-context or new blufio-tokenizer crate | OpenAI model token counting | ~1-2MB (includes embedded BPE vocabulary data) |
 
-| Crate | Version | Used By | Purpose |
-|-------|---------|---------|---------|
-| tower-governor | 0.8.0 | blufio-gateway | API key rate limiting for OpenAI-compat layer |
-| async-openai | 0.33.0 | blufio-openai, blufio-ollama, blufio-openrouter | OpenAI/Ollama/OpenRouter provider + TTS/Transcription types |
-| genai | 0.5.3 | blufio-gemini | Google Gemini provider (not OpenAI-compatible) |
-| serenity | 0.12.5 | blufio-discord | Discord channel adapter |
-| slack-morphism | 2.18.0 | blufio-slack | Slack channel adapter with Socket Mode |
-| irc | 1.1.0 | blufio-irc | IRC channel adapter |
-| matrix-sdk | 0.11.0 | blufio-matrix | Matrix channel adapter (MSRV 1.85 compatible) |
-| serde_json | 1 | blufio-openclaw-migrate | Parse OpenClaw JSON config |
-| walkdir | 2 | blufio-openclaw-migrate | Walk OpenClaw state directory |
+**Total new workspace dependency count: 1** (`tiktoken-rs`)
 
-**Total new direct crates: 9**
+Everything else uses existing workspace dependencies:
+- `tokenizers` 0.21 (already in workspace for ONNX embedding)
+- `thiserror` 2 (already in workspace for error derives)
+- `metrics` 0.24 (already in workspace for Prometheus)
+- `dashmap` 6 (already in workspace for concurrent maps)
+- `tracing` 0.1 (already in workspace for structured logging)
+- `tokio` (already in workspace; watch, broadcast channels for degradation/events)
 
-### Reused Without Change (v1.2 additions already cover)
+Or requires no external crate at all:
+- Circuit breaker: custom ~200 LOC, `std::sync::atomic`
+- Degradation ladder: custom state machine, `AtomicU8` + `tokio::sync::watch`
+- Error hierarchy: method additions to existing `BlufioError` enum
+- FormatPipeline integration: type extensions + wiring in existing crates
+- ChannelCapabilities extension: struct field additions
 
-| Crate | Usage in v1.3 |
-|-------|--------------|
-| minisign-verify 0.2.5 | Skill code signing in registry |
-| reqwest 0.13 | WhatsApp Cloud API, Signal JSON-RPC bridge, node HTTP calls |
-| flate2 1 | Decompress skill packages |
-| tar 0.4 | Extract skill archives |
-| ed25519-dalek 2.1 | Node-to-node message signing |
-| axum 0.8 | OpenAI-compatible endpoint handlers, SSE streaming |
-| tokio (broadcast) | Internal event bus implementation |
+---
 
-### No New Crates For
+## Alternatives Considered
 
-- Event bus: `tokio::sync::broadcast` (zero new deps)
-- WhatsApp: `reqwest` direct implementation (zero new deps)
-- Signal: `reqwest` bridge to signal-cli sidecar (zero new deps)
-- Skill registry: existing stack (minisign-verify + reqwest + flate2 + tar)
-- Node system: existing stack (ed25519-dalek + reqwest)
-- Docker: build tooling only (cargo-chef in CI/Dockerfile, not a Rust dependency)
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Claude token counting | `tokenizers` + Xenova/claude-tokenizer | Anthropic `count_tokens` API | API requires network call; adds 100-500ms latency; rate-limited (100-8000 RPM by tier); not available offline; not suitable for per-message context budget decisions |
+| Claude token counting | `tokenizers` + Xenova/claude-tokenizer | `tiktoken-rs` with cl100k_base approximation | Only ~70% vocabulary overlap with Claude; worse accuracy than dedicated Claude tokenizer |
+| OpenAI token counting | `tiktoken-rs` 0.9.1 | `tokenizers` + OpenAI tokenizer.json | OpenAI tokenizer files use tiktoken BPE format (rank-based), not HuggingFace JSON format (merge-based); tiktoken-rs handles this natively |
+| Circuit breaker | Custom (~200 LOC) | `tower-circuitbreaker` 0.2.0 | Only works for tower Service implementations; Blufio adapter calls are async trait methods via dyn dispatch, not tower Services; does not cover teloxide, serenity, slack-morphism, matrix-sdk, irc crate calls |
+| Circuit breaker | Custom (~200 LOC) | `failsafe` 1.3.0 | Unmaintained (>1yr no updates); pre-async-await API design; future-support bolted on |
+| Circuit breaker | Custom (~200 LOC) | `circuitbreaker-rs` 0.1.1 | v0.1.x; unproven in production; low adoption; too early to trust |
+| ORT upgrade | Stay on rc.11 | Upgrade to rc.12 | Breaking API renames for zero functional benefit; stable 2.0.0 expected soon; avoids double migration |
+| ORT upgrade | Stay on rc.11 | Downgrade to 1.x stable | 1.x API is completely different; would require full rewrite of OnnxEmbedder |
+| Degradation state | Custom state machine | `tower` middleware layers | Degradation is system-wide state, not per-request middleware; crosses all adapter boundaries |
+| Token counting arch | Dual-crate (tokenizers + tiktoken-rs) | Single crate for all providers | No single crate handles both OpenAI tiktoken-format and HuggingFace-format vocabularies |
 
-### Dependency Budget
+---
 
-| Metric | v1.2 | v1.3 |
+## What NOT to Add
+
+| Crate | Why Not |
+|-------|---------|
+| `tower-circuitbreaker` 0.2.0 | Adds tower-resilience-core 0.2 dep; only works for tower Service; Blufio's adapter calls are async trait methods through dyn dispatch |
+| `failsafe` 1.3.0 | Unmaintained; pre-async design; last release >1yr ago |
+| `circuitbreaker-rs` 0.1.1 | v0.1.x maturity; too immature; minimal downloads |
+| `rssafecircuit` | Minimal adoption; unproven; unknown maintenance status |
+| `bpe` crate | Lower-level BPE implementation without vocabulary files; tiktoken-rs and tokenizers are higher-level with correct vocabs included |
+| `tokenizers` 0.22.x upgrade | Risk of ndarray version conflict with pinned ort =2.0.0-rc.11; zero feature gap in 0.21.4 for our use case |
+| `token-counter` | CLI tool, not a library; not embeddable in workspace |
+| `ort` 2.0.0-rc.12 | Breaking API renames with zero new features needed; stable expected soon |
+| `another-tiktoken-rs` | Fork of tiktoken-rs with no additional value; use the original |
+| `tiktoken` (different crate) | Different from tiktoken-rs; less maintained |
+| Any resilience framework (tower-resilience full suite) | Overkill; Blufio needs only circuit breakers, not bulkheads/rate-limiters/retries from a framework |
+
+---
+
+## Installation
+
+```toml
+# Workspace Cargo.toml -- add to [workspace.dependencies]
+tiktoken-rs = "0.9"
+
+# No other new workspace dependencies needed for v1.4
+```
+
+```toml
+# blufio-context/Cargo.toml (or new blufio-tokenizer crate)
+[dependencies]
+tiktoken-rs.workspace = true
+tokenizers.workspace = true  # already available via workspace
+```
+
+---
+
+## Version Compatibility Matrix
+
+| Crate | Current | v1.4 Target | Constraint |
+|-------|---------|-------------|------------|
+| `tokenizers` | 0.21.4 | 0.21.x (keep) | Compatible with ort rc.11 and ndarray 0.17; loads Claude tokenizer.json |
+| `ort` | =2.0.0-rc.11 | =2.0.0-rc.11 (keep) | Pin until stable 2.0.0 releases |
+| `ndarray` | 0.17 | 0.17 (keep) | Required by ort rc.11 |
+| `tiktoken-rs` | (new) | 0.9.1 | No dependency conflicts with existing workspace |
+| `tower` | 0.5 | 0.5 (keep) | NOT used for circuit breaker pattern |
+| `metrics` | 0.24 | 0.24 (keep) | Used for circuit breaker + degradation Prometheus metrics |
+| `dashmap` | 6 | 6 (keep) | Used for CircuitBreakerRegistry concurrent map |
+| `thiserror` | 2 | 2 (keep) | Used for typed error hierarchy |
+| `tracing` | 0.1 | 0.1 (keep) | Used for circuit breaker/degradation state change logging |
+
+---
+
+## Dependency Budget
+
+| Metric | v1.3 | v1.4 |
 |--------|------|------|
-| Direct workspace deps | ~42 | ~51 |
-| Within <80 constraint | Yes | Yes |
-| New crates with broad ecosystem use | All 9 | Minimal audit surface |
-
----
-
-## 11. What NOT to Add
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| whatsapp-cloud-api crate (0.5.4) | Last updated May 2025, small ecosystem, targets Graph API v20.0 specifically | reqwest + serde with direct Meta API calls |
-| whatsapp-rust crate | Unofficial WhatsApp Web protocol. Violates Meta ToS. Account suspension risk | Meta Cloud API (official) |
-| libsignal-service-rs (whisperfish) | Immature, reverse-engineered Signal protocol, security-critical | signal-cli sidecar via JSON-RPC |
-| matrix-sdk 0.12+ | MSRV 1.88 — incompatible with workspace rust-version 1.85 | matrix-sdk 0.11.0 (MSRV 1.85) |
-| libp2p for node system | Full P2P stack (DHT, gossipsub, NAT) far exceeds needs for 2-10 trusted nodes | Static peer list in TOML + reqwest + ed25519 |
-| whisper-rs / whisper-cpp-plus for local TTS | Requires building C++, adds 5-15MB to binary, violates <50MB constraint | OpenAI-compatible HTTP TTS/transcription API; optional local plugin later |
-| genai for ALL providers | Displaces existing blufio-anthropic (v1.0-v1.2 investment), adds unnecessary abstraction layer | genai only for Gemini; async-openai for OpenAI/Ollama/OpenRouter |
-| poise (Discord slash commands) | Framework on top of serenity, adds complexity. Channel adapter needs message recv/send, not slash commands | serenity directly |
-| event_bus_rs / tokio-pubsub | Thin wrappers around tokio broadcast, zero value over direct use | tokio::sync::broadcast directly |
-| openclaw-core crate | Unofficial community re-implementation of OpenClaw, not the real config format | Direct serde_json parsing of openclaw.json |
-| self_update crate (jaemk) | Already rejected in v1.2. No Minisign support, outdated. Already using reqwest + self-replace | Continue v1.2 approach |
-| slack-rs-api | Last updated 2022, no Socket Mode support | slack-morphism 2.18.0 |
-| twilight (Discord) | Lower-level than serenity, requires more boilerplate for a Channel adapter | serenity 0.12.5 |
-
----
-
-## 12. Version Compatibility Matrix
-
-| Crate | Version Pinned | MSRV | Tokio Compat | Notes |
-|-------|---------------|------|-------------|-------|
-| serenity | 0.12.5 | 1.74 | tokio 1.x | Compatible with project Rust 1.85 |
-| matrix-sdk | 0.11.0 | 1.85 | tokio 1.x | EXACT version match required. 0.12+ breaks. |
-| slack-morphism | 2.18.0 | unknown | tokio 1.x | Actively maintained, no known MSRV conflicts |
-| irc | 1.1.0 | unknown | tokio 1.x | tokio-based, released 2025-03-24 |
-| async-openai | 0.33.0 | unknown | tokio 1.x | Released 2026-02-18 |
-| genai | 0.5.3 | unknown | tokio 1.x | Released 2026-01-31 |
-| tower-governor | 0.8.0 | unknown | tower 0.5 | tower 0.5 is in workspace already |
-
-**Matrix-SDK version lock is the single most critical version constraint in v1.3.**
-
----
-
-## 13. New Crates Structure
-
-```
-crates/
-  blufio-events/          # Event bus (tokio broadcast wrapper, zero new deps)
-  blufio-openai/          # OpenAI + Ollama + OpenRouter provider (async-openai)
-  blufio-gemini/          # Gemini provider (genai)
-  blufio-discord/         # Discord channel adapter (serenity)
-  blufio-whatsapp/        # WhatsApp Cloud API adapter (reqwest)
-  blufio-slack/           # Slack adapter (slack-morphism)
-  blufio-signal/          # Signal adapter (reqwest + signal-cli bridge)
-  blufio-irc/             # IRC adapter (irc crate)
-  blufio-matrix/          # Matrix adapter (matrix-sdk 0.11)
-  blufio-registry/        # Skill registry client (reqwest + minisign-verify)
-  blufio-node/            # Node system (reqwest + ed25519-dalek)
-  blufio-openclaw-migrate/ # OpenClaw migration (serde_json + walkdir)
-```
-
-Total new crates: 12 (bringing workspace from 22 to ~34 crates)
-
----
-
-## 14. Workspace Cargo.toml Additions
-
-```toml
-[workspace.dependencies]
-# === v1.3 ADDITIONS ===
-
-# OpenAI-compatible API layer
-tower-governor = "0.8"
-
-# LLM providers
-async-openai = "0.33"
-genai = "0.5"
-
-# Channel adapters
-serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "model", "rustls_backend"] }
-slack-morphism = "2.18"
-irc = { version = "1.1", default-features = false, features = ["tls-native"] }
-# NOTE: Pin matrix-sdk to 0.11.x — MSRV 1.85. Do NOT upgrade to 0.12+.
-matrix-sdk = { version = "0.11", default-features = false, features = ["rustls-tls", "e2e-encryption"] }
-
-# Migration tooling
-serde_json = "1"
-walkdir = "2"
-```
-
-**serenity features:** Use `rustls_backend` (not `native_tls`) to stay consistent with the project's rustls-only TLS policy. Disable default features to exclude unused voice/collector support.
-
-**irc features:** Use `tls-native` or `tls-rustls` depending on which compiles cleaner with the musl target. Verify at build time — IRC TLS via rustls is preferred for consistency.
-
-**matrix-sdk features:** `rustls-tls` for TLS consistency. `e2e-encryption` for Matrix E2EE support (required for production Matrix use).
+| Direct workspace deps | ~51 | ~52 (+tiktoken-rs only) |
+| Within <80 constraint | Yes | Yes (comfortable margin) |
+| New crates | 0 custom + 1 external | Minimal audit surface |
 
 ---
 
 ## Sources
 
-### Verified via docs.rs (version + release date confirmed)
-- [async-openai 0.33.0](https://docs.rs/crate/async-openai/latest) — Released 2026-02-18
-- [serenity 0.12.5](https://docs.rs/crate/serenity/latest) — Released 2025-12-20
-- [slack-morphism 2.18.0](https://docs.rs/crate/slack-morphism/latest) — Released 2026-02-21
-- [irc 1.1.0](https://docs.rs/crate/irc/latest) — Released 2025-03-24
-- [matrix-sdk 0.16.0](https://docs.rs/crate/matrix-sdk/latest) — 0.16 is latest; 0.11.0 used for MSRV 1.85
-- [genai 0.5.3](https://docs.rs/crate/genai/latest) — Released 2026-01-31
-- [tower-governor 0.8.0](https://docs.rs/tower-governor/latest/tower_governor/) — Version 0.8.0 confirmed
+### Verified via Official Documentation (HIGH confidence)
+- [Anthropic Token Counting API](https://platform.claude.com/docs/en/build-with-claude/token-counting) -- Free API, rate-limited, returns estimates
+- [tiktoken-rs on crates.io](https://crates.io/crates/tiktoken-rs) -- v0.9.1, released 2025-11-09
+- [tiktoken-rs API docs](https://docs.rs/tiktoken-rs/latest/tiktoken_rs/) -- OpenAI-only: o200k_base, cl100k_base, p50k_base confirmed
+- [ort GitHub releases](https://github.com/pykeio/ort/releases) -- rc.12 (March 5, 2025), rc.11 (Jan 7, 2025), no stable 2.0.0
+- [ort crate docs](https://docs.rs/crate/ort/latest) -- rc.12 API changes documented
 
-### Verified via WebSearch + official sources
-- [matrix-sdk CHANGELOG](https://github.com/matrix-org/matrix-rust-sdk/blob/main/crates/matrix-sdk/CHANGELOG.md) — MSRV 1.85 for 0.11, MSRV 1.88 from 0.12+
-- [serenity GitHub](https://github.com/serenity-rs/serenity) — MSRV 1.74, tokio 1.x compatible
-- [OpenClaw migration guide](https://docs.openclaw.ai/install/migrating) — State directory structure verified
-- [cargo-chef GitHub](https://github.com/LukeMathWalker/cargo-chef) — Three-stage Docker pattern
-- [axum SSE docs](https://docs.rs/axum/latest/axum/response/sse/) — Built-in SSE, no extra crate needed
-- [tokio broadcast](https://docs.rs/tokio/latest/tokio/sync/broadcast/index.html) — Event bus primitive
-- [genai crates.io](https://crates.io/crates/genai) — Multiprovider: OpenAI, Gemini, Anthropic, Ollama, etc.
+### Verified via crates.io / docs.rs (HIGH confidence)
+- [circuitbreaker-rs](https://docs.rs/circuitbreaker-rs) -- v0.1.1, async support, new crate
+- [tower-circuitbreaker](https://lib.rs/crates/tower-circuitbreaker) -- v0.2.0, Oct 2025, deps include tower-resilience-core
+- [failsafe on crates.io](https://crates.io/crates/failsafe) -- v1.3.0, last update >1yr ago
+- [tokenizers on crates.io](https://crates.io/crates/tokenizers) -- v0.22.1 latest, 0.21.4 in use
 
-### Confidence Assessment
+### Verified via Community Sources (MEDIUM confidence)
+- [Xenova/claude-tokenizer on HuggingFace](https://huggingface.co/Xenova/claude-tokenizer) -- tokenizer.json (1.77MB), HF-compatible, ~2yr old
+- [ctoc: Reverse Engineering Claude's Token Counter](https://grohan.co/2026/02/10/ctoc/) -- 36K vocab, ~96% accuracy on Claude 4.x
+- [Token Counting Guide](https://www.propelcode.ai/blog/token-counting-tiktoken-anthropic-gemini-guide-2025) -- len/4 accuracy ~75-85% for English
 
-| Area | Confidence | Reason |
-|------|------------|--------|
-| OpenAI API layer (axum + tower-governor) | HIGH | All crates verified, existing axum SSE proven |
-| OpenAI/Ollama/OpenRouter provider (async-openai) | HIGH | Version verified, base URL override documented |
-| Gemini provider (genai) | MEDIUM | Verified, actively maintained, but no official Google backing |
-| Discord (serenity) | HIGH | De facto standard, version + MSRV verified |
-| Slack (slack-morphism) | HIGH | Most complete Rust Slack library, version verified |
-| IRC (irc crate) | HIGH | RFC-compliant, version verified |
-| WhatsApp (reqwest direct) | MEDIUM | Meta API is stable, but business account setup is required |
-| Signal (signal-cli bridge) | MEDIUM | signal-cli is the only realistic approach; Java sidecar adds ops complexity |
-| Matrix (matrix-sdk 0.11) | HIGH for version, MEDIUM for E2EE | MSRV constraint verified; E2EE adds compile complexity |
-| Event bus (tokio broadcast) | HIGH | Core tokio primitive |
-| Skill registry/signing | HIGH | Reuses existing minisign-verify + reqwest |
-| Node system | MEDIUM | Design sound, no precedent in codebase |
-| Docker (cargo-chef) | HIGH | Industry standard Rust Docker pattern |
-| OpenClaw migration | MEDIUM | JSON format parseable; field mapping needs implementation discovery |
+### Local Codebase Verification
+- `blufio-context/src/dynamic.rs:64` -- confirmed `m.content.len() / 4` heuristic
+- `blufio-memory/src/embedder.rs` -- confirmed `tokenizers::Tokenizer::from_file()` usage with ort
+- `blufio-core/src/error.rs` -- confirmed 13-variant BlufioError without retryability/severity
+- `blufio-core/src/format.rs` -- confirmed FormatPipeline exists with RichContent/FormattedOutput
+- `blufio-core/src/types.rs:107` -- confirmed ChannelCapabilities with 9 fields
+- `Cargo.toml` -- confirmed tokenizers 0.21, ort =2.0.0-rc.11, ndarray 0.17
 
 ---
 
-*Stack research for: Blufio v1.3 Ecosystem Expansion*
-*Researched: 2026-03-05*
+*Stack research for: Blufio v1.4 Quality & Resilience*
+*Researched: 2026-03-08*
