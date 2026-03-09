@@ -20,17 +20,17 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 - [x] **CB-01**: CircuitBreaker implements 3-state FSM (Closed, Open, HalfOpen) with configurable thresholds
 - [x] **CB-02**: Each external dependency (5 providers, 8 channels) has an independent circuit breaker instance
 - [x] **CB-03**: Circuit breaker uses `is_retryable()` from typed errors — non-retryable errors (auth, config) do not count as failures
-- [ ] **CB-04**: Circuit breaker publishes state transitions to EventBus as Resilience events
-- [ ] **CB-05**: Prometheus gauge `blufio_circuit_breaker_state` emitted per dependency with state label
+- [x] **CB-04**: Circuit breaker publishes state transitions to EventBus as Resilience events
+- [x] **CB-05**: Prometheus gauge `blufio_circuit_breaker_state` emitted per dependency with state label
 - [x] **CB-06**: Circuit breaker thresholds configurable via TOML config `[resilience.circuit_breakers.<name>]`
 - [x] **CB-07**: HalfOpen state allows a configurable number of probe requests before transitioning to Closed
 
 ### Degradation Ladder
 
-- [ ] **DEG-01**: DegradationLevel enum with 6 levels (L0 FullyOperational through L5 SafeShutdown)
-- [ ] **DEG-02**: DegradationManager tracks current level and auto-escalates based on circuit breaker state changes
-- [ ] **DEG-03**: De-escalation uses hysteresis timer — level drops only after sustained recovery period
-- [ ] **DEG-04**: Degradation state changes published to EventBus and visible via `/v1/health` API
+- [x] **DEG-01**: DegradationLevel enum with 6 levels (L0 FullyOperational through L5 SafeShutdown)
+- [x] **DEG-02**: DegradationManager tracks current level and auto-escalates based on circuit breaker state changes
+- [x] **DEG-03**: De-escalation uses hysteresis timer — level drops only after sustained recovery period
+- [x] **DEG-04**: Degradation state changes published to EventBus and visible via `/v1/health` API
 - [ ] **DEG-05**: User-facing degradation messages delivered to primary channel at each level transition
 - [ ] **DEG-06**: Configurable fallback provider via `[resilience.fallback_provider]` activated at L2+
 
@@ -129,14 +129,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CB-01 | Phase 48 | Complete |
 | CB-02 | Phase 48 | Complete |
 | CB-03 | Phase 48 | Complete |
-| CB-04 | Phase 48 | Pending |
-| CB-05 | Phase 48 | Pending |
+| CB-04 | Phase 48 | Complete |
+| CB-05 | Phase 48 | Complete |
 | CB-06 | Phase 48 | Complete |
 | CB-07 | Phase 48 | Complete |
-| DEG-01 | Phase 48 | Pending |
-| DEG-02 | Phase 48 | Pending |
-| DEG-03 | Phase 48 | Pending |
-| DEG-04 | Phase 48 | Pending |
+| DEG-01 | Phase 48 | Complete |
+| DEG-02 | Phase 48 | Complete |
+| DEG-03 | Phase 48 | Complete |
+| DEG-04 | Phase 48 | Complete |
 | DEG-05 | Phase 48 | Pending |
 | DEG-06 | Phase 48 | Pending |
 | FMT-04 | Phase 49 | Pending |

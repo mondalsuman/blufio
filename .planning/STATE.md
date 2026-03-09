@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 48 of 50 (Circuit Breaker & Degradation Ladder) -- 3 of 5 in v1.4
-Plan: 1 of 3 complete
+Plan: 2 of 3 complete
 Status: In Progress
-Last activity: 2026-03-09 -- Phase 48 Plan 01 complete
+Last activity: 2026-03-09 -- Phase 48 Plan 02 complete
 
 Progress: [█████░░░░░] 50%
 
@@ -69,6 +69,7 @@ Recent decisions affecting current work:
 - Phase 47-02: OnceLock get()+set() pattern for HuggingFace tokenizer singleton (stable Rust); resolve_counter lowercases model IDs for case-insensitive matching
 - Phase 47-03: Arc<TokenizerCache> injection from config through ContextEngine to DynamicZone; delegation.rs defaults to Accurate mode; test harness uses Fast mode
 - Phase 48-01: BlufioError::CircuitOpen uses FailureMode::Internal (not retryable, not circuit-tripping); Clock trait injection for deterministic testing; Registry mutex poisoning recovery with into_inner()
+- Phase 48-02: compute_level uses open_provider_count >= 2 for L3 (not total_open with primary_provider); select! with sleep_until for hysteresis; HealthResponse degradation fields are Option for backward compatibility
 
 ### Pending Todos
 
@@ -89,9 +90,10 @@ None.
 | Phase 47 P02 | 5min | 2 tasks | 2 files |
 | Phase 47 P03 | 10min | 2 tasks | 7 files |
 | Phase 48 P01 | 13min | 2 tasks | 10 files |
+| Phase 48 P02 | 15min | 2 tasks | 9 files |
 
 ## Session Continuity
 
-Last session: 2026-03-09T13:19:02Z
-Stopped at: Phase 48 Plan 01 complete
-Resume file: .planning/phases/48-circuit-breaker-degradation-ladder/48-02-PLAN.md
+Last session: 2026-03-09T13:38:34Z
+Stopped at: Phase 48 Plan 02 complete
+Resume file: .planning/phases/48-circuit-breaker-degradation-ladder/48-03-PLAN.md
