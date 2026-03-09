@@ -1247,6 +1247,7 @@ dependencies = [
  "blufio-core",
  "chrono",
  "futures",
+ "metrics",
  "reqwest 0.13.2",
  "semver",
  "serde",
