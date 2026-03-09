@@ -1123,6 +1123,7 @@ dependencies = [
  "blufio-bus",
  "blufio-core",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 
