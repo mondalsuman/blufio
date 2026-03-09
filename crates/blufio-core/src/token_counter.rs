@@ -13,13 +13,17 @@
 //! - [`TokenizerCache`] -- thread-safe cache mapping model IDs to `Arc<dyn TokenCounter>`
 //! - [`TokenizerMode`] -- controls whether real tokenizers or heuristics are used
 //!
-//! Plan 02 adds TiktokenCounter (OpenAI) and HuggingFaceCounter (Claude).
+//! - [`TiktokenCounter`] -- tiktoken-rs BPE tokenizer for OpenAI models
+//! - [`HuggingFaceCounter`] -- HuggingFace tokenizer for Claude models (bundled vocabulary)
+//! - [`count_with_fallback`] -- graceful degradation to heuristic on tokenizer failure
+//!
 //! Plan 03 integrates TokenizerCache into the context engine.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use async_trait::async_trait;
+use tokenizers::Tokenizer;
 
 use crate::error::BlufioError;
 
@@ -122,6 +126,153 @@ impl TokenCounter for HeuristicCounter {
 
     fn counter_name(&self) -> &str {
         "heuristic"
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TiktokenCounter (OpenAI)
+// ---------------------------------------------------------------------------
+
+/// Token counter using tiktoken-rs BPE encodings for OpenAI models.
+///
+/// Uses [`o200k_base_singleton`] for GPT-4o/4.1/5 and o1/o3/o4 models,
+/// [`cl100k_base_singleton`] for GPT-4/3.5-turbo and older models.
+///
+/// The singletons are initialized once (lazy) and shared across all calls
+/// with zero per-call allocation. The synchronous `encode_with_special_tokens`
+/// call is wrapped in [`tokio::task::spawn_blocking`] to avoid blocking the
+/// tokio runtime.
+#[derive(Debug, Clone)]
+pub struct TiktokenCounter {
+    encoding: TiktokenEncoding,
+}
+
+impl TiktokenCounter {
+    /// Create a `TiktokenCounter` with the encoding appropriate for the given model.
+    pub fn for_model(model_id: &str) -> Self {
+        Self {
+            encoding: tiktoken_encoding_for_model(model_id),
+        }
+    }
+}
+
+#[async_trait]
+impl TokenCounter for TiktokenCounter {
+    async fn count_tokens(&self, text: &str) -> Result<usize, BlufioError> {
+        let text = text.to_string();
+        let encoding = self.encoding;
+
+        tokio::task::spawn_blocking(move || {
+            let tokens = match encoding {
+                TiktokenEncoding::O200kBase => {
+                    let bpe = tiktoken_rs::o200k_base_singleton();
+                    bpe.encode_with_special_tokens(&text)
+                }
+                TiktokenEncoding::Cl100kBase => {
+                    let bpe = tiktoken_rs::cl100k_base_singleton();
+                    bpe.encode_with_special_tokens(&text)
+                }
+            };
+            tokens.len()
+        })
+        .await
+        .map_err(|e| BlufioError::Internal(format!("tiktoken spawn_blocking join: {e}")))
+    }
+
+    fn counter_name(&self) -> &str {
+        match self.encoding {
+            TiktokenEncoding::O200kBase => "tiktoken-o200k",
+            TiktokenEncoding::Cl100kBase => "tiktoken-cl100k",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HuggingFaceCounter (Claude)
+// ---------------------------------------------------------------------------
+
+/// Bundled Claude tokenizer vocabulary (Xenova/claude-tokenizer).
+///
+/// Embedded at compile time via `include_bytes!` to preserve the single-binary
+/// deployment constraint. ~1.77 MB.
+const CLAUDE_TOKENIZER_BYTES: &[u8] = include_bytes!("../assets/claude-tokenizer.json");
+
+/// Global singleton for the Claude tokenizer instance.
+///
+/// Initialized once on first use via [`OnceLock`]. The `Arc` allows cheap
+/// cloning into `spawn_blocking` closures.
+static CLAUDE_TOKENIZER: OnceLock<Arc<Tokenizer>> = OnceLock::new();
+
+/// Get (or initialize) the Claude tokenizer singleton.
+fn get_claude_tokenizer() -> Result<Arc<Tokenizer>, BlufioError> {
+    if let Some(tok) = CLAUDE_TOKENIZER.get() {
+        return Ok(Arc::clone(tok));
+    }
+
+    let tok = Tokenizer::from_bytes(CLAUDE_TOKENIZER_BYTES)
+        .map_err(|e| BlufioError::Internal(format!("Claude tokenizer init: {e}")))?;
+    let arc = Arc::new(tok);
+
+    // If another thread beat us, that's fine -- we just discard our instance.
+    let _ = CLAUDE_TOKENIZER.set(Arc::clone(&arc));
+
+    // Return whichever was stored (ours or the other thread's).
+    Ok(CLAUDE_TOKENIZER.get().map(Arc::clone).unwrap_or(arc))
+}
+
+/// Token counter using the HuggingFace `tokenizers` crate with the bundled
+/// Claude vocabulary.
+///
+/// The tokenizer is loaded once (lazy) via [`OnceLock`] and reused across
+/// all calls. The synchronous `encode` call is wrapped in
+/// [`tokio::task::spawn_blocking`] to avoid blocking the tokio runtime.
+#[derive(Debug, Clone, Copy)]
+pub struct HuggingFaceCounter;
+
+#[async_trait]
+impl TokenCounter for HuggingFaceCounter {
+    async fn count_tokens(&self, text: &str) -> Result<usize, BlufioError> {
+        let tokenizer = get_claude_tokenizer()?;
+        let text = text.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let encoding = tokenizer
+                .encode(text.as_str(), false)
+                .map_err(|e| BlufioError::Internal(format!("Claude tokenizer encode: {e}")))?;
+            Ok(encoding.get_ids().len())
+        })
+        .await
+        .map_err(|e| BlufioError::Internal(format!("HuggingFace spawn_blocking join: {e}")))?
+    }
+
+    fn counter_name(&self) -> &str {
+        "hf-claude"
+    }
+}
+
+// ---------------------------------------------------------------------------
+// count_with_fallback
+// ---------------------------------------------------------------------------
+
+/// Count tokens with graceful fallback to heuristic on tokenizer failure.
+///
+/// If the primary counter fails (e.g., tokenizer initialization error,
+/// encoding error), logs a warning and falls back to [`HeuristicCounter`].
+/// If even the heuristic fails (should not happen), returns `text.len() / 4`.
+pub async fn count_with_fallback(primary: &dyn TokenCounter, text: &str) -> usize {
+    match primary.count_tokens(text).await {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                counter = primary.counter_name(),
+                "tokenizer failed, using heuristic fallback"
+            );
+            HeuristicCounter::default()
+                .count_tokens(text)
+                .await
+                .unwrap_or(text.len() / 4)
+        }
     }
 }
 
@@ -253,35 +404,44 @@ impl TokenizerCache {
     ///
     /// In Fast mode, always returns HeuristicCounter.
     /// In Accurate mode, determines the provider from the model name and creates
-    /// the appropriate counter. Plan 02 replaces the OpenAI/Claude placeholders
-    /// with real TiktokenCounter and HuggingFaceCounter.
+    /// the appropriate counter:
+    /// - OpenAI models: [`TiktokenCounter`] with appropriate encoding
+    /// - Anthropic models: [`HuggingFaceCounter`] with bundled Claude vocabulary
+    /// - Gemini/Ollama/unknown: [`HeuristicCounter`] fallback
+    ///
+    /// OpenRouter-style prefixed model IDs (e.g., `openai/gpt-4o`) are handled
+    /// by stripping the provider prefix and routing to the correct tokenizer.
     fn resolve_counter(&self, model_id: &str) -> Arc<dyn TokenCounter> {
         if self.mode == TokenizerMode::Fast {
             return Arc::new(HeuristicCounter::default());
         }
 
-        // Strip OpenRouter-style provider prefix (e.g., "openai/gpt-4o" -> "gpt-4o")
-        let bare_model = model_id
-            .find('/')
-            .map(|i| &model_id[i + 1..])
-            .unwrap_or(model_id);
+        let lower = model_id.to_lowercase();
 
-        if is_openai_model(bare_model) {
-            // TODO(Plan 02): Replace with TiktokenCounter using tiktoken_encoding_for_model()
-            tracing::debug!(
-                model = bare_model,
-                "OpenAI model detected -- using heuristic placeholder (Plan 02 adds tiktoken)"
-            );
-            Arc::new(HeuristicCounter::default())
-        } else if is_anthropic_model(bare_model) {
-            // TODO(Plan 02): Replace with HuggingFaceCounter using claude-tokenizer.json
-            tracing::debug!(
-                model = bare_model,
-                "Anthropic model detected -- using heuristic placeholder (Plan 02 adds HuggingFace)"
-            );
+        // Handle OpenRouter-style provider prefixes
+        if let Some(rest) = lower.strip_prefix("openai/") {
+            return Arc::new(TiktokenCounter::for_model(rest));
+        }
+        if lower.starts_with("anthropic/") {
+            return Arc::new(HuggingFaceCounter);
+        }
+        if lower.starts_with("google/") {
+            return Arc::new(HeuristicCounter::default());
+        }
+        // Unknown provider prefix (meta-llama/, mistral/, etc.) -> heuristic
+        if lower.contains('/') {
+            return Arc::new(HeuristicCounter::default());
+        }
+
+        // Direct model name matching (no prefix)
+        if is_openai_model(&lower) {
+            Arc::new(TiktokenCounter::for_model(&lower))
+        } else if is_anthropic_model(&lower) {
+            Arc::new(HuggingFaceCounter)
+        } else if is_gemini_model(&lower) {
             Arc::new(HeuristicCounter::default())
         } else {
-            // Gemini, Ollama, custom providers -- heuristic is the best we can do
+            // Unknown model -> heuristic fallback
             Arc::new(HeuristicCounter::default())
         }
     }

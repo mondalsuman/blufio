@@ -31,7 +31,10 @@ pub use types::{
 };
 
 // Re-export token counting abstractions.
-pub use token_counter::{HeuristicCounter, TokenCounter, TokenizerCache, TokenizerMode};
+pub use token_counter::{
+    HeuristicCounter, HuggingFaceCounter, TiktokenCounter, TokenCounter, TokenizerCache,
+    TokenizerMode, count_with_fallback,
+};
 
 // Re-export all adapter traits at crate root.
 pub use traits::{
