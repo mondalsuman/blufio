@@ -30,6 +30,9 @@ pub use types::{
     TranscriptionRequest, TranscriptionResponse, TtsRequest, TtsResponse,
 };
 
+// Re-export token counting abstractions.
+pub use token_counter::{HeuristicCounter, TokenCounter, TokenizerCache, TokenizerMode};
+
 // Re-export all adapter traits at crate root.
 pub use traits::{
     AuthAdapter, ChannelAdapter, EmbeddingAdapter, ImageAdapter, ModelInfo, ObservabilityAdapter,
