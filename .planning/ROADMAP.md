@@ -118,7 +118,7 @@ Plans:
   3. Ollama models use per-model tokenizer.json when available and a calibrated heuristic as fallback; Gemini uses calibrated heuristic; OpenRouter delegates to the underlying model's tokenizer
   4. Tokenizer instances are lazy-loaded, cached, and reused across calls -- not created per request
   5. Token counting runs via spawn_blocking so synchronous tokenizer.encode() never blocks tokio worker threads
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
 - [ ] 47-01-PLAN.md -- TokenCounter trait, HeuristicCounter, TokenizerCache, PerformanceConfig, workspace deps, Claude vocabulary
 - [ ] 47-02-PLAN.md -- TiktokenCounter, HuggingFaceCounter, DelegatingCounter implementations with spawn_blocking
@@ -210,7 +210,7 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 44. Node Approval Wiring | v1.3 | 2/2 | Complete | 2026-03-08 |
 | 45. Documentation & Traceability Sync | v1.3 | 2/2 | Complete | 2026-03-08 |
 | 46. Core Types & Error Hierarchy | v1.4 | 4/4 | Complete | 2026-03-09 |
-| 47. Accurate Token Counting | v1.4 | 0/3 | Not started | - |
+| 47. Accurate Token Counting | 1/3 | In Progress|  | - |
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 0/? | Not started | - |
 | 49. FormatPipeline Integration | v1.4 | 0/? | Not started | - |
 | 50. ADRs & Documentation | v1.4 | 0/? | Not started | - |

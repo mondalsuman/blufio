@@ -39,12 +39,12 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 - [ ] **TOK-01**: Context engine uses accurate token counting instead of `len()/4` heuristic
 - [ ] **TOK-02**: OpenAI token counting uses tiktoken-rs with o200k_base/cl100k_base encodings per model
 - [ ] **TOK-03**: Claude token counting uses HuggingFace tokenizers crate with Xenova/claude-tokenizer vocabulary
-- [ ] **TOK-04**: Ollama token counting uses per-model tokenizer.json when available, calibrated heuristic as fallback
-- [ ] **TOK-05**: Gemini token counting uses calibrated heuristic (no local tokenizer available)
+- [x] **TOK-04**: Ollama token counting uses per-model tokenizer.json when available, calibrated heuristic as fallback
+- [x] **TOK-05**: Gemini token counting uses calibrated heuristic (no local tokenizer available)
 - [ ] **TOK-06**: OpenRouter token counting delegates to underlying model's tokenizer based on model ID
-- [ ] **TOK-07**: Tokenizer instances lazy-loaded and reused across calls (not created per-request)
+- [x] **TOK-07**: Tokenizer instances lazy-loaded and reused across calls (not created per-request)
 - [ ] **TOK-08**: Token counting runs via `spawn_blocking` to avoid blocking tokio worker threads
-- [ ] **TOK-09**: Config toggle `[performance.tokenizer_mode]` allows "accurate" (default) vs "fast" (heuristic) mode
+- [x] **TOK-09**: Config toggle `[performance.tokenizer_mode]` allows "accurate" (default) vs "fast" (heuristic) mode
 
 ### Content Formatting
 
@@ -120,12 +120,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TOK-01 | Phase 47 | Pending |
 | TOK-02 | Phase 47 | Pending |
 | TOK-03 | Phase 47 | Pending |
-| TOK-04 | Phase 47 | Pending |
-| TOK-05 | Phase 47 | Pending |
+| TOK-04 | Phase 47 | Complete |
+| TOK-05 | Phase 47 | Complete |
 | TOK-06 | Phase 47 | Pending |
-| TOK-07 | Phase 47 | Pending |
+| TOK-07 | Phase 47 | Complete |
 | TOK-08 | Phase 47 | Pending |
-| TOK-09 | Phase 47 | Pending |
+| TOK-09 | Phase 47 | Complete |
 | CB-01 | Phase 48 | Pending |
 | CB-02 | Phase 48 | Pending |
 | CB-03 | Phase 48 | Pending |

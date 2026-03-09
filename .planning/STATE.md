@@ -3,34 +3,34 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Quality & Resilience
 status: executing
-stopped_at: Completed 46-04-PLAN.md
-last_updated: "2026-03-09T09:36:19.468Z"
-last_activity: 2026-03-09 -- Phase 46 Plan 04 executed (FormatPipeline Table/List extensions and error consumer updates)
+stopped_at: Completed 47-01-PLAN.md
+last_updated: "2026-03-09T10:17:59.314Z"
+last_activity: 2026-03-09 -- Phase 47 Plan 01 complete
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_plans: 7
+  completed_plans: 5
+  percent: 28
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-08)
+See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.4 Quality & Resilience -- Phase 46 (Core Types & Error Hierarchy)
+**Current focus:** v1.4 Quality & Resilience -- Phase 47 (Accurate Token Counting)
 
 ## Current Position
 
-Phase: 46 of 50 (Core Types & Error Hierarchy) -- 1 of 5 in v1.4
-Plan: 4 of 4 complete
+Phase: 47 of 50 (Accurate Token Counting) -- 2 of 5 in v1.4
+Plan: 1 of 3 complete
 Status: Executing
-Last activity: 2026-03-09 -- Phase 46 Plan 04 executed (FormatPipeline Table/List extensions and error consumer updates)
+Last activity: 2026-03-09 -- Phase 47 Plan 01 complete
 
-Progress: [██████████] 100%
+Progress: [██▓░░░░░░░] 28%
 
 ## Performance Metrics
 
@@ -64,19 +64,9 @@ Recent decisions affecting current work:
 - v1.4: tiktoken-rs for OpenAI counting, HuggingFace tokenizers for Claude counting (research validated)
 - v1.4: Custom circuit breaker (~200 LOC) over crate dependencies (failsafe/tower incompatible with dyn dispatch)
 - v1.4: ORT stays pinned at rc.11 -- no stable 2.0.0 yet, ADR to document
-- 46-01: user_message() returns Cow<'static, str> for zero-allocation static messages
-- 46-01: ChannelCapabilities derives Default for ergonomic ..Default::default() usage
-- 46-01: Deprecated fallback constructors map to sensible default sub-enum kinds
-- 46-02: Timeout errors detected via reqwest is_timeout() and mapped to provider_timeout()
-- 46-02: Ollama connection errors map to ServerError (local server down, not network)
-- 46-02: retry-after header extracted into ErrorContext for cloud providers
-- 46-03: MCP client errors corrected from Skill to Mcp kind (pre-existing misclassification)
-- 46-03: HTTP 400 mapped to non-retryable validation error (was incorrectly retryable via ServerError)
-- 46-03: storage_connection_failed as default storage constructor for generic DB errors
-- 46-03: skill_execution_msg/skill_compilation_msg for message-only errors without source
-- 46-04: Table degradation uses supports_code_blocks and FormattingSupport for tier selection
-- 46-04: Legacy record_error() kept alongside new record_error_classified() for backward compatibility
-- 46-04: Gateway classification fields populated only from BlufioError; static errors use None
+- Phase 46: Typed error hierarchy with Cow<'static, str> user_message(), ChannelCapabilities Default derive, deprecated constructors removed
+- Phase 47-01: HeuristicCounter uses ceil() to avoid underestimation; TokenizerCache uses std::sync::RwLock (microsecond hold times); OpenRouter prefix stripping in resolve_counter
+- [Phase 47]: HeuristicCounter uses ceil() rounding to avoid underestimation; TokenizerCache uses std::sync::RwLock for microsecond hold times; OpenRouter prefix stripping in resolve_counter
 
 ### Pending Todos
 
@@ -93,9 +83,10 @@ None.
 |---|-------------|------|--------|-----------|
 | 1 | Update all documentation according to current states | 2026-03-04 | f559572 | [1-update-all-documentation-according-to-cu](./quick/1-update-all-documentation-according-to-cu/) |
 | Phase 46 P04 | 15min | 2 tasks | 9 files |
+| Phase 47 P01 | 17min | 2 tasks | 6 files |
 
 ## Session Continuity
 
-Last session: 2026-03-09T09:25:38Z
-Stopped at: Completed 46-04-PLAN.md
-Resume file: Phase 46 complete -- next phase TBD
+Last session: 2026-03-09T10:17:59.310Z
+Stopped at: Completed 47-01-PLAN.md
+Resume file: None
