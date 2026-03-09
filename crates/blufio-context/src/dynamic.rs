@@ -4,8 +4,11 @@
 //! Dynamic zone: assembles conversation history with sliding window
 //! and triggers compaction when the token estimate exceeds the threshold.
 
+use std::sync::Arc;
+
 use blufio_config::model::ContextConfig;
 use blufio_core::error::BlufioError;
+use blufio_core::token_counter::{TokenizerCache, count_with_fallback};
 use blufio_core::traits::{ProviderAdapter, StorageAdapter};
 use blufio_core::types::{
     ContentBlock, InboundMessage, MessageContent, ProviderMessage, TokenUsage,
@@ -34,15 +37,18 @@ pub struct DynamicZone {
     context_budget: u32,
     /// Model to use for compaction summarization.
     compaction_model: String,
+    /// Cached tokenizer instances for accurate token counting.
+    token_cache: Arc<TokenizerCache>,
 }
 
 impl DynamicZone {
     /// Creates a new dynamic zone from context configuration.
-    pub fn new(config: &ContextConfig) -> Self {
+    pub fn new(config: &ContextConfig, token_cache: Arc<TokenizerCache>) -> Self {
         Self {
             compaction_threshold: config.compaction_threshold,
             context_budget: config.context_budget,
             compaction_model: config.compaction_model.clone(),
+            token_cache,
         }
     }
 
@@ -56,12 +62,17 @@ impl DynamicZone {
         storage: &dyn StorageAdapter,
         session_id: &str,
         inbound: &InboundMessage,
+        model: &str,
     ) -> Result<DynamicResult, BlufioError> {
         // Load ALL messages from storage for this session.
         let history = storage.get_messages(session_id, None).await?;
 
-        // Estimate total token count (rough heuristic: 4 chars per token).
-        let estimated_tokens: usize = history.iter().map(|m| m.content.len() / 4).sum();
+        // Accurate token counting via provider-specific tokenizer.
+        let counter = self.token_cache.get_counter(model);
+        let mut estimated_tokens: usize = 0;
+        for m in &history {
+            estimated_tokens += count_with_fallback(counter.as_ref(), &m.content).await;
+        }
         let threshold = (self.context_budget as f64 * self.compaction_threshold) as usize;
 
         debug!(
@@ -192,8 +203,10 @@ mod tests {
 
     #[test]
     fn dynamic_zone_new_from_config() {
+        use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
         let config = ContextConfig::default();
-        let zone = DynamicZone::new(&config);
+        let cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
+        let zone = DynamicZone::new(&config, cache);
         assert_eq!(zone.compaction_threshold, 0.70);
         assert_eq!(zone.context_budget, 180_000);
         assert_eq!(zone.compaction_model, "claude-haiku-4-5-20250901");

@@ -364,6 +364,20 @@ pub struct TokenizerCache {
     mode: TokenizerMode,
 }
 
+impl std::fmt::Debug for TokenizerCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let count = self
+            .counters
+            .read()
+            .map(|c| c.len())
+            .unwrap_or(0);
+        f.debug_struct("TokenizerCache")
+            .field("mode", &self.mode)
+            .field("cached_counters", &count)
+            .finish()
+    }
+}
+
 impl TokenizerCache {
     /// Create a new cache with the given tokenizer mode.
     pub fn new(mode: TokenizerMode) -> Self {
