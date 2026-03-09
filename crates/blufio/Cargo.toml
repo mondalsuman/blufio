@@ -60,6 +60,7 @@ blufio-irc = { path = "../blufio-irc", optional = true }
 blufio-matrix = { path = "../blufio-matrix", optional = true }
 blufio-bridge = { path = "../blufio-bridge", optional = true }
 blufio-bus = { path = "../blufio-bus" }
+blufio-resilience = { path = "../blufio-resilience" }
 blufio-anthropic = { path = "../blufio-anthropic", optional = true }
 blufio-openai = { path = "../blufio-openai", optional = true }
 blufio-ollama = { path = "../blufio-ollama", optional = true }

@@ -603,6 +603,7 @@ dependencies = [
  "blufio-openrouter",
  "blufio-plugin",
  "blufio-prometheus",
+ "blufio-resilience",
  "blufio-router",
  "blufio-security",
  "blufio-signal",
