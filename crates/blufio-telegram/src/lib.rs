@@ -222,7 +222,9 @@ impl ChannelAdapter for TelegramChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::channel_connection_lost("telegram"))
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("telegram"))
     }
 
     async fn edit_message(

@@ -92,10 +92,9 @@ impl OpenRouterClient {
                 .dns_resolver(Arc::new(resolver));
         }
 
-        let client =
-            builder
-                .build()
-                .map_err(|e| BlufioError::provider_server_error(PROVIDER_NAME, e))?;
+        let client = builder
+            .build()
+            .map_err(|e| BlufioError::provider_server_error(PROVIDER_NAME, e))?;
 
         Ok(Self {
             client,
@@ -181,36 +180,28 @@ impl OpenRouterClient {
             debug!(status = %status, attempt, "OpenRouter completion response received");
 
             if status.is_success() {
-                let body = response.text().await.map_err(|e| {
-                    BlufioError::Provider {
+                let body = response.text().await.map_err(|e| BlufioError::Provider {
+                    kind: ProviderErrorKind::ServerError,
+                    context: ErrorContext {
+                        provider_name: Some(PROVIDER_NAME.into()),
+                        ..Default::default()
+                    },
+                    source: Some(Box::new(e)),
+                })?;
+                let chat_response: RouterResponse =
+                    serde_json::from_str(&body).map_err(|e| BlufioError::Provider {
                         kind: ProviderErrorKind::ServerError,
                         context: ErrorContext {
                             provider_name: Some(PROVIDER_NAME.into()),
                             ..Default::default()
                         },
                         source: Some(Box::new(e)),
-                    }
-                })?;
-                let chat_response: RouterResponse =
-                    serde_json::from_str(&body).map_err(|e| {
-                        BlufioError::Provider {
-                            kind: ProviderErrorKind::ServerError,
-                            context: ErrorContext {
-                                provider_name: Some(PROVIDER_NAME.into()),
-                                ..Default::default()
-                            },
-                            source: Some(Box::new(e)),
-                        }
                     })?;
                 return Ok(chat_response);
             }
 
             let retry_after = Self::extract_retry_after(&response);
-            let error = BlufioError::provider_from_http(
-                status.as_u16(),
-                PROVIDER_NAME,
-                None,
-            );
+            let error = BlufioError::provider_from_http(status.as_u16(), PROVIDER_NAME, None);
             let error = if retry_after.is_some() {
                 match error {
                     BlufioError::Provider {
@@ -244,15 +235,13 @@ impl OpenRouterClient {
             return Err(error);
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            BlufioError::Provider {
-                kind: ProviderErrorKind::ServerError,
-                context: ErrorContext {
-                    provider_name: Some(PROVIDER_NAME.into()),
-                    ..Default::default()
-                },
-                source: None,
-            }
+        Err(last_error.unwrap_or_else(|| BlufioError::Provider {
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
+            source: None,
         }))
     }
 
@@ -305,11 +294,7 @@ impl OpenRouterClient {
             }
 
             let retry_after = Self::extract_retry_after(&response);
-            let error = BlufioError::provider_from_http(
-                status.as_u16(),
-                PROVIDER_NAME,
-                None,
-            );
+            let error = BlufioError::provider_from_http(status.as_u16(), PROVIDER_NAME, None);
             let error = if retry_after.is_some() {
                 match error {
                     BlufioError::Provider {
@@ -343,15 +328,13 @@ impl OpenRouterClient {
             return Err(error);
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            BlufioError::Provider {
-                kind: ProviderErrorKind::ServerError,
-                context: ErrorContext {
-                    provider_name: Some(PROVIDER_NAME.into()),
-                    ..Default::default()
-                },
-                source: None,
-            }
+        Err(last_error.unwrap_or_else(|| BlufioError::Provider {
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
+            source: None,
         }))
     }
 }

@@ -200,10 +200,9 @@ pub async fn start_server(
     let app = app.layer(CorsLayer::permissive());
 
     let addr = format!("{}:{}", config.host, config.port);
-    let listener =
-        tokio::net::TcpListener::bind(&addr)
-            .await
-            .map_err(|e| BlufioError::channel_delivery_failed("gateway", e))?;
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .map_err(|e| BlufioError::channel_delivery_failed("gateway", e))?;
 
     tracing::info!("Gateway server listening on {addr}");
 

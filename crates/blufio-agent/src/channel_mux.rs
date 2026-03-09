@@ -15,9 +15,9 @@ use tokio::sync::{Mutex, mpsc};
 use tracing::{info, warn};
 
 use blufio_core::BlufioError;
+use blufio_core::error::{ChannelErrorKind, ErrorContext};
 use blufio_core::traits::adapter::PluginAdapter;
 use blufio_core::traits::channel::ChannelAdapter;
-use blufio_core::error::{ChannelErrorKind, ErrorContext};
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
     OutboundMessage, StreamingType,

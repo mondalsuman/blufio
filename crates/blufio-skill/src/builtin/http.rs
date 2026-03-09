@@ -72,10 +72,13 @@ impl Tool for HttpTool {
     }
 
     async fn invoke(&self, input: serde_json::Value) -> Result<ToolOutput, BlufioError> {
-        let url = input["url"].as_str().ok_or_else(|| BlufioError::skill_execution_msg("missing required 'url' parameter"))?;
+        let url = input["url"]
+            .as_str()
+            .ok_or_else(|| BlufioError::skill_execution_msg("missing required 'url' parameter"))?;
 
         // Validate URL scheme (http/https only).
-        let parsed_url = reqwest::Url::parse(url).map_err(|e| BlufioError::skill_execution_failed(e))?;
+        let parsed_url =
+            reqwest::Url::parse(url).map_err(|e| BlufioError::skill_execution_failed(e))?;
 
         let scheme = parsed_url.scheme();
         if scheme != "http" && scheme != "https" {
@@ -122,7 +125,10 @@ impl Tool for HttpTool {
             .map_err(|e| BlufioError::skill_execution_failed(e))?;
 
         let status = response.status();
-        let body = response.text().await.map_err(|e| BlufioError::skill_execution_failed(e))?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| BlufioError::skill_execution_failed(e))?;
 
         // Truncate response body if too large.
         let truncated = if body.len() > MAX_RESPONSE_SIZE {

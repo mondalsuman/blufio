@@ -254,7 +254,10 @@ impl ChannelAdapter for SlackChannel {
     }
 
     async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
-        let client = self.client.as_ref().ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
+        let client = self
+            .client
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
         let token = self
             .bot_token
             .as_ref()
@@ -286,7 +289,9 @@ impl ChannelAdapter for SlackChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::channel_connection_lost("slack"))
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("slack"))
     }
 
     async fn edit_message(
@@ -296,7 +301,10 @@ impl ChannelAdapter for SlackChannel {
         text: &str,
         _parse_mode: Option<&str>,
     ) -> Result<(), BlufioError> {
-        let client = self.client.as_ref().ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
+        let client = self
+            .client
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("slack"))?;
         let token = self
             .bot_token
             .as_ref()

@@ -204,29 +204,22 @@ impl WasmSkillRuntime {
             .await;
         }
 
-        let manifest =
-            self.manifests
-                .get(&invocation.skill_name)
-                .ok_or_else(|| {
-                    BlufioError::skill_execution_msg(&format!(
-                        "skill '{}' not loaded",
-                        invocation.skill_name
-                    ))
-                })?;
+        let manifest = self.manifests.get(&invocation.skill_name).ok_or_else(|| {
+            BlufioError::skill_execution_msg(&format!(
+                "skill '{}' not loaded",
+                invocation.skill_name
+            ))
+        })?;
 
-        let module =
-            self.modules
-                .get(&invocation.skill_name)
-                .ok_or_else(|| {
-                    BlufioError::skill_execution_msg(&format!(
-                        "module for skill '{}' not found",
-                        invocation.skill_name
-                    ))
-                })?;
+        let module = self.modules.get(&invocation.skill_name).ok_or_else(|| {
+            BlufioError::skill_execution_msg(&format!(
+                "module for skill '{}' not found",
+                invocation.skill_name
+            ))
+        })?;
 
-        let input_json =
-            serde_json::to_string(&invocation.input)
-                .map_err(BlufioError::skill_execution_failed)?;
+        let input_json = serde_json::to_string(&invocation.input)
+            .map_err(BlufioError::skill_execution_failed)?;
 
         // Create fresh Store with skill state.
         let state = SkillState {
@@ -240,9 +233,7 @@ impl WasmSkillRuntime {
         // Set fuel limit.
         store
             .set_fuel(manifest.resources.fuel)
-            .map_err(|e| {
-                BlufioError::skill_execution_msg(&format!("failed to set fuel: {e}"))
-            })?;
+            .map_err(|e| BlufioError::skill_execution_msg(&format!("failed to set fuel: {e}")))?;
 
         // Configure epoch deadline for wall-clock timeout.
         store.epoch_deadline_trap();

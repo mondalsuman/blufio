@@ -178,9 +178,7 @@ pub async fn post_chat_completions(
             let category = Some(e.category().to_string());
             let retryable = Some(e.is_retryable());
             let failure_mode = Some(e.failure_mode().to_string());
-            let retry_after = e
-                .suggested_backoff()
-                .map(|d| d.as_secs());
+            let retry_after = e.suggested_backoff().map(|d| d.as_secs());
 
             (
                 StatusCode::BAD_GATEWAY,

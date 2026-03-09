@@ -129,8 +129,7 @@ pub fn save_keypair_to_file(
         hex::encode(keypair.private_bytes()),
         PRIVATE_KEY_FOOTER,
     );
-    std::fs::write(private_path, &private_content)
-        .map_err(BlufioError::skill_execution_failed)?;
+    std::fs::write(private_path, &private_content).map_err(BlufioError::skill_execution_failed)?;
 
     let public_content = format!(
         "{}\n{}\n{}\n",
@@ -138,8 +137,7 @@ pub fn save_keypair_to_file(
         hex::encode(keypair.public_bytes()),
         PUBLIC_KEY_FOOTER,
     );
-    std::fs::write(public_path, &public_content)
-        .map_err(BlufioError::skill_execution_failed)?;
+    std::fs::write(public_path, &public_content).map_err(BlufioError::skill_execution_failed)?;
 
     Ok(())
 }

@@ -39,12 +39,18 @@ pub async fn send_whatsapp_message(
         let body = resp.text().await.unwrap_or_default();
         return Err(BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
-            context: ErrorContext { channel_name: Some("whatsapp".to_string()), ..Default::default() },
+            context: ErrorContext {
+                channel_name: Some("whatsapp".to_string()),
+                ..Default::default()
+            },
             source: None,
         });
     }
 
-    let resp_json: serde_json::Value = resp.json().await.map_err(|e| BlufioError::channel_delivery_failed("whatsapp", e))?;
+    let resp_json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| BlufioError::channel_delivery_failed("whatsapp", e))?;
 
     // Extract message ID from response: { "messages": [{ "id": "wamid.xxx" }] }
     let message_id = resp_json

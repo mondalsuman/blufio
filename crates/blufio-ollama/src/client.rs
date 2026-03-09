@@ -111,26 +111,22 @@ impl OllamaClient {
             ));
         }
 
-        let body = response.text().await.map_err(|e| {
-            BlufioError::Provider {
-                kind: ProviderErrorKind::ServerError,
-                context: ErrorContext {
-                    provider_name: Some(PROVIDER_NAME.into()),
-                    ..Default::default()
-                },
-                source: Some(Box::new(e)),
-            }
+        let body = response.text().await.map_err(|e| BlufioError::Provider {
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
+            source: Some(Box::new(e)),
         })?;
 
-        serde_json::from_str(&body).map_err(|e| {
-            BlufioError::Provider {
-                kind: ProviderErrorKind::ServerError,
-                context: ErrorContext {
-                    provider_name: Some(PROVIDER_NAME.into()),
-                    ..Default::default()
-                },
-                source: Some(Box::new(e)),
-            }
+        serde_json::from_str(&body).map_err(|e| BlufioError::Provider {
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
+            source: Some(Box::new(e)),
         })
     }
 
@@ -154,15 +150,13 @@ impl OllamaClient {
             .json(&req)
             .send()
             .await
-            .map_err(|e| {
-                BlufioError::Provider {
-                    kind: ProviderErrorKind::ServerError,
-                    context: ErrorContext {
-                        provider_name: Some(PROVIDER_NAME.into()),
-                        ..Default::default()
-                    },
-                    source: Some(Box::new(e)),
-                }
+            .map_err(|e| BlufioError::Provider {
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some(PROVIDER_NAME.into()),
+                    ..Default::default()
+                },
+                source: Some(Box::new(e)),
             })?;
 
         let status = response.status();
@@ -188,15 +182,13 @@ impl OllamaClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| {
-                BlufioError::Provider {
-                    kind: ProviderErrorKind::ServerError,
-                    context: ErrorContext {
-                        provider_name: Some(PROVIDER_NAME.into()),
-                        ..Default::default()
-                    },
-                    source: Some(Box::new(e)),
-                }
+            .map_err(|e| BlufioError::Provider {
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some(PROVIDER_NAME.into()),
+                    ..Default::default()
+                },
+                source: Some(Box::new(e)),
             })?;
 
         let status = response.status();
@@ -209,26 +201,22 @@ impl OllamaClient {
             ));
         }
 
-        let body = response.text().await.map_err(|e| {
-            BlufioError::Provider {
-                kind: ProviderErrorKind::ServerError,
-                context: ErrorContext {
-                    provider_name: Some(PROVIDER_NAME.into()),
-                    ..Default::default()
-                },
-                source: Some(Box::new(e)),
-            }
+        let body = response.text().await.map_err(|e| BlufioError::Provider {
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
+            source: Some(Box::new(e)),
         })?;
 
-        serde_json::from_str(&body).map_err(|e| {
-            BlufioError::Provider {
-                kind: ProviderErrorKind::ServerError,
-                context: ErrorContext {
-                    provider_name: Some(PROVIDER_NAME.into()),
-                    ..Default::default()
-                },
-                source: Some(Box::new(e)),
-            }
+        serde_json::from_str(&body).map_err(|e| BlufioError::Provider {
+            kind: ProviderErrorKind::ServerError,
+            context: ErrorContext {
+                provider_name: Some(PROVIDER_NAME.into()),
+                ..Default::default()
+            },
+            source: Some(Box::new(e)),
         })
     }
 

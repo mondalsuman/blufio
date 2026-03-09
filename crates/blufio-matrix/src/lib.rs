@@ -211,7 +211,9 @@ impl ChannelAdapter for MatrixChannel {
 
     async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
         let client_guard = self.client.lock().await;
-        let client = client_guard.as_ref().ok_or_else(|| BlufioError::channel_connection_lost("matrix"))?;
+        let client = client_guard
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("matrix"))?;
 
         // Extract room_id from metadata.
         let room_id_str = if let Some(ref metadata) = msg.metadata
@@ -227,7 +229,10 @@ impl ChannelAdapter for MatrixChannel {
 
         let room_id: OwnedRoomId = room_id_str.parse().map_err(|e| BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
-            context: ErrorContext { channel_name: Some("matrix".to_string()), ..Default::default() },
+            context: ErrorContext {
+                channel_name: Some("matrix".to_string()),
+                ..Default::default()
+            },
             source: None,
         })?;
 
@@ -235,19 +240,27 @@ impl ChannelAdapter for MatrixChannel {
             .get_room(&room_id)
             .ok_or_else(|| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
-                context: ErrorContext { channel_name: Some("matrix".to_string()), ..Default::default() },
+                context: ErrorContext {
+                    channel_name: Some("matrix".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
         let content = RoomMessageEventContent::text_plain(&msg.content);
-        let response = room.send(content).await.map_err(|e| BlufioError::channel_delivery_failed("matrix", e))?;
+        let response = room
+            .send(content)
+            .await
+            .map_err(|e| BlufioError::channel_delivery_failed("matrix", e))?;
 
         Ok(MessageId(response.event_id.to_string()))
     }
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::channel_connection_lost("matrix"))
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("matrix"))
     }
 
     async fn edit_message(
@@ -258,11 +271,16 @@ impl ChannelAdapter for MatrixChannel {
         _parse_mode: Option<&str>,
     ) -> Result<(), BlufioError> {
         let client_guard = self.client.lock().await;
-        let client = client_guard.as_ref().ok_or_else(|| BlufioError::channel_connection_lost("matrix"))?;
+        let client = client_guard
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("matrix"))?;
 
         let room_id: OwnedRoomId = chat_id.parse().map_err(|e| BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
-            context: ErrorContext { channel_name: Some("matrix".to_string()), ..Default::default() },
+            context: ErrorContext {
+                channel_name: Some("matrix".to_string()),
+                ..Default::default()
+            },
             source: None,
         })?;
 
@@ -270,7 +288,10 @@ impl ChannelAdapter for MatrixChannel {
             .get_room(&room_id)
             .ok_or_else(|| BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
-                context: ErrorContext { channel_name: Some("matrix".to_string()), ..Default::default() },
+                context: ErrorContext {
+                    channel_name: Some("matrix".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
@@ -278,18 +299,25 @@ impl ChannelAdapter for MatrixChannel {
         // For simplicity, we send a new message with the edit prefix.
         // Full replacement event support requires the original event ID.
         let content = RoomMessageEventContent::text_plain(format!("(edited) {text}"));
-        room.send(content).await.map_err(|e| BlufioError::channel_delivery_failed("matrix", e))?;
+        room.send(content)
+            .await
+            .map_err(|e| BlufioError::channel_delivery_failed("matrix", e))?;
 
         Ok(())
     }
 
     async fn send_typing(&self, chat_id: &str) -> Result<(), BlufioError> {
         let client_guard = self.client.lock().await;
-        let client = client_guard.as_ref().ok_or_else(|| BlufioError::channel_connection_lost("matrix"))?;
+        let client = client_guard
+            .as_ref()
+            .ok_or_else(|| BlufioError::channel_connection_lost("matrix"))?;
 
         let room_id: OwnedRoomId = chat_id.parse().map_err(|_| BlufioError::Channel {
             kind: ChannelErrorKind::DeliveryFailed,
-            context: ErrorContext { channel_name: Some("matrix".to_string()), ..Default::default() },
+            context: ErrorContext {
+                channel_name: Some("matrix".to_string()),
+                ..Default::default()
+            },
             source: None,
         })?;
 

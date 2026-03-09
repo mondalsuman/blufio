@@ -189,10 +189,14 @@ fn parse_openclaw_dir(path: &Path) -> Result<OpenClawData, BlufioError> {
         let config_path = path.join(name);
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path).map_err(|e| {
-                BlufioError::migration_schema_failed(&format!("failed to read config file {name}: {e}"))
+                BlufioError::migration_schema_failed(&format!(
+                    "failed to read config file {name}: {e}"
+                ))
             })?;
             let value: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
-                BlufioError::migration_schema_failed(&format!("failed to parse config file {name}: {e}"))
+                BlufioError::migration_schema_failed(&format!(
+                    "failed to parse config file {name}: {e}"
+                ))
             })?;
 
             // Extract secrets from config.
@@ -254,10 +258,12 @@ fn parse_sessions(path: &Path, data: &mut OpenClawData) -> Result<(), BlufioErro
     // Try sessions.json first.
     let sessions_json = path.join("sessions.json");
     if sessions_json.exists() {
-        let content = std::fs::read_to_string(&sessions_json)
-            .map_err(|e| BlufioError::migration_schema_failed(&format!("failed to read sessions.json: {e}")))?;
-        let sessions: Vec<OpenClawSession> = serde_json::from_str(&content)
-            .map_err(|e| BlufioError::migration_schema_failed(&format!("failed to parse sessions.json: {e}")))?;
+        let content = std::fs::read_to_string(&sessions_json).map_err(|e| {
+            BlufioError::migration_schema_failed(&format!("failed to read sessions.json: {e}"))
+        })?;
+        let sessions: Vec<OpenClawSession> = serde_json::from_str(&content).map_err(|e| {
+            BlufioError::migration_schema_failed(&format!("failed to parse sessions.json: {e}"))
+        })?;
         data.sessions = sessions;
         return Ok(());
     }
@@ -358,10 +364,12 @@ fn parse_cost_records(path: &Path, data: &mut OpenClawData) -> Result<(), Blufio
     // Try costs.json.
     let costs_json = path.join("costs.json");
     if costs_json.exists() {
-        let content = std::fs::read_to_string(&costs_json)
-            .map_err(|e| BlufioError::migration_schema_failed(&format!("failed to read costs.json: {e}")))?;
-        let records: Vec<OpenClawCostRecord> = serde_json::from_str(&content)
-            .map_err(|e| BlufioError::migration_schema_failed(&format!("failed to parse costs.json: {e}")))?;
+        let content = std::fs::read_to_string(&costs_json).map_err(|e| {
+            BlufioError::migration_schema_failed(&format!("failed to read costs.json: {e}"))
+        })?;
+        let records: Vec<OpenClawCostRecord> = serde_json::from_str(&content).map_err(|e| {
+            BlufioError::migration_schema_failed(&format!("failed to parse costs.json: {e}"))
+        })?;
         data.cost_records = records;
         return Ok(());
     }
@@ -520,7 +528,9 @@ pub async fn run_migrate_preview(data_dir: Option<&str>, json: bool) -> Result<(
     // Output.
     if json {
         let json_output = serde_json::to_string_pretty(&report).map_err(|e| {
-            BlufioError::migration_schema_failed(&format!("failed to serialize preview report: {e}"))
+            BlufioError::migration_schema_failed(&format!(
+                "failed to serialize preview report: {e}"
+            ))
         })?;
         println!("{json_output}");
     } else {
@@ -765,7 +775,9 @@ pub async fn run_migrate(
             let dest = personality_dir.join(file_name);
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
-                    BlufioError::migration_schema_failed(&format!("failed to create personality directory: {e}"))
+                    BlufioError::migration_schema_failed(&format!(
+                        "failed to create personality directory: {e}"
+                    ))
                 })?;
             }
             dest
@@ -773,7 +785,9 @@ pub async fn run_migrate(
             let dest = import_dir.join(file_name);
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
-                    BlufioError::migration_schema_failed(&format!("failed to create import directory: {e}"))
+                    BlufioError::migration_schema_failed(&format!(
+                        "failed to create import directory: {e}"
+                    ))
                 })?;
             }
             dest
@@ -829,7 +843,9 @@ pub async fn run_migrate(
     // Print summary.
     if json {
         let json_output = serde_json::to_string_pretty(&summary).map_err(|e| {
-            BlufioError::migration_schema_failed(&format!("failed to serialize import summary: {e}"))
+            BlufioError::migration_schema_failed(&format!(
+                "failed to serialize import summary: {e}"
+            ))
         })?;
         println!("{json_output}");
     } else {
@@ -927,11 +943,16 @@ async fn try_vault_store(config: &BlufioConfig, key: &str, value: &str) -> Resul
 /// Translate an OpenClaw JSON config to Blufio TOML.
 pub fn run_config_translate(input: &str, output: Option<&str>) -> Result<(), BlufioError> {
     let content = std::fs::read_to_string(input).map_err(|e| {
-        BlufioError::migration_schema_failed(&format!("failed to read OpenClaw config '{}': {e}", input))
+        BlufioError::migration_schema_failed(&format!(
+            "failed to read OpenClaw config '{}': {e}",
+            input
+        ))
     })?;
 
     let oc_config: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
-        BlufioError::migration_schema_failed(&format!("failed to parse OpenClaw config as JSON: {e}"))
+        BlufioError::migration_schema_failed(&format!(
+            "failed to parse OpenClaw config as JSON: {e}"
+        ))
     })?;
 
     let oc_map = oc_config.as_object().ok_or_else(|| {
@@ -1033,7 +1054,9 @@ pub fn run_config_translate(input: &str, output: Option<&str>) -> Result<(), Blu
 
     // Serialize to TOML.
     let mut toml_output = toml::to_string_pretty(&blufio_config).map_err(|e| {
-        BlufioError::migration_schema_failed(&format!("failed to serialize Blufio config to TOML: {e}"))
+        BlufioError::migration_schema_failed(&format!(
+            "failed to serialize Blufio config to TOML: {e}"
+        ))
     })?;
 
     // Append unmapped fields as comments.
@@ -1048,8 +1071,9 @@ pub fn run_config_translate(input: &str, output: Option<&str>) -> Result<(), Blu
 
     // Output.
     if let Some(output_path) = output {
-        std::fs::write(output_path, &toml_output)
-            .map_err(|e| BlufioError::migration_schema_failed(&format!("failed to write output file: {e}")))?;
+        std::fs::write(output_path, &toml_output).map_err(|e| {
+            BlufioError::migration_schema_failed(&format!("failed to write output file: {e}"))
+        })?;
         eprintln!("Config written to: {output_path}");
     } else {
         print!("{toml_output}");

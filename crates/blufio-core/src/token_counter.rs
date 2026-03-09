@@ -366,11 +366,7 @@ pub struct TokenizerCache {
 
 impl std::fmt::Debug for TokenizerCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let count = self
-            .counters
-            .read()
-            .map(|c| c.len())
-            .unwrap_or(0);
+        let count = self.counters.read().map(|c| c.len()).unwrap_or(0);
         f.debug_struct("TokenizerCache")
             .field("mode", &self.mode)
             .field("cached_counters", &count)
@@ -748,7 +744,10 @@ mod tests {
     async fn hf_claude_empty_string_returns_zero_or_small() {
         let counter = HuggingFaceCounter;
         let tokens = counter.count_tokens("").await.unwrap();
-        assert!(tokens <= 1, "Empty string should produce 0 or at most 1 token, got {tokens}");
+        assert!(
+            tokens <= 1,
+            "Empty string should produce 0 or at most 1 token, got {tokens}"
+        );
     }
 
     #[test]

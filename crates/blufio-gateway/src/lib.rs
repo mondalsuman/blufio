@@ -405,7 +405,9 @@ impl ChannelAdapter for GatewayChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::channel_connection_lost("gateway"))
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("gateway"))
     }
 
     async fn send_typing(&self, chat_id: &str) -> Result<(), BlufioError> {

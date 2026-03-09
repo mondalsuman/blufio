@@ -36,20 +36,17 @@ impl StreamingEditorOps for SlackStreamOps {
             SlackMessageContent::new().with_text(formatted),
         );
 
-        let resp = session
-            .chat_post_message(&req)
-            .await
-            .map_err(|e| {
-                use blufio_core::error::{ChannelErrorKind, ErrorContext};
-                BlufioError::Channel {
-                    kind: ChannelErrorKind::DeliveryFailed,
-                    context: ErrorContext {
-                        channel_name: Some("slack".to_string()),
-                        ..Default::default()
-                    },
-                    source: None,
-                }
-            })?;
+        let resp = session.chat_post_message(&req).await.map_err(|e| {
+            use blufio_core::error::{ChannelErrorKind, ErrorContext};
+            BlufioError::Channel {
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("slack".to_string()),
+                    ..Default::default()
+                },
+                source: None,
+            }
+        })?;
 
         // Return the ts (timestamp) as the message ID.
         Ok(resp.ts.to_string())
@@ -67,20 +64,17 @@ impl StreamingEditorOps for SlackStreamOps {
             ts,
         );
 
-        session
-            .chat_update(&req)
-            .await
-            .map_err(|e| {
-                use blufio_core::error::{ChannelErrorKind, ErrorContext};
-                BlufioError::Channel {
-                    kind: ChannelErrorKind::DeliveryFailed,
-                    context: ErrorContext {
-                        channel_name: Some("slack".to_string()),
-                        ..Default::default()
-                    },
-                    source: None,
-                }
-            })?;
+        session.chat_update(&req).await.map_err(|e| {
+            use blufio_core::error::{ChannelErrorKind, ErrorContext};
+            BlufioError::Channel {
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("slack".to_string()),
+                    ..Default::default()
+                },
+                source: None,
+            }
+        })?;
 
         Ok(())
     }

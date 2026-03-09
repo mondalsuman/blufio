@@ -468,9 +468,7 @@ impl BlufioError {
                 }
             },
             Self::Channel { kind, .. } => match kind {
-                ChannelErrorKind::DeliveryFailed => {
-                    Cow::Borrowed("Failed to deliver the message.")
-                }
+                ChannelErrorKind::DeliveryFailed => Cow::Borrowed("Failed to deliver the message."),
                 ChannelErrorKind::ConnectionLost => {
                     Cow::Borrowed("Connection to the messaging service was lost.")
                 }
@@ -485,46 +483,32 @@ impl BlufioError {
                 }
             },
             Self::Storage { kind, .. } => match kind {
-                StorageErrorKind::Busy => {
-                    Cow::Borrowed("The database is busy. Please try again.")
-                }
+                StorageErrorKind::Busy => Cow::Borrowed("The database is busy. Please try again."),
                 StorageErrorKind::Corruption => {
                     Cow::Borrowed("A storage error occurred. Data may need recovery.")
                 }
-                StorageErrorKind::SchemaError => {
-                    Cow::Borrowed("A storage schema error occurred.")
-                }
-                StorageErrorKind::DiskFull => {
-                    Cow::Borrowed("Storage space is full.")
-                }
+                StorageErrorKind::SchemaError => Cow::Borrowed("A storage schema error occurred."),
+                StorageErrorKind::DiskFull => Cow::Borrowed("Storage space is full."),
                 StorageErrorKind::ConnectionFailed => {
                     Cow::Borrowed("Failed to connect to the database.")
                 }
             },
             Self::Skill { kind, .. } => match kind {
-                SkillErrorKind::ExecutionFailed => {
-                    Cow::Borrowed("A skill failed to execute.")
-                }
+                SkillErrorKind::ExecutionFailed => Cow::Borrowed("A skill failed to execute."),
                 SkillErrorKind::CapabilityDenied => {
                     Cow::Borrowed("The skill does not have the required permissions.")
                 }
                 SkillErrorKind::SandboxTimeout => {
                     Cow::Borrowed("A skill timed out during execution.")
                 }
-                SkillErrorKind::CompilationFailed => {
-                    Cow::Borrowed("A skill failed to compile.")
-                }
+                SkillErrorKind::CompilationFailed => Cow::Borrowed("A skill failed to compile."),
             },
             Self::Mcp { kind, .. } => match kind {
                 McpErrorKind::ConnectionFailed => {
                     Cow::Borrowed("Failed to connect to the tool server.")
                 }
-                McpErrorKind::ToolExecutionFailed => {
-                    Cow::Borrowed("A tool failed to execute.")
-                }
-                McpErrorKind::Timeout => {
-                    Cow::Borrowed("The tool server took too long to respond.")
-                }
+                McpErrorKind::ToolExecutionFailed => Cow::Borrowed("A tool failed to execute."),
+                McpErrorKind::Timeout => Cow::Borrowed("The tool server took too long to respond."),
                 McpErrorKind::AuthFailed => {
                     Cow::Borrowed("Authentication with the tool server failed.")
                 }
@@ -533,9 +517,7 @@ impl BlufioError {
                 }
             },
             Self::Migration { kind, .. } => match kind {
-                MigrationErrorKind::SchemaFailed => {
-                    Cow::Borrowed("A database migration failed.")
-                }
+                MigrationErrorKind::SchemaFailed => Cow::Borrowed("A database migration failed."),
                 MigrationErrorKind::DataCorruption => {
                     Cow::Borrowed("Data corruption detected during migration.")
                 }
@@ -587,10 +569,7 @@ impl BlufioError {
     // --- Provider constructors ---
 
     /// Create a provider rate-limited error.
-    pub fn provider_rate_limited(
-        retry_after: Option<Duration>,
-        provider_name: &str,
-    ) -> Self {
+    pub fn provider_rate_limited(retry_after: Option<Duration>, provider_name: &str) -> Self {
         Self::Provider {
             kind: ProviderErrorKind::RateLimited,
             context: ErrorContext {
@@ -702,10 +681,7 @@ impl BlufioError {
     }
 
     /// Create a channel rate-limited error.
-    pub fn channel_rate_limited(
-        channel_name: &str,
-        retry_after: Option<Duration>,
-    ) -> Self {
+    pub fn channel_rate_limited(channel_name: &str, retry_after: Option<Duration>) -> Self {
         Self::Channel {
             kind: ChannelErrorKind::RateLimited,
             context: ErrorContext {
@@ -773,9 +749,7 @@ impl BlufioError {
     }
 
     /// Create a storage schema error.
-    pub fn storage_schema_error(
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    pub fn storage_schema_error(source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Storage {
             kind: StorageErrorKind::SchemaError,
             context: ErrorContext::default(),
@@ -786,9 +760,7 @@ impl BlufioError {
     // --- MCP constructors ---
 
     /// Create an MCP connection failure.
-    pub fn mcp_connection_failed(
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    pub fn mcp_connection_failed(source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Mcp {
             kind: McpErrorKind::ConnectionFailed,
             context: ErrorContext::default(),
@@ -797,9 +769,7 @@ impl BlufioError {
     }
 
     /// Create an MCP tool execution failure.
-    pub fn mcp_tool_failed(
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    pub fn mcp_tool_failed(source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Mcp {
             kind: McpErrorKind::ToolExecutionFailed,
             context: ErrorContext::default(),
@@ -820,9 +790,7 @@ impl BlufioError {
     }
 
     /// Create an MCP protocol error.
-    pub fn mcp_protocol_error(
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    pub fn mcp_protocol_error(source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Mcp {
             kind: McpErrorKind::ProtocolError,
             context: ErrorContext::default(),
@@ -833,9 +801,7 @@ impl BlufioError {
     // --- Skill constructors ---
 
     /// Create a skill execution failure with a source error.
-    pub fn skill_execution_failed(
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    pub fn skill_execution_failed(source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Skill {
             kind: SkillErrorKind::ExecutionFailed,
             context: ErrorContext::default(),
@@ -936,7 +902,6 @@ impl BlufioError {
             },
         }
     }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -1067,10 +1032,8 @@ mod tests {
 
     #[test]
     fn provider_server_error_classification() {
-        let err = BlufioError::provider_server_error(
-            "gemini",
-            std::io::Error::other("server error"),
-        );
+        let err =
+            BlufioError::provider_server_error("gemini", std::io::Error::other("server error"));
         assert!(err.is_retryable());
         assert_eq!(err.failure_mode(), FailureMode::Unavailable);
         assert_eq!(err.severity(), Severity::Error);

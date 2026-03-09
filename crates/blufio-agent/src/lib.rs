@@ -741,7 +741,6 @@ fn extract_chat_id_from_metadata(metadata: &Option<String>) -> Option<String> {
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

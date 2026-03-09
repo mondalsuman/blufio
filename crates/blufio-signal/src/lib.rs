@@ -273,7 +273,9 @@ impl ChannelAdapter for SignalChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::channel_connection_lost("signal"))
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("signal"))
     }
 
     async fn edit_message(

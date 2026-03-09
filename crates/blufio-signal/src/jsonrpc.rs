@@ -51,10 +51,9 @@ impl JsonRpcClient {
             let port = config.port.unwrap_or(7583);
             let addr = format!("{host}:{port}");
 
-            let stream =
-                tokio::net::TcpStream::connect(&addr)
-                    .await
-                    .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
+            let stream = tokio::net::TcpStream::connect(&addr)
+                .await
+                .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
             let (read, write) = stream.into_split();
             Ok(Self {
                 reader: BufReader::new(Box::new(read)),
@@ -78,7 +77,8 @@ impl JsonRpcClient {
             id: format!("req-{id}"),
         };
 
-        let mut line = serde_json::to_string(&request).map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
+        let mut line = serde_json::to_string(&request)
+            .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
         line.push('\n');
 
         self.writer
@@ -97,7 +97,8 @@ impl JsonRpcClient {
             .await
             .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
 
-        serde_json::from_str(&response_line).map_err(|e| BlufioError::channel_delivery_failed("signal", e))
+        serde_json::from_str(&response_line)
+            .map_err(|e| BlufioError::channel_delivery_failed("signal", e))
     }
 
     /// Read the next notification from signal-cli.

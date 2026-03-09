@@ -152,7 +152,10 @@ impl ChannelAdapter for WhatsAppCloudChannel {
         } else {
             return Err(BlufioError::Channel {
                 kind: ChannelErrorKind::DeliveryFailed,
-                context: ErrorContext { channel_name: Some("whatsapp".to_string()), ..Default::default() },
+                context: ErrorContext {
+                    channel_name: Some("whatsapp".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             });
         };
@@ -166,7 +169,9 @@ impl ChannelAdapter for WhatsAppCloudChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::channel_connection_lost("whatsapp"))
+        rx.recv()
+            .await
+            .ok_or_else(|| BlufioError::channel_connection_lost("whatsapp"))
     }
 
     async fn edit_message(
