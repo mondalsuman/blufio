@@ -36,7 +36,7 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 
 ### Token Counting
 
-- [ ] **TOK-01**: Context engine uses accurate token counting instead of `len()/4` heuristic
+- [x] **TOK-01**: Context engine uses accurate token counting instead of `len()/4` heuristic
 - [x] **TOK-02**: OpenAI token counting uses tiktoken-rs with o200k_base/cl100k_base encodings per model
 - [x] **TOK-03**: Claude token counting uses HuggingFace tokenizers crate with Xenova/claude-tokenizer vocabulary
 - [x] **TOK-04**: Ollama token counting uses per-model tokenizer.json when available, calibrated heuristic as fallback
@@ -117,7 +117,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FMT-01 | Phase 46 | Complete |
 | FMT-02 | Phase 46 | Complete |
 | FMT-03 | Phase 46 | Complete |
-| TOK-01 | Phase 47 | Pending |
+| TOK-01 | Phase 47 | Complete |
 | TOK-02 | Phase 47 | Complete |
 | TOK-03 | Phase 47 | Complete |
 | TOK-04 | Phase 47 | Complete |
