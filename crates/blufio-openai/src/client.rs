@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blufio_config::model::SecurityConfig;
-use blufio_core::BlufioError;
+use blufio_core::{BlufioError, ErrorContext, ProviderErrorKind};
 use blufio_security::SsrfSafeResolver;
 use futures::Stream;
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -19,6 +19,9 @@ use tracing::{debug, warn};
 
 use crate::sse;
 use crate::types::{ApiErrorResponse, ChatRequest, ChatResponse, SseChunk};
+
+/// Provider name used in error context.
+const PROVIDER_NAME: &str = "openai";
 
 /// HTTP client for OpenAI API communication.
 ///
@@ -70,10 +73,10 @@ impl OpenAIClient {
                 .dns_resolver(Arc::new(resolver));
         }
 
-        let client = builder.build().map_err(|e| BlufioError::Provider {
-            message: format!("failed to build HTTP client: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        let client =
+            builder
+                .build()
+                .map_err(|e| BlufioError::provider_server_error(PROVIDER_NAME, e))?;
 
         Ok(Self {
             client,
@@ -105,9 +108,20 @@ impl OpenAIClient {
         format!("{}/chat/completions", self.base_url)
     }
 
+    /// Extracts the `retry-after` header value as a [`Duration`].
+    fn extract_retry_after(response: &reqwest::Response) -> Option<Duration> {
+        response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Duration::from_secs)
+    }
+
     /// Sends a non-streaming request and returns the full response.
     ///
-    /// On transient errors (429, 500, 503), retries once after a 1-second delay.
+    /// On retryable errors (determined by `error.is_retryable()`), retries once
+    /// after a 1-second delay.
     pub async fn complete_chat(&self, request: &ChatRequest) -> Result<ChatResponse, BlufioError> {
         let mut last_error = None;
 
@@ -123,63 +137,104 @@ impl OpenAIClient {
                 .json(request)
                 .send()
                 .await
-                .map_err(|e| BlufioError::Provider {
-                    message: format!("HTTP request failed: {e}"),
-                    source: Some(Box::new(e)),
+                .map_err(|e| {
+                    if e.is_timeout() {
+                        BlufioError::provider_timeout(PROVIDER_NAME)
+                    } else {
+                        BlufioError::Provider {
+                            kind: ProviderErrorKind::ServerError,
+                            context: ErrorContext {
+                                provider_name: Some(PROVIDER_NAME.into()),
+                                ..Default::default()
+                            },
+                            source: Some(Box::new(e)),
+                        }
+                    }
                 })?;
 
             let status = response.status();
             debug!(status = %status, attempt, "completion response received");
 
             if status.is_success() {
-                let body = response.text().await.map_err(|e| BlufioError::Provider {
-                    message: format!("failed to read response body: {e}"),
-                    source: Some(Box::new(e)),
+                let body = response.text().await.map_err(|e| {
+                    BlufioError::Provider {
+                        kind: ProviderErrorKind::ServerError,
+                        context: ErrorContext {
+                            provider_name: Some(PROVIDER_NAME.into()),
+                            ..Default::default()
+                        },
+                        source: Some(Box::new(e)),
+                    }
                 })?;
                 let chat_response: ChatResponse =
-                    serde_json::from_str(&body).map_err(|e| BlufioError::Provider {
-                        message: format!("failed to parse API response: {e}"),
-                        source: Some(Box::new(e)),
+                    serde_json::from_str(&body).map_err(|e| {
+                        BlufioError::Provider {
+                            kind: ProviderErrorKind::ServerError,
+                            context: ErrorContext {
+                                provider_name: Some(PROVIDER_NAME.into()),
+                                ..Default::default()
+                            },
+                            source: Some(Box::new(e)),
+                        }
                     })?;
                 return Ok(chat_response);
             }
 
-            if is_transient_error(status) && attempt < self.max_retries {
+            let retry_after = Self::extract_retry_after(&response);
+            let error = BlufioError::provider_from_http(
+                status.as_u16(),
+                PROVIDER_NAME,
+                None,
+            );
+            let error = if retry_after.is_some() {
+                match error {
+                    BlufioError::Provider {
+                        kind,
+                        mut context,
+                        source,
+                    } => {
+                        context.retry_after = retry_after;
+                        BlufioError::Provider {
+                            kind,
+                            context,
+                            source,
+                        }
+                    }
+                    other => other,
+                }
+            } else {
+                error
+            };
+
+            if error.is_retryable() && attempt < self.max_retries {
                 let body = response.text().await.unwrap_or_default();
                 warn!(status = %status, body = %body, "transient error, will retry");
-                last_error = Some(BlufioError::Provider {
-                    message: format!("API returned {status}: {body}"),
-                    source: None,
-                });
+                last_error = Some(error);
                 continue;
             }
 
-            // Non-transient error or exhausted retries.
+            // Non-retryable error or exhausted retries.
             let body = response.text().await.unwrap_or_default();
-            let error_msg = if let Ok(api_err) = serde_json::from_str::<ApiErrorResponse>(&body) {
-                format!(
-                    "OpenAI API error ({}): {}",
-                    api_err.error.type_.unwrap_or_default(),
-                    api_err.error.message
-                )
-            } else {
-                format!("API returned {status}: {body}")
-            };
-            return Err(BlufioError::Provider {
-                message: error_msg,
-                source: None,
-            });
+            let _api_detail = serde_json::from_str::<ApiErrorResponse>(&body).ok();
+            return Err(error);
         }
 
-        Err(last_error.unwrap_or_else(|| BlufioError::Provider {
-            message: "completion request failed after retries".into(),
-            source: None,
+        Err(last_error.unwrap_or_else(|| {
+            BlufioError::Provider {
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some(PROVIDER_NAME.into()),
+                    ..Default::default()
+                },
+                source: None,
+            }
         }))
     }
 
     /// Sends a streaming request and returns a stream of SSE chunks.
     ///
-    /// On transient errors (429, 500, 503), retries once after a 1-second delay.
+    /// On retryable errors (determined by `error.is_retryable()`), retries once
+    /// after a 1-second delay.
     pub async fn stream_chat(
         &self,
         request: &ChatRequest,
@@ -199,9 +254,19 @@ impl OpenAIClient {
                 .json(request)
                 .send()
                 .await
-                .map_err(|e| BlufioError::Provider {
-                    message: format!("HTTP request failed: {e}"),
-                    source: Some(Box::new(e)),
+                .map_err(|e| {
+                    if e.is_timeout() {
+                        BlufioError::provider_timeout(PROVIDER_NAME)
+                    } else {
+                        BlufioError::Provider {
+                            kind: ProviderErrorKind::ServerError,
+                            context: ErrorContext {
+                                provider_name: Some(PROVIDER_NAME.into()),
+                                ..Default::default()
+                            },
+                            source: Some(Box::new(e)),
+                        }
+                    }
                 })?;
 
             let status = response.status();
@@ -211,43 +276,56 @@ impl OpenAIClient {
                 return Ok(sse::parse_openai_sse_stream(response));
             }
 
-            if is_transient_error(status) && attempt < self.max_retries {
+            let retry_after = Self::extract_retry_after(&response);
+            let error = BlufioError::provider_from_http(
+                status.as_u16(),
+                PROVIDER_NAME,
+                None,
+            );
+            let error = if retry_after.is_some() {
+                match error {
+                    BlufioError::Provider {
+                        kind,
+                        mut context,
+                        source,
+                    } => {
+                        context.retry_after = retry_after;
+                        BlufioError::Provider {
+                            kind,
+                            context,
+                            source,
+                        }
+                    }
+                    other => other,
+                }
+            } else {
+                error
+            };
+
+            if error.is_retryable() && attempt < self.max_retries {
                 let body = response.text().await.unwrap_or_default();
                 warn!(status = %status, body = %body, "transient error, will retry");
-                last_error = Some(BlufioError::Provider {
-                    message: format!("API returned {status}: {body}"),
-                    source: None,
-                });
+                last_error = Some(error);
                 continue;
             }
 
-            // Non-transient error or exhausted retries.
+            // Non-retryable error or exhausted retries.
             let body = response.text().await.unwrap_or_default();
-            let error_msg = if let Ok(api_err) = serde_json::from_str::<ApiErrorResponse>(&body) {
-                format!(
-                    "OpenAI API error ({}): {}",
-                    api_err.error.type_.unwrap_or_default(),
-                    api_err.error.message
-                )
-            } else {
-                format!("API returned {status}: {body}")
-            };
-            return Err(BlufioError::Provider {
-                message: error_msg,
-                source: None,
-            });
+            let _api_detail = serde_json::from_str::<ApiErrorResponse>(&body).ok();
+            return Err(error);
         }
 
-        Err(last_error.unwrap_or_else(|| BlufioError::Provider {
-            message: "streaming request failed after retries".into(),
-            source: None,
+        Err(last_error.unwrap_or_else(|| {
+            BlufioError::Provider {
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some(PROVIDER_NAME.into()),
+                    ..Default::default()
+                },
+                source: None,
+            }
         }))
     }
-}
-
-/// Returns true for HTTP status codes that indicate transient errors worth retrying.
-fn is_transient_error(status: reqwest::StatusCode) -> bool {
-    matches!(status.as_u16(), 429 | 500 | 503)
 }
 
 #[cfg(test)]
@@ -368,8 +446,8 @@ mod tests {
         let client = test_client(&server.uri());
         let result = client.complete_chat(&test_request()).await;
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("invalid_request_error"), "got: {err}");
+        let err = result.unwrap_err();
+        assert!(!err.is_retryable());
     }
 
     #[tokio::test]
@@ -389,8 +467,9 @@ mod tests {
         let client = test_client(&server.uri());
         let result = client.complete_chat(&test_request()).await;
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("authentication_error"), "got: {err}");
+        let err = result.unwrap_err();
+        // 401 maps to AuthFailed, which is not retryable
+        assert!(!err.is_retryable());
     }
 
     #[tokio::test]
@@ -412,8 +491,8 @@ mod tests {
         let client = test_client(&server.uri());
         let result = client.complete_chat(&test_request()).await;
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("server_error"), "got: {err}");
+        let err = result.unwrap_err();
+        assert!(err.is_retryable()); // 503 is retryable, just exhausted
     }
 
     #[tokio::test]

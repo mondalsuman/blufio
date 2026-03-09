@@ -185,7 +185,11 @@ impl ProviderAdapter for OpenAIProvider {
             .choices
             .first()
             .ok_or_else(|| BlufioError::Provider {
-                message: "OpenAI response contained no choices".into(),
+                kind: blufio_core::ProviderErrorKind::ServerError,
+                context: blufio_core::ErrorContext {
+                    provider_name: Some("openai".into()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 

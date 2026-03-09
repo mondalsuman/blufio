@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blufio_config::model::SecurityConfig;
-use blufio_core::BlufioError;
+use blufio_core::{BlufioError, ErrorContext, ProviderErrorKind};
 use blufio_security::SsrfSafeResolver;
 use futures::Stream;
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -21,6 +21,9 @@ use tracing::{debug, warn};
 
 use crate::stream;
 use crate::types::{ApiErrorResponse, GenerateContentRequest, GenerateContentResponse};
+
+/// Provider name used in error context.
+const PROVIDER_NAME: &str = "gemini";
 
 /// Default base URL for the Gemini API.
 const API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
@@ -65,10 +68,10 @@ impl GeminiClient {
                 .dns_resolver(Arc::new(resolver));
         }
 
-        let client = builder.build().map_err(|e| BlufioError::Provider {
-            message: format!("failed to build HTTP client: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        let client =
+            builder
+                .build()
+                .map_err(|e| BlufioError::provider_server_error(PROVIDER_NAME, e))?;
 
         Ok(Self {
             client,
@@ -109,7 +112,8 @@ impl GeminiClient {
 
     /// Sends a non-streaming generateContent request.
     ///
-    /// On transient errors (429, 500, 503), retries once after a 1-second delay.
+    /// On retryable errors (determined by `error.is_retryable()`), retries once
+    /// after a 1-second delay.
     pub async fn generate_content(
         &self,
         request: &GenerateContentRequest,
@@ -131,63 +135,84 @@ impl GeminiClient {
                 .json(request)
                 .send()
                 .await
-                .map_err(|e| BlufioError::Provider {
-                    message: format!("HTTP request failed: {e}"),
-                    source: Some(Box::new(e)),
+                .map_err(|e| {
+                    if e.is_timeout() {
+                        BlufioError::provider_timeout(PROVIDER_NAME)
+                    } else {
+                        BlufioError::Provider {
+                            kind: ProviderErrorKind::ServerError,
+                            context: ErrorContext {
+                                provider_name: Some(PROVIDER_NAME.into()),
+                                ..Default::default()
+                            },
+                            source: Some(Box::new(e)),
+                        }
+                    }
                 })?;
 
             let status = response.status();
             debug!(status = %status, attempt, "Gemini response received");
 
             if status.is_success() {
-                let body = response.text().await.map_err(|e| BlufioError::Provider {
-                    message: format!("failed to read response body: {e}"),
-                    source: Some(Box::new(e)),
+                let body = response.text().await.map_err(|e| {
+                    BlufioError::Provider {
+                        kind: ProviderErrorKind::ServerError,
+                        context: ErrorContext {
+                            provider_name: Some(PROVIDER_NAME.into()),
+                            ..Default::default()
+                        },
+                        source: Some(Box::new(e)),
+                    }
                 })?;
                 let resp: GenerateContentResponse =
-                    serde_json::from_str(&body).map_err(|e| BlufioError::Provider {
-                        message: format!("failed to parse Gemini response: {e}"),
-                        source: Some(Box::new(e)),
+                    serde_json::from_str(&body).map_err(|e| {
+                        BlufioError::Provider {
+                            kind: ProviderErrorKind::ServerError,
+                            context: ErrorContext {
+                                provider_name: Some(PROVIDER_NAME.into()),
+                                ..Default::default()
+                            },
+                            source: Some(Box::new(e)),
+                        }
                     })?;
                 return Ok(resp);
             }
 
-            if is_transient_error(status) && attempt < self.max_retries {
+            let error = BlufioError::provider_from_http(
+                status.as_u16(),
+                PROVIDER_NAME,
+                None,
+            );
+
+            if error.is_retryable() && attempt < self.max_retries {
                 let body = response.text().await.unwrap_or_default();
                 warn!(status = %status, body = %body, "transient error, will retry");
-                last_error = Some(BlufioError::Provider {
-                    message: format!("Gemini API returned {status}: {body}"),
-                    source: None,
-                });
+                last_error = Some(error);
                 continue;
             }
 
-            // Non-transient error or exhausted retries.
+            // Non-retryable error or exhausted retries.
             let body = response.text().await.unwrap_or_default();
-            let error_msg = if let Ok(api_err) = serde_json::from_str::<ApiErrorResponse>(&body) {
-                format!(
-                    "Gemini API error ({}): {}",
-                    api_err.error.status.unwrap_or_default(),
-                    api_err.error.message
-                )
-            } else {
-                format!("Gemini API returned {status}: {body}")
-            };
-            return Err(BlufioError::Provider {
-                message: error_msg,
-                source: None,
-            });
+            let _api_detail = serde_json::from_str::<ApiErrorResponse>(&body).ok();
+            return Err(error);
         }
 
-        Err(last_error.unwrap_or_else(|| BlufioError::Provider {
-            message: "Gemini request failed after retries".into(),
-            source: None,
+        Err(last_error.unwrap_or_else(|| {
+            BlufioError::Provider {
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some(PROVIDER_NAME.into()),
+                    ..Default::default()
+                },
+                source: None,
+            }
         }))
     }
 
     /// Sends a streaming streamGenerateContent request.
     ///
-    /// On transient errors (429, 500, 503), retries once after a 1-second delay.
+    /// On retryable errors (determined by `error.is_retryable()`), retries once
+    /// after a 1-second delay.
     pub async fn stream_generate_content(
         &self,
         request: &GenerateContentRequest,
@@ -215,9 +240,19 @@ impl GeminiClient {
                 .json(request)
                 .send()
                 .await
-                .map_err(|e| BlufioError::Provider {
-                    message: format!("HTTP request failed: {e}"),
-                    source: Some(Box::new(e)),
+                .map_err(|e| {
+                    if e.is_timeout() {
+                        BlufioError::provider_timeout(PROVIDER_NAME)
+                    } else {
+                        BlufioError::Provider {
+                            kind: ProviderErrorKind::ServerError,
+                            context: ErrorContext {
+                                provider_name: Some(PROVIDER_NAME.into()),
+                                ..Default::default()
+                            },
+                            source: Some(Box::new(e)),
+                        }
+                    }
                 })?;
 
             let status = response.status();
@@ -227,43 +262,36 @@ impl GeminiClient {
                 return Ok(stream::parse_gemini_stream(response));
             }
 
-            if is_transient_error(status) && attempt < self.max_retries {
+            let error = BlufioError::provider_from_http(
+                status.as_u16(),
+                PROVIDER_NAME,
+                None,
+            );
+
+            if error.is_retryable() && attempt < self.max_retries {
                 let body = response.text().await.unwrap_or_default();
                 warn!(status = %status, body = %body, "transient error, will retry");
-                last_error = Some(BlufioError::Provider {
-                    message: format!("Gemini API returned {status}: {body}"),
-                    source: None,
-                });
+                last_error = Some(error);
                 continue;
             }
 
-            // Non-transient error or exhausted retries.
+            // Non-retryable error or exhausted retries.
             let body = response.text().await.unwrap_or_default();
-            let error_msg = if let Ok(api_err) = serde_json::from_str::<ApiErrorResponse>(&body) {
-                format!(
-                    "Gemini API error ({}): {}",
-                    api_err.error.status.unwrap_or_default(),
-                    api_err.error.message
-                )
-            } else {
-                format!("Gemini API returned {status}: {body}")
-            };
-            return Err(BlufioError::Provider {
-                message: error_msg,
-                source: None,
-            });
+            let _api_detail = serde_json::from_str::<ApiErrorResponse>(&body).ok();
+            return Err(error);
         }
 
-        Err(last_error.unwrap_or_else(|| BlufioError::Provider {
-            message: "Gemini streaming request failed after retries".into(),
-            source: None,
+        Err(last_error.unwrap_or_else(|| {
+            BlufioError::Provider {
+                kind: ProviderErrorKind::ServerError,
+                context: ErrorContext {
+                    provider_name: Some(PROVIDER_NAME.into()),
+                    ..Default::default()
+                },
+                source: None,
+            }
         }))
     }
-}
-
-/// Returns true for HTTP status codes that indicate transient errors worth retrying.
-fn is_transient_error(status: reqwest::StatusCode) -> bool {
-    matches!(status.as_u16(), 429 | 500 | 503)
 }
 
 #[cfg(test)]
@@ -508,8 +536,8 @@ mod tests {
         let client = test_client(&server.uri());
         let result = client.generate_content(&test_request(), None).await;
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("INVALID_ARGUMENT"), "got: {err}");
+        let err = result.unwrap_err();
+        assert!(!err.is_retryable());
     }
 
     #[tokio::test]
@@ -530,8 +558,8 @@ mod tests {
         let client = test_client(&server.uri());
         let result = client.generate_content(&test_request(), None).await;
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("UNAVAILABLE"), "got: {err}");
+        let err = result.unwrap_err();
+        assert!(err.is_retryable()); // 503 is retryable, just exhausted
     }
 
     #[tokio::test]

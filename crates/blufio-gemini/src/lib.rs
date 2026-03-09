@@ -223,7 +223,11 @@ fn map_response_to_provider(
         .candidates
         .first()
         .ok_or_else(|| BlufioError::Provider {
-            message: "Gemini response contained no candidates".into(),
+            kind: blufio_core::ProviderErrorKind::ServerError,
+            context: blufio_core::ErrorContext {
+                provider_name: Some("gemini".into()),
+                ..Default::default()
+            },
             source: None,
         })?;
 
