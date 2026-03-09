@@ -203,19 +203,13 @@ pub async fn start_server(
     let listener =
         tokio::net::TcpListener::bind(&addr)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to bind gateway to {addr}: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("gateway", e))?;
 
     tracing::info!("Gateway server listening on {addr}");
 
     axum::serve(listener, app)
         .await
-        .map_err(|e| BlufioError::Channel {
-            message: format!("gateway server error: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        .map_err(|e| BlufioError::channel_delivery_failed("gateway", e))?;
 
     Ok(())
 }

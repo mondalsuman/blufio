@@ -16,10 +16,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use blufio_config::model::TelegramConfig;
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageId, OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,
+    OutboundMessage, RateLimit, StreamingType,
 };
 use teloxide::prelude::*;
 use teloxide::types::{ChatAction, ChatId, ParseMode, Recipient};
@@ -117,6 +118,14 @@ impl ChannelAdapter for TelegramChannel {
             supports_embeds: false,
             supports_reactions: false,
             supports_threads: false,
+            streaming_type: StreamingType::EditBased,
+            formatting_support: FormattingSupport::BasicMarkdown,
+            rate_limit: Some(RateLimit {
+                messages_per_second: Some(30.0),
+                burst_limit: Some(30),
+                daily_limit: None,
+            }),
+            supports_code_blocks: true,
         }
     }
 
@@ -198,20 +207,14 @@ impl ChannelAdapter for TelegramChannel {
                     self.bot
                         .send_message(Recipient::Id(chat_id), &msg.content)
                         .await
-                        .map_err(|e| BlufioError::Channel {
-                            message: format!("failed to send message: {e}"),
-                            source: Some(Box::new(e)),
-                        })
+                        .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))
                 }
             }
         } else {
             self.bot
                 .send_message(Recipient::Id(chat_id), &msg.content)
                 .await
-                .map_err(|e| BlufioError::Channel {
-                    message: format!("failed to send message: {e}"),
-                    source: Some(Box::new(e)),
-                })
+                .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))
         }?;
 
         Ok(MessageId(result.id.0.to_string()))
@@ -219,10 +222,7 @@ impl ChannelAdapter for TelegramChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::Channel {
-            message: "Telegram inbound channel closed".into(),
-            source: None,
-        })
+        rx.recv().await.ok_or_else(|| BlufioError::channel_connection_lost("telegram"))
     }
 
     async fn edit_message(
@@ -236,7 +236,11 @@ impl ChannelAdapter for TelegramChannel {
             .parse::<i64>()
             .map(ChatId)
             .map_err(|e| BlufioError::Channel {
-                message: format!("invalid chat_id: {e}"),
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("telegram".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
@@ -244,7 +248,11 @@ impl ChannelAdapter for TelegramChannel {
             .parse::<i32>()
             .map(teloxide::types::MessageId)
             .map_err(|e| BlufioError::Channel {
-                message: format!("invalid message_id: {e}"),
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("telegram".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
@@ -270,16 +278,10 @@ impl ChannelAdapter for TelegramChannel {
                         self.bot
                             .edit_message_text(chat_id, msg_id, text)
                             .await
-                            .map_err(|e| BlufioError::Channel {
-                                message: format!("failed to edit message: {e}"),
-                                source: Some(Box::new(e)),
-                            })?;
+                            .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
                         Ok(())
                     } else {
-                        Err(BlufioError::Channel {
-                            message: format!("failed to edit message: {e}"),
-                            source: Some(Box::new(e)),
-                        })
+                        Err(BlufioError::channel_delivery_failed("telegram", e))
                     }
                 }
             }
@@ -287,10 +289,7 @@ impl ChannelAdapter for TelegramChannel {
             self.bot
                 .edit_message_text(chat_id, msg_id, text)
                 .await
-                .map_err(|e| BlufioError::Channel {
-                    message: format!("failed to edit message: {e}"),
-                    source: Some(Box::new(e)),
-                })?;
+                .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
             Ok(())
         }
     }
@@ -300,17 +299,18 @@ impl ChannelAdapter for TelegramChannel {
             .parse::<i64>()
             .map(ChatId)
             .map_err(|e| BlufioError::Channel {
-                message: format!("invalid chat_id: {e}"),
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("telegram".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
 
         self.bot
             .send_chat_action(chat_id, ChatAction::Typing)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to send typing indicator: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("telegram", e))?;
 
         Ok(())
     }
@@ -326,7 +326,11 @@ fn extract_chat_id(msg: &OutboundMessage) -> Result<ChatId, BlufioError> {
         let id = chat_id_str
             .parse::<i64>()
             .map_err(|e| BlufioError::Channel {
-                message: format!("invalid chat_id in metadata: {e}"),
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext {
+                    channel_name: Some("telegram".to_string()),
+                    ..Default::default()
+                },
                 source: None,
             })?;
         return Ok(ChatId(id));
@@ -337,7 +341,11 @@ fn extract_chat_id(msg: &OutboundMessage) -> Result<ChatId, BlufioError> {
         .parse::<i64>()
         .map(ChatId)
         .map_err(|_| BlufioError::Channel {
-            message: "no valid chat_id in message metadata or channel field".into(),
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext {
+                channel_name: Some("telegram".to_string()),
+                ..Default::default()
+            },
             source: None,
         })
 }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::streaming::{StreamingBuffer, StreamingEditorOps};
 use serenity::all::{ChannelId, CreateMessage, EditMessage};
 use serenity::http::Http;
@@ -36,16 +36,17 @@ impl StreamingEditorOps for DiscordStreamOps {
             .channel_id
             .send_message(&self.http, CreateMessage::new().content(&formatted))
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to send Discord message: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
         Ok(msg.id.to_string())
     }
 
     async fn edit_message(&mut self, msg_id: &str, text: &str) -> Result<(), BlufioError> {
-        let msg_id: u64 = msg_id.parse().map_err(|e| BlufioError::Channel {
-            message: format!("invalid Discord message_id: {e}"),
+        let msg_id: u64 = msg_id.parse().map_err(|_e| BlufioError::Channel {
+            kind: ChannelErrorKind::DeliveryFailed,
+            context: ErrorContext {
+                channel_name: Some("discord".to_string()),
+                ..Default::default()
+            },
             source: None,
         })?;
         let msg_id = serenity::model::id::MessageId::new(msg_id);
@@ -54,10 +55,7 @@ impl StreamingEditorOps for DiscordStreamOps {
         self.channel_id
             .edit_message(&self.http, msg_id, EditMessage::new().content(&formatted))
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to edit Discord message: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("discord", e))?;
         Ok(())
     }
 

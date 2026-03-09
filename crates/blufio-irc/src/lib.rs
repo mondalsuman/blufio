@@ -15,11 +15,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use blufio_config::model::IrcConfig;
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
-    AdapterType, ChannelCapabilities, HealthStatus, InboundMessage, MessageContent, MessageId,
-    OutboundMessage,
+    AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage,
+    MessageContent, MessageId, OutboundMessage, RateLimit, StreamingType,
 };
 use irc::client::Client;
 use irc::client::prelude::Config as IrcClientConfig;
@@ -113,6 +113,14 @@ impl ChannelAdapter for IrcChannel {
             supports_embeds: false,
             supports_reactions: false,
             supports_threads: false,
+            streaming_type: StreamingType::AppendOnly,
+            formatting_support: FormattingSupport::PlainText,
+            rate_limit: Some(RateLimit {
+                messages_per_second: Some(2.0),
+                burst_limit: Some(5),
+                daily_limit: None,
+            }),
+            supports_code_blocks: false,
         }
     }
 
@@ -144,10 +152,7 @@ impl ChannelAdapter for IrcChannel {
         let mut client =
             Client::from_config(irc_config)
                 .await
-                .map_err(|e| BlufioError::Channel {
-                    message: format!("failed to create IRC client for {server}:{port}: {e}"),
-                    source: Some(Box::new(e)),
-                })?;
+                .map_err(|e| BlufioError::channel_delivery_failed("irc", e))?;
 
         // SASL auth: request capability before identify.
         if self.config.auth_method.as_deref() == Some("sasl") && self.config.password.is_some() {
@@ -156,16 +161,10 @@ impl ChannelAdapter for IrcChannel {
         }
 
         // Identify (complete connection registration).
-        client.identify().map_err(|e| BlufioError::Channel {
-            message: format!("failed to identify IRC client: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        client.identify().map_err(|e| BlufioError::channel_delivery_failed("irc", e))?;
 
         // Get the message stream BEFORE wrapping in Arc (requires &mut self).
-        let stream = client.stream().map_err(|e| BlufioError::Channel {
-            message: format!("failed to get IRC message stream: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        let stream = client.stream().map_err(|e| BlufioError::channel_delivery_failed("irc", e))?;
 
         // Now wrap in Arc for shared access (send_privmsg uses &self).
         let client = Arc::new(client);
@@ -364,10 +363,7 @@ impl ChannelAdapter for IrcChannel {
 
     async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
         let fs = self.flood_sender.lock().await;
-        let sender = fs.as_ref().ok_or_else(|| BlufioError::Channel {
-            message: "IRC flood sender not initialized (not connected)".into(),
-            source: None,
-        })?;
+        let sender = fs.as_ref().ok_or_else(|| BlufioError::channel_connection_lost("irc"))?;
 
         // Extract target from metadata.
         let target = if let Some(ref metadata) = msg.metadata
@@ -383,7 +379,8 @@ impl ChannelAdapter for IrcChannel {
 
         if target.is_empty() {
             return Err(BlufioError::Channel {
-                message: "IRC send: no target (chat_id) in metadata".into(),
+                kind: ChannelErrorKind::DeliveryFailed,
+                context: ErrorContext { channel_name: Some("irc".to_string()), ..Default::default() },
                 source: None,
             });
         }
@@ -395,10 +392,7 @@ impl ChannelAdapter for IrcChannel {
 
     async fn receive(&self) -> Result<InboundMessage, BlufioError> {
         let mut rx = self.inbound_rx.lock().await;
-        rx.recv().await.ok_or_else(|| BlufioError::Channel {
-            message: "IRC inbound channel closed".into(),
-            source: None,
-        })
+        rx.recv().await.ok_or_else(|| BlufioError::channel_connection_lost("irc"))
     }
 
     async fn edit_message(

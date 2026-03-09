@@ -39,9 +39,16 @@ impl StreamingEditorOps for SlackStreamOps {
         let resp = session
             .chat_post_message(&req)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to send Slack message: {e}"),
-                source: None,
+            .map_err(|e| {
+                use blufio_core::error::{ChannelErrorKind, ErrorContext};
+                BlufioError::Channel {
+                    kind: ChannelErrorKind::DeliveryFailed,
+                    context: ErrorContext {
+                        channel_name: Some("slack".to_string()),
+                        ..Default::default()
+                    },
+                    source: None,
+                }
             })?;
 
         // Return the ts (timestamp) as the message ID.
@@ -63,9 +70,16 @@ impl StreamingEditorOps for SlackStreamOps {
         session
             .chat_update(&req)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to edit Slack message: {e}"),
-                source: None,
+            .map_err(|e| {
+                use blufio_core::error::{ChannelErrorKind, ErrorContext};
+                BlufioError::Channel {
+                    kind: ChannelErrorKind::DeliveryFailed,
+                    context: ErrorContext {
+                        channel_name: Some("slack".to_string()),
+                        ..Default::default()
+                    },
+                    source: None,
+                }
             })?;
 
         Ok(())

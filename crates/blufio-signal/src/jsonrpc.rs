@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use blufio_config::model::SignalConfig;
-use blufio_core::error::BlufioError;
+use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, warn};
 
@@ -30,12 +30,7 @@ impl JsonRpcClient {
             {
                 let stream = tokio::net::UnixStream::connect(socket_path)
                     .await
-                    .map_err(|e| BlufioError::Channel {
-                        message: format!(
-                            "failed to connect to signal-cli Unix socket at {socket_path}: {e}"
-                        ),
-                        source: Some(Box::new(e)),
-                    })?;
+                    .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
                 let (read, write) = stream.into_split();
                 Ok(Self {
                     reader: BufReader::new(Box::new(read)),
@@ -59,10 +54,7 @@ impl JsonRpcClient {
             let stream =
                 tokio::net::TcpStream::connect(&addr)
                     .await
-                    .map_err(|e| BlufioError::Channel {
-                        message: format!("failed to connect to signal-cli at {addr}: {e}"),
-                        source: Some(Box::new(e)),
-                    })?;
+                    .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
             let (read, write) = stream.into_split();
             Ok(Self {
                 reader: BufReader::new(Box::new(read)),
@@ -86,41 +78,26 @@ impl JsonRpcClient {
             id: format!("req-{id}"),
         };
 
-        let mut line = serde_json::to_string(&request).map_err(|e| BlufioError::Channel {
-            message: format!("failed to serialize JSON-RPC request: {e}"),
-            source: Some(Box::new(e)),
-        })?;
+        let mut line = serde_json::to_string(&request).map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
         line.push('\n');
 
         self.writer
             .write_all(line.as_bytes())
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to write to signal-cli: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
         self.writer
             .flush()
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to flush signal-cli connection: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
 
         // Read response line.
         let mut response_line = String::new();
         self.reader
             .read_line(&mut response_line)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to read from signal-cli: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
 
-        serde_json::from_str(&response_line).map_err(|e| BlufioError::Channel {
-            message: format!("failed to parse signal-cli response: {e}"),
-            source: Some(Box::new(e)),
-        })
+        serde_json::from_str(&response_line).map_err(|e| BlufioError::channel_delivery_failed("signal", e))
     }
 
     /// Read the next notification from signal-cli.
@@ -132,10 +109,7 @@ impl JsonRpcClient {
             .reader
             .read_line(&mut line)
             .await
-            .map_err(|e| BlufioError::Channel {
-                message: format!("failed to read from signal-cli: {e}"),
-                source: Some(Box::new(e)),
-            })?;
+            .map_err(|e| BlufioError::channel_delivery_failed("signal", e))?;
 
         if bytes == 0 {
             return Ok(None); // EOF
