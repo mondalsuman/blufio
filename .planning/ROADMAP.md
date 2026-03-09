@@ -227,7 +227,7 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 47. Accurate Token Counting | v1.4 | 3/3 | Complete | 2026-03-09 |
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 4/4 | Complete | 2026-03-09 |
 | 49. FormatPipeline Integration | v1.4 | 2/2 | Complete | 2026-03-09 |
-| 50. ADRs & Documentation | v1.4 | 1/1 | Complete | 2026-03-09 |
+| 50. ADRs & Documentation | 1/1 | Complete   | 2026-03-09 | 2026-03-09 |
 
 ---
 *Roadmap created: 2026-02-28*

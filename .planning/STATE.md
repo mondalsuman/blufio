@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Quality & Resilience
+milestone: v1.0
+milestone_name: milestone
 status: completed
-stopped_at: Phase 50 complete, v1.4 shipped
-last_updated: "2026-03-09T20:36:16.509Z"
+stopped_at: Completed 50-01-PLAN.md
+last_updated: "2026-03-09T20:41:18.284Z"
 last_activity: 2026-03-09 -- Phase 50 complete (ADR-001, ADR-002, v1.4 milestone shipped)
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 14
   completed_plans: 14
   percent: 100
@@ -74,6 +74,8 @@ Recent decisions affecting current work:
 - Phase 48-04: Clone ProviderRequest for fallback iteration (Rust ownership); Tier mapping via contains() for model family detection; Fallback registry reuses gateway ConcreteProviderRegistry; Notification channels grabbed after mux.connect() before move
 - [Phase 49]: Conservative regex detection for markdown structures; HTML Tier 0 before Tier 1 dispatch; split_at_paragraphs as free function with greedy sentence packing
 - [Phase 49-02]: Gateway FormattingSupport changed to FullMarkdown (API clients render); Matrix uses text_html for HTML-containing output; 4-step pipeline enforced in all 8 adapters
+- [Phase 50]: ADR-001 documents ORT rc.11 pin with 8-step upgrade checklist
+- [Phase 50]: ADR-002 documents compiled-in plugin architecture with 3-phase migration roadmap
 
 ### Pending Todos
 
@@ -99,9 +101,10 @@ None.
 | Phase 48 P04 | 12min | 2 tasks | 5 files |
 | Phase 49 P01 | 8min | 2 tasks | 1 files |
 | Phase 49 P02 | 8min | 2 tasks | 10 files |
+| Phase 50 P01 | 5min | 2 tasks | 8 files |
 
 ## Session Continuity
 
-Last session: 2026-03-09T20:36:16.503Z
-Stopped at: Phase 50 complete, v1.4 shipped
-Resume file: N/A -- v1.4 milestone complete
+Last session: 2026-03-09T20:41:18.280Z
+Stopped at: Completed 50-01-PLAN.md
+Resume file: None
