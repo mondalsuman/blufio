@@ -102,8 +102,67 @@ pub struct OutboundMessage {
     pub metadata: Option<String>,
 }
 
+/// How a channel supports streaming message updates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
+#[non_exhaustive]
+pub enum StreamingType {
+    /// No streaming support -- messages are sent as a whole.
+    None,
+    /// Messages can be edited in place (e.g., Telegram, Discord, Slack).
+    EditBased,
+    /// Messages are appended (e.g., IRC, SSE).
+    AppendOnly,
+}
+
+impl Default for StreamingType {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// Level of text formatting a channel supports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
+#[non_exhaustive]
+pub enum FormattingSupport {
+    /// Plain text only.
+    PlainText,
+    /// Bold, italic, links (e.g., WhatsApp).
+    BasicMarkdown,
+    /// Full GitHub-Flavored Markdown (e.g., Discord, Slack).
+    FullMarkdown,
+    /// HTML rendering (e.g., Matrix).
+    HTML,
+}
+
+impl Default for FormattingSupport {
+    fn default() -> Self {
+        Self::PlainText
+    }
+}
+
+/// Rate limit information for a channel.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RateLimit {
+    /// Maximum messages per second.
+    pub messages_per_second: Option<f32>,
+    /// Maximum burst size.
+    pub burst_limit: Option<u32>,
+    /// Maximum messages per day.
+    pub daily_limit: Option<u32>,
+}
+
+impl Default for RateLimit {
+    fn default() -> Self {
+        Self {
+            messages_per_second: None,
+            burst_limit: None,
+            daily_limit: None,
+        }
+    }
+}
+
 /// Capabilities reported by a channel adapter.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ChannelCapabilities {
     /// Whether the channel supports editing sent messages.
     pub supports_edit: bool,
@@ -123,6 +182,14 @@ pub struct ChannelCapabilities {
     pub supports_reactions: bool,
     /// Whether the channel supports threaded replies.
     pub supports_threads: bool,
+    /// How the channel handles streaming message updates.
+    pub streaming_type: StreamingType,
+    /// Level of text formatting the channel supports.
+    pub formatting_support: FormattingSupport,
+    /// Rate limit information for the channel.
+    pub rate_limit: Option<RateLimit>,
+    /// Whether the channel supports code blocks (fenced with backticks).
+    pub supports_code_blocks: bool,
 }
 
 // --- Provider types ---

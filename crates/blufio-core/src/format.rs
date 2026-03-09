@@ -123,20 +123,14 @@ mod tests {
             supports_embeds: true,
             supports_reactions: true,
             supports_threads: true,
+            ..Default::default()
         }
     }
 
     fn caps_minimal() -> ChannelCapabilities {
         ChannelCapabilities {
-            supports_edit: false,
-            supports_typing: false,
-            supports_images: false,
-            supports_documents: false,
-            supports_voice: false,
             max_message_length: Some(4096),
-            supports_embeds: false,
-            supports_reactions: false,
-            supports_threads: false,
+            ..Default::default()
         }
     }
 

@@ -22,11 +22,11 @@ pub use error::{
 pub use format::{FormatPipeline, FormattedOutput, RichContent};
 pub use streaming::{StreamingBuffer, StreamingEditorOps, split_at_paragraph_boundary};
 pub use types::{
-    AdapterType, ChannelCapabilities, ContentBlock, HealthStatus, ImageRequest, ImageResponse,
-    InboundMessage, Message, MessageContent, MessageId, OutboundMessage, ProviderMessage,
-    ProviderRequest, ProviderResponse, ProviderStreamChunk, QueueEntry, Session, SessionId,
-    StreamEventType, TokenUsage, ToolDefinition, TranscriptionRequest, TranscriptionResponse,
-    TtsRequest, TtsResponse,
+    AdapterType, ChannelCapabilities, ContentBlock, FormattingSupport, HealthStatus, ImageRequest,
+    ImageResponse, InboundMessage, Message, MessageContent, MessageId, OutboundMessage,
+    ProviderMessage, ProviderRequest, ProviderResponse, ProviderStreamChunk, QueueEntry, RateLimit,
+    Session, SessionId, StreamEventType, StreamingType, TokenUsage, ToolDefinition,
+    TranscriptionRequest, TranscriptionResponse, TtsRequest, TtsResponse,
 };
 
 // Re-export all adapter traits at crate root.
