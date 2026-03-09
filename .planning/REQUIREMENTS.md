@@ -13,7 +13,7 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 - [x] **ERR-02**: BlufioError exposes `severity()` method returning Severity enum (Critical, Error, Warning, Info)
 - [x] **ERR-03**: BlufioError exposes `category()` method returning structured category (Provider(name), Channel(name), Storage, Config, Security)
 - [x] **ERR-04**: Provider errors distinguish between RateLimited, AuthFailed, ServerError, Timeout, and ModelNotFound variants
-- [ ] **ERR-05**: Channel errors distinguish between DeliveryFailed, ConnectionLost, and RateLimited variants
+- [x] **ERR-05**: Channel errors distinguish between DeliveryFailed, ConnectionLost, and RateLimited variants
 
 ### Circuit Breaker
 
@@ -57,9 +57,9 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 
 ### Channel Capabilities Extension
 
-- [ ] **CAP-01**: ChannelCapabilities extended with `streaming_type` field (enum: None, BlockOnly, FullStreaming)
-- [ ] **CAP-02**: ChannelCapabilities extended with `formatting_support` field (enum: PlainText, BasicMarkdown, FullMarkdown, HTML)
-- [ ] **CAP-03**: ChannelCapabilities extended with `rate_limit` field (struct: messages_per_second, requests_per_minute)
+- [x] **CAP-01**: ChannelCapabilities extended with `streaming_type` field (enum: None, BlockOnly, FullStreaming)
+- [x] **CAP-02**: ChannelCapabilities extended with `formatting_support` field (enum: PlainText, BasicMarkdown, FullMarkdown, HTML)
+- [x] **CAP-03**: ChannelCapabilities extended with `rate_limit` field (struct: messages_per_second, requests_per_minute)
 - [ ] **CAP-04**: All 8 channel adapters updated to report extended capability fields accurately
 
 ### Documentation
@@ -110,10 +110,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ERR-02 | Phase 46 | Complete |
 | ERR-03 | Phase 46 | Complete |
 | ERR-04 | Phase 46 | Complete |
-| ERR-05 | Phase 46 | Pending |
-| CAP-01 | Phase 46 | Pending |
-| CAP-02 | Phase 46 | Pending |
-| CAP-03 | Phase 46 | Pending |
+| ERR-05 | Phase 46 | Complete |
+| CAP-01 | Phase 46 | Complete |
+| CAP-02 | Phase 46 | Complete |
+| CAP-03 | Phase 46 | Complete |
 | FMT-01 | Phase 46 | Pending |
 | FMT-02 | Phase 46 | Pending |
 | FMT-03 | Phase 46 | Pending |

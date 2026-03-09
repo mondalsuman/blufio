@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Quality & Resilience
 status: executing
-stopped_at: Completed 46-02-PLAN.md
-last_updated: "2026-03-09T08:32:54Z"
-last_activity: 2026-03-09 -- Phase 46 Plan 02 executed (provider error migration)
+stopped_at: Completed 46-03-PLAN.md
+last_updated: "2026-03-09T09:06:32Z"
+last_activity: 2026-03-09 -- Phase 46 Plan 03 executed (channel/storage/skill/MCP/migration error migration)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 ## Current Position
 
 Phase: 46 of 50 (Core Types & Error Hierarchy) -- 1 of 5 in v1.4
-Plan: 2 of 4 complete
+Plan: 3 of 4 complete
 Status: Executing
-Last activity: 2026-03-09 -- Phase 46 Plan 02 executed (provider error migration)
+Last activity: 2026-03-09 -- Phase 46 Plan 03 executed (channel/storage/skill/MCP/migration error migration)
 
-Progress: [#####░░░░░] 50%
+Progress: [########░░] 75%
 
 ## Performance Metrics
 
@@ -70,6 +70,10 @@ Recent decisions affecting current work:
 - 46-02: Timeout errors detected via reqwest is_timeout() and mapped to provider_timeout()
 - 46-02: Ollama connection errors map to ServerError (local server down, not network)
 - 46-02: retry-after header extracted into ErrorContext for cloud providers
+- 46-03: MCP client errors corrected from Skill to Mcp kind (pre-existing misclassification)
+- 46-03: HTTP 400 mapped to non-retryable validation error (was incorrectly retryable via ServerError)
+- 46-03: storage_connection_failed as default storage constructor for generic DB errors
+- 46-03: skill_execution_msg/skill_compilation_msg for message-only errors without source
 
 ### Pending Todos
 
@@ -88,6 +92,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-09T08:32:54Z
-Stopped at: Completed 46-02-PLAN.md
-Resume file: .planning/phases/46-core-types-error-hierarchy/46-03-PLAN.md
+Last session: 2026-03-09T09:06:32Z
+Stopped at: Completed 46-03-PLAN.md
+Resume file: .planning/phases/46-core-types-error-hierarchy/46-04-PLAN.md
