@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Quality & Resilience
 status: executing
-stopped_at: Completed 47-01-PLAN.md
-last_updated: "2026-03-09T10:17:59.314Z"
-last_activity: 2026-03-09 -- Phase 47 Plan 01 complete
+stopped_at: Completed 47-02-PLAN.md
+last_updated: "2026-03-09T10:24:00.000Z"
+last_activity: 2026-03-09 -- Phase 47 Plan 02 complete
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 7
-  completed_plans: 5
-  percent: 28
+  completed_plans: 6
+  percent: 42
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 47 of 50 (Accurate Token Counting) -- 2 of 5 in v1.4
-Plan: 1 of 3 complete
+Plan: 2 of 3 complete
 Status: Executing
-Last activity: 2026-03-09 -- Phase 47 Plan 01 complete
+Last activity: 2026-03-09 -- Phase 47 Plan 02 complete
 
-Progress: [██▓░░░░░░░] 28%
+Progress: [████▓░░░░░] 42%
 
 ## Performance Metrics
 
@@ -66,7 +66,7 @@ Recent decisions affecting current work:
 - v1.4: ORT stays pinned at rc.11 -- no stable 2.0.0 yet, ADR to document
 - Phase 46: Typed error hierarchy with Cow<'static, str> user_message(), ChannelCapabilities Default derive, deprecated constructors removed
 - Phase 47-01: HeuristicCounter uses ceil() to avoid underestimation; TokenizerCache uses std::sync::RwLock (microsecond hold times); OpenRouter prefix stripping in resolve_counter
-- [Phase 47]: HeuristicCounter uses ceil() rounding to avoid underestimation; TokenizerCache uses std::sync::RwLock for microsecond hold times; OpenRouter prefix stripping in resolve_counter
+- Phase 47-02: OnceLock get()+set() pattern for HuggingFace tokenizer singleton (stable Rust); resolve_counter lowercases model IDs for case-insensitive matching
 
 ### Pending Todos
 
@@ -84,9 +84,10 @@ None.
 | 1 | Update all documentation according to current states | 2026-03-04 | f559572 | [1-update-all-documentation-according-to-cu](./quick/1-update-all-documentation-according-to-cu/) |
 | Phase 46 P04 | 15min | 2 tasks | 9 files |
 | Phase 47 P01 | 17min | 2 tasks | 6 files |
+| Phase 47 P02 | 5min | 2 tasks | 2 files |
 
 ## Session Continuity
 
-Last session: 2026-03-09T10:17:59.310Z
-Stopped at: Completed 47-01-PLAN.md
+Last session: 2026-03-09T10:24:00.000Z
+Stopped at: Completed 47-02-PLAN.md
 Resume file: None
