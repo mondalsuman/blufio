@@ -64,8 +64,8 @@ Requirements for v1.4 Quality & Resilience milestone. Each maps to roadmap phase
 
 ### Documentation
 
-- [ ] **DOC-01**: ADR documenting ORT chosen over Candle — rationale, trade-offs, RC pin justification, upgrade plan
-- [ ] **DOC-02**: ADR documenting plugin architecture — Phase 1 compiled-in vs future dynamic loading plan
+- [x] **DOC-01**: ADR documenting ORT chosen over Candle — rationale, trade-offs, RC pin justification, upgrade plan
+- [x] **DOC-02**: ADR documenting plugin architecture — Phase 1 compiled-in vs future dynamic loading plan
 
 ## Future Requirements
 
@@ -143,8 +143,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FMT-05 | Phase 49 | Pending |
 | FMT-06 | Phase 49 | Complete |
 | CAP-04 | Phase 49 | Complete |
-| DOC-01 | Phase 50 | Pending |
-| DOC-02 | Phase 50 | Pending |
+| DOC-01 | Phase 50 | Complete |
+| DOC-02 | Phase 50 | Complete |
 
 **Coverage:**
 - v1.4 requirements: 39 total
@@ -153,4 +153,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-08*
-*Last updated: 2026-03-08 after roadmap creation -- all 39 requirements mapped to phases*
+*Last updated: 2026-03-09 after Phase 50 -- DOC-01 and DOC-02 complete, v1.4 shipped*

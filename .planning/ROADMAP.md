@@ -6,7 +6,7 @@
 - ✅ **v1.1 MCP Integration** — Phases 15-22 (shipped 2026-03-03)
 - ✅ **v1.2 Production Hardening** — Phases 23-28 (shipped 2026-03-04)
 - ✅ **v1.3 Ecosystem Expansion** — Phases 29-45 (shipped 2026-03-08)
-- 🚧 **v1.4 Quality & Resilience** — Phases 46-50 (in progress)
+- ✅ **v1.4 Quality & Resilience** — Phases 46-50 (shipped 2026-03-09)
 
 ## Phases
 
@@ -79,15 +79,18 @@
 
 </details>
 
-### v1.4 Quality & Resilience (In Progress)
+<details>
+<summary>v1.4 Quality & Resilience (Phases 46-50) -- SHIPPED 2026-03-09</summary>
 
 **Milestone Goal:** Address QA audit deviations -- accurate token counting, circuit breakers, graceful degradation, typed errors, format pipeline integration, and architectural decision records.
 
 - [x] **Phase 46: Core Types & Error Hierarchy** - Typed error hierarchy with retryable/severity/category classification, extended ChannelCapabilities, and Table/List content types (completed 2026-03-09)
 - [x] **Phase 47: Accurate Token Counting** - Replace len()/4 heuristic with real tokenizer-backed counting for all 5 LLM providers (completed 2026-03-09)
-- [x] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (gap closure in progress) (completed 2026-03-09)
+- [x] **Phase 48: Circuit Breaker & Degradation Ladder** - Per-dependency circuit breakers with 6-level graceful degradation and automatic escalation (completed 2026-03-09)
 - [x] **Phase 49: FormatPipeline Integration** - Wire FormatPipeline into all 8 channel adapters with message splitting and adapter-specific formatting (completed 2026-03-09)
-- [ ] **Phase 50: ADRs & Documentation** - Architectural decision records for ORT pinning and plugin architecture
+- [x] **Phase 50: ADRs & Documentation** - Architectural decision records for ORT pinning and plugin architecture (completed 2026-03-09)
+
+</details>
 
 ## Phase Details
 
@@ -155,6 +158,7 @@ Plans:
 - [x] 49-01-PLAN.md -- detect_and_format() auto-detection, split_at_paragraphs() utility, HTML Tier 0
 - [x] 49-02-PLAN.md -- Wire pipeline into all 8 channel adapters with escaping, splitting, and CAP-04 verification
 
+
 ### Phase 50: ADRs & Documentation
 **Goal**: Architectural decisions for ORT RC pinning and plugin architecture are formally documented with rationale, trade-offs, and upgrade plans
 **Depends on**: Nothing (can run in parallel with any phase)
@@ -162,9 +166,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. An ADR exists documenting why ORT is pinned at rc.11 over Candle, the trade-offs of each approach, and a concrete upgrade plan for when stable 2.0.0 lands
   2. An ADR exists documenting the Phase 1 compiled-in plugin architecture, why dynamic loading was deferred, and the migration path to libloading in the future
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] 50-01-PLAN.md -- ADR-001 (ORT ONNX inference), ADR-002 (compiled-in plugin architecture), index, project doc updates
+- [x] 50-01-PLAN.md -- ADR-001 (ORT ONNX inference), ADR-002 (compiled-in plugin architecture), index, project doc updates
 
 ## Progress
 
@@ -223,8 +227,8 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 47. Accurate Token Counting | v1.4 | 3/3 | Complete | 2026-03-09 |
 | 48. Circuit Breaker & Degradation Ladder | v1.4 | 4/4 | Complete | 2026-03-09 |
 | 49. FormatPipeline Integration | v1.4 | 2/2 | Complete | 2026-03-09 |
-| 50. ADRs & Documentation | v1.4 | 0/1 | Not started | - |
+| 50. ADRs & Documentation | v1.4 | 1/1 | Complete | 2026-03-09 |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-09 after Phase 50 planning complete*
+*Last updated: 2026-03-09 after Phase 50 complete -- v1.4 shipped*
