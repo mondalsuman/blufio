@@ -150,9 +150,10 @@ Plans:
   2. Messages exceeding a channel's max_message_length are split at paragraph boundaries, not mid-sentence
   3. Adapter-specific formatting (Telegram MarkdownV2, Slack mrkdwn, Discord Markdown, etc.) is applied after FormatPipeline degradation, not before
   4. All 8 channel adapters report accurate extended capability fields (streaming_type, formatting_support, rate_limit)
-**Plans:** 0/?
+**Plans:** 2 plans
 Plans:
-- (not yet planned)
+- [ ] 49-01-PLAN.md -- detect_and_format() auto-detection, split_at_paragraphs() utility, HTML Tier 0
+- [ ] 49-02-PLAN.md -- Wire pipeline into all 8 channel adapters with escaping, splitting, and CAP-04 verification
 
 ### Phase 50: ADRs & Documentation
 **Goal**: Architectural decisions for ORT RC pinning and plugin architecture are formally documented with rationale, trade-offs, and upgrade plans
@@ -220,10 +221,10 @@ Note: Phase 47 is independent and can execute in parallel with Phase 46. Phase 5
 | 45. Documentation & Traceability Sync | v1.3 | 2/2 | Complete | 2026-03-08 |
 | 46. Core Types & Error Hierarchy | v1.4 | 4/4 | Complete | 2026-03-09 |
 | 47. Accurate Token Counting | v1.4 | 3/3 | Complete | 2026-03-09 |
-| 48. Circuit Breaker & Degradation Ladder | 4/4 | Complete    | 2026-03-09 | - |
-| 49. FormatPipeline Integration | v1.4 | 0/? | Not started | - |
+| 48. Circuit Breaker & Degradation Ladder | v1.4 | 4/4 | Complete | 2026-03-09 |
+| 49. FormatPipeline Integration | v1.4 | 0/2 | Not started | - |
 | 50. ADRs & Documentation | v1.4 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-09 after Phase 48 gap closure plan created*
+*Last updated: 2026-03-09 after Phase 49 planning complete*
