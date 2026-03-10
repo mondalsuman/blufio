@@ -473,6 +473,7 @@ mod tests {
                         metadata: None,
                         created_at: "2026-03-01T00:00:00Z".to_string(),
                         updated_at: "2026-03-01T00:00:00Z".to_string(),
+                        classification: Default::default(),
                     },
                     Session {
                         id: "sess-2".to_string(),
@@ -482,6 +483,7 @@ mod tests {
                         metadata: None,
                         created_at: "2026-03-02T00:00:00Z".to_string(),
                         updated_at: "2026-03-02T00:00:00Z".to_string(),
+                        classification: Default::default(),
                     },
                 ],
                 messages: vec![
@@ -493,6 +495,7 @@ mod tests {
                         token_count: None,
                         metadata: None,
                         created_at: "2026-03-01T00:00:01Z".to_string(),
+                        classification: Default::default(),
                     },
                     Message {
                         id: "msg-2".to_string(),
@@ -502,6 +505,7 @@ mod tests {
                         token_count: Some(5),
                         metadata: None,
                         created_at: "2026-03-01T00:00:02Z".to_string(),
+                        classification: Default::default(),
                     },
                 ],
             }

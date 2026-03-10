@@ -252,6 +252,7 @@ mod tests {
             metadata: None,
             created_at: "2026-01-01T00:00:00.000Z".to_string(),
             updated_at: "2026-01-01T00:00:00.000Z".to_string(),
+            classification: Default::default(),
         };
         storage.create_session(&session).await.unwrap();
 
@@ -271,6 +272,7 @@ mod tests {
             token_count: Some(5),
             metadata: None,
             created_at: "2026-01-01T00:00:01.000Z".to_string(),
+            classification: Default::default(),
         };
         let m2 = Message {
             id: "m2".to_string(),
@@ -280,6 +282,7 @@ mod tests {
             token_count: Some(8),
             metadata: None,
             created_at: "2026-01-01T00:00:02.000Z".to_string(),
+            classification: Default::default(),
         };
         storage.insert_message(&m1).await.unwrap();
         storage.insert_message(&m2).await.unwrap();
@@ -348,6 +351,7 @@ mod tests {
             metadata: None,
             created_at: "2026-01-01T00:00:00.000Z".to_string(),
             updated_at: "2026-01-01T00:00:00.000Z".to_string(),
+            classification: Default::default(),
         };
         storage.create_session(&session).await.unwrap();
 

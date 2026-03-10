@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
+use crate::classification::{Classifiable, DataClassification};
+
 /// Unique identifier for a conversation session.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SessionId(pub String);
@@ -531,6 +533,9 @@ pub struct Session {
     pub created_at: String,
     /// ISO 8601 last-update timestamp.
     pub updated_at: String,
+    /// Data classification level for this session.
+    #[serde(default)]
+    pub classification: DataClassification,
 }
 
 /// A single message within a session.
@@ -550,6 +555,27 @@ pub struct Message {
     pub metadata: Option<String>,
     /// ISO 8601 creation timestamp.
     pub created_at: String,
+    /// Data classification level for this message.
+    #[serde(default)]
+    pub classification: DataClassification,
+}
+
+impl Classifiable for Message {
+    fn classification(&self) -> DataClassification {
+        self.classification
+    }
+    fn set_classification(&mut self, level: DataClassification) {
+        self.classification = level;
+    }
+}
+
+impl Classifiable for Session {
+    fn classification(&self) -> DataClassification {
+        self.classification
+    }
+    fn set_classification(&mut self, level: DataClassification) {
+        self.classification = level;
+    }
 }
 
 /// A crash-safe message queue entry.

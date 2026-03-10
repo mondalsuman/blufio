@@ -673,6 +673,7 @@ pub async fn run_migrate(
             ),
             created_at: session.created_at.clone().unwrap_or_else(|| now_ts.clone()),
             updated_at: now_ts.clone(),
+            classification: Default::default(),
         };
 
         blufio_storage::queries::sessions::create_session(&db, &blufio_session).await?;
@@ -692,6 +693,7 @@ pub async fn run_migrate(
                 token_count: msg.token_count,
                 metadata: None,
                 created_at: msg.created_at.clone().unwrap_or_else(|| now_ts.clone()),
+                classification: Default::default(),
             };
 
             blufio_storage::queries::messages::insert_message(&db, &blufio_msg).await?;

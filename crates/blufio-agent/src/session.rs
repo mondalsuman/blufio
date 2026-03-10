@@ -296,6 +296,7 @@ impl SessionActor {
             token_count: None,
             metadata: inbound.metadata.clone(),
             created_at: now,
+            classification: Default::default(),
         };
         self.storage.insert_message(&msg).await?;
 
@@ -682,6 +683,7 @@ impl SessionActor {
             token_count: usage.as_ref().map(|u| i64::from(u.output_tokens)),
             metadata: None,
             created_at: now,
+            classification: Default::default(),
         };
         self.storage.insert_message(&msg).await?;
 
@@ -1154,6 +1156,7 @@ mod tests {
             metadata: None,
             created_at: now.clone(),
             updated_at: now,
+            classification: Default::default(),
         };
         storage.create_session(&session).await.unwrap();
 

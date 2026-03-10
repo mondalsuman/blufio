@@ -97,7 +97,7 @@
 
 **Milestone Goal:** Close all remaining PRD gaps -- compaction overhaul, prompt injection defense, cron/hooks/hot-reload, memory enhancements, audit trail, data classification, retention policies, GDPR tooling, additional channels, OpenTelemetry, and code quality hardening. 93 requirements across 17 categories.
 
-- [x] **Phase 53: Data Classification & PII Foundation** - Classification enum, Classifiable trait, PII regex expansion, and cross-cutting integration (completed 2026-03-10)
+- [ ] **Phase 53: Data Classification & PII Foundation** - Classification enum, Classifiable trait, PII regex expansion, and cross-cutting integration (gap closure in progress)
 - [ ] **Phase 54: Audit Trail** - Hash-chained tamper-evident log in separate audit.db with async writes and GDPR-safe schema
 - [ ] **Phase 55: Memory Enhancements** - Temporal decay, importance boost, MMR diversity, LRU eviction, background validation, file watcher
 - [ ] **Phase 56: Multi-Level Compaction & Context Budget** - L0-L3 compaction engine with quality gates, entity extraction, and zone-level token budget enforcement
@@ -121,11 +121,13 @@
   3. Data exports redact PII when configured, and PII-containing content auto-classifies as Confidential
   4. Code blocks and URLs are not false-positive flagged as PII
   5. Per-level controls enforce restrictions (Restricted data never exported or sent to LLM, Confidential encrypted at rest and redacted in logs)
-**Plans**: 3 plans
+**Plans**: 5 plans
 Plans:
-- [ ] 53-01-PLAN.md -- Core types (DataClassification enum, Classifiable trait, PII detection engine, ClassificationGuard)
-- [ ] 53-02-PLAN.md -- Data layer wiring (DB migration, config, EventBus events, RedactingWriter PII integration)
-- [ ] 53-03-PLAN.md -- User interface and enforcement (CLI/API endpoints, agent PII detection, context filtering, Prometheus metrics)
+- [x] 53-01-PLAN.md -- Core types (DataClassification enum, Classifiable trait, PII detection engine, ClassificationGuard)
+- [x] 53-02-PLAN.md -- Data layer wiring (DB migration, config, EventBus events, RedactingWriter PII integration)
+- [x] 53-03-PLAN.md -- User interface and enforcement (CLI/API endpoints, agent PII detection, context filtering, Prometheus metrics)
+- [ ] 53-04-PLAN.md -- Gap closure: Data layer for classification CRUD (Message/Session struct fields, storage queries, StorageAdapter extension)
+- [ ] 53-05-PLAN.md -- Gap closure: Wire CLI/API to DB, fix context filtering, add export redaction utility
 
 ### Phase 54: Audit Trail
 **Goal**: Every security-relevant action in Blufio is recorded in a tamper-evident, hash-chained audit log that can be independently verified
@@ -303,7 +305,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 50. ADRs & Documentation | v1.4 | 1/1 | Complete | 2026-03-09 |
 | 51. Wire CB Events to EventBus | v1.4 | 1/1 | Complete | 2026-03-09 |
 | 52. Fix Tracking Gaps | v1.4 | 1/1 | Complete | 2026-03-09 |
-| 53. Data Classification & PII Foundation | 3/3 | Complete   | 2026-03-10 | - |
+| 53. Data Classification & PII Foundation | v1.5 | 3/5 | Gap closure | - |
 | 54. Audit Trail | v1.5 | 0/0 | Not started | - |
 | 55. Memory Enhancements | v1.5 | 0/0 | Not started | - |
 | 56. Multi-Level Compaction & Context Budget | v1.5 | 0/0 | Not started | - |
@@ -317,4 +319,4 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-10 after Phase 53 planning*
+*Last updated: 2026-03-10 after Phase 53 gap closure planning*
