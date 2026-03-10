@@ -671,6 +671,7 @@ dependencies = [
  "blufio-prometheus",
  "blufio-resilience",
  "blufio-router",
+ "blufio-security",
  "blufio-skill",
  "blufio-storage",
  "blufio-test-utils",
@@ -777,6 +778,7 @@ dependencies = [
  "base64 0.22.1",
  "blufio-config",
  "blufio-core",
+ "blufio-security",
  "chrono",
  "serde",
  "serde_json",
@@ -849,6 +851,7 @@ dependencies = [
  "blufio-bus",
  "blufio-core",
  "blufio-resilience",
+ "blufio-security",
  "blufio-skill",
  "blufio-whatsapp",
  "chrono",
@@ -1142,11 +1145,13 @@ dependencies = [
 name = "blufio-security"
 version = "0.1.0"
 dependencies = [
+ "blufio-bus",
  "blufio-config",
  "blufio-core",
  "proptest",
  "regex",
  "reqwest 0.13.2",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
