@@ -49,13 +49,13 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Audit Trail
 
-- [ ] **AUDT-01**: Hash-chained tamper-evident log where each entry hash = SHA-256(prev_hash || canonical_entry)
+- [x] **AUDT-01**: Hash-chained tamper-evident log where each entry hash = SHA-256(prev_hash || canonical_entry)
 - [ ] **AUDT-02**: Audit entries cover: tool execution, memory modification, config changes, provider calls, session lifecycle, classification changes, erasure events
-- [ ] **AUDT-03**: Audit trail stored in dedicated audit.db (separate from main database)
+- [x] **AUDT-03**: Audit trail stored in dedicated audit.db (separate from main database)
 - [ ] **AUDT-04**: CLI command `blufio audit verify` walks hash chain and reports any breaks
-- [ ] **AUDT-05**: Audit entries are append-only -- retention policies never delete them
-- [ ] **AUDT-06**: Audit schema supports GDPR redact-in-place (PII fields replaceable with [ERASED] without breaking hash chain)
-- [ ] **AUDT-07**: Async audit writes via buffered mpsc channel with batch flush
+- [x] **AUDT-05**: Audit entries are append-only -- retention policies never delete them
+- [x] **AUDT-06**: Audit schema supports GDPR redact-in-place (PII fields replaceable with [ERASED] without breaking hash chain)
+- [x] **AUDT-07**: Async audit writes via buffered mpsc channel with batch flush
 
 ### Memory Enhancements
 
@@ -195,13 +195,13 @@ Deferred to v1.6+.
 | PII-03 | Phase 53 | Complete |
 | PII-04 | Phase 53 | Complete |
 | PII-05 | Phase 53 | Complete |
-| AUDT-01 | Phase 54 | Pending |
+| AUDT-01 | Phase 54 | Complete |
 | AUDT-02 | Phase 54 | Pending |
-| AUDT-03 | Phase 54 | Pending |
+| AUDT-03 | Phase 54 | Complete |
 | AUDT-04 | Phase 54 | Pending |
-| AUDT-05 | Phase 54 | Pending |
-| AUDT-06 | Phase 54 | Pending |
-| AUDT-07 | Phase 54 | Pending |
+| AUDT-05 | Phase 54 | Complete |
+| AUDT-06 | Phase 54 | Complete |
+| AUDT-07 | Phase 54 | Complete |
 | MEME-01 | Phase 55 | Pending |
 | MEME-02 | Phase 55 | Pending |
 | MEME-03 | Phase 55 | Pending |

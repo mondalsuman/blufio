@@ -138,7 +138,11 @@ Plans:
   2. `blufio audit verify` walks the hash chain and reports any tampered or missing entries
   3. Audit trail lives in a dedicated audit.db separate from the main database, with async buffered writes that do not block the agent loop
   4. Audit entries are append-only and exempt from retention deletion, but support GDPR redact-in-place (PII replaced with [ERASED] without breaking hash chain)
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 54-01-PLAN.md -- Core blufio-audit crate (models, chain, writer, filter, migrations, GDPR erasure, config, error types)
+- [ ] 54-02-PLAN.md -- BusEvent extension (5 new variants), AuditSubscriber, event emission in memory/agent/gateway
+- [ ] 54-03-PLAN.md -- CLI subcommands (verify/tail/stats), serve.rs wiring, doctor health check, backup integration
 
 ### Phase 55: Memory Enhancements
 **Goal**: Memory retrieval returns the most relevant, diverse, and temporally appropriate results with bounded index size
@@ -306,7 +310,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 51. Wire CB Events to EventBus | v1.4 | 1/1 | Complete | 2026-03-09 |
 | 52. Fix Tracking Gaps | v1.4 | 1/1 | Complete | 2026-03-09 |
 | 53. Data Classification & PII Foundation | 5/5 | Complete    | 2026-03-10 | - |
-| 54. Audit Trail | v1.5 | 0/0 | Not started | - |
+| 54. Audit Trail | 1/3 | In Progress|  | - |
 | 55. Memory Enhancements | v1.5 | 0/0 | Not started | - |
 | 56. Multi-Level Compaction & Context Budget | v1.5 | 0/0 | Not started | - |
 | 57. Prompt Injection Defense | v1.5 | 0/0 | Not started | - |
@@ -319,4 +323,4 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-10 after Phase 53 gap closure planning*
+*Last updated: 2026-03-10 after Phase 54 planning*
