@@ -12,7 +12,7 @@ pub mod redact;
 pub mod ssrf;
 pub mod tls;
 
-pub use classification_guard::ClassificationGuard;
+pub use classification_guard::{ClassificationGuard, filter_for_export};
 pub use pii::{
     PiiMatch, PiiScanResult, PiiType, bulk_classification_changed_event,
     classification_changed_event, classification_enforced_event, detect_pii, luhn_validate,

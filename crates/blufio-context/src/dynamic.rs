@@ -67,6 +67,26 @@ impl DynamicZone {
         // Load ALL messages from storage for this session.
         let history = storage.get_messages(session_id, None).await?;
 
+        // Defense-in-depth: filter Restricted messages that may have bypassed SQL filter.
+        // Primary filter is the SQL WHERE clause (AND classification != 'restricted')
+        // added in Plan 04. This secondary filter catches any messages from non-SQL paths.
+        let guard = blufio_security::ClassificationGuard::instance();
+        let history: Vec<_> = history
+            .into_iter()
+            .filter(|msg| {
+                if !guard.can_include_in_context(msg.classification) {
+                    tracing::info!(
+                        message_id = %msg.id,
+                        classification = %msg.classification.as_str(),
+                        "restricted message excluded from context (defense-in-depth)"
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         // Accurate token counting via provider-specific tokenizer.
         let counter = self.token_cache.get_counter(model);
         let mut estimated_tokens: usize = 0;
