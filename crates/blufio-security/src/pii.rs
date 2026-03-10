@@ -178,7 +178,7 @@ fn strip_code_and_urls(text: &str) -> String {
 /// Valid area numbers: 001-899, excluding 666.
 fn is_valid_ssn_area(area: &str) -> bool {
     if let Ok(num) = area.parse::<u16>() {
-        num >= 1 && num <= 899 && num != 666
+        (1..=899).contains(&num) && num != 666
     } else {
         false
     }
@@ -217,7 +217,7 @@ pub fn luhn_validate(number: &str) -> bool {
         })
         .sum();
 
-    checksum % 10 == 0
+    checksum.is_multiple_of(10)
 }
 
 /// Check if a credit card number starts with a valid BIN prefix.
@@ -263,10 +263,10 @@ pub fn detect_pii(text: &str) -> Vec<PiiMatch> {
             }
 
             // Post-validation for credit cards: Luhn + BIN prefix
-            if *pii_type == PiiType::CreditCard {
-                if !has_valid_card_prefix(&matched_value) || !luhn_validate(&matched_value) {
-                    continue;
-                }
+            if *pii_type == PiiType::CreditCard
+                && (!has_valid_card_prefix(&matched_value) || !luhn_validate(&matched_value))
+            {
+                continue;
             }
 
             matches.push(PiiMatch {

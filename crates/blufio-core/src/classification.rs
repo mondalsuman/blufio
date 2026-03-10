@@ -23,24 +23,21 @@ use thiserror::Error;
 /// `Public < Internal < Confidential < Restricted`
 ///
 /// Serialized as lowercase strings: `"public"`, `"internal"`, `"confidential"`, `"restricted"`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum DataClassification {
     /// No restrictions. Safe to share publicly.
     Public,
     /// Default level. Audit-logged only (Phase 54). No export/context restrictions.
+    #[default]
     Internal,
     /// Contains sensitive data. PII redacted in logs. Encrypted at rest via SQLCipher.
     Confidential,
     /// Most sensitive. Never exported, never included in LLM context, redacted in logs.
     Restricted,
-}
-
-impl Default for DataClassification {
-    fn default() -> Self {
-        Self::Internal
-    }
 }
 
 impl fmt::Display for DataClassification {
