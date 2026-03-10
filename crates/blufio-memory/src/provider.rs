@@ -124,6 +124,7 @@ mod tests {
                 status: MemoryStatus::Active,
                 superseded_by: None,
                 session_id: None,
+                classification: blufio_core::classification::DataClassification::default(),
                 created_at: String::new(),
                 updated_at: String::new(),
             },

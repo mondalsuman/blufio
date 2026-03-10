@@ -7,12 +7,16 @@
 //! common types used throughout the Blufio workspace. All adapter plugins
 //! implement traits defined here.
 
+pub mod classification;
 pub mod error;
 pub mod format;
 pub mod streaming;
 pub mod token_counter;
 pub mod traits;
 pub mod types;
+
+// Re-export classification types at crate root.
+pub use classification::{Classifiable, ClassificationError, DataClassification};
 
 // Re-export key items at crate root for ergonomic imports.
 pub use error::{
@@ -106,6 +110,9 @@ mod tests {
             context: ErrorContext::default(),
         };
         let _update = BlufioError::Update("test".into());
+        let _classification = BlufioError::Classification(
+            classification::ClassificationError::InvalidLevel("bad".into()),
+        );
     }
 
     #[test]

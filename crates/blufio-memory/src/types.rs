@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use blufio_core::classification::{Classifiable, DataClassification};
+
 /// A single memory fact stored by the memory system.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
@@ -25,10 +27,23 @@ pub struct Memory {
     pub superseded_by: Option<String>,
     /// Session where this memory was created.
     pub session_id: Option<String>,
+    /// Data classification level (defaults to Internal for existing data).
+    #[serde(default)]
+    pub classification: DataClassification,
     /// ISO 8601 creation timestamp.
     pub created_at: String,
     /// ISO 8601 last-update timestamp.
     pub updated_at: String,
+}
+
+impl Classifiable for Memory {
+    fn classification(&self) -> DataClassification {
+        self.classification
+    }
+
+    fn set_classification(&mut self, level: DataClassification) {
+        self.classification = level;
+    }
 }
 
 /// How a memory was created.
@@ -167,11 +182,50 @@ mod tests {
             status: MemoryStatus::Active,
             superseded_by: None,
             session_id: Some("session-1".to_string()),
+            classification: DataClassification::default(),
             created_at: "2026-03-01T00:00:00Z".to_string(),
             updated_at: "2026-03-01T00:00:00Z".to_string(),
         };
         assert_eq!(memory.id, "test-id");
         assert_eq!(memory.embedding.len(), 384);
+    }
+
+    #[test]
+    fn memory_classifiable_trait() {
+        let mut memory = Memory {
+            id: "cls-test".to_string(),
+            content: "test".to_string(),
+            embedding: vec![],
+            source: MemorySource::Explicit,
+            confidence: 1.0,
+            status: MemoryStatus::Active,
+            superseded_by: None,
+            session_id: None,
+            classification: DataClassification::default(),
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        assert_eq!(memory.classification(), DataClassification::Internal);
+        memory.set_classification(DataClassification::Restricted);
+        assert_eq!(memory.classification(), DataClassification::Restricted);
+    }
+
+    #[test]
+    fn memory_classification_defaults_on_deserialize() {
+        // Simulate JSON without classification field (existing data).
+        let json = r#"{
+            "id": "m1",
+            "content": "test",
+            "source": "Explicit",
+            "confidence": 0.9,
+            "status": "Active",
+            "superseded_by": null,
+            "session_id": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        }"#;
+        let memory: Memory = serde_json::from_str(json).unwrap();
+        assert_eq!(memory.classification, DataClassification::Internal);
     }
 
     #[test]

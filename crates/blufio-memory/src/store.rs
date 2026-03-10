@@ -3,6 +3,7 @@
 
 //! SQLite-backed memory store with vector BLOB storage and FTS5 for BM25.
 
+use blufio_core::classification::DataClassification;
 use blufio_core::error::BlufioError;
 use tokio_rusqlite::Connection;
 
@@ -215,6 +216,7 @@ fn row_to_memory(row: &rusqlite::Row) -> Memory {
         status: MemoryStatus::from_str_value(&status_str),
         superseded_by: row.get(6).unwrap_or(None),
         session_id: row.get(7).unwrap_or(None),
+        classification: DataClassification::default(),
         created_at: row.get(8).unwrap_or_default(),
         updated_at: row.get(9).unwrap_or_default(),
     }
@@ -310,6 +312,7 @@ mod tests {
             status: MemoryStatus::Active,
             superseded_by: None,
             session_id: Some("test-session".to_string()),
+            classification: DataClassification::default(),
             created_at: "2026-03-01T00:00:00.000Z".to_string(),
             updated_at: "2026-03-01T00:00:00.000Z".to_string(),
         }

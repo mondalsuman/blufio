@@ -373,6 +373,7 @@ mod tests {
             status: MemoryStatus::Active,
             superseded_by: None,
             session_id: Some("test-session".to_string()),
+            classification: blufio_core::classification::DataClassification::default(),
             created_at: "2026-03-01T00:00:00.000Z".to_string(),
             updated_at: "2026-03-01T00:00:00.000Z".to_string(),
         }
