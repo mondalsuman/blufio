@@ -331,6 +331,7 @@ mod tests {
                     status TEXT NOT NULL DEFAULT 'active',
                     superseded_by TEXT,
                     session_id TEXT,
+                    classification TEXT NOT NULL DEFAULT 'internal',
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 );
