@@ -1,14 +1,14 @@
 # Feature Research
 
-**Domain:** Quality & Resilience for a multi-provider AI agent platform (Rust)
-**Researched:** 2026-03-08
+**Domain:** PRD Gap Closure for a multi-provider AI agent platform (Rust)
+**Researched:** 2026-03-10
 **Confidence:** HIGH
 
 ## Scope
 
-This document covers only the NEW features targeted for v1.4 Quality & Resilience. All existing shipped features (FSM agent loop, 5 LLM providers, 8 channel adapters, FormatPipeline, ChannelCapabilities, StreamingBuffer, event bus, skill registry, gateway API, node system) are treated as foundation -- they are dependencies, not scope.
+This document covers the 15 NEW feature domains targeted for v1.5 PRD Gap Closure. All existing shipped features (FSM agent loop, 5 LLM providers, 8 channel adapters, three-zone context engine with single-pass compaction, WASM skills, SQLCipher, AES-256 vault, circuit breakers, degradation ladder, FormatPipeline, accurate token counting, Prometheus metrics, MCP client+server, hybrid memory search, event bus) are treated as foundation -- they are dependencies, not scope.
 
-The v1.4 goal is to fix QA audit deviations: accurate token counting, circuit breakers, graceful degradation, typed errors, FormatPipeline wiring, ChannelCapabilities extension, and ADR documentation.
+The v1.5 goal: close every remaining gap between the PRD vision and the shipped product.
 
 ---
 
@@ -16,122 +16,218 @@ The v1.4 goal is to fix QA audit deviations: accurate token counting, circuit br
 
 ### Table Stakes (Users Expect These)
 
-Features operators assume exist once a system claims multi-provider LLM support with production resilience. Missing these means the system feels prototype-grade.
+Features that any production AI agent platform must have. Missing these means the product feels incomplete for operators running Blufio for months on a VPS.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Accurate token counting per provider | Cost ledger accuracy, context window management, compaction trigger correctness. Current `len()/4` heuristic in `dynamic.rs:64` is off by 2-5x for CJK, code, and mixed content. Any system with a "cost ledger" that uses char-length heuristics is lying about costs. Compaction triggers at wrong thresholds, wasting money or truncating too aggressively. | MEDIUM | HuggingFace `tokenizers` 0.21 already in workspace (used by blufio-memory for embeddings). tiktoken-rs 0.9.1 covers OpenAI models (o200k_base for GPT-4o/o1/o3/o4, cl100k_base for GPT-4/3.5). Anthropic provides FREE `/v1/messages/count_tokens` API (100-8000 RPM by tier) but publishes NO local tokenizer for Claude 3+. Gemini provides FREE `:countTokens` endpoint (3000 RPM). Ollama returns `prompt_eval_count`/`eval_count` in responses and has `/api/tokenize` endpoint. |
-| Per-dependency circuit breakers | Any system calling 5+ external APIs (LLM providers, channel platforms) without circuit breakers will cascade-fail. Provider goes down, all sessions stall, backlog grows, system OOMs. This is the number one cause of production outages in LLM agent systems. Blufio currently has ZERO circuit breakers -- every external call is fire-and-hope. | MEDIUM | Standard 3-state FSM (Closed/Open/HalfOpen). Build in-house: ~200 LOC of state machine logic. Existing Rust crates (circuitbreaker-rs, tower-circuitbreaker) add external dependencies for trivial logic. Blufio already uses tower but tower-circuitbreaker is a separate crate for what is a simple state machine. Per-dependency instances: 5 providers + 8 channels + MCP servers = ~15 circuit breakers. |
-| Typed error hierarchy with retryability | Current `BlufioError` has 14 variants but no `is_retryable()`, `severity()`, or `category()`. Without this, the agent loop cannot make automated retry/fallback decisions. Every production system needs "should I retry this?" to be answerable without string-matching error messages. The circuit breaker needs error classification to decide whether a failure should count toward trip threshold. | MEDIUM | Extend existing `BlufioError` enum with methods. Add `ErrorSeverity` (Fatal/Degraded/Transient) and `ErrorCategory` (Network/Auth/RateLimit/Capacity/Internal/Config). Each variant maps to retryability via match arms. No breaking changes to existing code -- methods are additive. |
-| FormatPipeline wired into adapters | FormatPipeline exists in `blufio-core/src/format.rs` but ZERO adapters use it. Grep confirms: no adapter crate imports FormatPipeline. Every adapter does its own ad-hoc string formatting. This defeats the purpose of having a centralized formatting pipeline and means format degradation is untested and inconsistent across all 8 channel adapters. | MEDIUM | Wire `FormatPipeline::format()` into each adapter's `send()` path. Adapters currently construct raw strings; they should construct `RichContent` and let the pipeline degrade based on `capabilities()`. The FormatPipeline already handles Embed and Image degradation. |
-| ChannelCapabilities completeness | Current 9-field struct (`types.rs:107-126`) is missing critical metadata: streaming type (edit-in-place vs append-only vs no-streaming), formatting support (markdown vs html vs plaintext vs platform-specific), and rate limits. Without `streaming_type`, the agent loop cannot decide whether to use `StreamingBuffer` (edit-in-place) or append-only for a given channel. Without `formatting_support`, FormatPipeline cannot degrade markdown to plaintext for channels like IRC. | LOW | Add 3 fields to existing struct. All new fields can have sensible defaults via `Default` impl. No breaking changes. |
+| Multi-level context compaction (L0-L3) with quality scoring | Current compaction is single-pass, splits at history midpoint, and has no quality validation. Long-running sessions (days/weeks) accumulate compaction summaries that lose critical context. Any agent platform advertising long-term conversations must preserve key facts through compaction rounds. OpenClaw loses context entirely after ~50 turns. | HIGH | Extends existing `blufio-context/compaction.rs`. L0=raw messages, L1=turn-pair summaries, L2=session summary, L3=cross-session archive. Each level retains entity/decision graphs. Quality gates use probe-based validation: after compaction, test that key facts survive via LLM probe queries. ACON research shows 26-54% peak token reduction while preserving 95%+ accuracy with multi-step validation. Existing `DynamicZone` triggers compaction at 70% threshold -- extend with tiered triggers (L0 at 50%, L1 at 70%, L2 at 85%). |
+| Prompt injection defense layers | OWASP Top 10 for LLM Apps 2025 ranks prompt injection #1. Attack success rates reach 84% in agentic systems. Blufio has MCP description sanitization and trust zone labeling but no systematic input/output defense. Any agent system executing tools (WASM skills, MCP) from user-influenced context is vulnerable to injection. | HIGH | 5-layer defense as specified in PRD: L1=regex pattern classifier (known attack signatures), L3=HMAC boundary tokens (cryptographic separation of system/user content), L4=output validator (LLM output screened before tool execution), L5=human-in-the-loop (configurable confirmation for high-risk operations). L2 was omitted in PRD -- reserved for future ML classifier. Existing `blufio-security` crate handles TLS/SSRF/redaction; extend with injection defense module. |
+| PII detection and redaction | Existing `redact.rs` handles API keys and bearer tokens only. No detection of user PII (email, phone, SSN, credit cards). For a personal AI agent handling private conversations, PII appearing in logs, exports, or LLM context is a compliance liability. Operators in EU/California expect PII awareness. | MEDIUM | Extend `blufio-security/redact.rs` with regex patterns: email (`[\w.+-]+@[\w-]+\.[\w.]+`), phone (international formats), SSN (`\d{3}-\d{2}-\d{4}`), credit cards (Luhn-validated 13-19 digit patterns). Use regex-only approach for v1.5 -- ML-based NER is overkill for a single-binary agent. Apply redaction in log output (existing `RedactingWriter`), data exports, and optionally in LLM context injection. |
+| Data export (JSON, CSV) | Any system storing user data must provide export capability. GDPR Article 20 (data portability) requires machine-readable export. Operators need export for backup verification, migration, and debugging. | LOW | Export sessions, messages, memories, cost records filtered by session/date/type. JSON for programmatic use, CSV for spreadsheet analysis. CLI command `blufio export --format json --session <id> --from <date> --to <date>`. Reads directly from SQLite via existing `blufio-storage` queries. |
+| Retention policy enforcement | Long-running agents accumulate unbounded data. Without retention policies, SQLite database grows indefinitely. Cost records, old session messages, and superseded memories should be automatically cleaned. Operators expect configurable TTLs per data type. | MEDIUM | TOML config per data type: `[retention] messages_days = 90`, `sessions_days = 180`, `cost_records_days = 365`, `memories_days = 0` (0=forever). Background task runs on configurable interval (default: daily). Deletes records older than retention period. Must respect audit trail (hash chain entries are never deleted). Must respect GDPR erasure requests (immediate, not waiting for retention). |
+| OpenAPI spec generation | Blufio ships an API gateway with 15+ endpoints. Any production API needs documentation. OpenAPI enables client SDK generation, Swagger UI, and API testing. Without it, integrators must read source code or guess at payloads. | MEDIUM | Use `utoipa` + `utoipa-axum` crates for compile-time OpenAPI 3.1 generation from existing axum handlers. Add `#[utoipa::path]` annotations to gateway handlers. Serve spec at `/openapi.json` and optional Swagger UI at `/docs`. Does not require restructuring existing handlers -- annotation-only changes. |
+| Clippy unwrap enforcement | 80K LOC codebase with uncounted `.unwrap()` calls. Any `unwrap` in library code is a potential panic in production. For a system targeting months of uptime on a $4/month VPS, panics are unacceptable. | LOW | Add `#![deny(clippy::unwrap_used)]` to all library crate `lib.rs` files. Replace `.unwrap()` with `.expect("reason")`, `?`, or `.unwrap_or_default()` as appropriate. Binary crate (`blufio/main.rs`) can keep `unwrap()` in startup paths where panicking is acceptable. |
 
 ### Differentiators (Competitive Advantage)
 
-Features that set Blufio apart from OpenClaw and other agent platforms. These address the "kill shot" weaknesses directly.
+Features that set Blufio apart from OpenClaw and other agent platforms. These are not table stakes but create significant competitive advantage.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| 6-level graceful degradation ladder | Automatic escalation from "normal" through "reduced context" to "emergency static responses" with de-escalation when dependencies recover. OpenClaw has no degradation -- it either works or crashes (memory leaks to 300-800MB). This is the single most impactful resilience feature for a $4/month VPS that needs to run for months without restart. No other open-source AI agent platform implements structured degradation levels. | HIGH | Levels: L0-Normal, L1-ReducedContext (shrink context window), L2-SimplifiedModel (force Haiku), L3-NoTools (disable skill/MCP execution), L4-CachedResponses (use stored patterns), L5-StaticFallback (hardcoded "I'm having trouble, try again later"). Each level triggered by circuit breaker state + resource pressure. Automatic de-escalation when conditions clear. |
-| Table and List content types in FormatPipeline | LLM responses frequently contain tabular data and bullet lists. Discord renders embeds with fields, Telegram uses HTML tables, IRC gets plain text rows, Signal gets plain text. No other agent platform handles structured content degradation across 8 channels. Adds `RichContent::Table` and `RichContent::List` to existing pipeline. | LOW | Table degrades: native table (if supported) -> markdown table -> plain text rows with alignment. List degrades: bullet points -> numbered text -> plain indented text. Each adapter's `ChannelCapabilities.formatting_support` drives which degradation path is taken. |
-| Provider-aware token counting abstraction | Single `TokenCounter` trait with per-provider implementations: local BPE for OpenAI (tiktoken-rs), API call for Anthropic (free endpoint), API call for Gemini (free endpoint), response-based for Ollama, and configurable heuristic fallback. No other agent framework provides accurate token counting across 5 providers from Rust. | MEDIUM | Trait in blufio-core, implementations in each provider crate. Cache tokenizer instances (singletons for tiktoken-rs). The HuggingFace `tokenizers` crate already in workspace can serve as fallback for providers without dedicated tokenizers. Key insight: pre-call counting must be fast; use cached estimates for repeated system prompts and only API-count the dynamic portion. |
-| Circuit breaker Prometheus integration | Every circuit breaker state transition emits Prometheus metrics. Operators see `blufio_circuit_breaker_state{dependency="anthropic"}` in Grafana and get alerted before users notice degradation. OpenClaw has no observability for dependency health. Blufio already ships Prometheus via the metrics crate. | LOW | Add gauge for state (0=closed, 1=half-open, 2=open), counter for trip events, histogram for recovery time. Integrates with existing blufio-prometheus crate. |
-| Automatic degradation-level Prometheus metrics | `blufio_degradation_level` gauge lets operators set alerts at L2+ (model downgrade) and page at L4+ (cached responses). Combined with circuit breaker metrics, gives full picture of system health without log-diving. | LOW | Single gauge metric + labels per affected subsystem. |
+| Hash-chained tamper-evident audit trail | No open-source AI agent platform provides cryptographic audit trails. Every action (tool execution, memory modification, config change, provider call) gets a hash-chained log entry where altering any historical record breaks the chain. Enables enterprise trust and regulatory compliance. AuditableLLM research shows negligible overhead: 3.4ms/step, 5.7% slowdown. | MEDIUM | New `blufio-audit` crate or module in `blufio-storage`. Each entry: `{id, timestamp, actor, action, target, detail, prev_hash, hash}` where `hash = SHA-256(prev_hash || serialized_entry)`. Store in dedicated `audit_trail` SQLite table. Verification CLI command `blufio audit verify` walks chain and reports breaks. Integrate with EventBus -- subscribe to all event types and log audit entries. Audit entries are append-only; retention policies NEVER delete them (separate from message retention). |
+| Data classification framework (4 levels) | No competitor classifies data sensitivity levels. With 4 levels (Public/Internal/Confidential/Restricted), Blufio can enforce per-level controls: Restricted data never leaves the system, Confidential data is encrypted at rest (already via SQLCipher), Internal data is access-controlled, Public data flows freely. This is table stakes for enterprise but a differentiator in the AI agent space. | MEDIUM | Enum `DataClassification { Public, Internal, Confidential, Restricted }` in `blufio-core`. Tag memories, messages, exports, and config values with classification level. Controls matrix: Restricted = never exported + never in LLM context + encrypted at rest. Confidential = encrypted at rest + redacted in logs. Internal = access-controlled + audit-logged. Public = no restrictions. Classification can be set explicitly or inferred (messages with PII auto-classify as Confidential). |
+| Memory temporal decay with MMR diversity | Current retriever uses RRF fusion (vector + BM25) with confidence boost but no temporal decay and no diversity enforcement. Older memories rank equally to recent ones. Redundant memories (same topic, slight variations) dominate results. OpenClaw implements both decay and MMR. Blufio's memory retrieval must match or exceed. | MEDIUM | Temporal decay: `score *= 0.95^days_since_creation` (configurable decay factor). Half-life ~14 days. MMR re-ranking: after RRF fusion, apply `finalScore = lambda * relevance - (1-lambda) * max_similarity_to_already_selected` with lambda=0.7. This runs on the already-scored results, so zero additional API calls. Both apply in `HybridRetriever::retrieve()` after the existing RRF step. Add `importance` field to Memory struct for manual boost (explicit memories get importance=1.0, extracted get 0.6). |
+| Lifecycle hook system (11 events) | No agent platform provides extensible lifecycle hooks. Hooks let operators run shell commands at specific lifecycle points: backup before shutdown, notify on degradation, sync memory on session close, restart services on config change. Kubernetes/Nomad/Docker all have lifecycle hooks because the pattern is proven. | MEDIUM | 11 lifecycle events: `pre_start`, `post_start`, `pre_shutdown`, `post_shutdown`, `session_created`, `session_closed`, `pre_compaction`, `post_compaction`, `degradation_changed`, `config_reloaded`, `memory_extracted`. Each hook defined in TOML with priority (BTreeMap ordering), command, timeout, and sandbox flag. Hooks run as shell subprocesses with configurable environment variables. Sandboxed hooks run with restricted PATH and no network. Subscribe to EventBus events to trigger hooks asynchronously. |
+| Hot reload (config, TLS, plugins) | No competitor supports zero-downtime config reload. Blufio targets months of uptime; restarting for a config change breaks that promise. ArcSwap provides wait-free, lock-free atomic pointer swaps. Combined with `notify` crate for file watching, config changes apply within seconds without dropping connections. | HIGH | Three reload targets: (1) Config: watch `blufio.toml` with `notify` crate, parse new config, validate, swap via `ArcSwap<BlufioConfig>`. All components that hold config references must read through ArcSwap. (2) TLS certs: use `tls-hot-reload` crate or implement `rustls::server::ResolvesServerCert` with file watcher. Certificate rotation applies without connection drop. (3) Plugin state: re-scan skill directory, reload changed WASM modules, verify signatures. The config change is the hardest because every crate reads config at construction time -- must refactor to read through shared ArcSwap. |
+| Cron/scheduler system | No agent platform provides built-in scheduled tasks. Operators want scheduled memory cleanup, backup triggers, health report generation, and custom skill execution on cron schedules. Currently requires external crontab or systemd timers. | MEDIUM | Use `tokio-cron-scheduler` crate (active, 0.15.x, tokio-native). Define schedules in TOML: `[[cron]] name = "daily-backup"`, `schedule = "0 3 * * *"`, `command = "blufio backup"`. Also generate systemd timer unit files via `blufio cron generate-timers`. Built-in tasks: memory cleanup, cost report, health check, retention enforcement. Custom tasks run as shell commands (same sandbox as hooks). Store last-run timestamps in SQLite to handle restarts gracefully. |
+| GDPR erasure tooling | OpenClaw has no GDPR tooling. Blufio can be the first open-source agent platform with built-in right-to-erasure support. EDPB 2025 CEF report found that most controllers lack appropriate procedures. CLI command `blufio gdpr erase --user <id>` deletes all user data: messages, memories, session metadata, cost records. Transparency disclosure via `blufio gdpr report --user <id>` shows what data is held. | MEDIUM | Must handle: (1) message deletion from all sessions, (2) memory deletion and re-embedding of remaining memories, (3) cost record anonymization (keep aggregates, remove user association), (4) audit trail annotation (log erasure event without deleting audit entries -- GDPR allows keeping processing records). Also: retention policy enforcement as automated erasure. Export before erasure as safety net. Backup exclusion -- must document that backup files may contain pre-erasure data. |
+| iMessage, Email, SMS channel adapters | Expanding from 8 to 11 channels. iMessage reaches iOS users (massive market). Email enables async agent interaction. SMS provides universal reach. These three channels cover the remaining major communication platforms not yet supported. | MEDIUM-HIGH | **iMessage:** BlueBubbles REST API + webhook adapter. Requires macOS server running BlueBubbles. Poll or webhook for incoming messages. REST API for sending. OpenClaw has a BlueBubbles plugin as reference. **Email:** IMAP polling for incoming + SMTP via `lettre` for outgoing. `async-imap` crate for async IMAP. Map email threads to sessions via In-Reply-To headers. **SMS:** Twilio Programmable Messaging API. Webhook for incoming (same pattern as WhatsApp Cloud API). REST API for outgoing. No official Twilio Rust SDK -- use reqwest directly (same as WhatsApp adapter). Each adapter implements existing `ChannelAdapter` trait. |
+| OpenTelemetry distributed tracing | Blufio has Prometheus metrics but no distributed tracing. For operators running Blufio behind reverse proxies, load balancers, or with MCP servers, trace propagation is essential for debugging latency. OpenTelemetry is the industry standard. | MEDIUM | Use `opentelemetry` + `tracing-opentelemetry` crates. Bridge existing `tracing` spans to OpenTelemetry. Export via OTLP (gRPC or HTTP) to Jaeger, Tempo, or any OTLP-compatible backend. Optional and disabled by default (zero overhead when disabled). Config: `[opentelemetry] enabled = false`, `endpoint = "http://localhost:4317"`, `service_name = "blufio"`. Key spans: agent loop iteration, LLM provider call, tool execution, memory retrieval, context assembly. Trace context propagation through MCP calls. |
+| Litestream WAL-based replication | SQLite is a single-file database. Disk failure = total data loss. Litestream provides continuous WAL-frame streaming to S3/GCS/Azure Blob with point-in-time recovery. For a $4/month VPS, this is the difference between "acceptable risk" and "production-grade." | LOW | Litestream runs as a sidecar process -- no code changes in Blufio. Ship `litestream.yml` config template. Document setup in operator guide. CLI command `blufio litestream init` generates config from `blufio.toml` storage path. `blufio litestream status` checks replication lag. Blufio's existing WAL mode is compatible (Litestream requires WAL). Only consideration: Litestream takes over checkpointing, so Blufio must not set `wal_autocheckpoint` to 0 conflictingly. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Automatic provider failover in agent loop | "If Anthropic is down, auto-switch to OpenAI" | Different providers have different tokenizers, tool call formats, system prompt handling, and context window sizes. Mid-conversation failover produces incoherent responses. Provider-specific prompt caching is wasted. The cost model changes silently. Users cannot predict which model answered. | Circuit breaker + degradation ladder. When primary provider trips circuit, degrade to simpler behavior (smaller model on same provider at L2, then cached responses at L4) rather than silently switching providers. Let operators explicitly configure failover pairs if they want cross-provider failover. OpenRouter already handles multi-provider failover at the infrastructure level. |
-| Per-character tokenizer for all providers | "Embed tokenizers for every provider locally so we never need API calls" | Anthropic deliberately does not publish Claude 3+ tokenizer. Embedding a stale or approximate tokenizer gives false confidence in counts. Gemini tokenizer changes between model versions. Maintaining tokenizer parity across 5 providers is a maintenance nightmare. | Use provider-native counting: tiktoken-rs for OpenAI (local, fast, exact), free API for Anthropic (accurate, server-side), free API for Gemini (accurate, server-side), response-based for Ollama (free, exact post-call), heuristic for OpenRouter (response-based after first call). Accept that pre-call counting for Anthropic/Gemini requires an API call. |
-| Complex retry policies per error type | "Exponential backoff with jitter, different delays per error class, retry budgets" | Over-engineering for conversational agents. LLM API calls take 1-30 seconds. Retrying a failed 10-second call with exponential backoff means 20-60 seconds of user-visible latency. For a conversational agent, the user will re-send their message before any retry completes. Complex retry logic also masks the real problem (dependency is down) instead of surfacing it to the degradation ladder. | Simple retry: 1 immediate retry for transient errors (network glitches), then circuit breaker opens. For rate limits, respect Retry-After header with a single delay. For everything else, fail fast and let the degradation ladder handle it. |
-| Dynamic format negotiation with channels | "Let channels declare formatting capabilities at runtime so new formats don't need code changes" | Channels have fixed capabilities -- Telegram's MarkdownV2 does not change at runtime. Adding runtime negotiation means capability discovery latency on every message. The 8 channels have well-known, stable capabilities that change only with platform updates (years apart). | Static `ChannelCapabilities` per adapter (already exists). Add new fields as needed. Compile-time is correct for capabilities that change once per platform major version. |
-| Global error recovery orchestrator | "Central component that monitors all errors and orchestrates recovery across subsystems" | Single point of failure for recovery. Adds coordination overhead and distributed state. Makes error handling non-local and harder to reason about. A bug in the orchestrator takes down all recovery. | Per-dependency circuit breakers (local state machines) + degradation ladder (composable levels). Each subsystem handles its own errors; the degradation ladder is the composition mechanism that reads circuit breaker state. Local reasoning, global effect. |
+| ML-based PII detection (NER models) | "Regex misses context-dependent PII like names and addresses" | Adds ONNX model loading overhead (already have one for embeddings). False positive rate on names is high (is "Paris" a city or a name?). Increases binary size. For a personal agent with one user, the user's own data is not "unknown PII" -- they chose to share it. | Regex patterns for structured PII (email, phone, SSN, CC). Users tag sensitive memories manually via data classification. ML-based NER deferred to v2+ if demand materializes. |
+| Real-time PII scanning of all LLM context | "Scan every message sent to LLM providers for PII before transmission" | Adds latency to every LLM call (regex scan of full context window = 100K+ tokens). PII in conversation IS the conversation -- the user is talking about their life. Blocking PII from reaching the LLM defeats the purpose of a personal agent. | PII redaction in logs and exports only. Optional PII stripping for LLM context as opt-in config. Data classification framework handles what should/should not leave the system. |
+| Blockchain-based audit trail | "Hash chains are not truly tamper-proof without distributed consensus" | Blockchain adds massive complexity, external dependencies (node, consensus, storage), and latency for zero practical benefit in a single-instance system. The threat model is "detect tampering," not "prevent tampering by a Byzantine adversary." | SHA-256 hash-chained log in SQLite. Operator can periodically snapshot chain head hash to external witness (cloud KMS, git repo, email) for independent verification. This is what Certificate Transparency uses (Trillian) and it works at internet scale. |
+| Full GDPR consent management UI | "Need cookie banners, consent tracking, and preference centers" | Blufio is a CLI/API agent, not a web application. There is no web UI for users to interact with. Consent management requires a user-facing interface that does not exist. | Document that Blufio operators are data controllers responsible for obtaining consent. Provide GDPR tooling (erasure, export, transparency) but not consent UI. Operators integrate with their own consent management systems. |
+| Cross-provider session migration on hot reload | "When config changes the default provider, migrate active sessions to the new provider" | Different providers have different tokenizers, context window sizes, tool calling formats, and prompt caching. Mid-conversation provider switch produces incoherent responses and wastes cached context. | Hot reload applies to new sessions only. Active sessions complete on their current provider. Operator can force-close sessions via CLI if immediate migration is needed. Document this as a design decision. |
+| Embedded Litestream (compiled into binary) | "Ship Litestream as part of the Blufio binary for single-binary purity" | Litestream is a Go binary. Embedding it means CGO or subprocess management. Litestream's lifecycle (continuous WAL monitoring) is better managed as a sidecar. Single-binary constraint already has exceptions (signal-cli sidecar). | Ship config templates and CLI helpers. `blufio litestream init` generates config. Document sidecar deployment in operator guide. Docker compose includes Litestream container. |
+| Automatic PII-based data classification | "Automatically classify all data based on PII content detection" | Auto-classification creates false confidence. A message mentioning "credit card" in casual conversation gets classified as Restricted. The user then cannot access their own conversation. Classification should be explicit or rule-based, not inference-based. | Rule-based classification: messages with detected PII patterns auto-tag as Confidential (not Restricted). Operators define classification rules in TOML. Users can manually classify memories. Restricted level requires explicit operator designation. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-TokenCounter trait
+Prompt Injection Defense
     |
-    +--requires--> Provider-specific implementations (per provider crate)
-    |                  |
-    |                  +--requires--> tiktoken-rs dep (OpenAI crate)
-    |                  +--requires--> HTTP client to /v1/messages/count_tokens (Anthropic crate)
-    |                  +--requires--> HTTP client to :countTokens (Gemini crate)
-    |                  +--requires--> Response parsing (Ollama -- already returns counts)
+    +--requires--> blufio-security crate (existing, extend)
+    +--requires--> HMAC primitives (already have hmac via blufio-vault)
     |
-    +--enables--> Accurate compaction threshold (blufio-context DynamicZone)
-    +--enables--> Accurate cost ledger pre-estimation (blufio-cost)
+    +--enhances--> Agent loop (pre/post LLM call validation)
+    +--enhances--> WASM skill sandbox (tool call validation)
+    +--enhances--> MCP client (external tool output validation)
 
-TypedErrorHierarchy
+Data Classification Framework
     |
-    +--requires--> BlufioError enhancement (blufio-core)
+    +--requires--> blufio-core types (new enum)
     |
-    +--enables--> CircuitBreaker (needs is_retryable() to decide failure counting)
-    +--enables--> GracefulDegradationLadder (needs severity() for escalation)
+    +--enables--> PII Redaction (auto-classify PII-containing data as Confidential)
+    +--enables--> Retention Policies (per-classification retention rules)
+    +--enables--> GDPR Tooling (classification drives export/erasure scope)
+    +--enables--> Data Export (classification drives what is exportable)
 
-CircuitBreaker
+PII Detection
     |
-    +--requires--> TypedErrorHierarchy (is_retryable, severity)
+    +--requires--> blufio-security/redact.rs (extend existing patterns)
     |
-    +--enables--> GracefulDegradationLadder (circuit state drives level transitions)
-    +--enhances--> Prometheus (state transition metrics)
+    +--enhances--> Data Classification (auto-tag PII-detected content)
+    +--enhances--> GDPR Tooling (find all user PII for erasure)
+    +--enhances--> Data Export (redact PII from exports)
+    +--enhances--> Audit Trail (redact PII from audit entries)
 
-GracefulDegradationLadder
+Hash-Chained Audit Trail
     |
-    +--requires--> CircuitBreaker (dependency health signal)
-    +--requires--> TypedErrorHierarchy (error classification)
+    +--requires--> EventBus (subscribe to all events for audit logging)
+    +--requires--> blufio-storage (new audit_trail table)
+    +--requires--> SHA-256 (already have via sha2 crate in workspace)
     |
-    +--enhances--> Agent loop (adjusts behavior per level)
-    +--enhances--> Prometheus (degradation level gauge)
+    +--enhances--> GDPR Tooling (erasure events logged in audit trail)
+    +--enhances--> Data Classification (classification changes logged)
 
-FormatPipeline integration
+Retention Policies
     |
-    +--requires--> Table + List content types (extend RichContent enum)
-    +--requires--> ChannelCapabilities extension (formatting_support field)
+    +--requires--> Data Classification (per-classification retention rules)
+    +--requires--> Cron/Scheduler (automated enforcement on schedule)
     |
-    +--enhances--> All 8 channel adapters (consistent formatting)
+    +--enhances--> GDPR Tooling (retention = automated erasure)
+    +--conflicts--> Audit Trail (audit entries exempt from retention deletion)
 
-ChannelCapabilities extension
+GDPR Tooling
     |
-    +--enhances--> FormatPipeline (formatting_support drives degradation path)
-    +--enhances--> StreamingBuffer (streaming_type drives edit-vs-append decision)
-    +--enhances--> Agent loop (rate_limits for throttling decisions)
+    +--requires--> PII Detection (find user PII across all tables)
+    +--requires--> Data Export (export before erasure as safety net)
+    +--requires--> Audit Trail (log erasure events)
+    +--requires--> Data Classification (scope erasure by classification)
+
+Multi-Level Compaction
+    |
+    +--requires--> blufio-context (extend existing compaction.rs)
+    +--requires--> Accurate token counting (already shipped in v1.4)
+    |
+    +--enhances--> Memory system (compacted summaries feed memory extraction)
+    +--independent-of--> Security/compliance features
+
+Memory Enhancements (temporal decay, MMR, LRU)
+    |
+    +--requires--> blufio-memory (extend existing retriever.rs, store.rs)
+    |
+    +--independent-of--> Security/compliance features
+    +--independent-of--> Compaction (different subsystem)
+
+Lifecycle Hooks
+    |
+    +--requires--> EventBus (hook triggers from bus events)
+    +--requires--> Config system (TOML hook definitions)
+    |
+    +--enhances--> Hot Reload (hooks fire on config reload)
+    +--enhances--> Cron/Scheduler (hooks can trigger scheduled tasks)
+
+Hot Reload
+    |
+    +--requires--> ArcSwap (new dependency)
+    +--requires--> notify crate (file watcher, new dependency)
+    +--requires--> Config refactor (components read through ArcSwap)
+    |
+    +--enhances--> Lifecycle Hooks (config_reloaded hook fires)
+    +--enhances--> TLS cert rotation (zero-downtime)
+
+Cron/Scheduler
+    |
+    +--requires--> tokio-cron-scheduler (new dependency)
+    +--requires--> blufio-storage (last-run timestamps)
+    |
+    +--enables--> Retention Policy enforcement (scheduled cleanup)
+    +--enables--> Background memory validation
+    +--enhances--> Lifecycle Hooks (cron tasks can trigger hooks)
+
+Channel Adapters (iMessage, Email, SMS)
+    |
+    +--requires--> ChannelAdapter trait (already exists)
+    +--requires--> blufio-config (new config sections)
+    +--requires--> FormatPipeline integration (already wired in v1.4)
+    |
+    +--independent-of--> All other v1.5 features
+
+OpenTelemetry
+    |
+    +--requires--> opentelemetry + tracing-opentelemetry crates (new deps)
+    +--requires--> blufio-config (new otel config section)
+    |
+    +--independent-of--> All other v1.5 features
+
+OpenAPI Spec
+    |
+    +--requires--> utoipa + utoipa-axum crates (new deps)
+    +--requires--> blufio-gateway handlers (annotation changes)
+    |
+    +--independent-of--> All other v1.5 features
+
+Litestream Replication
+    |
+    +--requires--> WAL mode (already enabled)
+    +--requires--> Config templates (no code changes)
+    |
+    +--independent-of--> All other v1.5 features
 ```
 
 ### Dependency Notes
 
-- **TypedErrorHierarchy must come before CircuitBreaker:** The circuit breaker's decision logic depends on error classification. It must know whether a failure should count toward the trip threshold. Network timeouts count; authentication errors do not (they will fail every time until config is fixed). Building them in reverse order would require retrofitting the circuit breaker's counting logic.
-- **CircuitBreaker must come before GracefulDegradationLadder:** Degradation levels are driven by circuit breaker state. When the primary LLM provider circuit opens, the ladder escalates to L2 (simplified model). When multiple circuits are open, it escalates to L4-L5. Without circuit breakers, the ladder has no input signal.
-- **TokenCounter is independent:** Can be built and shipped without waiting for circuit breakers or degradation ladder. Immediately fixes the `len()/4` heuristic and improves cost accuracy. No dependency on error hierarchy or resilience features.
-- **FormatPipeline + ChannelCapabilities are independent:** No dependency on circuit breakers, error hierarchy, or token counting. Can be done in parallel with the resilience track.
-- **Two parallel tracks emerge:** (1) Resilience: TypedErrors -> CircuitBreaker -> DegradationLadder. (2) Quality: TokenCounting + FormatPipeline + ChannelCapabilities. These tracks can be developed concurrently.
+- **Data Classification should come before PII Detection:** Classification framework provides the enum and tagging infrastructure that PII detection populates. Building PII detection first means retrofitting classification tags later.
+- **PII Detection should come before GDPR Tooling:** GDPR erasure needs to find all user PII across all tables. PII detection patterns provide the scanning capability.
+- **Audit Trail should come before GDPR Tooling:** Erasure events must be logged in the audit trail. Building GDPR tooling without audit trail means erasure events are unauditable.
+- **Cron/Scheduler should come before Retention Policies:** Retention enforcement runs on a schedule. Without the scheduler, retention requires external crontab (defeats single-binary value).
+- **Compaction and Memory enhancements are independent of security/compliance features.** They can be developed on a parallel track.
+- **Channel adapters are fully independent.** Each adapter is a separate crate implementing the existing ChannelAdapter trait. No dependency on any other v1.5 feature.
+- **OpenTelemetry, OpenAPI, and Litestream are fully independent.** They can be built at any point in the milestone.
+- **Hot Reload is the highest-risk feature.** It requires refactoring how every component reads config. This should be scoped carefully and potentially deferred to late in the milestone.
 
 ---
 
 ## MVP Definition
 
-### Must Ship (v1.4)
+### Must Ship (v1.5 Core)
 
-- [x] **Typed error hierarchy** -- Foundation for all resilience features. Add `is_retryable()`, `severity()`, `category()` to `BlufioError`. Unblocks circuit breakers and degradation.
-- [x] **Per-dependency circuit breakers** -- Prevents cascade failures. 3-state FSM per external dependency. Configurable thresholds in TOML. Prometheus metrics on state transitions.
-- [x] **Graceful degradation ladder (6 levels)** -- The differentiator. Automatic escalation/de-escalation based on circuit breaker state and resource pressure. Solves the core value: "run for months without restart on $4/month VPS."
-- [x] **Accurate token counting** -- Fixes the `len()/4` lie in cost ledger and compaction triggers. Provider-aware: tiktoken-rs for OpenAI, free API for Anthropic/Gemini, response-based for Ollama.
-- [x] **FormatPipeline integration** -- Wire existing pipeline into all 8 adapters. Add Table + List content types. Fixes the gap where FormatPipeline exists but is unused.
-- [x] **ChannelCapabilities extension** -- Add streaming_type, formatting_support, rate_limits. Enables informed decisions about streaming strategy and format degradation.
+- [ ] **Multi-level compaction with quality scoring** -- Fixes the single biggest long-term usability problem: context degradation over extended conversations. Directly addresses core value of running for months.
+- [ ] **Prompt injection defense (L1, L3, L4)** -- Security table stakes for any system executing tools from user-influenced context. L5 (human-in-loop) is stretch.
+- [ ] **Cron/scheduler system** -- Unblocks retention policies, automated memory cleanup, and background tasks. Foundation for operational automation.
+- [ ] **Memory temporal decay and MMR diversity** -- Fixes memory retrieval quality for long-running agents. Direct user-facing improvement.
+- [ ] **Hash-chained audit trail** -- Differentiator. Enables compliance storytelling and operator trust.
+- [ ] **Data classification framework** -- Foundation for PII, GDPR, retention, and export features.
+- [ ] **Retention policy enforcement** -- Prevents unbounded database growth. Operational necessity for long-running agents.
+- [ ] **PII detection patterns** -- Extends existing redaction system. Compliance foundation.
+- [ ] **Data export (JSON, CSV)** -- GDPR Article 20 compliance. Simple to implement on existing queries.
+- [ ] **GDPR erasure tooling** -- First open-source agent platform with built-in erasure. Competitive differentiator.
+- [ ] **Clippy unwrap enforcement** -- Code quality. Prevents panics in production.
 
-### Add After Validation (v1.5+)
+### Should Ship (v1.5 Extended)
 
-- [ ] **Provider failover with session migration** -- Only after circuit breakers prove stable in production. Requires solving the mid-conversation context translation problem.
-- [ ] **Adaptive token budget** -- Dynamically adjust context window budget based on provider response latency and error rates. Needs degradation ladder telemetry data first.
-- [ ] **Custom degradation policies** -- Let operators define custom degradation behavior per level via TOML config.
+- [ ] **OpenAPI spec generation** -- API documentation. High value, moderate effort.
+- [ ] **Lifecycle hook system** -- Operator extensibility. Enables custom automation without code changes.
+- [ ] **OpenTelemetry tracing** -- Observability upgrade. Optional, disabled by default.
+- [ ] **Litestream replication setup** -- Config templates and CLI helpers. Low effort, high value for disaster recovery.
+- [ ] **iMessage adapter** -- BlueBubbles REST API. Extends channel coverage.
+- [ ] **Email adapter** -- IMAP/SMTP. Async agent interaction.
+- [ ] **SMS adapter** -- Twilio API. Universal reach.
 
-### Future Consideration (v2+)
+### Defer if Time-Constrained (v1.6+)
 
-- [ ] **Cross-instance degradation coordination** -- When running multiple Blufio instances, share circuit breaker state via SQLite or gossip protocol.
-- [ ] **ML-based anomaly detection** -- Use historical error patterns to predict failures before circuit breakers trip.
+- [ ] **Hot reload (config, TLS, plugins)** -- High complexity, requires config access refactoring across all crates. High value but risky for a gap-closure milestone. Better as a focused phase.
+- [ ] **Background memory validation + file watcher re-indexing** -- Nice to have but not blocking any other feature.
+- [ ] **Context engine token budget enforcement verification** -- Testing/validation task, not a feature.
 
 ---
 
@@ -139,122 +235,230 @@ ChannelCapabilities extension
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Typed error hierarchy | HIGH | LOW | P1 -- Foundation, unblocks everything |
-| Circuit breakers | HIGH | MEDIUM | P1 -- Prevents cascade failures |
-| Token counting | HIGH | MEDIUM | P1 -- Fixes cost accuracy |
-| Degradation ladder | HIGH | HIGH | P1 -- Core value differentiator |
-| FormatPipeline integration | MEDIUM | MEDIUM | P1 -- Fixes existing dead code |
-| ChannelCapabilities extension | MEDIUM | LOW | P1 -- Enables pipeline + streaming decisions |
-| Table/List content types | LOW | LOW | P2 -- Polish, not critical for resilience |
-| Circuit breaker Prometheus metrics | MEDIUM | LOW | P2 -- Observability enhancement |
-| Degradation level Prometheus metrics | MEDIUM | LOW | P2 -- Observability enhancement |
-| ORT stable upgrade + ADR | LOW | LOW | P2 -- Tech debt, not user-facing |
-| Plugin architecture ADR | LOW | LOW | P2 -- Documentation, not code |
+| Multi-level compaction | HIGH | HIGH | P1 -- Core value: long-term agent reliability |
+| Prompt injection defense | HIGH | HIGH | P1 -- Security table stakes |
+| Data classification | HIGH | LOW | P1 -- Foundation for compliance features |
+| PII detection | HIGH | LOW | P1 -- Compliance foundation |
+| Audit trail (hash-chained) | HIGH | MEDIUM | P1 -- Differentiator, compliance enabler |
+| Cron/scheduler | HIGH | MEDIUM | P1 -- Unblocks retention and automation |
+| Retention policies | HIGH | MEDIUM | P1 -- Operational necessity |
+| Memory decay + MMR | MEDIUM | MEDIUM | P1 -- User-facing quality improvement |
+| GDPR erasure + export | HIGH | MEDIUM | P1 -- Compliance differentiator |
+| Data export | MEDIUM | LOW | P1 -- GDPR requirement, simple to build |
+| Clippy unwrap enforcement | MEDIUM | LOW | P1 -- Code quality, prevents panics |
+| OpenAPI spec | MEDIUM | MEDIUM | P2 -- API documentation |
+| Hook system | MEDIUM | MEDIUM | P2 -- Operator extensibility |
+| OpenTelemetry | MEDIUM | MEDIUM | P2 -- Observability upgrade |
+| Litestream setup | MEDIUM | LOW | P2 -- Disaster recovery |
+| iMessage adapter | LOW | MEDIUM | P2 -- Channel expansion |
+| Email adapter | LOW | MEDIUM | P2 -- Channel expansion |
+| SMS adapter | LOW | MEDIUM | P2 -- Channel expansion |
+| Hot reload | HIGH | HIGH | P3 -- Defer to focused phase |
+| Memory validation/file watcher | LOW | MEDIUM | P3 -- Nice to have |
 
 **Priority key:**
-- P1: Must have for v1.4 milestone
-- P2: Should have, add within v1.4 if time allows
-- P3: Nice to have, future milestone
+- P1: Must have for v1.5 milestone
+- P2: Should have, add within v1.5 if schedule allows
+- P3: Nice to have, defer to v1.6 if time-constrained
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | OpenClaw | LiteLLM | Portkey | Blufio v1.4 Approach |
-|---------|----------|---------|---------|----------------------|
-| Token counting | No counting -- injects ~35K tokens/turn regardless of query complexity | Provider-specific via `litellm.token_counter()` with local tokenizers | Uses provider APIs for billing | Provider-aware trait: tiktoken-rs local for OpenAI, free API for Anthropic/Gemini, response-based for Ollama. Cached system prompt estimates to minimize API calls. |
-| Circuit breakers | None -- silent `catch {}` blocks hide failures | None built-in (relies on HTTP client retries) | Built-in circuit breakers with configurable thresholds | Per-dependency FSM with Closed/Open/HalfOpen, configurable thresholds (50% failure rate, 5 min calls, 30s open duration), Prometheus metrics on every transition |
-| Graceful degradation | None -- either works or crashes with 300-800MB memory leak | Fallback to alternate models (provider failover only) | Provider failover + caching layer | 6-level ladder: L0 normal -> L1 context reduction -> L2 model simplification -> L3 tool disabling -> L4 cached responses -> L5 static fallback. Automatic escalation and de-escalation. |
-| Error typing | Empty catch blocks, no classification | Basic HTTP status code retry logic | HTTP status code based with retry headers | Typed enum with `is_retryable()`, `severity()`, `category()` on every variant. Compile-time exhaustive matching ensures every error path is handled. |
-| Format pipeline | None -- each channel adapter does ad-hoc formatting independently | N/A (not a channel system) | N/A (not a channel system) | Centralized FormatPipeline with capability-based degradation across 8 channels. RichContent types (Text, Embed, Image, CodeBlock, Table, List) degrade automatically. |
-| Observability of resilience | Minimal logging, no structured metrics | Token usage logging only | Dashboard metrics for requests | Prometheus: circuit breaker state gauge, trip counter, recovery histogram, degradation level gauge, per-provider token counts, cost per provider |
+| Feature | OpenClaw | LangChain / LangGraph | Blufio v1.5 Approach |
+|---------|----------|----------------------|----------------------|
+| Context compaction | Single-pass recursive summary, loses facts after ~50 turns | Memory/summary buffer, no multi-level | L0-L3 tiered compaction with quality gates. Probe-based validation ensures key facts survive compression. Archive system for cold storage retrieval. |
+| Prompt injection defense | None -- trusts all input | Experimental guardrails via LangChain-Guard, no structural defense | 5-layer defense: regex classifier, HMAC boundary tokens, output validator, human-in-loop. Structural separation of system/user content. |
+| Scheduled tasks | None built-in, relies on external cron | Scheduled graphs via LangGraph Cloud | Built-in cron with TOML config, systemd timer generation, SQLite last-run tracking. Single-binary includes scheduler. |
+| Memory temporal decay | 0.995/hour decay factor, 30-day half-life | Optional in vectorstores with metadata filtering | Configurable 0.95^days decay, importance boost, MMR diversity (lambda=0.7). Applied post-RRF-fusion in existing hybrid retriever. |
+| Audit trail | None | None | SHA-256 hash-chained tamper-evident log in SQLite. EventBus integration for automatic capture. CLI verification. |
+| Data classification | None | None | 4-level framework (Public/Internal/Confidential/Restricted) with per-level controls matrix. |
+| Retention policies | None -- unbounded data growth | None built-in | Configurable per-type TTLs in TOML. Automated enforcement via cron scheduler. Audit trail exempt. |
+| PII detection | None | Optional via Presidio integration | Built-in regex patterns for email, phone, SSN, CC. Extends existing secret redaction. Applied in logs, exports, optionally in LLM context. |
+| GDPR tooling | None | None | CLI commands for erasure, export, transparency report. First open-source agent platform with built-in GDPR support. |
+| Hook system | Lifecycle hooks for some events | Graph callbacks | 11 lifecycle events with BTreeMap priority, shell-based, sandboxed, configurable per-event. |
+| Hot reload | Must restart for config changes | N/A (cloud service) | ArcSwap + notify for config/TLS/plugins. Zero-downtime updates. |
+| Channel coverage | 15+ channels (Node.js) | Not a channel system | 8 existing + 3 new (iMessage via BlueBubbles, Email via IMAP/SMTP, SMS via Twilio) = 11 channels |
+| OpenTelemetry | None | Built-in via LangSmith/LangFuse | Optional OTLP export via tracing-opentelemetry. Disabled by default. Zero overhead when off. |
+| OpenAPI spec | None (no HTTP API) | LangServe has OpenAPI | utoipa + utoipa-axum for compile-time OpenAPI 3.1 from existing axum handlers. |
+| Replication | None (JSONL files on disk) | Cloud-managed | Litestream sidecar for WAL-based continuous replication to S3/GCS. Config templates + CLI helpers. |
 
 ---
 
-## Token Counting Strategy Details
+## Implementation Details: Key Features
 
-Because this is the most nuanced feature, additional detail on the per-provider strategy:
+### Multi-Level Compaction Design
 
-| Provider | Local Tokenizer | API Endpoint | Cost | Accuracy | Recommended Approach |
-|----------|----------------|--------------|------|----------|---------------------|
-| **OpenAI** | tiktoken-rs 0.9.1 (o200k_base for GPT-4o/o1/o3/o4/GPT-4.1/GPT-5, cl100k_base for GPT-4/3.5) | N/A needed | Free (local) | Exact | Use tiktoken-rs singleton. 2000+ projects use this crate. Proven at scale. Zero latency for pre-call estimates. |
-| **Anthropic** | None for Claude 3+ (old claude-tokenizer crate covers pre-Claude-3 only) | `POST /v1/messages/count_tokens` | Free, 100-8000 RPM by tier | Exact (server-side) | API call for pre-estimation when needed. Response `usage` field for post-call tracking. Cache system prompt token count (does not change between calls). For DynamicZone compaction trigger, use HuggingFace tokenizers as local approximation to avoid API latency. |
-| **Gemini** | None published | `POST models/{model}:countTokens` | Free, 3000 RPM | Exact (server-side) | API call for pre-estimation. Same caching pattern as Anthropic. Response includes `promptTokensDetails` with per-modality breakdown. |
-| **Ollama** | Model-specific via `POST /api/tokenize` | Response includes `prompt_eval_count` + `eval_count` | Free (local) | Exact (model-native) | Use `/api/tokenize` for pre-estimation (model-aligned, no inference overhead). Response fields for post-call tracking. |
-| **OpenRouter** | Varies by underlying model | Response includes `usage` field | Free (in response) | Exact (post-call) | For pre-estimation, use heuristic based on known model's tokenizer (tiktoken-rs if OpenAI model, HuggingFace if known). Post-call, use response usage. OpenRouter bills per underlying provider's tokenizer. |
-| **Fallback** | HuggingFace `tokenizers` 0.21 (already in workspace via blufio-memory) | N/A | Free (local) | Approximate but much better than len()/4 | Load model-appropriate tokenizer.json if available. Use as local approximation when API calls would add unacceptable latency (e.g., compaction trigger). |
+The existing compaction in `blufio-context/compaction.rs` does a single LLM call to summarize the older half of conversation history. The v1.5 upgrade introduces four levels:
 
-**Critical implementation note:** Pre-call token counting for Anthropic/Gemini adds network latency. Strategy to minimize impact:
-1. Cache system prompt token count at session start (system prompt is static within a session).
-2. For compaction threshold checks, use HuggingFace tokenizers locally (approximate but fast, ~10x better than len()/4).
-3. Only use the provider API for precise pre-call budget gates where cost accuracy matters.
-4. Always use response `usage` fields for post-call cost recording (zero additional latency).
+| Level | Content | Trigger | Retention |
+|-------|---------|---------|-----------|
+| L0 | Raw messages | Always (current behavior) | Until compacted to L1 |
+| L1 | Turn-pair summaries (2-4 messages -> 1 summary) | Dynamic zone hits 50% of context budget | 24 hours after L2 creation |
+| L2 | Session summary (all L1 summaries -> coherent narrative) | Dynamic zone hits 70% of context budget (current threshold) | Until session closes |
+| L3 | Cross-session archive (L2 summaries from closed sessions) | Session close | Governed by retention policy |
 
----
+**Quality scoring** uses probe-based validation:
+1. Before compaction, extract 3-5 key facts from the source material (names, decisions, commitments)
+2. After compaction, query the summary for each fact
+3. If recall drops below 80%, reject compaction and retry with more generous token budget
+4. Quality score stored in compaction metadata for monitoring
 
-## Circuit Breaker Configuration Defaults
+**Soft/hard triggers:**
+- Soft trigger (50%): Begin L0->L1 compaction in background
+- Hard trigger (85%): Force L1->L2 compaction synchronously before next LLM call
+- Archive trigger (session close): L2->L3 archival
 
-Based on production patterns from Resilience4j, Microsoft Azure Architecture Center, and LLM-specific guidance:
+### Prompt Injection Defense Architecture
 
-| Parameter | Default | Rationale |
-|-----------|---------|-----------|
-| Failure rate threshold | 50% | Industry standard (Resilience4j default). Trip when half the calls in the sliding window fail. |
-| Minimum call count | 5 | Do not trip on first few failures (could be transient startup issues). Ensures statistical significance. |
-| Open state duration | 30s | LLM providers typically recover within 30s from transient issues. Long enough to avoid flapping, short enough to recover quickly for conversational use. |
-| Half-open probe count | 3 | Allow 3 test calls before fully closing. Validates recovery is real, not a fluke. |
-| Slow call threshold | 60s | LLM calls can legitimately take 30s+ for long responses with extended thinking. Only flag as slow above 60s. |
-| Slow call rate threshold | 80% | If 80% of calls exceed 60s, something is systemically wrong (not just long responses). |
-| Sliding window size | 20 calls | Enough history for meaningful rate calculation. Not so large that recovery is slow. |
-
-These defaults should be configurable per-dependency in TOML:
-```toml
-[resilience.circuit_breaker.anthropic]
-failure_rate_threshold = 0.5
-min_call_count = 5
-open_duration_secs = 30
-half_open_probes = 3
+```
+User Input
+    |
+    v
+[L1: Pattern Classifier]  -- Regex scan for known attack signatures
+    |                         (ignore/system/jailbreak patterns)
+    | pass
+    v
+[L3: HMAC Boundary Tokens]  -- System instructions wrapped in HMAC-signed
+    |                          delimiters. LLM trained to trust only
+    |                          authenticated boundaries.
+    | pass
+    v
+[LLM Processing]
+    |
+    v
+[L4: Output Validator]  -- Scan LLM output before tool execution:
+    |                      - No tool calls targeting system files
+    |                      - No unexpected capability escalation
+    |                      - Parameter value validation
+    | pass
+    v
+[L5: Human-in-the-Loop]  -- For high-risk operations (configurable):
+    |                       - File system writes
+    |                       - External API calls
+    |                       - Memory modifications
+    | approved
+    v
+[Tool Execution / Response]
 ```
 
----
+### Cron/Scheduler TOML Configuration
 
-## Degradation Ladder Level Details
+```toml
+[scheduler]
+enabled = true
 
-| Level | Name | Trigger | Behavior Change | Recovery Condition |
-|-------|------|---------|-----------------|---------------------|
-| L0 | Normal | All circuits closed, resources normal | Full functionality | N/A (default state) |
-| L1 | ReducedContext | Provider response latency >50% above baseline OR memory pressure >80% | Halve context window budget, skip conditional zone, trigger aggressive compaction | Latency returns to baseline for 2 minutes OR memory drops below 70% |
-| L2 | SimplifiedModel | Provider circuit half-open OR 2+ consecutive slow call alerts | Force cheapest model (Haiku), disable model routing | Provider circuit fully closes |
-| L3 | NoTools | Provider circuit open OR 3+ tool execution failures in 5 minutes | Disable skill/MCP tool execution, LLM-only text responses | Provider circuit enters half-open + tool errors clear |
-| L4 | CachedResponses | Multiple provider circuits open OR budget >90% exhausted | Match user queries against stored response patterns, return cached answers | Any provider circuit enters half-open + budget headroom returns |
-| L5 | StaticFallback | All provider circuits open OR system resource critical (OOM risk) | Return hardcoded "I'm experiencing issues, please try again later" with optional operator-customized message | Any provider circuit enters half-open |
+[[scheduler.jobs]]
+name = "retention-cleanup"
+schedule = "0 3 * * *"      # Daily at 3 AM
+command = "builtin:retention"
+enabled = true
 
-**Escalation is immediate; de-escalation has hysteresis.** When conditions clear, wait for the recovery condition to hold for 2 minutes before de-escalating one level. This prevents flapping between levels during unstable recovery.
+[[scheduler.jobs]]
+name = "memory-validation"
+schedule = "0 */6 * * *"    # Every 6 hours
+command = "builtin:memory-validate"
+enabled = true
 
-**Each level is additive.** L3 includes the effects of L1 and L2 (reduced context + simplified model + no tools).
+[[scheduler.jobs]]
+name = "custom-backup"
+schedule = "0 0 * * 0"      # Weekly on Sunday
+command = "/usr/local/bin/backup.sh"
+timeout_secs = 300
+sandbox = true
+```
+
+### Hash-Chained Audit Entry Schema
+
+```sql
+CREATE TABLE audit_trail (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   TEXT NOT NULL,       -- ISO 8601
+    actor       TEXT NOT NULL,       -- "system", "user:<id>", "operator"
+    action      TEXT NOT NULL,       -- "tool.execute", "memory.create", "config.change"
+    target      TEXT,                -- affected resource ID
+    detail      TEXT,                -- JSON detail blob
+    prev_hash   TEXT NOT NULL,       -- SHA-256 of previous entry (genesis = "0"*64)
+    hash        TEXT NOT NULL UNIQUE -- SHA-256(prev_hash || timestamp || actor || action || target || detail)
+);
+CREATE INDEX idx_audit_timestamp ON audit_trail(timestamp);
+CREATE INDEX idx_audit_action ON audit_trail(action);
+```
 
 ---
 
 ## Sources
 
-- [Anthropic Token Counting API](https://platform.claude.com/docs/en/build-with-claude/token-counting) -- FREE API, 100-8000 RPM by tier, supports all active models including images and PDFs (HIGH confidence, verified via official docs)
-- [tiktoken-rs v0.9.1](https://github.com/zurawiki/tiktoken-rs) -- o200k_base for GPT-4o/o1/o3/o4/GPT-4.1/GPT-5, cl100k_base for GPT-4/3.5, actively maintained, 2000+ dependents (HIGH confidence)
-- [Google Gemini countTokens API](https://ai.google.dev/api/tokens) -- Free, 3000 RPM, supports text + multimodal (HIGH confidence, verified via official docs)
-- [Ollama tokenize/detokenize endpoints](https://github.com/ollama/ollama/pull/12030) -- `/api/tokenize` and `/api/detokenize` for model-aligned tokenization (MEDIUM confidence -- PR merged, verify endpoint availability in target Ollama version)
-- [Token Counting Guide: tiktoken, Anthropic, Gemini](https://www.propelcode.ai/blog/token-counting-tiktoken-anthropic-gemini-guide-2025) -- Provider comparison and approach differences (MEDIUM confidence)
-- [Resilience4j CircuitBreaker](https://resilience4j.readme.io/docs/circuitbreaker) -- Industry-standard thresholds, sliding window configuration, state machine design (HIGH confidence)
-- [Microsoft Azure Circuit Breaker Pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker) -- Production architecture guidance, state transition design (HIGH confidence)
-- [Martin Fowler: Circuit Breaker](https://martinfowler.com/bliki/CircuitBreaker.html) -- Original pattern description (HIGH confidence)
-- [Portkey: Retries, Fallbacks, and Circuit Breakers in LLM Apps](https://portkey.ai/blog/retries-fallbacks-and-circuit-breakers-in-llm-apps/) -- Layered resilience approach for LLM systems (MEDIUM confidence)
-- [Circuit Breakers for LLM Services (Go implementation)](https://dasroot.net/posts/2026/02/implementing-circuit-breakers-for-llm-services-in-go/) -- LLM-specific circuit breaker implementation patterns (MEDIUM confidence)
-- [Fail-Safe Patterns for AI Agent Workflows](https://engineersmeetai.substack.com/p/fail-safe-patterns-for-ai-agent-workflows) -- Agent-specific resilience patterns (MEDIUM confidence)
-- [AWS Reliability Pillar: Graceful Degradation](https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_mitigate_interaction_failure_graceful_degradation.html) -- Production degradation patterns, soft vs hard dependencies (HIGH confidence)
-- [Graceful Degradation with FeatureOps](https://www.getunleash.io/blog/graceful-degradation-featureops-resilience) -- Feature flag driven degradation design (MEDIUM confidence)
-- [circuitbreaker-rs crate](https://lib.rs/crates/circuitbreaker-rs) -- Rust circuit breaker library, considered but not recommended (build in-house for ~200 LOC) (LOW confidence -- evaluated but not selected)
-- [tower-circuitbreaker crate](https://lib.rs/crates/tower-circuitbreaker) -- Tower middleware circuit breaker, considered but adds dependency for trivial logic (LOW confidence -- evaluated but not selected)
-- [Rust Error Type Design](https://nrc.github.io/error-docs/error-design/error-type-design.html) -- Best practices for error hierarchy design in Rust (HIGH confidence)
-- [Error Handling in Correctness-Critical Rust (sled)](http://sled.rs/errors.html) -- Production error handling patterns from sled database (HIGH confidence)
-- [OpenRouter API](https://openrouter.ai/docs/api/reference/overview) -- Token counting via response usage field, per-provider tokenizer billing (HIGH confidence)
+### Context Compaction
+- [The Fundamentals of Context Management and Compaction in LLMs](https://kargarisaac.medium.com/the-fundamentals-of-context-management-and-compaction-in-llms-171ea31741a2) -- Multi-level summarization strategies (MEDIUM confidence)
+- [Evaluating Context Compression for AI Agents](https://factory.ai/news/evaluating-compression) -- Probe-based quality evaluation methodology (HIGH confidence)
+- [ACON: Optimizing Context Compression](https://openreview.net/pdf?id=7JbSwX6bNL) -- 26-54% token reduction with 95%+ accuracy preservation (HIGH confidence, peer-reviewed)
+- [Context Rot: How Increasing Input Tokens Impacts LLM Performance](https://research.trychroma.com/context-rot) -- Why compaction quality matters (MEDIUM confidence)
+
+### Prompt Injection Defense
+- [Prompt Injection Attacks: Comprehensive Review](https://www.mdpi.com/2078-2489/17/1/54) -- Attack taxonomy and defense mechanisms (HIGH confidence, peer-reviewed)
+- [AI Security in 2026: Prompt Injection](https://airia.com/ai-security-in-2026-prompt-injection-the-lethal-trifecta-and-how-to-defend/) -- Production defense strategies (MEDIUM confidence)
+- [Indirect Prompt Injection: The Hidden Threat](https://www.lakera.ai/blog/indirect-prompt-injection) -- Lakera's defense-in-depth approach (MEDIUM confidence)
+- [Prompt Injection: Types, CVEs, Enterprise Defenses](https://www.vectra.ai/topics/prompt-injection) -- Enterprise defense patterns (MEDIUM confidence)
+
+### Cron/Scheduler
+- [tokio-cron-scheduler](https://crates.io/crates/tokio-cron-scheduler) -- v0.15, tokio-native, active maintenance (HIGH confidence, verified via crates.io)
+- [Building a Cron Job System in Rust with Tokio](https://dev.to/hexshift/building-a-cron-job-system-in-rust-with-tokio-and-cronexpr-18j1) -- Implementation patterns (MEDIUM confidence)
+
+### Memory Temporal Decay and MMR
+- [How OpenClaw Orchestrates Long-Term Memory](https://dev.to/chwu1946/how-openclaw-orchestrates-long-term-memory-10en) -- Competitor reference implementation (HIGH confidence, primary source)
+- [OpenClaw MMR Feature Request #19760](https://github.com/openclaw/openclaw/issues/19760) -- MMR implementation details (HIGH confidence)
+- [Memory in the Age of AI Agents](https://arxiv.org/abs/2512.13564) -- Survey of agent memory architectures (HIGH confidence, peer-reviewed)
+- [Human-Like Remembering and Forgetting in LLM Agents](https://dl.acm.org/doi/10.1145/3765766.3765803) -- ACT-R-inspired decay models (HIGH confidence, peer-reviewed)
+
+### Audit Trail
+- [Building a Tamper-Evident Audit Log with SHA-256 Hash Chains](https://dev.to/veritaschain/building-a-tamper-evident-audit-log-with-sha-256-hash-chains-zero-dependencies-h0b) -- Implementation guide (MEDIUM confidence)
+- [AuditableLLM: Hash-Chain-Backed Auditable Framework for LLMs](https://www.mdpi.com/2079-9292/15/1/56) -- 3.4ms/step overhead, 5.7% slowdown benchmarks (HIGH confidence, peer-reviewed)
+- [Trillian: Append-Only Ledger](https://transparency.dev/) -- Production-grade transparency log used by Certificate Transparency (HIGH confidence)
+
+### Data Classification
+- [Data Classification Levels](https://www.sisainfosec.com/blogs/data-classification-levels/) -- Standard 4-level framework (HIGH confidence)
+- [ISO 27001 Annex A 5.12: Classification of Information](https://hightable.io/iso-27001-annex-a-5-12-classification-of-information/) -- International standard reference (HIGH confidence)
+- [AWS Data Classification Models](https://docs.aws.amazon.com/whitepapers/latest/data-classification/data-classification-models-and-schemes.html) -- Cloud provider implementation (HIGH confidence)
+
+### Retention Policies
+- [Data Retention and Deletion: Regulatory Expectations](https://kpmg.com/us/en/articles/2022/data-retention-and-deletion-increasing-regulatory-expectations.html) -- Regulatory context (HIGH confidence)
+- [CPRA Auto-Deletion Workflows](https://secureprivacy.ai/blog/cpra-auto-deletion-workflows) -- Automated deletion implementation (MEDIUM confidence)
+
+### GDPR
+- [EDPB Right to Erasure: 2025 Coordinated Enforcement Report](https://www.edpb.europa.eu/news/news/2026/edpb-identifies-challenges-hindering-full-implementation-right-erasure_en) -- Official regulatory findings (HIGH confidence, primary source)
+- [GDPR Article 17: Right to Erasure](https://www.exabeam.com/explainers/gdpr-compliance/what-is-gdpr-article-17-right-to-erasure-and-4-ways-to-achieve-compliance/) -- Implementation guidance (MEDIUM confidence)
+
+### Hot Reload
+- [tls-hot-reload crate](https://crates.io/crates/tls-hot-reload) -- Wait-free TLS cert reloading for rustls (HIGH confidence, verified via crates.io)
+- [rust-hot-reloader](https://github.com/junkurihara/rust-hot-reloader) -- ArcSwap + notify boilerplate with debouncing (MEDIUM confidence)
+- [ArcSwap Patterns Documentation](https://docs.rs/arc-swap/latest/arc_swap/docs/patterns/index.html) -- Official usage patterns (HIGH confidence)
+
+### Channel Adapters
+- [BlueBubbles API Documentation](https://documenter.getpostman.com/view/765844/UV5RnfwM) -- REST API for iMessage (HIGH confidence, primary source)
+- [BlueBubbles - OpenClaw](https://docs.openclaw.ai/channels/bluebubbles) -- Reference integration (MEDIUM confidence)
+- [lettre: Rust Email Client](https://lettre.rs/) -- SMTP library (HIGH confidence, verified via crates.io)
+- [async-imap](https://github.com/chatmail/async-imap) -- Async IMAP for Rust (MEDIUM confidence)
+- [Twilio SMS with Rust](https://www.twilio.com/en-us/blog/developers/tutorials/send-sms-rust-30-seconds) -- Official Twilio guide (HIGH confidence)
+
+### PII Detection
+- [Regular Expressions used in PII Scanning](https://www.piicrawler.com/blog/regular-expressions-used-in-pii-scanning/) -- Production regex patterns (MEDIUM confidence)
+- [PII Detection with NLP and Pattern Matching](https://www.elastic.co/observability-labs/blog/pii-ner-regex-assess-redact-part-2) -- Elastic's combined approach (HIGH confidence)
+
+### OpenTelemetry
+- [OpenTelemetry Rust](https://opentelemetry.io/docs/languages/rust/) -- Official documentation (HIGH confidence, primary source)
+- [tracing-opentelemetry](https://crates.io/crates/tracing-opentelemetry) -- Bridge crate, v0.27 (HIGH confidence)
+- [Rust Observability with OpenTelemetry and Tokio](https://dasroot.net/posts/2026/01/rust-observability-opentelemetry-tokio/) -- Production integration guide (MEDIUM confidence)
+
+### OpenAPI
+- [utoipa: OpenAPI Documentation for Rust](https://github.com/juhaku/utoipa) -- Code-first OpenAPI generation (HIGH confidence, verified via crates.io)
+- [utoipa-axum](https://docs.rs/utoipa-axum) -- Axum integration (HIGH confidence)
+
+### Litestream
+- [Litestream: How It Works](https://litestream.io/how-it-works/) -- WAL frame streaming architecture (HIGH confidence, primary source)
+- [Going Production-Ready with SQLite: Litestream](https://medium.com/@cosmicray001/going-production-ready-with-sqlite-how-litestream-makes-it-possible-74f894fc96f0) -- Production deployment guide (MEDIUM confidence)
+- [The SQLite Renaissance: Production in 2026](https://dev.to/pockit_tools/the-sqlite-renaissance-why-the-worlds-most-deployed-database-is-taking-over-production-in-2026-3jcc) -- Industry trend context (MEDIUM confidence)
 
 ---
-*Feature research for: Blufio v1.4 Quality & Resilience*
-*Researched: 2026-03-08*
+*Feature research for: Blufio v1.5 PRD Gap Closure*
+*Researched: 2026-03-10*

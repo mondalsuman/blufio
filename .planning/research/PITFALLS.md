@@ -1,571 +1,657 @@
-# Domain Pitfalls: v1.4 Quality & Resilience
+# Domain Pitfalls: v1.5 PRD Gap Closure
 
-**Domain:** Adding circuit breakers, graceful degradation ladders, typed error hierarchy, accurate token counting, format pipeline integration, ChannelCapabilities extension, and ORT upgrade to an existing 71,808 LOC Rust async agent platform (35 crates)
-**Researched:** 2026-03-08
-**Confidence:** HIGH for Rust async/tokio/thiserror specifics (verified against codebase); HIGH for ORT RC-to-stable changes (verified against GitHub release notes); MEDIUM for circuit breaker/degradation patterns (established industry patterns + Rust-specific verification)
+**Domain:** Adding multi-level compaction, prompt injection defense, cron/scheduler, memory temporal decay, hash-chained audit trail, data classification, retention policies, hook system, hot reload, iMessage/Email/SMS channels, PII redaction, GDPR tooling, OpenTelemetry, OpenAPI spec, Litestream replication, data export, and Clippy unwrap enforcement to an existing 80K LOC Rust AI agent platform (35 crates, 1,444 unwrap() calls)
+**Researched:** 2026-03-10
+**Confidence:** HIGH for Rust/SQLite/tokio specifics (verified against codebase); HIGH for Litestream+SQLCipher incompatibility (confirmed via GitHub issue #177 "wontfix"); HIGH for OpenTelemetry-Prometheus coexistence (verified deprecation of opentelemetry-prometheus crate); MEDIUM for prompt injection defense rates (research papers verified but production data varies); MEDIUM for PII regex patterns (well-documented failure modes); LOW for BlueBubbles stability (limited production deployment data)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, cascading failures, or make the system worse than before the "improvement."
+Mistakes that cause rewrites, data loss, security vulnerabilities, or make the system fundamentally worse.
 
 ---
 
-### Pitfall 1: Token Counting on the Hot Path Blocks Tokio Worker Threads
+### Pitfall 1: Litestream Cannot Replicate SQLCipher-Encrypted Databases
 
 **What goes wrong:**
-The `tokenizers` crate's `encode()` method is a synchronous, CPU-bound operation. The current codebase calls it synchronously in the embedder (`OnnxEmbedder::embed_text` at `crates/blufio-memory/src/embedder.rs:83`). Replacing the `len() / 4` heuristic in `DynamicZone::assemble_messages` (`crates/blufio-context/src/dynamic.rs:64`) with accurate tokenizer-based counting means calling `tokenizer.encode()` for every message in the conversation history on every turn. For a 50-message history, that is 50 synchronous encode calls. Each call takes 50-200 microseconds for short text, but 1-5ms for long messages (1K+ chars, CJK text, or code). If these calls happen on a tokio worker thread (inside an async fn), they block the cooperative scheduler. With 4 worker threads (default on a 4-core VPS), 4 concurrent sessions doing token counting simultaneously stall the entire runtime -- no other tasks can make progress, including channel polling, heartbeats, and health checks.
+Litestream replicates by reading SQLite WAL frames directly. SQLCipher encrypts the WAL data with the database key, so Litestream sees binary garbage and returns "file is not a database." This is a fundamental incompatibility, not a configuration issue. The Litestream maintainer closed the SQLCipher support issue as "wontfix" in June 2021, stating it would require compiling a different version of SQLite with SQLCipher changes -- something they deemed too complex.
+
+Blufio uses SQLCipher when `BLUFIO_DB_KEY` is set (see `crates/blufio-storage/src/database.rs`). The entire connection factory (`open_connection`, `open_connection_sync`) applies `PRAGMA key` as the first statement. Litestream cannot intercept after decryption because it operates at the filesystem level, not the SQLite API level.
 
 **Why it happens:**
-The `tokenizers` crate is a Rust library that performs CPU-bound work. It has no async interface. Developers wrap the call in an `async fn` and assume it is safe because "it's fast" (sub-millisecond per call). But cooperative scheduling in tokio means any work that does not yield at an `.await` point starves other tasks. The problem is invisible in testing (single session, fast messages) and manifests only under concurrent load.
+The PRD specifies both SQLCipher encryption at rest (shipped in v1.2) and Litestream WAL replication (v1.5 target). These two features are architecturally incompatible. The assumption is that "SQLite + WAL + Litestream" is a well-trodden path (true for plaintext databases), but encryption changes the game entirely.
 
 **Consequences:**
-- Heartbeat timer fires late, triggering unnecessary heartbeat messages (cost waste)
-- Channel adapter `receive()` calls delayed, causing message delivery latency spikes
-- P99 latency grows nonlinearly with session count
-- sd-notify watchdog timeout triggers if worker threads are blocked for >30s
+- Litestream integration cannot work for encrypted deployments -- the most security-conscious users
+- If implemented without testing against encrypted databases, it silently fails or produces corrupt backups
+- Users who enable both features get a false sense of replication safety
 
-**Prevention:**
-Use `tokio::task::spawn_blocking` for all token counting operations. Create a dedicated `TokenCounter` struct that owns a `tokenizers::Tokenizer` (it is `Send` but not `Sync`, so wrap in `Arc<Mutex<Tokenizer>>` or clone per call -- the tokenizer is lightweight to clone). Batch all messages into a single `spawn_blocking` call rather than spawning one per message:
+**How to avoid:**
+Choose one of three strategies:
+1. **Application-level replication:** Instead of WAL-level replication, implement periodic backup + upload. Use the existing `blufio backup` command (which does WAL checkpoint + file copy) on a cron schedule and upload to object storage. This works with SQLCipher because the backup API operates through SQLite's connection, after decryption.
+2. **Encrypt-after-replicate:** Run Litestream on unencrypted databases and encrypt the replicated data at the object storage level (e.g., S3 SSE, GCS CMEK). This trades at-rest encryption on the local disk for replication capability. Less secure but functional.
+3. **Conditional feature:** Enable Litestream only when `BLUFIO_DB_KEY` is NOT set. Document the incompatibility clearly. Add a startup check that errors if both features are configured.
 
-```rust
-let messages = messages.clone();
-let tokenizer = self.tokenizer.clone();
-let counts = tokio::task::spawn_blocking(move || {
-    messages.iter().map(|m| tokenizer.encode(&m.content, false)
-        .map(|e| e.get_ids().len())
-        .unwrap_or(m.content.len() / 4) // fallback on error
-    ).collect::<Vec<_>>()
-}).await?;
-```
+Recommendation: Strategy 1 (application-level backup + upload) because it works universally and does not weaken the encryption posture.
 
-Never call `tokenizer.encode()` directly inside an `async fn` body. Add a test that measures elapsed wall time of token counting with 100 messages and asserts it does not block the tokio runtime (use `tokio::time::timeout` around a concurrent health check).
-
-**Detection:**
-- `tokio::runtime::metrics::RuntimeMetrics::worker_noop_count` increasing (workers starving)
-- P99 latency spikes correlating with conversation length
-- Heartbeat firing late (cost ledger shows heartbeat intervals > 2x configured)
+**Warning signs:**
+- Litestream process starts but never uploads any WAL frames
+- Restore from Litestream backup produces "file is not a database" errors
+- WAL file size grows unboundedly because Litestream cannot checkpoint
 
 **Phase to address:**
-Token counting phase (first phase of v1.4). Must be designed with spawn_blocking from the start.
+Litestream/Infrastructure phase. Must be addressed at design time, not as a bug fix.
 
 ---
 
-### Pitfall 2: Circuit Breaker Thresholds Tuned for Development Cause Production Cascading Failures
+### Pitfall 2: Multi-Level Compaction Loses Critical Information Silently
 
 **What goes wrong:**
-Circuit breakers with thresholds set during development (e.g., "open after 3 failures in 60 seconds") are either too aggressive or too lenient for production. Too aggressive: a single Anthropic API hiccup (502 during deployment) opens the circuit, and the agent becomes unresponsive for the entire cooldown period. Too lenient: the circuit stays closed during a sustained outage, sending requests into a black hole while accumulating timeouts that eat the budget. The half-open state is particularly dangerous: if the single probe request happens to succeed (lucky timing), the circuit closes and immediately floods the recovering service with backed-up requests -- the thundering herd problem.
+The current single-pass compaction (`crates/blufio-context/src/compaction.rs`) uses a Haiku LLM call to summarize conversation history. The prompt explicitly preserves "user preferences, names, commitments, key decisions, action items, emotional tone, facts about the user." Moving to multi-level compaction (L0 raw -> L1 turn summaries -> L2 session summaries -> L3 persona distillation) introduces a lossy compression chain. Each level discards information. The critical failure: information that seems unimportant at L1 (when context is fresh) becomes critical at L3 (when it is the only remaining record). For example, a user mentions "I'm allergic to shellfish" once in passing -- L1 might preserve it, but L2 condenses it away among more "important" business decisions, and by L3 it is gone. The agent then recommends a seafood restaurant.
 
 **Why it happens:**
-Developers test circuit breakers with artificial failure injection (mock returning errors). Real API failures have different characteristics: they come in bursts (provider deployment), they affect some endpoints but not others (rate limit on streaming but not non-streaming), and recovery is gradual (first request succeeds but second times out because the provider is warming caches). Thresholds that "feel right" in testing (3 failures = open, 30s cooldown) don't account for the bursty, partial-failure reality.
+LLM-based summarization is non-deterministic. Quality scoring (proposed: evaluate if compacted output preserves key facts) requires knowing which facts are key -- which is itself an AI-hard problem. Developers test with short conversations where information loss is invisible. Long-running sessions (weeks, months of daily use) where compaction chains accumulate errors are never tested.
 
 **Consequences:**
-- Agent goes dark for 30-60 seconds on every minor provider hiccup (too aggressive)
-- Agent burns budget sending requests to a down provider for minutes (too lenient)
-- Thundering herd after half-open probe success crashes the recovering provider
-- All 5 providers (Anthropic, OpenAI, Ollama, OpenRouter, Gemini) have different failure characteristics but share the same thresholds
+- Loss of user preferences, personal facts, or safety-critical information
+- Agent personality drift over long sessions (compaction rewrites tone)
+- User trust erosion ("I already told you this")
+- Quality gate passes because it measures aggregate quality, not specific fact retention
 
-**Prevention:**
-1. Make thresholds per-provider and configurable in TOML, not hardcoded:
-   ```toml
-   [provider.anthropic.circuit_breaker]
-   failure_threshold = 5
-   success_threshold = 3
-   cooldown_secs = 30
-   half_open_max_requests = 1
-   ```
-2. Use a sliding window (not a simple counter) to avoid the "3 failures across 3 hours trips the breaker" problem.
-3. In half-open state, allow exactly 1 request through. If it succeeds, allow 2, then 4 (exponential ramp-up, not instant close). This prevents the thundering herd.
-4. Add jitter to the cooldown period: `cooldown_secs * (1.0 + random(0.0, 0.3))` so that if multiple providers open their circuits simultaneously (e.g., during a network partition), they don't all probe at the same time.
-5. Emit Prometheus metrics for circuit state transitions: `blufio_circuit_state{provider="anthropic"} 0|1|2` (closed/open/half_open).
-6. The circuit breaker MUST be below the retry logic layer, not above it. Retries should not count as separate failures for the circuit breaker -- only the final retry failure should increment the failure count.
+**How to avoid:**
+1. **Never compact explicitly stated preferences.** Before compaction, extract and persist critical facts to the memory system (blufio-memory) as separate Memory entries. These bypass the compaction chain entirely.
+2. **Quality gates must test specific facts, not just summary quality.** Before accepting a compaction, verify that named entities, numbers, and user-stated facts from the input appear in the output. Use a checklist approach: extract key facts from input, verify each appears in output.
+3. **Keep L0 raw messages in cold storage.** Compaction should summarize for context window purposes but never delete original messages. Add an `archived` status and a `cold_storage` table. This is the escape hatch when compaction quality fails.
+4. **Cap compaction depth.** L3 (persona distillation) should only be generated from L0 raw messages, not from L2 summaries. Re-derive from source when possible, even if more expensive.
+5. **Test with 1000+ message conversations.** Generate synthetic long conversations with planted facts and verify fact retention after full compaction chain.
 
-**Detection:**
-- Provider that was briefly unavailable causes agent to be unresponsive for the full cooldown
-- Cost spikes during provider outages (too lenient -- keeps sending)
-- Prometheus `blufio_circuit_state` transitions happening too frequently (threshold too low)
+**Warning signs:**
+- Users report "I already told you" more than once per 50 turns
+- Memory system and compaction summaries contain contradictory facts
+- Quality scores are high but user satisfaction is low
 
 **Phase to address:**
-Circuit breaker phase. Thresholds must be configurable from day one; do not hardcode and plan to make configurable later.
+Compaction & Context phase. Quality scoring and cold storage archival must be designed together, not bolted on.
 
 ---
 
-### Pitfall 3: Degradation Ladder That Never Recovers (Ratchet Effect)
+### Pitfall 3: GDPR Erasure Conflicts with Hash-Chained Audit Trail
 
 **What goes wrong:**
-A 6-level degradation ladder escalates through levels (e.g., 0=Normal, 1=ReduceContext, 2=DisableMemory, 3=SimplifyRouting, 4=MinimalPrompt, 5=EmergencyMode). Escalation triggers are well-defined (budget threshold, provider errors, latency spikes). But de-escalation is forgotten or implemented with a simple "if condition cleared, go to level 0." The system escalates to level 3 during a brief provider outage, the outage resolves, but the de-escalation check only runs on the next message. If the operator's sessions are idle, the system stays at level 3 indefinitely. When the next message arrives, it gets the degraded experience even though the system is healthy. Worse: if de-escalation goes directly from level 3 to level 0, all the features snap back simultaneously, potentially triggering the same overload that caused escalation (memory queries + full context + complex routing all hitting at once).
+Hash-chained audit logs create an append-only, tamper-evident record where each entry includes the hash of the previous entry. Deleting any entry breaks the chain -- subsequent entries' "previous_hash" fields no longer verify, making the entire chain appear tampered. GDPR Article 17 (right to erasure) requires deleting personal data upon request. These two requirements directly conflict: you cannot delete personal data from an audit trail without destroying tamper evidence.
+
+This is not a hypothetical -- the EU AI Act and GDPR create explicit tension. GDPR mandates erasure; the AI Act demands lengthy archival of system documentation. The deletion process (GDPR) must happen first, leaving only the audit trail behind -- but the audit trail cannot contain the deleted personal data.
 
 **Why it happens:**
-Escalation is event-driven (error occurs -> escalate). De-escalation requires proactive polling (is the system healthy now?). Developers implement the exciting escalation logic but treat de-escalation as "just set it back to 0." The asymmetry between event-driven escalation and polling-based de-escalation means recovery logic is always weaker than failure logic.
+Audit trails and GDPR erasure are designed in separate phases by different mental models. The audit team thinks "nothing can be deleted." The compliance team thinks "everything must be deletable." Neither considers the other's constraint until implementation.
 
 **Consequences:**
-- System permanently stuck at a degraded level after a transient issue
-- Users experience degraded service long after the underlying problem is resolved
-- If de-escalation is too aggressive (jump to 0), it causes the same overload that triggered escalation -- creating an oscillation loop between levels 0 and 3
-- Memory search disabled at level 2+ means the agent loses personality, which operators notice and report as a bug
+- Compliance deadlock: cannot satisfy both GDPR and tamper evidence simultaneously
+- Expensive rearchitecture if discovered after audit trail is deployed
+- Legal exposure if GDPR erasure request cannot be fulfilled
 
-**Prevention:**
-1. Implement de-escalation as a background timer task (not message-driven). Every 60 seconds, check if conditions for the current level still hold. If not, drop ONE level (not to 0).
-2. Step-wise de-escalation: 5->4->3->2->1->0, with a minimum dwell time at each level (e.g., 2 minutes) before dropping further. This prevents oscillation.
-3. Add hysteresis: the condition to escalate from level 1 to 2 should be stricter than the condition to stay at level 2. For example, escalate at 80% budget utilization, but de-escalate only when below 70%.
-4. Log every level transition with `tracing::info!` including the reason and dwell time at the previous level.
-5. Expose current degradation level as a Prometheus gauge: `blufio_degradation_level{} 0-5`.
-6. Add a `blufio status` CLI command that shows the current degradation level and reason.
-7. Include a manual override: `blufio degrade reset` to force level 0 (operator escape hatch for stuck states).
+**How to avoid:**
+Design for GDPR from day one of the audit trail:
+1. **Separate PII from audit events.** Store the audit event (who did what, when, hash chain) in the audit table. Store PII (user name, email, message content) in a separate linked table with a foreign key. On GDPR erasure, null out the PII columns but keep the audit event and its hash. The hash covers the event metadata (action type, timestamp, actor_id), not the PII content.
+2. **Hash only non-PII fields.** The hash chain should cover: event_id, timestamp, action_type, actor_id (opaque UUID, not email), resource_type, resource_id, previous_hash. It should NOT cover: user_name, email, message_content, IP address. This way, erasing PII does not break the hash chain.
+3. **Use pseudonymized actor IDs.** The audit trail references `actor_id = "usr_abc123"`, not `actor_id = "john@example.com"`. The mapping from UUID to real identity is stored separately and deleted on erasure.
+4. **Document the approach in the GDPR transparency disclosure.** Explain that audit logs retain anonymized event records but personal data is erasable.
 
-**Detection:**
-- `blufio_degradation_level` gauge stays above 0 for hours after the triggering condition cleared
-- Users report "agent seems dumber than usual" or "agent forgot my preferences" (memory disabled)
-- Oscillation visible as rapid level transitions in metrics (0->3->0->3 every few minutes)
+**Warning signs:**
+- Audit table schema includes columns like `user_email`, `user_name`, or `message_content`
+- Hash computation includes any field that might need to be erased
+- No separation between audit metadata and PII
 
 **Phase to address:**
-Degradation ladder phase. De-escalation timer and step-wise recovery must be in the initial design, not added later.
+Must be co-designed: audit trail and GDPR phases should be planned together even if implemented sequentially. The audit trail schema must be GDPR-aware from the first migration.
 
 ---
 
-### Pitfall 4: Typed Error Hierarchy Creates Variant Explosion That Makes Match Ergonomics Painful
+### Pitfall 4: Prompt Injection Defense Creates Unusable False Positive Rates
 
 **What goes wrong:**
-The current `BlufioError` enum has 14 variants (Config, Storage, Channel, Provider, AdapterNotFound, HealthCheckFailed, Timeout, Vault, Security, Signature, BudgetExhausted, Skill, Mcp, Update, Migration, Internal). Adding typed metadata (is_retryable, severity, category) seems to require either: (a) adding sub-enums to each variant (ProviderError::RateLimit, ProviderError::AuthFailed, ProviderError::ModelNotFound...), creating a two-level match nightmare, or (b) adding methods like `is_retryable()` to the enum, which requires matching all 14+ variants to determine retryability. Either approach makes every `match` statement across 35 crates that handles `BlufioError` require updating. Since `BlufioError` is in `blufio-core` (the root dependency), any new variant requires recompiling the entire workspace.
+The PRD specifies a 5-layer defense: L1 pattern classifier, L3 HMAC boundary tokens, L4 output validator, L5 human-in-the-loop. The L1 pattern classifier (regex-based) is where false positives concentrate. Patterns like "ignore previous instructions" also match legitimate user messages ("Can you ignore my previous instructions about formatting and just give me the raw data?"). Research shows that even frontier model-based guardrails (GPT-4o, GPT-4.1) achieve <1% FPR on benchmarks like AgentDojo, but regex classifiers have significantly higher FPR (5-15%) depending on pattern strictness.
+
+For an always-on personal AI agent, a 5% false positive rate means 1 in 20 legitimate messages gets flagged. If the response is to block the message, the user gets frustrated every 20 messages. If the response is a warning, alert fatigue sets in within a day.
 
 **Why it happens:**
-The existing error type is designed as a flat enum -- simple to construct, simple to display. Adding behavioral traits (retryability, severity) to a flat enum forces each variant to carry enough context to answer the question. Developers either add nested enums (complex to construct, painful to match) or add fields to existing variants (breaking change across all crates), or add methods that use a giant match (fragile -- new variant means updating the method).
+Developers write injection patterns from known attack lists without testing against real conversational data. The pattern "ignore all previous" matches attack prompts and also matches "Please ignore all previous formatting preferences." Testing uses adversarial datasets (which are all attacks) rather than mixed datasets (99% legitimate, 1% attacks), so precision looks high.
 
 **Consequences:**
-- Adding a new error variant forces updating `is_retryable()`, `severity()`, and `category()` methods -- each is a match with 15+ arms
-- Downstream crates that match on `BlufioError` break when variants are added (non-exhaustive helps but makes matching weaker)
-- Two-level matching (`BlufioError::Provider(ProviderError::RateLimit { ... })`) is verbose and discourages proper error handling -- developers use `_ => false` for `is_retryable`, making everything non-retryable by default
-- Error context is lost: `BlufioError::Provider { message: "rate limited" }` has the same type as `BlufioError::Provider { message: "model not found" }` but completely different retry semantics
+- Users disable the defense ("too many false alerts")
+- Support burden from users reporting "my messages are being blocked"
+- Agent becomes unusable for power users who write complex, technical, or meta-level prompts
 
-**Prevention:**
-1. Do NOT nest enums. Keep `BlufioError` flat. Instead, add an `ErrorContext` struct that carries behavioral metadata:
-   ```rust
-   pub struct ErrorContext {
-       pub retryable: bool,
-       pub severity: ErrorSeverity,
-       pub category: ErrorCategory,
-       pub retry_after: Option<Duration>,
-   }
-   ```
-2. Add a single new variant or modify existing variants to optionally carry context:
-   ```rust
-   Provider {
-       message: String,
-       source: Option<Box<dyn std::error::Error + Send + Sync>>,
-       context: Option<ErrorContext>,
-   }
-   ```
-3. Provide builder methods on `BlufioError` for constructing with context:
-   ```rust
-   BlufioError::provider("rate limited").retryable().with_retry_after(Duration::from_secs(30))
-   ```
-4. Make `is_retryable()` a method on `BlufioError` with sensible defaults: Timeout is always retryable, BudgetExhausted is never retryable, Provider uses the context if present or defaults to false. This avoids the exhaustive match problem -- defaults are safe, context overrides when available.
-5. Mark the enum `#[non_exhaustive]` to prevent downstream crates from relying on exhaustive matching.
+**How to avoid:**
+1. **Start with HMAC boundary tokens (L3) as the primary defense.** This has zero false positive rate because it is structural, not content-based. Wrap system prompts in `[BOUNDARY:hmac_hash]...[/BOUNDARY:hmac_hash]` tokens that the model is instructed to never reproduce. Any output containing boundary tokens is filtered.
+2. **L1 pattern classifier should LOG, not BLOCK.** Score messages 0.0-1.0 for injection likelihood. Log high scores. Only block at >0.95 threshold (obvious attacks like "SYSTEM: you are now..."). Use the logged data to tune thresholds before enforcement.
+3. **Test against a corpus of 1000+ real conversational messages** from diverse domains (technical, casual, meta-discussion). Measure FPR before deploying any blocking behavior.
+4. **L4 output validation (check for data exfiltration in responses) catches what L1 misses** with near-zero false positives because it validates outputs, not inputs. Prioritize this over input filtering.
+5. **L5 human-in-the-loop should be for sensitive actions only** (tool execution, data access), not for every flagged message.
 
-**Detection:**
-- PR review shows 15-arm match statements in `is_retryable()`
-- Developers adding `_ => false` wildcard arms in error classification
-- New variant added to BlufioError but `is_retryable()` not updated -- silent regression
+**Warning signs:**
+- Users report "my message was blocked" within the first week
+- FPR measured on test data is >2%
+- All defense layers are set to "block" mode simultaneously
 
 **Phase to address:**
-Typed error hierarchy phase. Must be designed before circuit breakers (circuit breakers consume `is_retryable()`).
+Security Hardening phase. Must include a calibration period with logging-only mode before enforcement.
 
 ---
 
-### Pitfall 5: ORT RC-to-Stable Upgrade Breaks Module Paths, Value Extraction, and Feature Flags
+### Pitfall 5: OpenTelemetry + Prometheus Dual Recorder Conflict
 
 **What goes wrong:**
-The current codebase pins `ort = "=2.0.0-rc.11"` and uses:
-- `ort::session::Session` and `ort::session::builder::GraphOptimizationLevel` (embedder.rs:13-14)
-- `ort::value::TensorRef` (embedder.rs:15)
-- `ort::inputs!` macro (embedder.rs:128)
-- `session.run()` with named inputs
-- `outputs[0].try_extract_tensor::<f32>()` returning `(shape, data)` (embedder.rs:136-138)
+Blufio currently uses the `metrics-rs` facade with `metrics-exporter-prometheus` (see `crates/blufio-prometheus/src/lib.rs`). The `PrometheusBuilder::new().install_recorder()` installs a global metrics recorder. The `metrics-rs` crate supports exactly ONE global recorder. If OpenTelemetry is added with its own `metrics` SDK and another global recorder (or the now-deprecated `opentelemetry-prometheus` crate), the second `install_recorder()` call fails silently or panics.
 
-ORT rc.12 (released 2026-03-05) introduced breaking changes: module reorganization (`ort::tensor` -> `ort::value`), env var renaming (`ORT_LIB_LOCATION` -> `ORT_LIB_PATH`), session option renames, and new feature flag requirements (`api-24` must be enabled for latest features). The rc.11-to-rc.12 changes also updated `ndarray` from 0.16 to 0.17 (already done in this codebase, so safe). The stable 2.0.0 release (when it ships) will remove backward-compatibility re-exports for renamed items that are still available in rc.12 as deprecated.
-
-If upgrading to rc.12 or stable, the following code breaks:
-1. `try_extract_tensor::<f32>()` API may change return type (rc.9 changed from owned to borrowed references)
-2. `with_denormal_as_zero` renamed to `with_flush_to_zero` (not used in current code, but future usage would break)
-3. Feature flags: current features `["std", "ndarray", "download-binaries", "copy-dylibs", "tls-rustls"]` may need `api-24` added for full feature access under the new multiversioning system
-4. The `unsafe impl Send for OnnxEmbedder` (embedder.rs:38) relies on `Session` being non-Send -- if the stable release makes `Session: Send`, the unsafe impl becomes unsound
+Furthermore, the `opentelemetry-prometheus` crate has been deprecated as of 2025 -- version 0.29 is the final release. It depends on the unmaintained `protobuf` crate with unresolved security vulnerabilities. The recommended path is OTLP export, not Prometheus SDK integration.
 
 **Why it happens:**
-RC versions are explicitly unstable. Each RC can break API surfaces. The project pinned to rc.11 with `=2.0.0-rc.11` (exact version) which prevents accidental upgrades but also means no bug fixes or security patches land. The ORT project is actively reorganizing APIs before the stable release.
+The assumption is "just add OpenTelemetry alongside Prometheus." But the `metrics-rs` global recorder pattern means you cannot have two metric systems writing to the same global state. The previous Prometheus integration was designed as the sole observability adapter. Adding OTel requires either replacing it or running them in parallel with careful isolation.
 
 **Consequences:**
-- Compilation failure on upgrade (module paths changed)
-- Potential unsoundness if `Session` Send/Sync status changes and the `unsafe impl` is not re-evaluated
-- Docker builds break if `ORT_LIB_LOCATION` env var is used in CI (renamed to `ORT_LIB_PATH`)
-- Upgraded binary may not load existing ONNX models if ONNX Runtime version expectations change (rc.12 supports v1.17-v1.24 via multiversioning)
+- Second recorder installation panics at startup (breaking change)
+- Metric names diverge between Prometheus and OTel exporters
+- Deprecated crate introduces security vulnerabilities
+- Double-counting if both systems record the same events
 
-**Prevention:**
-1. Before upgrading, audit all `ort::` imports in the workspace: `grep -r "ort::" crates/blufio-memory/src/`
-2. Check if `Session` gains `Send` in the target version. If it does, remove the `unsafe impl Send` and `unsafe impl Sync` and the `Mutex<Session>` wrapper.
-3. Add `api-24` feature flag if upgrading to rc.12+ and needing latest ONNX Runtime features.
-4. If stable 2.0.0 is not yet released when v1.4 ships, upgrade to rc.12 (not stable) and document the pinned RC status in the ADR. Do not block v1.4 on ORT stable -- it may not ship for months.
-5. Write an integration test that loads the quantized all-MiniLM-L6-v2 model, embeds a test string, and asserts the output shape is `[384]`. This catches API breakage at test time, not production time.
-6. Pin the exact version (`=2.0.0-rc.12`) to prevent cargo update from pulling a future RC.
+**How to avoid:**
+1. **Use OpenTelemetry as the single metrics facade.** Replace `metrics-rs` with `opentelemetry` SDK for metrics. Use the `opentelemetry-prometheus` bridge (note: this is different from the deprecated crate -- the OTLP-based approach is recommended) or expose metrics via OTLP and let an OpenTelemetry Collector scrape/export to Prometheus.
+2. **Keep `metrics-rs` for Prometheus, use OTel only for tracing.** Since the PRD says "OpenTelemetry distributed tracing (optional, disabled by default)", the simplest approach is: Prometheus stays as-is for metrics, OpenTelemetry adds tracing only (spans, not metrics). The `tracing-opentelemetry` crate bridges `tracing` spans to OTel without touching the metrics recorder.
+3. **If both metric systems are needed**, use the `metrics-tracing-context` layer to bridge tracing context into metrics labels, but keep separate export paths.
 
-**Detection:**
-- `cargo build` fails with "unresolved import `ort::session::Session`"
-- Runtime panic in embedder with "failed to extract tensor" (API return type changed)
-- Docker build fails with "ORT_LIB_LOCATION: unknown environment variable"
+Recommendation: Option 2. Keep existing Prometheus for metrics (it works, it is tested). Add OTel for distributed tracing only. This avoids the recorder conflict entirely.
+
+**Warning signs:**
+- `install_recorder()` returns an error at startup
+- Metric counts differ between `/metrics` endpoint and OTel export
+- Dependency audit flags `protobuf` crate vulnerabilities
 
 **Phase to address:**
-ORT upgrade phase (should be a separate, small phase with its own ADR). Do not combine with other feature work.
+Observability phase. Architecture decision must be made before any OTel code is written.
 
 ---
 
-### Pitfall 6: FormatPipeline Integration Silently Changes Existing Adapter Output
+### Pitfall 6: Hot Reload with ArcSwap Causes Partial Configuration States
 
 **What goes wrong:**
-The existing `FormatPipeline` (at `crates/blufio-core/src/format.rs`) converts `RichContent` to `FormattedOutput` based on `ChannelCapabilities`. Currently, no adapter uses it -- the pipeline exists but is not wired in. When wiring it into the 8 channel adapters, developers insert the pipeline into the send path: `RichContent -> FormatPipeline::format() -> FormattedOutput -> adapter.send()`. The problem: the existing adapters already handle formatting internally. The Telegram adapter applies MarkdownV2 escaping. The Discord adapter constructs embeds. The Slack adapter builds Block Kit structures. Inserting the FormatPipeline before the adapter's own formatting creates double-formatting: text gets MarkdownV2-escaped, then the embed degradation adds `**bold**` markers which themselves need escaping. The output is garbled: `\*\*Status\*\*` instead of **Status**.
+The proposed hot reload uses ArcSwap to atomically swap configuration. ArcSwap itself is sound -- the swap is atomic. The pitfall is what happens AFTER the swap. If the configuration change requires multiple downstream actions (e.g., new TLS cert requires re-binding the listener, new provider config requires updating circuit breaker thresholds, new channel config requires reconnecting the adapter), these actions are NOT atomic. Between the config swap and the completion of all downstream updates, the system is in an inconsistent state: new config loaded, but old TLS cert still serving, old circuit breaker thresholds active, old channel connections live.
+
+The current config model (`crates/blufio-config/src/model.rs`) uses `#[serde(deny_unknown_fields)]` on ALL structs (BlufioConfig, AgentConfig, TelegramConfig, etc.). Adding new config fields for hot-reload features requires adding them to these structs. If a hot-reload config file has a field that the current binary does not recognize, `deny_unknown_fields` rejects the entire config, causing a reload failure.
 
 **Why it happens:**
-The FormatPipeline was designed as a standalone component. The adapters were designed as standalone components. Neither knows about the other's formatting. The pipeline outputs markdown-style formatting (`**bold**`) which is correct for channels that support markdown, but the adapters then apply their own channel-specific escaping on top.
+ArcSwap documentation emphasizes the atomic swap, which developers interpret as "the whole reload is atomic." But the swap only makes the new config visible -- it does not ensure all consumers have reacted to it. With 35 crates potentially reading config, the propagation delay can be significant.
 
 **Consequences:**
-- Telegram messages show raw markdown instead of formatted text (double-escaping)
-- Discord embeds get degraded to text even though the channel supports embeds (pipeline runs before the adapter checks capabilities)
-- Slack messages lose Block Kit formatting because the pipeline converts to plain text
-- IRC messages get markdown syntax that IRC does not render
+- TLS cert rotation leaves old cert serving for seconds/minutes
+- Provider config change creates mismatch between routing logic and circuit breaker state
+- `deny_unknown_fields` causes config reload failures during rolling upgrades
 
-**Prevention:**
-1. The FormatPipeline must be the LAST step before the raw send, NOT an input to the adapter's existing formatting.
-2. Better: make each adapter opt-in to the FormatPipeline rather than inserting it globally. The adapter calls `FormatPipeline::format()` internally when it receives `RichContent`, using its own `capabilities()` to drive degradation. The adapter is responsible for converting `FormattedOutput` to its platform-specific format.
-3. Do not change the existing `send(OutboundMessage)` signature. Instead, add a new method `send_rich(RichContent)` with a default implementation that calls `FormatPipeline::format()` then `send()`. Adapters override `send_rich()` to handle rich content natively (Discord embeds, Slack blocks).
-4. Add a test for EACH adapter that sends a `RichContent::Embed` and verifies the output is formatted correctly for that platform (not garbled by double-escaping).
+**How to avoid:**
+1. **Single ArcSwap, not per-component.** Store the entire `BlufioConfig` in one `ArcSwap<Arc<BlufioConfig>>`. Components use the `arc_swap::access::Access` trait to project into their section. This ensures all components see the same config version.
+2. **Reload is config swap + ordered propagation.** After swapping, notify all affected components via EventBus events (e.g., `ConfigReloaded { changed_sections: Vec<String> }`). Each component that receives the event re-reads its config section and applies changes. Order matters: TLS reload before accepting new connections, circuit breaker update before routing changes.
+3. **Validate before swap.** Parse and validate the new config fully before calling `arc_swap.store()`. If validation fails, log the error and keep the old config. Never swap to a partially valid config.
+4. **Version the reloadable config.** Not all config is safe to reload. Database path, encryption key, and bind address cannot change at runtime. Partition config into `static` (requires restart) and `reloadable` sections. Reject hot reload of static fields.
+5. **For `deny_unknown_fields` during upgrades:** Add a `#[serde(default)]` fallback for new optional sections, and consider a `strict_reload: bool` flag that relaxes `deny_unknown_fields` during hot reload only.
 
-**Detection:**
-- `**bold**` appearing literally in Telegram messages (not rendered as bold)
-- Discord adapter producing text blocks where embeds are expected
-- Test that compares send output before and after FormatPipeline wiring shows different results
+**Warning signs:**
+- Logs show "config reloaded" but behavior does not change
+- TLS cert rotation test shows old cert served after reload
+- Config reload in CI fails due to `deny_unknown_fields` on new fields
 
 **Phase to address:**
-FormatPipeline integration phase. Must audit each adapter's existing formatting before wiring in the pipeline.
+Hot Reload phase. Must design the propagation protocol before implementing any hot-reload feature.
 
 ---
 
 ## Moderate Pitfalls
 
----
-
-### Pitfall 7: ChannelCapabilities Extension Breaks All Existing Adapter Implementations
-
-**What goes wrong:**
-The current `ChannelCapabilities` struct has 9 boolean fields. Adding new fields (streaming_type, formatting_support, rate_limits) means every adapter that constructs a `ChannelCapabilities` value needs updating. There are 10 places in the codebase that construct `ChannelCapabilities` (8 adapters + gateway + test-utils mock). Since `ChannelCapabilities` has no `Default` impl and no builder pattern, adding a new field is a compile error in all 10 locations simultaneously. This is correct behavior (the compiler catches it), but it means a "simple" capability extension touches 10 files across 10 crates.
-
-**Why it happens:**
-`ChannelCapabilities` was designed as a simple struct with public fields. No `#[non_exhaustive]`, no `Default`, no builder. Every consumer constructs it with struct literal syntax: `ChannelCapabilities { supports_edit: true, ... }`. Adding a field breaks every construction site.
-
-**Prevention:**
-1. Add `#[derive(Default)]` to `ChannelCapabilities` with sensible defaults (all false, None for optionals, streaming_type defaults to None).
-2. Add `#[non_exhaustive]` to prevent future breakage when adding more fields.
-3. Provide a builder or `new()` method that returns the default, with chainable setters:
-   ```rust
-   ChannelCapabilities::default()
-       .with_edit(true)
-       .with_embeds(true)
-       .with_streaming_type(StreamingType::EditInPlace)
-   ```
-4. In the PR that adds new fields, migrate all 10 construction sites to use `..Default::default()` syntax to future-proof against further additions.
-5. Keep new fields as `Option<T>` not `T` -- this allows adapters to signal "I don't know" rather than forcing a potentially incorrect boolean.
-
-**Detection:**
-- Adding a field to ChannelCapabilities causes 10+ compilation errors across the workspace
-- New adapters always construct ChannelCapabilities with all new fields set to false/None because the developer didn't know what to put
-
-**Phase to address:**
-ChannelCapabilities extension phase. Add Default + non_exhaustive BEFORE adding new fields.
+Mistakes that cause significant bugs, performance problems, or wasted effort, but are recoverable without full rewrites.
 
 ---
 
-### Pitfall 8: Circuit Breaker State Shared Across Sessions Causes One User's Failure to Block All Users
+### Pitfall 7: Cron Scheduler Timer Drift and Missed Jobs After Sleep/Suspend
 
 **What goes wrong:**
-A global per-provider circuit breaker is the obvious design: one `CircuitBreaker` per provider, shared by all sessions via `Arc<Mutex<CircuitBreaker>>`. But if provider failures are user-specific (e.g., one user's API key is rate-limited because of their usage on another platform, or one user's content triggers a safety filter), the global circuit breaker opens for ALL users. One user's API key hitting rate limits causes the circuit to open, blocking a different user whose key has headroom.
+Tokio's `tokio::time::sleep` and `tokio::time::interval` use monotonic time (Instant), not wall clock time. On a VPS that never suspends, this works fine. But: (a) On development macOS (where Blufio explicitly supports development), laptop sleep causes Instant to jump forward by the sleep duration, potentially missing multiple cron triggers. (b) Under heavy load, the tokio scheduler may delay timer execution beyond the 1-second check interval, causing missed cron ticks. (c) Over long uptimes (months, per Blufio's design goal), floating-point drift in interval calculations accumulates.
+
+The PRD specifies the system should run "for months without restart" on a $4/month VPS. A cron scheduler that drifts or misses jobs undermines this goal.
 
 **Why it happens:**
-The existing architecture uses a single provider adapter per provider type (one `Arc<dyn ProviderAdapter>` for Anthropic, shared by all sessions). The circuit breaker wraps the provider, so it naturally becomes global.
+Developers test with short intervals (every 5 seconds) and see correct behavior. Drift only manifests over hours/days. The tokio-cron-scheduler crate documents that "time drift is possible over long uptime without correction logic" and jobs do not persist across restarts.
 
-**Prevention:**
-1. Circuit breakers should be per-provider, not per-session. Per-session is too granular (1000 sessions = 1000 circuit breakers, hard to monitor). Per-provider is correct for the single-binary, single-API-key model that Blufio uses (all sessions share one Anthropic API key).
-2. However, differentiate between errors that indicate provider-wide problems (503, network errors, timeout) and errors that indicate request-specific problems (400 bad request, 413 content too long, safety filter). Only provider-wide errors should increment the circuit breaker failure count. Request-specific errors should be returned to the caller without affecting the circuit.
-3. This is where `is_retryable()` on `BlufioError` matters: the circuit breaker should only count errors where `is_retryable() == true` as failures. Non-retryable errors (auth failed, invalid request) are the caller's problem, not the provider's.
-4. Emit a Prometheus counter `blufio_circuit_failure{provider, error_class}` that separates counted vs uncounted errors.
+**How to avoid:**
+1. **Use wall clock time for cron evaluation.** On each tick, compute `Utc::now()` and evaluate the cron expression against it. Do not rely on interval duration accuracy.
+2. **Persist last execution time per job in SQLite.** On startup and after every tick, read `last_run_at` from the database. If `now - last_run_at > interval`, the job was missed and should execute immediately (catch-up mode) or skip (no-catch-up mode, configurable per job).
+3. **Tick at 1-second granularity using `tokio::time::interval(Duration::from_secs(1))`** but compare against wall clock time, not accumulated ticks. If the interval fires late (e.g., 3 seconds instead of 1), evaluate all 3 seconds' worth of cron expressions.
+4. **Implement jitter for jobs scheduled at the same time** to prevent thundering herd when multiple cron jobs fire simultaneously (e.g., all at midnight).
 
-**Detection:**
-- All sessions fail when one session gets a 400 error
-- Circuit opens due to non-transient errors (auth failure, content filter)
-- Prometheus shows circuit opening with error_class="client_error" (should only open on server errors)
+**Warning signs:**
+- Cron job fires at :00:01 instead of :00:00 after a few hours
+- Jobs missed after macOS laptop wake
+- Multiple cron jobs fire simultaneously causing load spikes
 
 **Phase to address:**
-Circuit breaker phase. Must classify errors before counting them, which depends on the typed error hierarchy.
+Cron/Scheduler phase.
 
 ---
 
-### Pitfall 9: Token Counter Initialization Fails Silently When Model File Missing
+### Pitfall 8: Memory Temporal Decay Causes Cold Start Amnesia
 
 **What goes wrong:**
-The `tokenizers` crate requires a `tokenizer.json` file for each model. The accurate token counter will need tokenizer files for Claude (Anthropic uses a custom BPE tokenizer), GPT-4/GPT-4o (cl100k_base or o200k_base), Gemini (SentencePiece), and Ollama models (varies). If any tokenizer file is missing at startup, the system has two bad options: (a) fail to start entirely (too aggressive -- the agent should work even without perfect counting), or (b) fall back to `len() / 4` silently (defeats the purpose of accurate counting, and the operator thinks they have accurate counting when they don't).
+Temporal decay (proposed: `0.95^days`) reduces memory relevance scores over time. The intent is good: recent memories are more relevant. The problem: after extended inactivity (user goes on vacation for 2 weeks), ALL memories have decayed significantly. `0.95^14 = 0.488` -- every memory is at half strength. The agent "forgets" everything equally, including critical facts like the user's name, job, preferences. When the user returns, the agent behaves as if it has amnesia.
+
+Worse: the PRD specifies "bounded index with LRU eviction (default 10,000)." If decay scores drop below the eviction threshold and LRU eviction kicks in, memories are actually deleted, not just deprioritized.
 
 **Why it happens:**
-Different LLM providers use different tokenizers. There is no universal tokenizer. The `tokenizers` crate supports BPE (OpenAI, Anthropic) and SentencePiece (Gemini), but each requires its own model file. Shipping all tokenizer files in the binary increases binary size. Downloading them at runtime requires network access at startup.
+Decay functions are tested with daily-active-user patterns. Nobody tests "what happens after 30 days of inactivity?" The `0.95^30 = 0.215` problem is invisible in active testing.
 
-**Prevention:**
-1. Ship the cl100k_base tokenizer (GPT-4) embedded in the binary using `include_bytes!`. It is ~1.5MB and covers OpenAI and Anthropic approximately (within 5% accuracy for English, 10% for CJK). This is the default fallback.
-2. For other providers, use the provider's own token counting API if available (Anthropic's `/v1/messages/count_tokens`, Gemini's `countTokens` endpoint) for pre-flight budget checks, and the embedded tokenizer for hot-path estimation.
-3. When a provider-specific tokenizer is missing, log `tracing::warn!` ONCE per provider (not per message) and fall back to the embedded tokenizer. Never fall back silently to `len() / 4` -- that defeats the purpose.
-4. Add a Prometheus gauge `blufio_token_counter_accuracy{provider, method}` where method is "exact", "approximate", or "heuristic" so operators can see which counting method is active per provider.
-5. The `blufio doctor` command should report tokenizer availability per provider.
+**How to avoid:**
+1. **Decay must have a floor.** No memory should decay below a configurable minimum (e.g., 0.3). Formula: `max(0.3, 0.95^days)`. This ensures that even ancient memories retain some baseline relevance.
+2. **Importance-weighted decay.** High-importance memories (user-stated facts, preferences, safety info) decay slower than low-importance ones (transient observations). Formula: `max(floor, base^(days / importance_factor))` where importance_factor ranges from 1.0 (normal) to 3.0 (critical).
+3. **Separate decay from eviction.** Decay adjusts retrieval ranking. LRU eviction is based on access patterns (last retrieved), not decay score. A memory that has not been accessed in 90 days can be evicted. A memory that was accessed last week but has high age should NOT be evicted.
+4. **Refresh on access.** When a memory is retrieved and included in context, reset its decay timer. Memories that keep being relevant stay fresh.
+5. **Cold start detection.** If `days_since_last_interaction > threshold`, temporarily boost all memory scores by a "welcome back" factor. This prevents the amnesia effect.
 
-**Detection:**
-- Cost tracking shows significant over/under-estimation compared to provider invoices
-- `blufio doctor` reports "token counting: heuristic" when operator expected "exact"
-- Budget gates trigger too early or too late due to inaccurate counting
+**Warning signs:**
+- Agent fails to recall user's name after a week of inactivity
+- Memory retrieval returns zero results for queries that worked a week ago
+- LRU eviction removes high-importance but stale memories
 
 **Phase to address:**
-Token counting phase. Fallback strategy must be designed before implementation.
+Memory Enhancements phase.
 
 ---
 
-### Pitfall 10: Degradation Ladder Interacts Badly with Model Router Budget Downgrade
+### Pitfall 9: PII Regex Matches Code Blocks, URLs, and Technical Content
 
 **What goes wrong:**
-The existing `ModelRouter` already downgrades models when budget utilization is high (e.g., Opus -> Sonnet when daily spend > 80%). The new degradation ladder also reacts to budget pressure (level 3 = SimplifyRouting). If both systems act independently, they compound: the router downgrades from Opus to Sonnet, AND the degradation ladder disables memory + reduces context. The user gets a dramatically worse experience (wrong model + no memory + short context) when either system alone would have been sufficient. Worse: the degradation ladder's "SimplifyRouting" might override the router's decision, creating a conflict about which model to use.
+The existing redaction system (`crates/blufio-security/src/redact.rs`) uses regex patterns for API keys and bearer tokens -- these are high-precision patterns with low false positive rates because their formats are distinctive (e.g., `sk-ant-[a-zA-Z0-9_\-]{20,}`). PII patterns (email, phone, SSN, credit card) have fundamentally different characteristics: they match common string formats that appear in non-PII contexts.
+
+Examples of false positives:
+- Phone regex `\d{3}-\d{3}-\d{4}` matches semantic version ranges like "123-456-7890" in code, date ranges, and order numbers
+- Email regex matches `user@host` in code comments, configuration examples, and documentation
+- SSN regex `\d{3}-\d{2}-\d{4}` matches dates formatted as `123-45-6789` in timestamps
+- Credit card regex `\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}` matches 16-digit numeric strings in technical data
+
+For a coding assistant (which Blufio supports), false positives on code blocks are especially damaging -- the agent redacts parts of code it is supposed to help with.
 
 **Why it happens:**
-The model router and the degradation ladder are designed as independent systems. Neither knows about the other's state. Both react to the same signal (budget utilization) but take different actions. Without coordination, they stack.
+PII patterns are designed for maximum recall (catch all PII). In a general-purpose AI agent handling diverse content types (code, configuration, natural language, logs), the false positive rate skyrockets because the content domain is unbounded.
 
-**Prevention:**
-1. The degradation ladder MUST be aware of the model router's state. If the router has already downgraded the model, the degradation ladder should not apply routing-related degradation (level 3 SimplifyRouting becomes a no-op).
-2. Define a clear precedence: the degradation ladder controls which features are available; the model router controls which model is used. They should not overlap in responsibility.
-3. Budget utilization thresholds must be different: if the router downgrades at 80%, the degradation ladder should escalate at 90% (not also at 80%).
-4. Add a combined state view: `blufio status` shows both router state and degradation level together so operators can see the full picture.
-5. Test the interaction explicitly: set budget to 85% and verify that EITHER the router downgrades OR the ladder escalates, but not both simultaneously.
+**How to avoid:**
+1. **Context-aware redaction.** Detect content type before applying patterns. If the message contains code blocks (markdown fenced blocks, or content from a coding skill), apply only the high-precision patterns (API keys, bearer tokens). Skip phone/SSN patterns inside code blocks.
+2. **Luhn checksum for credit cards.** Do not rely on digit patterns alone. Validate the Luhn checksum before redacting. This eliminates false positives from random 16-digit sequences.
+3. **Email validation beyond regex.** Check that the domain part has a valid TLD. `user@localhost` and `var@type` are not emails.
+4. **Phone number normalization.** Use a pattern that requires country code or known area code prefix, not bare `\d{3}-\d{3}-\d{4}`. International patterns vary wildly -- do not try to cover all locales with one regex.
+5. **Allowlist patterns.** Maintain a set of "looks like PII but is not" patterns: semantic versions, date formats, UUIDs, hex strings. Check against allowlist before redacting.
+6. **Keep the existing two-tier approach.** High-precision (API keys, bearer tokens) always on. PII patterns opt-in per deployment, with configurable sensitivity levels.
 
-**Detection:**
-- User experiences both model downgrade AND feature degradation simultaneously
-- Cost savings from router downgrade are insufficient because degradation ladder also activates
-- `blufio status` shows router at "downgraded" AND degradation at level 3
+**Warning signs:**
+- Agent's code output contains `[REDACTED]` in places where no PII exists
+- Users report "the agent is censoring my code"
+- Redaction logs show >5% of messages triggering PII redaction
 
 **Phase to address:**
-Degradation ladder phase. Must integrate with ModelRouter, not operate independently.
+PII Redaction phase. Must include a false-positive test suite with code samples, URLs, and technical content.
 
 ---
 
-### Pitfall 11: Format Pipeline Table/List Content Types Have No Fallback for Length-Limited Channels
+### Pitfall 10: Hook System Infinite Loops via Cascading Event Triggers
 
 **What goes wrong:**
-Adding `RichContent::Table` and `RichContent::List` content types to the FormatPipeline seems straightforward: render to markdown tables/lists, fall back to text if the channel doesn't support them. But IRC has a 512-byte line limit. A table with 5 columns and 10 rows renders to ~800 characters of text. The fallback exceeds the channel's `max_message_length` and either gets truncated (losing data) or rejected by the channel API (silent failure). List items with long text have the same problem. The FormatPipeline does not currently check `max_message_length` during degradation.
+The proposed hook system fires on 11 lifecycle events, with hooks integrated into the existing EventBus. A hook that fires on `channel.message_sent` and sends a message (e.g., a logging hook that posts to a channel) triggers another `channel.message_sent` event, which triggers the hook again. Infinite loop.
+
+The existing bridge system already solved this for cross-channel bridging with the `is_bridged: bool` flag on `ChannelEvent::MessageReceived` (see `crates/blufio-bus/src/events.rs:131`). But hooks introduce a more general version of the problem: any hook that modifies state visible to other hooks creates potential for cascading loops.
 
 **Why it happens:**
-The existing FormatPipeline degrades based on capability booleans (supports_embeds, supports_images) but does not consider length constraints. Adding new content types that produce variable-length text output exposes this gap.
+Each hook is designed and tested in isolation. Hook A works correctly alone. Hook B works correctly alone. Together, A triggers B which triggers A. The combinatorial explosion of hook interactions is not tested.
 
-**Prevention:**
-1. The FormatPipeline must check `caps.max_message_length` after every degradation and truncate or split if the output exceeds the limit.
-2. For tables: truncate columns that are too wide, then truncate rows if still too long, adding a `... (N more rows)` footer.
-3. For lists: truncate after N items with `... and N more`.
-4. Add a `FormattedOutput::MultiPart(Vec<String>)` variant for cases where degraded content exceeds the length limit and must be split across multiple messages.
-5. Test with IRC's 512-byte limit: send a 10-row table and verify the output fits in 512 bytes or is properly split.
+**How to avoid:**
+1. **Recursion depth counter.** Add a `hook_depth: u8` field to event metadata. Each hook invocation increments depth. If depth exceeds a configurable maximum (default: 3), the event is dropped with a warning log. This is the same pattern the bridge uses with `is_bridged`.
+2. **Hook isolation.** Events generated by hooks are marked with `source: "hook"`. Hooks can filter: `trigger_on_hook_events: false` (default) means hooks do not fire on events generated by other hooks.
+3. **Priority ordering matters for determinism.** Hooks fire in BTreeMap priority order (proposed). Document that equal-priority hooks have undefined execution order. Require unique priorities or use priority + name as the sorting key.
+4. **Timeout per hook execution.** Shell-based hooks (proposed) must have a configurable timeout (default: 30 seconds). A hung hook blocks the event pipeline. Use `tokio::process::Command` with `timeout`.
+5. **Error isolation.** A failed hook must not prevent subsequent hooks from firing. Log the error, continue to next hook. Never propagate hook errors to the caller that generated the event.
 
-**Detection:**
-- IRC messages truncated mid-word after FormatPipeline wiring
-- Table data silently lost on length-limited channels
-- Adapter returns error on send because message exceeds platform limit
+**Warning signs:**
+- CPU spikes to 100% after installing two or more hooks
+- EventBus channel fills up (1024 capacity) and reliable subscribers start dropping events
+- Hook execution logs show the same event ID appearing multiple times
 
 **Phase to address:**
-FormatPipeline integration phase. Length-aware degradation must be added alongside new content types.
+Hook System phase. Loop prevention must be in the first iteration, not added later.
+
+---
+
+### Pitfall 11: Hash-Chained Audit Trail Becomes a Write Bottleneck
+
+**What goes wrong:**
+A hash-chained audit log requires sequential writes: each entry's hash depends on the previous entry's hash. This means audit writes cannot be parallelized or batched without breaking the chain. In Blufio's single-writer SQLite architecture (all writes go through one `tokio_rusqlite::Connection` background thread), every audit write adds to the single-writer queue. If every API call, message, session operation, and tool invocation generates an audit entry, the write queue grows unboundedly during bursts.
+
+Current write patterns: message insert, session update, cost ledger update. Adding audit entries potentially doubles the write count per operation.
+
+**Why it happens:**
+Developers implement the hash chain correctly but do not measure write latency under load. In testing (1-2 concurrent sessions), the overhead is invisible. Under 10+ concurrent sessions with active tool use, the single-writer thread becomes the bottleneck.
+
+**How to avoid:**
+1. **Batch audit writes.** Buffer audit entries in memory (bounded channel) and flush to SQLite in batches every 100ms or 100 entries, whichever comes first. Compute hash chains in the batch. The chain is still sequential within each batch, but the SQLite write is a single transaction.
+2. **Async hash computation.** The SHA-256 hash for each entry is cheap (~1 microsecond) but the SQLite write is not. Pre-compute the hash chain in memory and write the batch to SQLite in a single INSERT with VALUES list.
+3. **Separate audit database.** Use a second SQLite database file for audit logs. This gives audit its own single-writer thread, preventing audit writes from blocking operational writes. Litestream (or the backup alternative) can replicate them independently.
+4. **Selective auditing.** Not every event needs audit logging. Define audit levels: `critical` (auth events, data access, deletions), `standard` (session lifecycle, tool execution), `verbose` (every message). Default to `standard`. Let operators configure.
+5. **Periodic chain verification.** Do not verify the entire chain on every read. Verify on startup, on backup, and on demand via a CLI command.
+
+**Warning signs:**
+- Write latency for messages increases after audit trail is enabled
+- Queue depth metrics show sustained growth during active sessions
+- SQLite WAL file grows faster than expected
+
+**Phase to address:**
+Audit Trail phase.
+
+---
+
+### Pitfall 12: Retention Policy Cascading Deletes Break Referential Integrity
+
+**What goes wrong:**
+The current database has `PRAGMA foreign_keys = ON` (see `database.rs:211`). Retention policies that delete old messages, sessions, or memories must respect foreign key constraints. The `messages` table references `sessions`. The `memories` table references `sessions` (via `session_id`). Queue entries reference sessions. Deleting a session without first deleting or nullifying dependent rows fails with a foreign key violation. Conversely, using `ON DELETE CASCADE` without understanding the full dependency graph can silently delete audit entries, cost records, and memories that should be retained.
+
+SQLite foreign keys have a specific pitfall: they are disabled by default and must be enabled per-connection. If the retention job opens a new connection (e.g., a separate thread for cleanup), it may not have foreign keys enabled, causing silent referential integrity violations.
+
+**Why it happens:**
+Retention policies are implemented as "delete old rows" without analyzing the full schema dependency graph. Developers test with fresh databases (no dependent rows). Production databases have complex cross-table references that evolve over migrations.
+
+**How to avoid:**
+1. **Map the full dependency graph before implementing retention.** Document which tables reference which others. For Blufio: sessions -> messages, sessions -> memories (session_id), sessions -> queue, sessions -> cost entries.
+2. **Soft-delete first, hard-delete later.** Retention policy marks rows as `status = 'expired'`. A separate garbage collection job hard-deletes expired rows in correct dependency order: leaf tables first (messages, memories), then parent tables (sessions).
+3. **Never use ON DELETE CASCADE for tables with audit significance.** Use ON DELETE RESTRICT and handle deletion order in application code. This prevents accidental cascade deletions.
+4. **Always use the centralized connection factory** (`open_connection`) for retention jobs. Never open raw `rusqlite::Connection` directly. This ensures `PRAGMA foreign_keys = ON` is always set.
+5. **Retention must exclude audit entries.** Audit trail retention has its own policy (longer, or indefinite). Create a separate retention category for audit data.
+
+**Warning signs:**
+- `FOREIGN KEY constraint failed` errors in retention job logs
+- Audit entries disappear after retention run
+- Memory count drops unexpectedly after session cleanup
+
+**Phase to address:**
+Retention Policy phase. Must come after audit trail design so retention can respect audit constraints.
+
+---
+
+### Pitfall 13: Data Classification Over-Classification Paralyzes Operations
+
+**What goes wrong:**
+The PRD specifies 4 classification levels: Public/Internal/Confidential/Restricted. The pitfall: when in doubt, operators classify everything as Restricted. This is the "better safe than sorry" instinct. Result: all data requires maximum access controls, all exports are blocked, all API responses are filtered. The system becomes operationally useless because every action requires elevated permissions.
+
+In an AI agent context, this is especially problematic: if conversation messages are classified as Restricted, the context engine cannot assemble prompts without Restricted-level access. Every LLM call becomes a Restricted operation. Memory retrieval is Restricted. The classification system adds overhead to every request path without differentiation.
+
+**Why it happens:**
+Classification is designed by security-minded developers who default to maximum restriction. Real data sensitivity is nuanced: a user's name is Internal, their SSN is Restricted, a weather query is Public. Without clear guidelines and defaults, operators either over-classify (paranoid) or under-classify (ignore it entirely).
+
+**How to avoid:**
+1. **Default classification per data type.** Messages: Internal. Memories: Internal. Audit logs: Confidential. Credentials: Restricted. Embeddings: Internal. Session metadata: Internal. Provide sensible defaults that operators can override.
+2. **Classification determines handling rules, not access gates.** Public: no restrictions. Internal: redact in exports, include in API responses. Confidential: encrypt at rest, redact in logs. Restricted: encrypt at rest, redact in logs and API responses, require explicit access grants.
+3. **Automatic classification based on content.** If PII patterns are detected, auto-elevate to Confidential. If credential patterns are detected, auto-elevate to Restricted. This reduces the classification burden on operators.
+4. **Classification is metadata, not a permission gate.** Store classification level as a column on each row. Use it for filtering exports and redaction, not for blocking reads. The agent must always be able to read its own data to function.
+5. **Provide a `classify` CLI command** that audits current data and reports classification distribution. If >80% of data is Restricted, the operator has over-classified and should adjust defaults.
+
+**Warning signs:**
+- All data is classified at the same level
+- Operators report "everything is locked down, nothing works"
+- Export and backup commands refuse to run due to classification restrictions
+
+**Phase to address:**
+Data Classification phase.
 
 ---
 
 ## Minor Pitfalls
 
+Mistakes that cause developer friction, minor bugs, or suboptimal behavior.
+
 ---
 
-### Pitfall 12: Token Counter Disagrees with Provider's Count, Causing Budget Miscalculation
+### Pitfall 14: Clippy unwrap Enforcement Breaks 1,444 Call Sites at Once
 
 **What goes wrong:**
-Local token counting with the `tokenizers` crate uses a tokenizer model that may not exactly match the provider's tokenizer. Anthropic's tokenizer is proprietary (not published as a tokenizer.json). OpenAI's o200k_base (used for GPT-4o) is different from cl100k_base (GPT-4). If the local counter says a message is 1,000 tokens but Anthropic reports 1,100 tokens, the budget tracker under-counts by 10%. Over thousands of messages, this accumulates into real money.
+Adding `#![deny(clippy::unwrap_used)]` to library crates causes all 1,444 `unwrap()` calls to become compile errors simultaneously. This is an all-or-nothing change that makes the codebase unbuildable until every single call is fixed. With 35 crates, this is a multi-day effort that blocks all other development.
 
-**Prevention:**
-Use the provider's reported `TokenUsage` from responses as the source of truth for cost tracking (already done in `session.rs:399`). Use local counting ONLY for pre-flight estimation (budget gate check, compaction threshold). Never use local counting for billing. Log the discrepancy between estimated and actual token counts as a metric: `blufio_token_estimate_error{provider} = (estimated - actual) / actual`. If discrepancy exceeds 15%, log a warning.
+**How to avoid:**
+1. **Phased rollout per crate.** Start with leaf crates (blufio-core, blufio-bus, blufio-config) that have fewer unwrap() calls. Add `#![warn(clippy::unwrap_used)]` first (warnings, not errors). Fix warnings. Then promote to `#![deny(clippy::unwrap_used)]`.
+2. **Categorize unwrap() calls.** Not all unwrap() calls are equal:
+   - **Test code:** `#[cfg(test)]` modules can keep `unwrap()`. Add `#[allow(clippy::unwrap_used)]` to test modules.
+   - **Proven safe:** `"constant".parse::<Uri>().unwrap()` where the input is a compile-time constant. Add `#[allow(clippy::unwrap_used)] // SAFETY: constant input` with a comment.
+   - **Actually fallible:** These need conversion to `?`, `.unwrap_or_default()`, `.expect("reason")`, or proper error handling. These are the real bugs to fix.
+3. **Use `expect()` instead of `unwrap()` as an intermediate step.** `expect("descriptive message")` is allowed by `clippy::unwrap_used` but denied by `clippy::expect_used`. Migrate to `expect()` first (quick, mechanical), then to proper error handling (slower, requires thought).
+4. **CI gate:** Add `cargo clippy -- -W clippy::unwrap_used` to CI as a warning. Track the count over time. Set a target: "reduce by 100 per phase."
+
+**Warning signs:**
+- PR that adds `deny(clippy::unwrap_used)` to all crates simultaneously
+- Build fails on CI after lint change with 1000+ errors
+- Developers add `#[allow(clippy::unwrap_used)]` everywhere to make it compile
 
 **Phase to address:**
-Token counting phase. Pre-flight vs post-flight counting distinction must be clear in the architecture.
+Code Quality phase. Must be a gradual process, not a single PR.
 
 ---
 
-### Pitfall 13: Circuit Breaker Prometheus Metrics Use Labels That Cause Cardinality Explosion
+### Pitfall 15: BlueBubbles iMessage Adapter Relies on macOS-Only Sidecar
 
 **What goes wrong:**
-Adding labels like `{provider, endpoint, model, session_id}` to circuit breaker metrics creates a unique time series per session per model per endpoint. With 100 sessions and 5 models, that is 500+ time series per metric. Prometheus scrape becomes slow and memory usage grows. On a $4/month VPS with limited RAM, Prometheus OOMs.
+BlueBubbles requires a macOS host running the BlueBubbles Server application, which interfaces with iMessage through AppleScript (basic) or the Private API (advanced). The Private API is more reliable but exceptions crash the entire iMessage process, requiring restart. For a Blufio deployment on a Linux VPS ($4/month), the BlueBubbles server must run on a separate macOS machine (real or virtual), introducing a network dependency and an additional point of failure.
 
-**Prevention:**
-Labels should be `{provider}` only for circuit state metrics. Error counters can add `{error_class}` (transient/permanent) but NOT session_id or model. Keep total label cardinality under 50 per metric.
+**How to avoid:**
+1. **Design the adapter as a remote client.** The BlueBubbles REST API + WebSocket is the integration point. The adapter connects to a remote BlueBubbles server URL, not a local process. Handle connection failures gracefully with the existing circuit breaker system.
+2. **Private API is recommended.** AppleScript-based sending is unreliable. Document that operators should enable the Private API on their BlueBubbles server for reliable message delivery.
+3. **Reconnection logic.** BlueBubbles server restarts (macOS updates, Private API crashes) cause WebSocket disconnections. Implement exponential backoff reconnection, not just one retry.
+4. **Rate limiting.** Apple does not publish iMessage rate limits, but anecdotal evidence suggests aggressive sending can trigger throttling or temporary blocks. Implement a conservative send rate limit (e.g., 1 message per second, 30 per minute).
+
+**Warning signs:**
+- Adapter connects but messages never arrive
+- WebSocket disconnections every few hours
+- "Transaction timeout" errors on send
 
 **Phase to address:**
-Circuit breaker phase. Define metric labels in the design document before implementation.
+Additional Channels phase.
 
 ---
 
-### Pitfall 14: Error Hierarchy Breaking Change Not Gated Behind a Major Version
+### Pitfall 16: Email Adapter Deliverability and Spam Classification
 
 **What goes wrong:**
-Modifying `BlufioError` variants (adding context fields, changing variant shapes) is a breaking change for any external consumer of `blufio-core`. If Blufio ever publishes crates to crates.io, this breaks semver. Even internally, it forces recompilation of all 35 crates.
+Sending emails from a VPS IP address almost always triggers spam classification. Without SPF, DKIM, DMARC records, the agent's emails go to spam folders. For an AI agent that responds to emails, this means responses silently vanish from the user's perspective.
 
-**Prevention:**
-Mark `BlufioError` as `#[non_exhaustive]` before making changes. Add new variants rather than modifying existing ones. Use `Option<ErrorContext>` in existing variants to add metadata without changing the variant shape. Document in the ADR that this is a one-time migration and future additions will use the non_exhaustive escape hatch.
+**How to avoid:**
+1. **Use a transactional email service** (SendGrid, Amazon SES, Postmark) as the SMTP relay, not direct VPS-to-MX delivery. These services handle deliverability, reputation, and authentication.
+2. **IMAP/POP for receiving, SMTP relay for sending.** The adapter reads incoming mail via IMAP and sends via an authenticated SMTP relay.
+3. **Email threading.** Reply to the original message with correct `In-Reply-To` and `References` headers. Without threading, each response appears as a new conversation.
+4. **Rate limiting.** Transactional email services have hourly/daily limits. Implement rate limiting that matches the provider's quotas.
+
+**Warning signs:**
+- Agent sends emails but users report "I never received it"
+- Email service reports high bounce rates or spam complaints
+- Response emails appear as new threads instead of replies
 
 **Phase to address:**
-Typed error hierarchy phase. `#[non_exhaustive]` must be added as the FIRST commit.
+Additional Channels phase.
 
 ---
 
-## Phase-Specific Warnings
+### Pitfall 17: OpenAPI Spec Drift from Actual Route Behavior
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Token counting | Blocking tokio workers with CPU-bound encode calls | `spawn_blocking` for all tokenizer operations |
-| Token counting | Tokenizer file missing for specific provider | Embedded fallback tokenizer + per-provider accuracy metric |
-| Token counting | Local count disagrees with provider count | Use provider count for billing, local for estimation only |
-| Circuit breakers | Thresholds too aggressive/lenient for production | Per-provider configurable thresholds in TOML |
-| Circuit breakers | Non-retryable errors counted as failures | Only count `is_retryable() == true` errors |
-| Circuit breakers | Half-open thundering herd | Exponential ramp-up in half-open, not instant close |
-| Circuit breakers | Prometheus cardinality explosion | Labels: `{provider}` only, not per-session |
-| Degradation ladder | Ratchet effect -- never de-escalates | Background timer with step-wise de-escalation + hysteresis |
-| Degradation ladder | Compounds with model router downgrade | Coordinate thresholds; don't overlap responsibilities |
-| Typed errors | Variant explosion / match ergonomics | ErrorContext struct, not nested enums; non_exhaustive |
-| Typed errors | Breaking change across 35 crates | Add #[non_exhaustive] first; use Option fields |
-| FormatPipeline | Double-formatting with existing adapter output | Adapter calls pipeline internally, not externally imposed |
-| FormatPipeline | Table/List exceeds max_message_length | Length-aware degradation with truncation/splitting |
-| ChannelCapabilities | Adding fields breaks 10 construction sites | Add Default + non_exhaustive before new fields |
-| ORT upgrade | Module path changes break compilation | Audit all ort:: imports; pin exact version |
-| ORT upgrade | unsafe Send impl becomes unsound | Re-evaluate if Session gains Send in new version |
-| ORT upgrade | Feature flags change | Add api-24 feature; test model loading in CI |
+**What goes wrong:**
+Auto-generating OpenAPI specs from route definitions captures the request/response types but misses runtime behavior: authentication requirements, rate limiting, error response formats, streaming behavior. The spec says `200 OK` but the actual response is `200 OK` with an SSE stream. The spec documents query parameters but not the interaction between them (e.g., `stream=true` changes the response content type).
+
+**How to avoid:**
+1. **Generate from types, validate with tests.** Use `utoipa` or `aide` to generate the spec from Rust types. Then write integration tests that fetch the spec and validate that every documented endpoint returns the documented response format.
+2. **Include error responses.** Document `401`, `403`, `429`, `500` responses with their actual error type format (which uses the v1.4 typed error hierarchy).
+3. **Document streaming endpoints separately.** SSE endpoints need `text/event-stream` content type in the spec. Mark them clearly.
+4. **Version the spec.** The spec version should track the Blufio version. Breaking changes in the API must bump the spec version.
+
+**Warning signs:**
+- API clients generated from the spec fail on actual requests
+- Spec shows `application/json` but endpoint returns `text/event-stream`
+- Error responses do not match documented schemas
+
+**Phase to address:**
+OpenAPI Spec phase.
 
 ---
 
-## Integration Pitfalls
+## Technical Debt Patterns
 
-Mistakes when these features interact with each other and with the existing system.
+Shortcuts that seem reasonable but create long-term problems.
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| `#[allow(clippy::unwrap_used)]` on every module | Build compiles immediately | Defeats the purpose of the lint; unwrap calls never get fixed | Test modules only, or with `// SAFETY:` comment for proven-safe cases |
+| Single-level compaction (keep current L0->summary) | No new code needed | Information loss accumulates; no cold storage; no quality verification | As temporary state while building multi-level system |
+| PII regex without context awareness | Simple implementation | False positives on code, URLs, technical content; users disable it | If agent is text-chat only (no code assistance) |
+| Audit trail without PII separation | Simpler schema | GDPR erasure breaks hash chain or becomes impossible | Never -- design PII separation from day one |
+| In-memory cron state (no SQLite persistence) | Simpler implementation | Missed jobs on restart; no catch-up; operator cannot see schedule | Development/testing only; production must persist |
+| Blocking prompt injection check on every message | Maximum security | Adds latency to every message; false positives block legitimate use | Never for blocking; acceptable for logging-only mode |
+
+## Integration Gotchas
+
+Common mistakes when connecting new features to the existing Blufio architecture.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Circuit breaker + typed errors | Building circuit breaker before error hierarchy exists | Build typed errors first; circuit breaker consumes `is_retryable()` |
-| Degradation ladder + circuit breaker | Degradation reacts to circuit state AND to errors independently | Degradation watches circuit state as an input, not raw errors |
-| Token counting + context engine | Replacing `len()/4` in DynamicZone without maintaining backward-compatible threshold | Recalibrate compaction_threshold after switching to accurate counting (tokens != chars/4) |
-| Token counting + cost ledger | Using estimated tokens for billing | Always use provider-reported TokenUsage for cost; local estimate for budget gate only |
-| FormatPipeline + streaming | Running format pipeline on partial streaming chunks | Pipeline runs on complete messages only, not streaming deltas |
-| ChannelCapabilities + FormatPipeline | Adding Table/List to FormatPipeline without adding corresponding capability flags | Add `supports_tables: bool`, `supports_lists: bool` to ChannelCapabilities first |
-| Circuit breaker + degradation ladder | Both react to same signal (provider errors) | Circuit breaker owns provider health; ladder reads circuit state |
-| ORT upgrade + token counting | Both touch blufio-memory dependencies | Do ORT upgrade in isolation first; then token counting in a separate phase |
-| Typed errors + all provider crates | New error variants in blufio-core require all providers to update | Use #[non_exhaustive] and Option<ErrorContext> to minimize blast radius |
-| Degradation level + heartbeat | Heartbeat continues at full cost during degradation | Degradation level 4+ should reduce heartbeat frequency or disable it |
+| Hook system + EventBus | Subscribing to broadcast channel (fire-and-forget) for hooks that must execute | Use `subscribe_reliable()` for hooks. Broadcast is for logging/metrics. Hooks require guaranteed delivery. |
+| Retention + SQLCipher | Opening new connection for cleanup without encryption key | Always use `open_connection()` factory which reads `BLUFIO_DB_KEY` automatically |
+| Hot reload + deny_unknown_fields | New config fields cause reload failures on older binaries | Add `#[serde(default)]` on all new optional sections; consider relaxing deny_unknown_fields for reload path |
+| OpenTelemetry + tracing | Adding a new subscriber that conflicts with the existing `tracing` subscriber | Use `tracing_subscriber::registry().with(existing_layer).with(otel_layer)` -- compose layers, do not replace |
+| Data export + SQLCipher | Opening read-only connection for export without encryption | Export must use same connection factory with `BLUFIO_DB_KEY` |
+| PII redaction + FormatPipeline | Redacting content after formatting (breaks markdown/HTML) | Redact before FormatPipeline processes the content. Redact on raw text, then format. |
+| Audit trail + EventBus | Publishing audit events on EventBus (creates audit events for audit events) | Audit writes bypass EventBus entirely. Direct SQLite insert in audit module. |
+| GDPR export + memory embeddings | Exporting raw embeddings in data export (meaningless to user) | Export memory content and metadata, not embedding vectors. Embeddings are model artifacts, not user data. |
 
----
+## Performance Traps
+
+Patterns that work at small scale but fail as usage grows.
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Loading all active memory embeddings for vector search | `get_active_embeddings()` fetches all embeddings on every query | Implement ANN index (HNSW) or cache embeddings in memory with LRU. Current linear scan is O(n) per query. | >5,000 active memories (384-dim * 5000 * 4 bytes = 7.5MB per query) |
+| Hash chain verification on every audit read | Full chain walk from genesis to latest entry | Verify only on startup, backup, and on-demand CLI. Cache latest verified hash. | >100,000 audit entries (~1 second per 100K SHA-256 ops) |
+| Regex PII scan on every message field | Scan all 4 PII patterns against every string | Scan only user-facing content (messages, memories). Skip internal fields (session_id, metadata JSON). | >50 messages/second (regex compilation is cached but matching scales with content length) |
+| Single-writer SQLite with audit + retention + normal ops | Write queue depth grows, latency increases for all operations | Separate audit database file, batch writes, or dedicated connection for cleanup | >20 concurrent sessions with active tool use |
+| Cron job evaluation every second with wall clock comparison | CPU wake-ups when idle, unnecessary for hourly/daily jobs | Compute next execution time and sleep until then, rather than polling every second | Negligible CPU cost, but wastes power on battery-powered dev machines |
+
+## Security Mistakes
+
+Domain-specific security issues beyond general web security.
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Storing PII in audit trail hash computation | GDPR erasure breaks tamper evidence | Hash only non-PII fields: event_id, timestamp, action_type, actor_id (UUID) |
+| Prompt injection defense that blocks the model's own output | Agent cannot respond to meta-questions about its instructions | L1 classifier runs on user INPUT only, not on model output. L4 validates OUTPUT for data exfiltration. |
+| HMAC boundary tokens using static secret | Leaked HMAC key lets attacker craft boundary tokens | Rotate HMAC secret per session. Derive from session_id + master secret. |
+| PII redaction in logs but not in LLM prompts | LLM provider receives unredacted PII | Redact before assembling the ProviderRequest, not just in log output |
+| Data export without authentication | Anyone with API access can export all user data | Data export requires Restricted-level API key scope. Rate limit to 1 export per hour. |
+| Hook system executes arbitrary shell commands | Compromised config file = RCE | Hooks run in sandboxed subprocesses with no network access, configurable UID, and resource limits (CPU, memory, time) |
+| Audit trail stored in same database as operational data | Compromised application can modify audit entries | Consider write-only audit database or separate file with restricted permissions |
+
+## UX Pitfalls
+
+Common user experience mistakes when adding these features.
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Prompt injection warning on every flagged message | Alert fatigue; user ignores real warnings | Silent logging for LOW-confidence flags. Alert only for HIGH-confidence + sensitive action |
+| PII redaction replaces content with [REDACTED] in agent responses | Agent appears to be censoring itself | Redact in logs and exports. In agent responses, use the original content (the user sent it, they know it) |
+| GDPR erasure confirmation is "are you sure?" without showing what will be deleted | User does not know what they are erasing | Show a preview: "This will delete: 47 messages, 12 memories, 3 sessions. Audit records will be anonymized." |
+| Cron job failures are silent | Operator does not know jobs are failing | Send cron failure notifications via the agent's channels (e.g., Telegram message to operator) |
+| Hot reload success is invisible | Operator reloads config but cannot tell if it worked | Log the diff: "Config reloaded: tls.cert changed, agent.model unchanged (7 fields unchanged)" |
+| Data classification levels shown in user-facing responses | Users see "CONFIDENTIAL" markers on their own messages | Classification is internal metadata. Never expose to end users. |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Token counting:** Call `tokenizer.encode()` on CJK text (Chinese, Japanese, Korean) -- CJK has dramatically different token-to-char ratios (1 char = 1-3 tokens, not 0.25). If tests only use English, the counter "works" but is 4-12x wrong for CJK users.
+Things that appear complete but are missing critical pieces.
 
-- [ ] **Token counting on hot path:** Run a 50-message conversation and verify tokio worker threads are NOT blocked (use `tokio::runtime::Handle::current().metrics()` to check `worker_noop_count` or `tokio-console`).
-
-- [ ] **Circuit breaker half-open:** After circuit opens and cools down, send exactly 1 probe request. If it fails, verify the circuit returns to OPEN (not stays in HALF_OPEN). If it succeeds, verify only a limited number of requests pass (ramp-up, not flood).
-
-- [ ] **Circuit breaker error classification:** Send a 400 Bad Request to the provider and verify it does NOT increment the circuit breaker failure count. Only 429/500/502/503/timeout should count.
-
-- [ ] **Degradation de-escalation:** Set degradation to level 3. Clear the triggering condition. Wait 5 minutes. Verify the system has de-escalated (not stuck at level 3).
-
-- [ ] **Degradation + router interaction:** Set budget to 85%. Verify either the router downgrades OR the ladder escalates, not both.
-
-- [ ] **Typed errors retryable:** Construct a `BlufioError::Timeout` and verify `is_retryable()` returns true. Construct `BlufioError::BudgetExhausted` and verify `is_retryable()` returns false.
-
-- [ ] **FormatPipeline + Telegram:** Send a `RichContent::Embed` through the Telegram adapter. Verify the output does NOT contain raw `**bold**` markdown that Telegram doesn't render (Telegram uses MarkdownV2 with different escaping).
-
-- [ ] **FormatPipeline + IRC:** Send a `RichContent::Table` with 10 rows through IRC. Verify the output fits within 512 bytes or is properly split across messages.
-
-- [ ] **ChannelCapabilities Default:** After adding new fields, verify that an adapter constructed with `..Default::default()` has sensible values (not accidentally claiming capability it doesn't have).
-
-- [ ] **ORT upgrade:** After upgrading, run the embedding integration test that loads all-MiniLM-L6-v2 and produces a 384-dim vector. Verify the vector is identical (within f32 epsilon) to the vector produced by the old version -- ORT upgrades should not change inference results.
-
-- [ ] **ORT unsafe Send:** After upgrade, check if `ort::session::Session` implements `Send`. If yes, remove the `unsafe impl Send for OnnxEmbedder` and the `Mutex<Session>` wrapper (replace with direct field).
-
----
+- [ ] **Multi-level compaction:** Quality scoring passes on test data but has never been tested on 1000+ message conversations with planted facts -- verify fact retention, not just summary quality
+- [ ] **Prompt injection L1:** Pattern classifier deployed but FPR never measured on real conversational corpus -- verify <2% FPR before enabling blocking mode
+- [ ] **Audit trail:** Hash chain verifies correctly but PII is embedded in hashed fields -- verify GDPR erasure does not break chain integrity
+- [ ] **Retention policy:** Deletes old messages but does not respect foreign key order -- verify no `FOREIGN KEY constraint failed` errors in production logs
+- [ ] **Hook system:** Hooks fire correctly in isolation but two hooks have never been tested together -- verify no infinite loops with 3+ hooks installed
+- [ ] **Hot reload:** Config file reload works but TLS cert rotation was not tested with active connections -- verify active WebSocket connections survive cert rotation
+- [ ] **PII redaction:** Email/phone patterns match correctly on PII test data but were never tested against code blocks -- verify no false positives on 100+ code samples
+- [ ] **GDPR export:** Export generates JSON but does not include memories -- verify export includes all user data types (messages, memories, sessions, preferences)
+- [ ] **Cron scheduler:** Jobs fire on time in testing but persistence was not tested across restart -- verify jobs resume correctly after `blufio serve` restart
+- [ ] **Litestream:** Replication works on test database but encrypted database was not tested -- verify behavior with `BLUFIO_DB_KEY` set (expect failure, document alternative)
+- [ ] **OpenTelemetry:** Traces export to collector but span context is not propagated to provider HTTP calls -- verify trace continuity across LLM provider requests
+- [ ] **Clippy unwrap enforcement:** Lint added to 5 crates but test modules still panic on `unwrap()` -- verify `#[allow]` annotations are limited to test code and proven-safe constants
+- [ ] **Data classification:** System classifies correctly but default level for new data types is Restricted -- verify defaults are sensible (Public/Internal for most data)
+- [ ] **BlueBubbles adapter:** Connects and sends but Private API crash recovery was not tested -- verify adapter reconnects after BlueBubbles server restart
 
 ## Recovery Strategies
 
+When pitfalls occur despite prevention, how to recover.
+
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Token counting blocking workers | LOW | Wrap in spawn_blocking; no data changes needed |
-| Circuit breaker too aggressive | LOW | Adjust thresholds in TOML config; restart |
-| Circuit breaker too lenient | MEDIUM | Tighten thresholds; may need to add sliding window if using simple counter |
-| Degradation ladder stuck | LOW | `blufio degrade reset` manual override; fix de-escalation timer |
-| Degradation + router double-downgrade | MEDIUM | Coordinate threshold ranges; may need to restructure both systems |
-| Error hierarchy breaks 35 crates | HIGH | If done wrong (nested enums), requires rewriting all error handling; plan carefully |
-| FormatPipeline double-formatting | MEDIUM | Revert pipeline wiring; redesign as adapter-internal rather than external |
-| ChannelCapabilities breaks 10 files | LOW | Add Default impl retroactively; mechanical fix |
-| ORT upgrade compilation failure | LOW | Mechanical import path fixes; audit all ort:: usages |
-| ORT unsafe Send unsoundness | MEDIUM | Requires careful evaluation of Session thread safety; may need architectural change |
+| Compaction loses critical facts | MEDIUM | Re-derive summaries from cold storage (L0 raw messages). Reindex memories from raw messages. Requires cold storage to exist. |
+| Audit trail has PII in hashed fields | HIGH | Must rebuild entire hash chain with PII-free hashing. Requires migration script that re-hashes every entry. Downtime required. |
+| Litestream configured with SQLCipher | LOW | Remove Litestream config. Switch to application-level backup + upload. No data loss (original database is intact). |
+| False positive storm from PII regex | LOW | Disable PII patterns via config change (hot reload). Tune thresholds. Re-enable with allowlist. |
+| Hook infinite loop | LOW | Kill the process (loop is CPU-bound, not a data corruption issue). Add recursion depth limit. Restart. |
+| Retention deletes cascade to audit | HIGH | Restore from backup. Audit entries cannot be regenerated. Requires backup to exist and be recent. |
+| Over-classification blocks all operations | LOW | Reset all classifications to default via CLI command. Re-classify selectively. |
+| Dual recorder panic at startup | LOW | Remove OpenTelemetry config or switch to tracing-only mode. No data loss. |
+| Cron drift causes missed jobs | LOW | Restart with persistence enabled. Missed jobs execute in catch-up mode on next tick. |
+| Cold start amnesia from temporal decay | MEDIUM | Temporarily set decay floor to 1.0 (no decay). Gradually lower as new interactions refresh memory scores. |
 
----
+## Pitfall-to-Phase Mapping
 
-## Dependency Ordering (Critical)
+How roadmap phases should address these pitfalls.
 
-These features have strict dependencies that constrain implementation order:
-
-```
-1. Typed Error Hierarchy (no deps -- enables everything else)
-   |
-   v
-2. Circuit Breakers (depends on is_retryable() from typed errors)
-   |
-   v
-3. Degradation Ladder (depends on circuit state as input)
-   |
-   |-- 4a. Token Counting (independent, but recalibrates context engine thresholds)
-   |
-   |-- 4b. ChannelCapabilities Extension (independent, but must precede FormatPipeline)
-   |       |
-   |       v
-   |-- 5. FormatPipeline Integration (depends on ChannelCapabilities extension)
-   |
-   v
-6. ORT Upgrade (independent -- do in isolation, ideally last to minimize risk)
-```
-
-**Do NOT** implement circuit breakers before typed errors. The circuit breaker needs `is_retryable()` to classify errors. Without it, all errors count as failures, making the breaker too aggressive.
-
-**Do NOT** implement FormatPipeline before ChannelCapabilities extension. The pipeline needs capability flags for new content types (tables, lists).
-
----
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Litestream + SQLCipher incompatibility | Infrastructure / Litestream | Startup check rejects dual config; integration test with BLUFIO_DB_KEY |
+| Compaction information loss | Compaction & Context | Planted-fact test: 1000 messages, 20 planted facts, verify all 20 survive full compaction chain |
+| GDPR vs audit trail conflict | Audit Trail (design) + GDPR (implementation) | GDPR erasure test: erase user, verify audit chain still validates, verify no PII in audit table |
+| Prompt injection false positives | Security Hardening | FPR test: 500 legitimate messages, verify <2% flag rate before enabling blocking |
+| OTel + Prometheus recorder conflict | Observability | Startup test: both Prometheus and OTel tracing enabled simultaneously without panic |
+| ArcSwap partial config state | Hot Reload | Integration test: reload TLS cert, verify new cert served within 5 seconds |
+| Cron timer drift | Cron/Scheduler | Long-running test: 24-hour cron job accuracy within 1 second |
+| Memory cold start amnesia | Memory Enhancements | Decay test: simulate 30 days inactivity, verify core memories still retrievable |
+| PII regex false positives | PII Redaction | False-positive suite: 200 code samples, 50 URLs, 50 technical strings, verify <1% false positive rate |
+| Hook infinite loops | Hook System | Loop test: install 2 hooks that trigger each other, verify depth limit prevents loop |
+| Audit write bottleneck | Audit Trail | Load test: 20 concurrent sessions, verify audit does not increase p95 message latency by >50ms |
+| Retention cascading deletes | Retention Policy | Foreign key test: delete session with 100 messages, verify correct deletion order, no FK violations |
+| Over-classification | Data Classification | Default test: new deployment, verify >80% of data classified as Internal (not Restricted) |
+| Clippy unwrap enforcement | Code Quality | CI gate: warn-mode first, track count decreasing across phases, deny-mode last |
+| BlueBubbles reliability | Additional Channels | Reconnection test: kill BlueBubbles server, verify adapter reconnects within 60 seconds |
+| Email deliverability | Additional Channels | Deliverability test: send to Gmail, verify inbox (not spam) with SPF/DKIM/DMARC configured |
+| OpenAPI spec drift | OpenAPI Spec | Spec validation test: auto-generated spec matches actual endpoint behavior for all routes |
 
 ## Sources
 
-- ORT 2.0.0-rc.12 release notes (breaking changes): https://github.com/pykeio/ort/releases/tag/v2.0.0-rc.12
-- ORT 2.0.0-rc.11 release notes (ndarray update, metadata API changes): https://github.com/pykeio/ort/releases/tag/v2.0.0-rc.11
-- ORT documentation (Session API, value extraction): https://ort.pyke.io/
-- tokio spawn_blocking documentation: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
-- tokio cooperative scheduling and blocking: https://tokio.rs/tokio/tutorial/spawning
-- HuggingFace tokenizers crate: https://crates.io/crates/tokenizers
-- Circuit breaker pattern (Microsoft): https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
-- Graceful degradation in distributed systems: https://www.geeksforgeeks.org/system-design/graceful-degradation-in-distributed-systems/
-- AWS graceful degradation best practices: https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_mitigate_interaction_failure_graceful_degradation.html
-- Rust error handling with thiserror (anti-patterns): https://nrc.github.io/error-docs/error-design/error-type-design.html
-- Effective Rust error design: https://effective-rust.com/errors.html
-- Iroh project error handling (backtraces + thiserror): https://www.iroh.computer/blog/error-handling-in-iroh
-- Circuit breaker thundering herd prevention: https://iam.slys.dev/p/how-systems-handle-failure-retries
-- tower-circuitbreaker crate: https://lib.rs/crates/tower-circuitbreaker
-- Blufio codebase: `BlufioError` enum at `crates/blufio-core/src/error.rs` (14 variants, no behavioral methods)
-- Blufio codebase: `FormatPipeline` at `crates/blufio-core/src/format.rs` (exists but not wired into adapters)
-- Blufio codebase: `ChannelCapabilities` at `crates/blufio-core/src/types.rs:107` (9 fields, no Default, no non_exhaustive)
-- Blufio codebase: `DynamicZone::assemble_messages` at `crates/blufio-context/src/dynamic.rs:64` (len()/4 heuristic)
-- Blufio codebase: `OnnxEmbedder` at `crates/blufio-memory/src/embedder.rs` (unsafe Send, Mutex<Session>, ort rc.11 APIs)
-- Blufio codebase: ort pinned at `=2.0.0-rc.11` in workspace Cargo.toml line 49
-- Blufio codebase: tokenizers at `0.21` in workspace Cargo.toml line 50
+- [Litestream SQLCipher Issue #177 (wontfix)](https://github.com/benbjohnson/litestream/issues/177) -- confirmed incompatibility
+- [Litestream Tips & Caveats](https://litestream.io/tips/) -- WAL management, checkpoint control, data loss window
+- [ArcSwap documentation - patterns](https://docs.rs/arc-swap/latest/arc_swap/docs/patterns/index.html) -- Access trait for config projection
+- [ArcSwap limitations and pitfalls](https://docs.rs/arc-swap/latest/arc_swap/docs/index.html) -- performance characteristics, read operation selection
+- [OpenTelemetry Rust SDK](https://github.com/open-telemetry/opentelemetry-rust) -- opentelemetry-prometheus deprecation notice
+- [opentelemetry-prometheus crate deprecation](https://crates.io/crates/opentelemetry-prometheus) -- v0.29 final release, unmaintained protobuf dependency
+- [tokio-cron-scheduler](https://github.com/mvniekerk/tokio-cron-scheduler) -- timer drift documentation, no persistence across restarts
+- [PromptArmor: Prompt Injection Defenses](https://arxiv.org/html/2507.15219v1) -- <1% FPR/FNR with GPT-4o guardrail
+- [OWASP LLM Top 10 2025 - Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) -- defense-in-depth requirement
+- [OWASP Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+- [GDPR Right to Erasure and Backups](https://hallboothsmith.com/we-all-know-about-gdprs-right-to-erasure-does-this-mean-you-have-to-delete-data-from-backups-as-well/) -- backup erasure obligations
+- [Right to Be Forgotten vs Audit Trail Mandates](https://axiom.co/blog/the-right-to-be-forgotten-vs-audit-trail-mandates) -- legal tension, practical solutions
+- [PII Detection: Why Regex Fails](https://www.protecto.ai/blog/why-regex-fails-pii-detection-in-unstructured-text/) -- false positive analysis
+- [The Hidden PII Detection Crisis](https://www.private-ai.com/en/blog/hidden-pii-detection) -- context-aware detection rationale
+- [SQLite Foreign Key Support](https://sqlite.org/foreignkeys.html) -- cascade behavior, performance, default-off enforcement
+- [Clippy unwrap_used lint discussion](https://github.com/rust-lang/rust-clippy/issues/6636) -- migration strategies for large codebases
+- [AuditableLLM: Hash-Chain-Backed Audit Framework](https://www.mdpi.com/2079-9292/15/1/56) -- performance characteristics of hash-chained audit
+- [Audit Trail Scaling Strategies](https://www.sachith.co.uk/audit-trails-and-tamper-evidence-scaling-strategies-practical-guide-feb-22-2026/) -- batch writes, Merkle trees
+- [BlueBubbles FAQ](https://bluebubbles.app/faq/) -- Private API requirements, macOS dependency
+- [BlueBubbles Troubleshooting](https://docs.bluebubbles.app/server/troubleshooting-guides/cant-send-messages-from-bluebubbles) -- AppleScript vs Private API reliability
+- [Persistent Memory Design for AI Agents](https://www.marktechpost.com/2025/11/02/how-to-design-a-persistent-memory-and-personalized-agentic-ai-system-with-decay-and-self-evaluation/) -- decay mechanisms, cold start patterns
+- [Data Classification Challenges](https://www.sentra.io/learn/5-data-classification-challenges-that-security-teams-face) -- over-classification, context dependency
+- Blufio codebase analysis: `crates/blufio-context/src/compaction.rs`, `crates/blufio-security/src/redact.rs`, `crates/blufio-bus/src/events.rs`, `crates/blufio-config/src/model.rs`, `crates/blufio-memory/src/store.rs`, `crates/blufio-storage/src/database.rs`, `crates/blufio-prometheus/src/lib.rs`
 
 ---
-*Pitfalls research for: v1.4 Quality & Resilience -- adding circuit breakers, graceful degradation, typed errors, accurate token counting, format pipeline integration, ChannelCapabilities extension, and ORT upgrade to existing 71,808 LOC Rust AI agent platform*
-*Researched: 2026-03-08*
+*Pitfalls research for: Blufio v1.5 PRD Gap Closure*
+*Researched: 2026-03-10*

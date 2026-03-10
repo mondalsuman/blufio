@@ -1,480 +1,1006 @@
 # Architecture Patterns
 
-**Domain:** Quality & Resilience for Rust AI Agent Platform (v1.4)
-**Researched:** 2026-03-08
-**Confidence:** HIGH (based on direct source code analysis of 35-crate workspace)
+**Domain:** v1.5 PRD Gap Closure -- Feature Integration Into 35-Crate Rust AI Agent Platform
+**Researched:** 2026-03-10
+**Confidence:** HIGH (based on direct analysis of 80,101 LOC across 35 crates, 11 migration files, workspace Cargo.toml, and component wiring in serve.rs)
 
 ## Recommended Architecture
 
-### Principle: Modify Existing Crates, No New Crates
+The v1.5 features integrate into the existing 35-crate workspace through three strategies: (A) **extend existing crates** where the feature naturally belongs, (B) **create new crates** where a new domain boundary exists, and (C) **add infrastructure** where cross-cutting concerns require new wiring. The guiding principle is: a new crate only when a new adapter trait or a clearly orthogonal subsystem justifies it.
 
-All v1.4 features fit naturally into existing crate boundaries. Adding new crates would fragment the workspace and create unnecessary dependency complexity. The 35-crate workspace is already large; v1.4 is about depth (improving what exists), not breadth (adding new subsystems).
+### Crate Impact Map
 
-**Crate modification map:**
+| Feature | Strategy | Primary Crate(s) | New Crate? | New Migration? |
+|---------|----------|-------------------|------------|----------------|
+| Multi-level compaction (L0-L3) | Extend | blufio-context | No | No (metadata in existing messages table) |
+| Prompt injection defense | Extend | blufio-security, blufio-agent | No | No |
+| Cron/scheduler | **New crate** | blufio-scheduler | **Yes** | Yes (V12: scheduled_jobs) |
+| Memory enhancements | Extend | blufio-memory | No | Yes (V13: ALTER memories) |
+| Audit trail | **New crate** | blufio-audit | **Yes** | Yes (V14: audit_log) |
+| Data classification | Extend | blufio-core (traits) | No | No |
+| Retention policies | Extend | blufio-storage | No | Yes (V15: soft delete columns) |
+| Hook system | **New crate** | blufio-hooks | **Yes** | No (TOML-driven) |
+| Hot reload | Extend | blufio-config | No | No |
+| iMessage adapter | **New crate** | blufio-imessage | **Yes** | No |
+| Email adapter | **New crate** | blufio-email | **Yes** | No |
+| SMS adapter | **New crate** | blufio-sms | **Yes** | No |
+| PII redaction expansion | Extend | blufio-security | No | No |
+| GDPR tooling | Extend | blufio (CLI binary) | No | No |
+| OpenTelemetry | **New crate** | blufio-otel | **Yes** | No |
+| OpenAPI spec | Extend | blufio-gateway | No | No |
+| Litestream replication | External sidecar | blufio (CLI/docs) | No | No |
+| Code quality hardening | Cross-cutting | All library crates | No | No |
 
-| Crate | Modifications | Why Here |
-|-------|--------------|----------|
-| `blufio-core` | Typed error hierarchy, extended `ChannelCapabilities`, `FormatPipeline` additions (Table/List content types) | Core traits/types crate; all adapters depend on it |
-| `blufio-context` | Replace `len()/4` heuristic with accurate tokenizer-backed counting | Token estimation lives in `dynamic.rs` line 64 |
-| `blufio-agent` | Circuit breaker wrapper around provider calls, degradation ladder integration | Agent loop is the call site for provider + channel + storage |
-| `blufio-bus` | New `Resilience` event domain (circuit breaker state changes, degradation level changes) | Event bus is the pub/sub backbone |
-| `blufio-prometheus` | Circuit breaker + degradation metrics | Observability is already centralized here |
-| `blufio-telegram`, `blufio-discord`, `blufio-slack`, `blufio-whatsapp`, `blufio-signal`, `blufio-irc`, `blufio-matrix`, `blufio-gateway` | Wire `FormatPipeline`, update `capabilities()` return values | Each adapter owns its formatting; pipeline replaces ad-hoc formatting |
+**Summary: 7 new crates, 4 new migrations (V12-V15), bringing total to ~42 crates.**
 
-### Component Boundaries
+---
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| `blufio-core::error` | Typed error hierarchy with `is_retryable()`, `severity()`, `category()` | Every crate (all use `BlufioError`) |
-| `blufio-core::format` | Content degradation pipeline + Table/List content types | Channel adapters (call `FormatPipeline::format()`) |
-| `blufio-core::types` | Extended `ChannelCapabilities` (streaming_type, formatting_support, rate_limits) | Channel adapters (return from `capabilities()`) |
-| `blufio-context::token_counter` | New module: accurate token counting via HuggingFace `tokenizers` crate | `blufio-context::dynamic` (replace heuristic), `blufio-agent` (budget checks) |
-| `blufio-agent::circuit_breaker` | New module: per-dependency circuit breaker state machine | `blufio-agent::session` (wraps provider calls), `blufio-bus` (publishes state changes) |
-| `blufio-agent::degradation` | New module: 6-level degradation ladder with auto-escalation | `blufio-agent::session` (adjusts behavior per level), `blufio-bus` (publishes level changes) |
-| `blufio-bus::events` | Extended with `Resilience(ResilienceEvent)` domain | `blufio-agent` (publishes), `blufio-prometheus` (subscribes), webhooks (subscribes) |
-| `blufio-prometheus::recording` | New circuit breaker + degradation gauge/counter metrics | `blufio-prometheus` (subscribes to bus events) |
+## Component Architecture: Per-Feature Integration
 
-### Data Flow
+### 1. Multi-Level Compaction (L0-L3) -- blufio-context
 
-#### Normal Request Flow (unchanged)
+**Current state:** Single-level compaction in `compaction.rs` -- a flat module with `generate_compaction_summary()` and `persist_compaction_summary()`. The `DynamicZone` in `dynamic.rs` splits history at the midpoint and summarizes the older half via a single Haiku LLM call. No quality scoring, no tiered summarization, no archive, no soft/hard thresholds.
 
-```
-InboundMessage -> ChannelMultiplexer -> SessionActor
-  -> ContextEngine (dynamic zone: token counting HERE)
-  -> ProviderAdapter.stream() (circuit breaker wraps HERE)
-  -> StreamingBuffer -> ChannelAdapter.send() (FormatPipeline HERE)
-```
-
-#### Circuit Breaker Flow (new)
+**Architecture change:**
 
 ```
-SessionActor.process_message()
-  -> CircuitBreaker.call(provider.stream(request))
-     -> [Closed] pass through, record success/failure
-     -> [Open] immediate Err(BlufioError::Provider { is_retryable: false })
-              -> DegradationLadder.escalate()
-     -> [HalfOpen] allow probe, transition on result
-  -> On state change: EventBus.publish(Resilience::CircuitStateChanged)
-  -> Prometheus: gauge blufio_circuit_state{dependency="anthropic"}
+blufio-context/
+  src/
+    compaction/           # Promote from single file to module
+      mod.rs              # CompactionEngine with level-based dispatch
+      levels.rs           # L0 (raw), L1 (session summary), L2 (topic cluster), L3 (persona)
+      quality.rs          # QualityScoringGate -- cosine sim between summary and source
+      triggers.rs         # Soft/hard threshold configuration and trigger logic
+      archive.rs          # Cold storage serialization for compacted messages
+    dynamic.rs            # Delegates to CompactionEngine instead of bare functions
 ```
 
-#### Degradation Ladder Flow (new)
+**Data flow change:**
 
 ```
-DegradationLadder (6 levels):
-  L0: Normal         - full features, all models available
-  L1: CostReduction  - force Haiku for all queries, skip memory search
-  L2: Simplified     - disable streaming, plain text only, skip skills
-  L3: CacheOnly      - serve from cached/compacted context only
-  L4: StaticResponse - pre-configured "service degraded" messages
-  L5: Offline        - reject new messages, drain existing sessions
-
-Triggers:
-  - CircuitBreaker opens -> escalate one level
-  - CircuitBreaker closes -> de-escalate one level
-  - Budget exhaustion -> jump to L4
-  - Storage failure -> jump to L5
-
-Each transition -> EventBus.publish(Resilience::DegradationChanged)
-                -> Prometheus gauge blufio_degradation_level
+DynamicZone::assemble_messages()
+  |
+  +-- Estimate tokens via TokenizerCache (existing)
+  |
+  +-- IF tokens > soft_threshold (default 0.60):
+  |     CompactionEngine::compact_incremental(L0 -> L1)
+  |     QualityScoringGate::verify(summary, source_messages)
+  |       IF quality_score < 0.7 -> retry with enhanced prompt
+  |
+  +-- IF tokens > hard_threshold (default 0.85):
+  |     CompactionEngine::compact_deep(L1 -> L2, L2 -> L3)
+  |     Archive::store(compacted_messages)  # optional cold storage
+  |
+  +-- Return DynamicResult with compaction_usage (Vec, not Option)
 ```
 
-#### Token Counting Flow (modified)
+**Key integration points:**
+- `ContextConfig` in blufio-config gains `compaction_soft_threshold`, `compaction_hard_threshold`, `compaction_quality_min`, `compaction_archive_enabled` fields
+- `DynamicZone` delegates to `CompactionEngine` rather than calling `generate_compaction_summary` directly
+- Compaction level metadata stored in existing `messages.metadata` JSON column (no new migration)
+- `AssembledContext::compaction_usage` changes from `Option<TokenUsage>` to `Vec<TokenUsage>` (multi-stage)
+- EventBus gets new `BusEvent::Compaction(CompactionEvent)` variant for level transitions and quality gate outcomes
+- Quality gate uses cosine similarity of summary embedding vs. mean of source embeddings (reuses blufio-memory embedder)
+- **No new crate dependencies** -- uses existing LLM provider calls and SHA-256 from `sha2`
+
+### 2. Prompt Injection Defense Pipeline -- blufio-security + blufio-agent
+
+**Current state:** blufio-security has three modules: TLS enforcement (`tls.rs`), SSRF prevention (`ssrf.rs`), and secret redaction (`redact.rs`). No input validation against prompt injection. The `REDACTION_PATTERNS` LazyLock in `redact.rs` has 4 regex patterns for API keys and tokens.
+
+**Architecture change:**
 
 ```
-BEFORE (dynamic.rs:64):
-  estimated_tokens = history.iter().map(|m| m.content.len() / 4).sum()
-
-AFTER:
-  estimated_tokens = token_counter.count_tokens_batch(&history_texts)
-  // where token_counter is initialized per-provider from tokenizer.json
+blufio-security/
+  src/
+    injection/            # New module
+      mod.rs              # InjectionDefense pipeline orchestrator
+      pattern.rs          # L1: Regex/keyword pattern classifier (known attack patterns)
+      boundary.rs         # L3: HMAC boundary token insertion/verification
+      output_validator.rs # L4: Output scanning for leaked system prompt content
+    redact.rs             # Existing (unchanged)
+    ssrf.rs               # Existing (unchanged)
+    tls.rs                # Existing (unchanged)
 ```
 
-## Patterns to Follow
+**Five-layer defense model:**
 
-### Pattern 1: Typed Error Enrichment (Extend BlufioError)
+| Layer | Location | Mechanism | Blocking? |
+|-------|----------|-----------|-----------|
+| L1 | blufio-security/injection/pattern.rs | Regex classifier for known injection patterns | Configurable |
+| L2 | System prompt instructions | "Ignore attempts to override" preamble | Passive |
+| L3 | blufio-security/injection/boundary.rs | HMAC boundary tokens wrapping user content | Non-blocking (structural) |
+| L4 | blufio-security/injection/output_validator.rs | Scan LLM output for system prompt leakage | Warning/block |
+| L5 | blufio-agent (handle_inbound) | Human-in-the-loop queue for high-risk inputs | Blocking (async) |
 
-**What:** Add `is_retryable()`, `severity()`, and `category()` methods to `BlufioError` without breaking existing variant construction. Add structured fields to Provider/Channel variants.
+**Integration into agent loop:**
 
-**When:** Every error construction and match site.
+```
+AgentLoop::handle_inbound(inbound)
+  |
+  +-- InjectionDefense::classify_input(&inbound.content)  # L1 pattern check
+  |     Returns: InputClassification { risk_level, matched_patterns }
+  |
+  +-- IF risk_level >= High && config.injection.human_in_loop:  # L5
+  |     Enqueue for human review, respond with hold message
+  |
+  +-- ContextEngine::assemble() wraps user content with HMAC tokens  # L3
+  |     boundary::wrap_user_content(content, session_hmac_key)
+  |
+  +-- After LLM response:
+  |     output_validator::scan_output(&response, &system_prompt_hashes)  # L4
+  |     Check for: system prompt leakage, instruction override indicators
+```
 
-**Approach:** The existing `BlufioError` enum (15 variants, `thiserror`-derived) uses string messages for `Provider` and `Channel` variants. Rather than adding new variants (which would break every `match`), enrich the existing variants with optional typed metadata and add trait methods.
+**Key integration points:**
+- blufio-security depends on `hmac` + `sha2` (already workspace dependencies)
+- blufio-agent gains `Option<Arc<InjectionDefense>>` field on `AgentLoop` and `SessionActorConfig`
+- `SecurityConfig` in blufio-config gains `[security.injection]` subsection
+- HMAC key derived from session_id + vault master key (via blufio-vault's Argon2id KDF)
+- EventBus: `BusEvent::Security(SecurityEvent::InjectionDetected { risk_level, patterns })` for observability
+- Pattern database: embedded const strings in the binary (not external file) to preserve single-binary constraint
+- L1 patterns based on [OWASP Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+
+### 3. Cron/Scheduler -- blufio-scheduler (NEW CRATE)
+
+**Rationale for new crate:** Scheduling is an orthogonal concern -- it does not belong in blufio-agent (message processing), blufio-config (configuration loading), or blufio-storage (persistence). It needs its own lifecycle (start/stop), its own persistence (job run history), and its own error domain. It parallels blufio-resilience in being a cross-cutting operational concern.
+
+**Architecture:**
+
+```
+blufio-scheduler/
+  Cargo.toml             # Deps: blufio-core, blufio-config, blufio-bus, croner, tokio, chrono
+  src/
+    lib.rs               # Scheduler struct with start/stop/list
+    job.rs               # ScheduledJob definition (cron expr, action, enabled)
+    executor.rs          # Job execution loop (tokio::spawn + tick interval)
+    systemd.rs           # systemd timer file generation (blufio scheduler export-systemd)
+    config.rs            # SchedulerConfig with [[scheduler.jobs]] TOML array
+```
+
+**Integration:**
 
 ```rust
-// blufio-core/src/error.rs
+// serve.rs wiring (same pattern as circuit breaker registry):
+let scheduler = Scheduler::new(&config.scheduler, event_bus.clone(), storage.clone());
+scheduler.start(cancel_token.clone()).await;
+```
 
-/// Error severity for automated response decisions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorSeverity {
-    /// Transient error, retry likely to succeed.
-    Transient,
-    /// Degraded operation, partial functionality available.
-    Degraded,
-    /// Fatal error, operation cannot succeed.
-    Fatal,
+**TOML configuration:**
+
+```toml
+[scheduler]
+enabled = true
+tick_interval_ms = 500
+
+[[scheduler.jobs]]
+name = "daily-memory-cleanup"
+cron = "0 3 * * *"
+action = "memory:cleanup"
+enabled = true
+
+[[scheduler.jobs]]
+name = "retention-enforcement"
+cron = "0 4 * * *"
+action = "retention:enforce"
+enabled = true
+```
+
+**Key integration points:**
+- New `[scheduler]` section in BlufioConfig with `enabled` bool and `[[scheduler.jobs]]` array
+- Actions are string-typed dispatch keys: `memory:cleanup`, `retention:enforce`, `backup:run`, `health:check`
+- Scheduler publishes `BusEvent::Scheduler(SchedulerEvent::JobTriggered { ... })` to EventBus
+- Action dispatch routes to internal subsystem methods via a registered action handler map
+- Migration V12 adds `scheduled_jobs` table for job run history (last_run, next_run, run_count, last_error)
+- CLI: `blufio scheduler list`, `blufio scheduler run <job>`, `blufio scheduler export-systemd`
+- Uses `croner` crate for cron expression parsing (lightweight, well-maintained, no std issues)
+
+### 4. Memory Enhancements -- blufio-memory
+
+**Current state:** `HybridRetriever` does vector + BM25 + RRF fusion with confidence-based boosting (`explicit=0.9`, `extracted=0.6`). The `Memory` struct has `created_at`/`updated_at` timestamps but no access tracking. No temporal decay, no MMR diversity reranking, no index size bounds, no background validation.
+
+**Architecture change:**
+
+```
+blufio-memory/
+  src/
+    retriever.rs          # Add temporal_decay(), importance_boost(), mmr_rerank() stages
+    store.rs              # Add last_accessed_at tracking, LRU eviction, count queries
+    validator.rs          # NEW: Background task to validate embedding dimensionality
+    watcher.rs            # NEW: notify-based file watcher for auto re-indexing
+    types.rs              # Add last_accessed_at, access_count fields to Memory struct
+```
+
+**Enhanced retrieval pipeline:**
+
+```
+HybridRetriever::retrieve(query)
+  |
+  +-- embed(query)                          # existing
+  +-- vector_search()                       # existing
+  +-- bm25_search()                         # existing
+  +-- rrf_fusion()                          # existing
+  +-- temporal_decay(0.95^days)             # NEW: score *= decay_factor^(days_since_created)
+  +-- importance_boost(source)              # NEW: explicit=1.2x boost, extracted=1.0x
+  +-- mmr_rerank(lambda=0.7)               # NEW: Maximal Marginal Relevance for diversity
+  +-- update_access_timestamps()            # NEW: track last_accessed_at for LRU
+  +-- return top-K results
+```
+
+**MMR algorithm:**
+
+```
+Selected = {most relevant result}
+While |Selected| < K:
+  For each candidate not in Selected:
+    mmr_score = lambda * relevance(candidate) - (1-lambda) * max(sim(candidate, s) for s in Selected)
+  Add candidate with highest mmr_score to Selected
+```
+
+**Key integration points:**
+- Migration V13: `ALTER TABLE memories ADD COLUMN last_accessed_at TEXT DEFAULT NULL; ALTER TABLE memories ADD COLUMN access_count INTEGER DEFAULT 0;`
+- `MemoryConfig` gains `temporal_decay_factor` (default 0.95), `mmr_lambda` (default 0.7), `max_index_size` (default 10000), `lru_eviction_enabled` (default true)
+- LRU eviction: background tokio task checks `SELECT COUNT(*) FROM memories WHERE status='active'` > `max_index_size`, evicts least-recently-accessed
+- File watcher uses `notify` crate for monitoring skill/memory directories for changes
+- Background validator: spawned as tokio task in serve.rs, checks embedding dimensionality consistency
+- EventBus: `BusEvent::Memory(MemoryEvent::Evicted { count, reason })` for observability
+- New dependency: `notify = "7"` (shared with blufio-config hot reload)
+
+### 5. Audit Trail -- blufio-audit (NEW CRATE)
+
+**Rationale for new crate:** Audit is a cross-cutting concern that every subsystem feeds into but that must be independently reliable. It has its own storage table, its own integrity guarantees (hash chain), and its own verification logic. Embedding it in blufio-storage would conflate CRUD persistence with tamper-evident logging.
+
+**Architecture:**
+
+```
+blufio-audit/
+  Cargo.toml             # Deps: blufio-core, sha2, serde, serde_json, tokio-rusqlite, chrono, uuid
+  src/
+    lib.rs               # AuditLogger with append(), verify_chain(), export()
+    entry.rs             # AuditEntry struct with hash_self, hash_prev fields
+    chain.rs             # Hash chain verification logic
+    canonical.rs         # Deterministic JSON serialization (sorted keys, no whitespace)
+```
+
+**Hash chain structure:**
+
+```rust
+pub struct AuditEntry {
+    pub id: String,                    // UUID v4
+    pub timestamp: String,             // ISO 8601
+    pub actor: String,                 // "user:<id>", "system", "agent", "admin"
+    pub action: String,                // "message.sent", "session.created", "memory.deleted"
+    pub resource_type: String,         // "session", "message", "memory", "config"
+    pub resource_id: Option<String>,   // ID of affected resource
+    pub metadata: Option<String>,      // JSON: additional context (data classification tagged)
+    pub hash_prev: String,             // SHA-256 of previous entry (or "genesis" for first)
+    pub hash_self: String,             // SHA-256(canonical(fields + hash_prev))
 }
 
-/// Error category for metric labeling and routing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorCategory {
-    Network,
-    Authentication,
-    RateLimit,
-    Capacity,
-    Validation,
+// Chain integrity: hash_self = SHA-256(canonical_json(timestamp, actor, action, resource_type,
+//                                       resource_id, metadata, hash_prev))
+// Canonical JSON: keys sorted alphabetically, no whitespace, stable float repr
+```
+
+**Key integration points:**
+- Migration V14: `CREATE TABLE audit_log (id TEXT PK, timestamp TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT, metadata TEXT, hash_prev TEXT NOT NULL, hash_self TEXT NOT NULL UNIQUE); CREATE INDEX idx_audit_timestamp ON audit_log(timestamp); CREATE INDEX idx_audit_actor ON audit_log(actor); CREATE INDEX idx_audit_action ON audit_log(action);`
+- **Separate audit.db preferred** over same-database storage: isolates audit chain from main DB operations, allows different backup cadence, prevents accidental cascade deletes
+- `AuditLogger` wrapped in `Arc<AuditLogger>` -- injected into serve.rs and passed to AgentLoop
+- Async append via buffered mpsc channel: agent loop sends audit events, background task flushes to SQLite in batches (never blocks hot path)
+- EventBus integration: `AuditLogger` subscribes as reliable subscriber to EventBus, auto-generates audit entries from all event variants
+- CLI: `blufio audit verify` (checks full hash chain), `blufio audit export --format json --since 2026-03-01`
+- **Critical design decision:** Canonical serialization uses sorted keys and no pretty-printing -- without deterministic serialization, verification produces false positives
+
+### 6. Data Classification -- blufio-core (traits)
+
+**Current state:** No data classification. All data treated uniformly in logs, exports, API responses.
+
+**Architecture change:**
+
+```rust
+// New file: blufio-core/src/classification.rs (or add to types.rs)
+
+/// Data sensitivity classification following a four-level model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum DataClassification {
+    /// System status, model names, public configuration, version info.
+    Public,
+    /// Session IDs, message counts, operational metrics, timestamps.
     Internal,
+    /// Message content, memory facts, user preferences, conversation history.
+    Confidential,
+    /// Credentials, PII, encryption keys, audit chain hashes, vault entries.
+    Restricted,
 }
 
-impl BlufioError {
-    /// Whether this error is safe to retry automatically.
-    pub fn is_retryable(&self) -> bool {
-        match self {
-            BlufioError::Provider { message, .. } => {
-                message.contains("429")
-                    || message.contains("500")
-                    || message.contains("503")
-                    || message.contains("timeout")
+/// Types that carry a data sensitivity classification.
+pub trait Classifiable {
+    fn classification(&self) -> DataClassification;
+}
+```
+
+**Key integration points:**
+- `Classifiable` trait implemented on core types: `Message` (Confidential), `Session` (Internal), `Memory` (Confidential), vault entries (Restricted)
+- Classification drives: log redaction depth (Restricted always redacted), export filtering (GDPR export respects level), API response field filtering
+- blufio-security redaction uses classification: Restricted fields always redacted in logs, Confidential redacted at info/debug level
+- No migration needed -- classification is derived from type, not stored as a column
+- DataClassification is `PartialOrd` so you can write `if classification >= Confidential { redact() }`
+- Re-exported from blufio-core crate root alongside other traits
+
+### 7. Retention Policies -- blufio-storage + blufio-scheduler
+
+**Architecture:**
+
+```
+blufio-storage/
+  src/
+    retention.rs          # NEW: RetentionPolicy struct, RetentionEnforcer
+```
+
+**TOML configuration:**
+
+```toml
+[retention]
+enabled = true
+
+[retention.messages]
+max_age_days = 90
+soft_delete = true       # Mark deleted_at, don't DROP rows
+
+[retention.sessions]
+max_age_days = 365
+archive_closed = true    # Move to archived_at after close
+
+[retention.memories]
+max_age_days = 0          # 0 = never expire
+min_access_count = 0      # Memories accessed < N times eligible for pruning
+
+[retention.audit]
+max_age_days = 730        # 2 years for compliance
+immutable = true          # Never auto-delete audit entries
+```
+
+**Key integration points:**
+- Migration V15: `ALTER TABLE messages ADD COLUMN deleted_at TEXT DEFAULT NULL; ALTER TABLE sessions ADD COLUMN archived_at TEXT DEFAULT NULL;` (soft delete support)
+- `RetentionEnforcer::enforce()` called by scheduler job `retention:enforce` on configured cron
+- Enforcer respects `DataClassification` -- Restricted data has minimum retention period (configurable)
+- Audit entries are immutable by default: retention policy skips audit_log unless `immutable = false`
+- EventBus: `BusEvent::Retention(RetentionEvent::Enforced { deleted_messages, archived_sessions })` for observability
+- Soft delete means `get_messages()` needs `WHERE deleted_at IS NULL` filter (backward-compatible: existing queries see only active messages)
+
+### 8. Hook System -- blufio-hooks (NEW CRATE)
+
+**Rationale for new crate:** Hooks are a distinct extension mechanism -- shell-based external commands triggered by lifecycle events. This is orthogonal to the plugin system (compiled-in Rust adapters) and the skill system (WASM sandboxed). Hooks bridge Blufio to external tooling.
+
+**Architecture:**
+
+```
+blufio-hooks/
+  Cargo.toml             # Deps: blufio-core, blufio-bus, blufio-config, tokio
+  src/
+    lib.rs               # HookRegistry with register(), trigger()
+    runner.rs            # HookRunner: tokio::process::Command with timeout + env isolation
+    config.rs            # [[hooks]] TOML config parsing
+    events.rs            # 11 lifecycle hook points mapped from BusEvent variants
+```
+
+**11 lifecycle hook points (mapped to BusEvent):**
+
+| Hook | BusEvent Source | Environment Variables |
+|------|----------------|----------------------|
+| `on_startup` | AgentLoop init | BLUFIO_EVENT=startup |
+| `on_shutdown` | CancellationToken | BLUFIO_EVENT=shutdown |
+| `on_session_start` | Session(Created) | SESSION_ID, CHANNEL |
+| `on_session_end` | Session(Closed) | SESSION_ID |
+| `on_message_received` | Channel(MessageReceived) | CHANNEL, SENDER_ID |
+| `on_message_sent` | Channel(MessageSent) | CHANNEL |
+| `on_skill_invoked` | Skill(Invoked) | SKILL_NAME, SESSION_ID |
+| `on_skill_completed` | Skill(Completed) | SKILL_NAME, IS_ERROR |
+| `on_memory_extracted` | Memory(Extracted) | MEMORY_COUNT (new event) |
+| `on_error` | Error events | ERROR_TYPE, SEVERITY |
+| `on_health_degraded` | Resilience(DegradationLevelChanged) | FROM_LEVEL, TO_LEVEL |
+
+**TOML configuration:**
+
+```toml
+[[hooks]]
+event = "on_session_start"
+command = "/usr/local/bin/notify-new-session.sh"
+timeout_secs = 10
+priority = 100            # BTreeMap ordering (lower = earlier)
+environment = { SESSION_ID = "{{session_id}}", CHANNEL = "{{channel}}" }
+enabled = true
+```
+
+**Key integration points:**
+- HookRegistry subscribes to EventBus as reliable subscriber (guaranteed delivery)
+- Background task matches events to registered hooks, executes in BTreeMap priority order
+- Shell execution: `tokio::process::Command` with configurable timeout, stdin closed, stdout/stderr captured and logged
+- Sandbox: hooks run with restricted environment -- only TOML-specified env vars plus `BLUFIO_EVENT_TYPE`
+- No migration -- hooks are TOML-defined and stateless (fire-and-forget)
+- Hook failures logged and emitted as `BusEvent::Hook(HookEvent::Failed { ... })` but **never block the agent loop**
+- Maximum concurrent hooks: configurable (default 4) to prevent fork bombs
+
+### 9. Hot Reload -- blufio-config
+
+**Current state:** Config loaded once at startup via `figment` (TOML + env vars). No runtime reload. `BlufioConfig` passed by value/clone to subsystems.
+
+**Architecture change:**
+
+```
+blufio-config/
+  src/
+    hot_reload.rs         # NEW: ConfigWatcher using notify + ArcSwap
+    loader.rs             # Existing (unchanged)
+    model.rs              # Existing (unchanged)
+```
+
+**Core pattern using ArcSwap:**
+
+```rust
+use arc_swap::ArcSwap;
+use notify::{RecommendedWatcher, RecursiveMode, Event};
+
+pub struct ConfigWatcher {
+    config: Arc<ArcSwap<BlufioConfig>>,
+    _watcher: RecommendedWatcher,
+}
+
+impl ConfigWatcher {
+    pub fn new(initial: BlufioConfig, config_path: PathBuf) -> Result<Self, BlufioError> {
+        let config = Arc::new(ArcSwap::from_pointee(initial));
+        let config_clone = config.clone();
+
+        let mut watcher = notify::recommended_watcher(move |res: Result<Event, _>| {
+            if let Ok(event) = res {
+                if event.kind.is_modify() {
+                    // Reload, validate, swap
+                    match load_and_validate_from_path(&config_path) {
+                        Ok(new_config) => {
+                            config_clone.store(Arc::new(new_config));
+                            tracing::info!("configuration reloaded");
+                        }
+                        Err(errors) => {
+                            tracing::error!(?errors, "config reload failed validation, keeping current");
+                        }
+                    }
+                }
             }
-            BlufioError::Channel { message, .. } => {
-                message.contains("rate limit")
-                    || message.contains("timeout")
-            }
-            BlufioError::Timeout { .. } => true,
-            BlufioError::Storage { .. } => false,
-            _ => false,
-        }
+        })?;
+
+        watcher.watch(&config_path, RecursiveMode::NonRecursive)?;
+        Ok(Self { config, _watcher: watcher })
     }
 
-    /// Error severity for circuit breaker and degradation decisions.
-    pub fn severity(&self) -> ErrorSeverity {
-        match self {
-            BlufioError::Timeout { .. } => ErrorSeverity::Transient,
-            BlufioError::Provider { .. } if self.is_retryable() => ErrorSeverity::Transient,
-            BlufioError::BudgetExhausted { .. } => ErrorSeverity::Fatal,
-            BlufioError::Security(_) => ErrorSeverity::Fatal,
-            BlufioError::Storage { .. } => ErrorSeverity::Fatal,
-            _ => ErrorSeverity::Degraded,
-        }
+    pub fn current(&self) -> arc_swap::Guard<Arc<BlufioConfig>> {
+        self.config.load()
     }
 
-    /// Category for metric labeling.
-    pub fn category(&self) -> ErrorCategory {
-        match self {
-            BlufioError::Provider { message, .. } if message.contains("429") => {
-                ErrorCategory::RateLimit
-            }
-            BlufioError::Provider { .. } => ErrorCategory::Network,
-            BlufioError::Channel { .. } => ErrorCategory::Network,
-            BlufioError::Timeout { .. } => ErrorCategory::Network,
-            BlufioError::Security(_) => ErrorCategory::Authentication,
-            BlufioError::BudgetExhausted { .. } => ErrorCategory::Capacity,
-            BlufioError::Config(_) => ErrorCategory::Validation,
-            _ => ErrorCategory::Internal,
-        }
+    pub fn handle(&self) -> Arc<ArcSwap<BlufioConfig>> {
+        self.config.clone()
     }
 }
 ```
 
-**Why this approach:** Adding methods to the existing enum is backward-compatible. No existing `match` arms break. Provider crates can construct errors exactly as before. The `is_retryable()` check uses message heuristics initially -- these can be refined to use HTTP status codes extracted from the source error later, but starting with string matching avoids changing 17 `BlufioError::Provider` construction sites in blufio-anthropic alone.
+**Reload scope (what can vs. cannot be hot-reloaded):**
 
-### Pattern 2: Circuit Breaker as Wrapper, Not Trait Extension
+| Config Section | Hot Reload? | Reason |
+|----------------|-------------|--------|
+| `[agent]` system_prompt | Yes | Re-builds StaticZone on next assemble |
+| `[context]` thresholds | Yes | DynamicZone reads config per-request |
+| `[security]` TLS certs | Yes | Rebuild reqwest client on change |
+| `[cost]` budgets | Yes | BudgetTracker reads config per-check |
+| `[routing]` thresholds | Yes | ModelRouter reads config per-request |
+| `[hooks]` definitions | Yes | HookRegistry re-registers hooks |
+| `[scheduler.jobs]` | Yes | Scheduler reloads job list |
+| `[retention]` policies | Yes | Enforcer reads config per-run |
+| `[telegram]` token | **No** | Requires channel disconnect/reconnect |
+| `[storage]` path/key | **No** | Requires DB close/reopen |
+| `[anthropic]` API key | **No** | Requires provider re-initialization |
 
-**What:** Circuit breaker lives in `blufio-agent`, wrapping provider calls at the call site. It does NOT modify the `ProviderAdapter` trait.
+**Key integration points:**
+- New workspace dependencies: `arc-swap = "1"` (lock-free reads), `notify = "7"` (file watching)
+- ConfigWatcher created in serve.rs, `Arc<ArcSwap<BlufioConfig>>` shared to all subsystems
+- Subsystems reading config per-request (router, context, cost) get latest config via `config.load()` on each call
+- Subsystems caching config (StaticZone, TLS client) need explicit reload handlers triggered by ConfigWatcher callback
+- EventBus: `BusEvent::Config(ConfigEvent::Reloaded { changed_sections })` variant
+- **Critical safety rule:** ConfigWatcher runs full `validation::validate_config()` on new config. If validation fails, keep old config and log error. Never swap invalid config.
 
-**When:** Every `provider.stream()` and `provider.complete()` call in `SessionActor`.
+### 10. New Channel Adapters (iMessage/Email/SMS)
 
-**Why not a trait extension:** The `ProviderAdapter` trait is implemented by 5 provider crates. Adding circuit breaker logic to the trait would require changes in all 5 crates. Instead, the circuit breaker wraps the call in the agent loop -- the single place where all provider calls funnel through.
+Each follows the established pattern: new crate implementing `ChannelAdapter` + `PluginAdapter` traits from blufio-core, feature-gated in the main binary. This is the same pattern used by all 8 existing channel adapters.
+
+#### blufio-imessage (NEW CRATE)
+
+```
+blufio-imessage/
+  Cargo.toml             # Deps: blufio-core, blufio-config, reqwest, async-trait, serde, serde_json
+  src/
+    lib.rs               # BlueBubblesChannel implementing ChannelAdapter
+    api.rs               # BlueBubbles REST API client (HTTP + password auth)
+    webhook.rs           # BlueBubbles webhook receiver
+    types.rs             # BlueBubbles API response types
+```
+
+- Talks to BlueBubbles macOS server via REST API (HTTP, password query param auth)
+- Receives messages via BlueBubbles webhooks (POST to gateway extra public route)
+- Webhook registration via REST API on connect()
+- Feature flag: `imessage = ["dep:blufio-imessage"]` in main binary
+- Config: `[imessage]` section with `server_url`, `password_vault_key`, `webhook_port`
+- Requires BlueBubbles server running on macOS -- documented as prerequisite
+
+#### blufio-email (NEW CRATE)
+
+```
+blufio-email/
+  Cargo.toml             # Deps: blufio-core, blufio-config, lettre, mail-parser, async-trait, tokio
+  src/
+    lib.rs               # EmailChannel implementing ChannelAdapter
+    imap.rs              # IMAP polling loop for receive()
+    smtp.rs              # SMTP for send() via lettre
+    types.rs             # Email message types
+```
+
+- IMAP poll loop for receive(), SMTP send for send()
+- Config: `[email]` section with `imap_host`, `smtp_host`, `username`, `password_vault_key`, `poll_interval_secs`, `allowed_senders`
+- Feature flag: `email = ["dep:blufio-email"]`
+- New workspace dependencies: `lettre = "0.11"` (SMTP), `mail-parser = "0.9"` (IMAP message parsing)
+
+#### blufio-sms (NEW CRATE)
+
+```
+blufio-sms/
+  Cargo.toml             # Deps: blufio-core, blufio-config, reqwest, async-trait
+  src/
+    lib.rs               # TwilioSmsChannel implementing ChannelAdapter
+    api.rs               # Twilio REST API client
+    webhook.rs           # Twilio webhook handler (receives SMS via HTTP POST)
+```
+
+- Twilio API for outbound, Twilio webhook for inbound (same pattern as WhatsApp adapter)
+- Webhook endpoint registered on gateway as extra public route (same mechanism as `blufio-whatsapp`)
+- Config: `[sms]` section with `account_sid`, `auth_token_vault_key`, `from_number`, `webhook_url`
+- Feature flag: `sms = ["dep:blufio-sms"]`
+- No new dependencies (uses reqwest, already in workspace)
+
+### 11. PII Redaction Expansion -- blufio-security
+
+**Current state:** `redact.rs` has 4 `LazyLock` regex patterns (Anthropic keys, generic sk-*, Bearer tokens, Telegram bot tokens) plus exact-match vault values. The `RedactingWriter` wraps `std::io::Write`.
+
+**Architecture change:**
+
+```
+blufio-security/
+  src/
+    pii.rs                # NEW: PII-specific patterns and detection logic
+    redact.rs             # Import and use PII patterns alongside existing secret patterns
+```
+
+**New PII patterns:**
 
 ```rust
-// blufio-agent/src/circuit_breaker.rs
+// Email addresses
+Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap(),
+// Phone numbers (international format)
+Regex::new(r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}").unwrap(),
+// US SSN
+Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap(),
+// Credit card numbers (space or dash separated)
+Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap(),
+// IPv4 addresses
+Regex::new(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b").unwrap(),
+```
 
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+**Key integration points:**
+- `SecurityConfig` gains `[security.pii]` subsection with `redact_email`, `redact_phone`, `redact_ssn`, `redact_credit_card`, `redact_ip` booleans (all default true)
+- PII redaction applied in two places: (1) log output via `RedactingWriter`, (2) optional pre-storage redaction of LLM responses
+- `DataClassification::Restricted` auto-triggers all PII redaction regardless of per-type config
+- PII detection events published to EventBus for audit logging
+- `redact()` function gains an optional `PiiConfig` parameter to control which patterns are active
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CircuitState {
-    Closed,
-    Open,
-    HalfOpen,
-}
+### 12. GDPR Tooling -- blufio (CLI binary)
 
-pub struct CircuitBreaker {
-    state: Arc<RwLock<CircuitBreakerInner>>,
-    dependency: String,
-}
+**Architecture:** New CLI subcommands in the main binary. No separate crate because GDPR operations orchestrate across existing crates (storage, memory, audit) and the CLI is the right surface.
 
-struct CircuitBreakerInner {
-    state: CircuitState,
-    failure_count: u32,
-    success_count: u32,
-    last_failure: Option<Instant>,
-    failure_threshold: u32,
-    cooldown: Duration,
-    success_threshold: u32,
+```
+blufio/src/
+  gdpr.rs                 # NEW: GDPR CLI commands module
+```
+
+**CLI commands:**
+
+```
+blufio gdpr erase --user <user_id> [--dry-run]
+blufio gdpr export --user <user_id> [--format json|csv] [--since 2026-01-01] [--classification-max confidential]
+blufio gdpr report --user <user_id>
+```
+
+**Key integration points:**
+- `gdpr erase`: cascading delete across sessions, messages, memories for a user_id. Audit entries for the user are **redacted** (content replaced with "[ERASED]") but **not deleted** (hash chain integrity preserved). Queue entries purged.
+- `gdpr export`: JSON/CSV export filtered by user, date range, data type. Uses `DataClassification` to filter fields (e.g., `--classification-max internal` excludes Confidential content).
+- `gdpr report`: generates transparency report listing: what data types are stored, retention policies in effect, processing purposes, data recipients (channels).
+- All GDPR operations create audit entries with `actor = "admin"`, `action = "gdpr.erase"` / `"gdpr.export"`.
+- Dry-run mode for erase: shows what would be deleted without executing.
+
+### 13. OpenTelemetry -- blufio-otel (NEW CRATE)
+
+**Rationale for new crate:** Observability adapters are feature-gated. OpenTelemetry is optional alongside Prometheus (which has its own crate, blufio-prometheus). Keeping OTel in a separate crate avoids pulling opentelemetry + OTLP + protobuf dependencies when not needed.
+
+**Architecture:**
+
+```
+blufio-otel/
+  Cargo.toml             # Deps: blufio-core, opentelemetry, opentelemetry-otlp,
+                          #   opentelemetry_sdk, tracing-opentelemetry
+  src/
+    lib.rs               # OtelSetup with init(), shutdown(), create_layer()
+    config.rs            # OtelConfig validation
+```
+
+**Integration pattern:**
+
+```rust
+// In serve.rs, alongside existing Prometheus setup:
+#[cfg(feature = "otel")]
+{
+    let otel_layer = blufio_otel::create_tracing_layer(&config.otel)?;
+    // Added as tracing-subscriber layer alongside existing env-filter and fmt layers
 }
 ```
 
-**Integration point in SessionActor:**
+**Key integration points:**
+- Feature flag: `otel = ["dep:blufio-otel"]` (disabled by default per PRD requirement)
+- Config: `[otel]` section with `enabled`, `endpoint`, `service_name`, `protocol` (grpc/http), `sample_rate`
+- Coexists with Prometheus: both can be active simultaneously (Prometheus for pull metrics, OTel for push traces)
+- Uses `tracing-opentelemetry` layer which piggybacks on existing `#[instrument]` and `tracing::info!()` calls -- **zero code changes needed in any subsystem**
+- Gateway handlers should extract/inject W3C trace context headers for distributed tracing
+- New workspace dependencies: `opentelemetry = "0.28"`, `opentelemetry-otlp = "0.28"`, `opentelemetry_sdk = "0.28"`, `tracing-opentelemetry = "0.29"`
 
-```rust
-// In SessionActor::process_message(), replace:
-//   let stream = self.provider.stream(request).await?;
-// With:
-//   let stream = self.circuit_breaker.call(
-//       || self.provider.stream(request.clone())
-//   ).await?;
+### 14. OpenAPI Spec -- blufio-gateway
+
+**Architecture change:**
+
+```
+blufio-gateway/
+  src/
+    openapi.rs            # NEW: OpenAPI spec composition and /openapi.json handler
+    handlers.rs           # Add #[utoipa::path(...)] annotations to existing handlers
+    server.rs             # Mount /openapi.json route
 ```
 
-### Pattern 3: Token Counter as Injectable Service
+**Key integration points:**
+- New workspace dependencies: `utoipa = "5"`, `utoipa-axum = "0.2"`
+- Annotate existing handler functions with `#[utoipa::path]` proc macros
+- Request/response types annotated with `#[derive(utoipa::ToSchema)]`
+- Spec served at GET `/openapi.json` (compile-time generated, zero runtime cost)
+- Optional Swagger UI at `/docs` gated behind `[gateway.swagger_ui]` config boolean
+- Does NOT require restructuring routes -- `utoipa-axum` works with existing axum Router patterns
+- Covers: `/v1/chat/completions`, `/v1/responses`, `/v1/tools`, `/v1/sessions`, `/v1/health`, `/v1/keys`, `/v1/webhooks`, `/v1/batch`
 
-**What:** A `TokenCounter` that wraps the HuggingFace `tokenizers` crate, living in `blufio-context` because token counting is a context-engine concern (budget estimation, compaction thresholds).
+### 15. Litestream Replication -- External Sidecar
 
-**When:** Dynamic zone assembly (replacing `len()/4`), cost estimation, context budget checks.
+**Architecture:** Litestream is NOT embedded in the Rust binary. It runs as a separate Go process alongside Blufio. This is the correct integration pattern because Litestream is designed as a sidecar that monitors SQLite WAL files.
 
-**Why blufio-context, not blufio-memory:** The `tokenizers` crate is already a workspace dependency (used by blufio-memory for embedder tokenization). Token counting is fundamentally a context-engine operation -- the dynamic zone needs accurate counts for compaction thresholds. The blufio-memory OnnxEmbedder uses a sentence-transformer tokenizer (all-MiniLM-L6-v2), which is different from the LLM tokenizers needed here (Claude uses a custom BPE tokenizer, OpenAI uses cl100k_base/o200k_base). The token counter should be separate from the embedding tokenizer.
+**Integration approach:**
 
-```rust
-// blufio-context/src/token_counter.rs
+```bash
+# Option A: Litestream wraps the blufio process
+litestream replicate -config /etc/litestream.yml -exec "blufio serve"
 
-use tokenizers::Tokenizer;
-
-/// Accurate token counter using HuggingFace tokenizers.
-///
-/// Wraps a tokenizer loaded from tokenizer.json. Each provider
-/// can ship its own tokenizer definition. Falls back to len()/4
-/// if no tokenizer is available (graceful degradation).
-pub struct TokenCounter {
-    tokenizer: Option<Tokenizer>,
-}
-
-impl TokenCounter {
-    /// Load from a tokenizer.json file path.
-    pub fn from_file(path: &Path) -> Result<Self, BlufioError> { /* ... */ }
-
-    /// Fallback counter that uses the len()/4 heuristic.
-    pub fn heuristic() -> Self {
-        Self { tokenizer: None }
-    }
-
-    /// Count tokens in a single string.
-    pub fn count(&self, text: &str) -> usize {
-        match &self.tokenizer {
-            Some(t) => t.encode(text, false)
-                .map(|enc| enc.len())
-                .unwrap_or_else(|_| text.len() / 4),
-            None => text.len() / 4,
-        }
-    }
-
-    /// Count tokens in a batch of strings (more efficient).
-    pub fn count_batch(&self, texts: &[&str]) -> usize {
-        texts.iter().map(|t| self.count(t)).sum()
-    }
-}
+# Option B: Litestream as separate sidecar
+litestream replicate /var/lib/blufio/blufio.db s3://bucket/blufio/
 ```
 
-**Key decision: Ship tokenizer.json files bundled with the binary or download on first use.**
-Recommendation: Use `include_bytes!()` to embed a default Claude tokenizer.json at compile time (~1.5MB). For other providers, download on first use and cache in data directory. This keeps the binary self-contained for the default (Anthropic) use case while supporting other providers.
+**Blufio provides:**
+1. Documentation on Litestream setup (docs/litestream.md)
+2. CLI helper: `blufio litestream init` (generates litestream.yml template)
+3. Docker compose with Litestream sidecar container
+4. `blufio doctor` gains Litestream health check (process running, replication lag)
 
-### Pattern 4: FormatPipeline Integration via Explicit Call Sites
+**Critical compatibility issue:** Litestream requires exclusive control of WAL checkpointing. When Litestream is active, SQLite must not auto-checkpoint. blufio-storage must disable auto-checkpoint via `PRAGMA wal_autocheckpoint=0` when `[storage.litestream_mode]` is true. Without this, Litestream and SQLite will race on checkpoint operations, causing replication gaps.
 
-**What:** Channel adapters call `FormatPipeline::format()` before sending outbound messages, using their own `ChannelCapabilities` to determine degradation.
+**Key integration points:**
+- No new crate or Rust dependency
+- blufio-storage already uses WAL mode (Litestream requirement satisfied)
+- SQLCipher compatibility: Litestream replicates encrypted WAL pages (transparent)
+- New config: `[storage] litestream_mode = false` (when true, disables auto-checkpoint)
+- Docker compose template: `services: { litestream: { image: litestream/litestream, ... } }`
 
-**When:** In each adapter's `send()` implementation and streaming finalize.
+---
 
-**Why not middleware:** The format pipeline is not middleware -- it requires the adapter's specific capabilities which are known at construction time. Each adapter calls it explicitly before its platform-specific send.
+## Data Flow Changes
 
-```rust
-// Example: blufio-telegram/src/lib.rs send() modification
+### Pre-v1.5 Data Flow
 
-async fn send(&self, msg: OutboundMessage) -> Result<MessageId, BlufioError> {
-    // NEW: If the message contains RichContent, format through pipeline
-    let formatted = FormatPipeline::format_text(&msg.content, &self.capabilities());
-    let escaped = markdown::format_for_telegram(&formatted);
-    // ... rest of existing send logic
-}
+```
+Channel.receive() -> AgentLoop.handle_inbound()
+  -> ContextEngine.assemble() [static + conditional + dynamic]
+  -> Provider.stream() -> consume_stream()
+  -> Channel.send() -> Storage.insert_message()
 ```
 
-The `FormatPipeline` gains a convenience method `format_text()` that detects content type markers in plain text (e.g., table/list patterns) and formats them appropriately per channel capabilities. This avoids changing the `OutboundMessage` type (which would require changes in all adapters simultaneously).
+### Post-v1.5 Data Flow (additions marked with >>)
 
-### Pattern 5: Event Bus Resilience Domain
+```
+Channel.receive()
+  >> InjectionDefense.classify_input()           # L1 pattern check
+  >> AuditLogger.append("message.received")      # tamper-evident log
+  >> HookRegistry.trigger("on_message_received") # shell hooks
+  -> AgentLoop.handle_inbound()
+  -> ContextEngine.assemble()
+     >> CompactionEngine.compact_if_needed()      # multi-level with quality gates
+     >> boundary::wrap_user_content()             # L3 HMAC boundary tokens
+  -> Provider.stream() -> consume_stream()
+  >> OutputValidator.scan()                       # L4 check for prompt leakage
+  >> PiiRedactor.redact_response()                # if configured
+  -> Channel.send()
+  -> Storage.insert_message()
+  >> AuditLogger.append("message.sent")
+  >> HookRegistry.trigger("on_message_sent")
+```
 
-**What:** New `Resilience` variant in `BusEvent` for circuit breaker and degradation events.
+### New Background Tasks
 
-**When:** Circuit breaker state transitions, degradation level changes.
+```
+Scheduler (tokio task, 500ms tick):
+  -> Check cron expressions against current time
+  -> Execute due jobs:
+     -> retention:enforce -> RetentionEnforcer.enforce()
+     -> memory:cleanup -> MemoryStore.evict_lru()
+     -> backup:run -> backup logic (existing)
+
+ConfigWatcher (notify file events):
+  -> Detect blufio.toml modification
+  -> Reload + validate via load_and_validate()
+  -> ArcSwap::store(new_config)
+  -> Publish ConfigEvent::Reloaded to EventBus
+
+MemoryValidator (periodic tokio task):
+  -> Check embedding dimensionality consistency
+  -> Re-index stale entries via file watcher events
+  -> LRU eviction if over max_index_size
+
+AuditLogger (mpsc consumer):
+  -> Receive audit entries from mpsc channel
+  -> Compute hash chain (hash_self = SHA-256(canonical + hash_prev))
+  -> Batch insert to audit.db
+```
+
+---
+
+## Dependency Graph (New Edges)
+
+```
+blufio (binary)
+  +-- blufio-scheduler (NEW) --> blufio-core, blufio-bus, blufio-config
+  +-- blufio-audit (NEW) --> blufio-core, sha2, serde_json, tokio-rusqlite
+  +-- blufio-hooks (NEW) --> blufio-core, blufio-bus, blufio-config
+  +-- blufio-otel (NEW) --> blufio-core, opentelemetry, tracing-opentelemetry
+  +-- blufio-imessage (NEW) --> blufio-core, blufio-config, reqwest
+  +-- blufio-email (NEW) --> blufio-core, blufio-config, lettre, mail-parser
+  +-- blufio-sms (NEW) --> blufio-core, blufio-config, reqwest
+
+  blufio-context --> (no new deps, compaction is internal refactor)
+  blufio-security --> hmac (already in workspace)
+  blufio-memory --> notify (NEW workspace dep)
+  blufio-config --> arc-swap (NEW), notify (NEW)
+  blufio-gateway --> utoipa (NEW), utoipa-axum (NEW)
+```
+
+**New workspace-level dependencies (12 total):**
+
+| Dependency | Version | Purpose | Used By |
+|-----------|---------|---------|---------|
+| `arc-swap` | 1 | Lock-free config hot reload | blufio-config |
+| `notify` | 7 | File system watching | blufio-config, blufio-memory |
+| `utoipa` | 5 | OpenAPI spec generation | blufio-gateway |
+| `utoipa-axum` | 0.2 | Axum route integration for utoipa | blufio-gateway |
+| `croner` | 2 | Cron expression parsing | blufio-scheduler |
+| `lettre` | 0.11 | SMTP email sending | blufio-email |
+| `mail-parser` | 0.9 | IMAP email parsing | blufio-email |
+| `opentelemetry` | 0.28 | OTel API | blufio-otel |
+| `opentelemetry-otlp` | 0.28 | OTLP exporter | blufio-otel |
+| `opentelemetry_sdk` | 0.28 | OTel SDK | blufio-otel |
+| `tracing-opentelemetry` | 0.29 | tracing <-> OTel bridge | blufio-otel |
+
+Note: `hmac`, `sha2`, `tokio-rusqlite`, `reqwest`, `serde`, `serde_json`, `chrono`, `uuid` are already workspace dependencies.
+
+---
+
+## Suggested Build Order (Dependency-Driven)
+
+The build order is determined by which features are prerequisites for others. Features within the same phase have no inter-dependencies and can be parallelized.
+
+### Phase 1: Foundation Layer
+*No inter-dependencies. Everything else builds on these.*
+
+1. **Data Classification (blufio-core)** -- 1 plan
+   - Adds `DataClassification` enum and `Classifiable` trait
+   - Zero breaking changes, purely additive
+   - Required by: PII redaction, retention policies, GDPR, audit trail
+
+2. **PII Redaction Expansion (blufio-security)** -- 1 plan
+   - Extends `redact.rs` with PII patterns, adds `pii.rs` module
+   - Uses DataClassification for redaction depth decisions
+   - Required by: GDPR tooling, prompt injection output validator
+
+3. **Hot Reload Infrastructure (blufio-config)** -- 1 plan
+   - ArcSwap + notify file watcher for live config
+   - Required by: scheduler (reload jobs), hooks (reload definitions), all subsystems reading config
+
+### Phase 2: Storage & Data Infrastructure
+*Migrations and data infrastructure that later features persist into.*
+
+4. **Audit Trail (blufio-audit)** -- 2 plans (crate + integration wiring)
+   - New crate, hash-chained SQLite log, migration V14
+   - Required by: GDPR (audit entries on erasure), retention (audit enforcement events)
+   - Depends on: DataClassification (Phase 1)
+
+5. **Memory Enhancements (blufio-memory)** -- 2 plans (retrieval pipeline + background tasks)
+   - Temporal decay, MMR, LRU eviction, background validator, migration V13
+   - Depends on: Hot Reload (Phase 1, for live config updates)
+
+6. **Retention Policies (blufio-storage)** -- 1 plan
+   - RetentionEnforcer with soft-delete, migration V15
+   - Depends on: DataClassification (Phase 1), Audit Trail (Phase 2)
+
+### Phase 3: Context & Security Pipeline
+*Agent loop modifications that change message processing flow.*
+
+7. **Multi-Level Compaction (blufio-context)** -- 2 plans (engine refactor + quality gates)
+   - Promote compaction.rs to module, add L0-L3 levels and quality scoring
+   - Depends on: Hot Reload (Phase 1, for live threshold tuning)
+
+8. **Prompt Injection Defense (blufio-security + blufio-agent)** -- 2 plans (classifier + boundary/output)
+   - L1 pattern classifier, L3 HMAC boundaries, L4 output validator, L5 human-in-loop
+   - Modifies AgentLoop::handle_inbound() flow
+   - Depends on: PII Redaction (Phase 1, shared redaction infrastructure), Audit Trail (Phase 2, security event logging)
+
+### Phase 4: Operational Automation
+*Scheduler and hooks that automate operations from earlier phases.*
+
+9. **Cron/Scheduler (blufio-scheduler)** -- 2 plans (crate + systemd export)
+   - New crate, migration V12, job execution loop
+   - Depends on: Retention Policies (Phase 2, scheduler runs `retention:enforce`)
+   - Depends on: Memory Enhancements (Phase 2, scheduler runs `memory:cleanup`)
+   - Depends on: Hot Reload (Phase 1, live job list updates)
+
+10. **Hook System (blufio-hooks)** -- 1 plan
+    - New crate, BusEvent-driven shell execution with BTreeMap priority
+    - Depends on: EventBus event variants from Phases 2-3 (new Compaction, Security, Memory events)
+
+### Phase 5: Channels & API
+*New adapters and API surface. Fully independent of each other and mostly independent of Phases 1-4.*
+
+11. **iMessage Adapter (blufio-imessage)** -- 1 plan
+12. **Email Adapter (blufio-email)** -- 1 plan
+13. **SMS Adapter (blufio-sms)** -- 1 plan
+14. **OpenAPI Spec (blufio-gateway)** -- 1 plan
+
+### Phase 6: Observability & Infrastructure
+
+15. **OpenTelemetry (blufio-otel)** -- 1 plan
+    - Benefits from all Phase 1-4 tracing spans but has no hard dependency
+
+16. **Litestream Replication** -- 1 plan
+    - Documentation, CLI helper, Docker compose, storage.litestream_mode config
+
+### Phase 7: Compliance & Export
+
+17. **GDPR Tooling (blufio CLI)** -- 1 plan
+    - CLI subcommands for erasure, export, reporting
+    - Depends on: DataClassification, PII Redaction, Audit Trail, Retention Policies (all earlier phases)
+
+### Phase 8: Code Quality Hardening
+
+18. **Clippy unwrap enforcement** -- 1 plan
+19. **Test coverage expansion** -- 1 plan
+20. **Bug fixes and tech debt** -- 1 plan
+
+**Total: ~24 plans across 8 phases (vs. 16 plans across 7 phases for v1.4)**
+
+---
+
+## EventBus Extensions
+
+The existing `BusEvent` enum (7 variants) needs these new variants for v1.5:
 
 ```rust
-// blufio-bus/src/events.rs additions
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ResilienceEvent {
-    CircuitStateChanged {
-        event_id: String,
-        timestamp: String,
-        dependency: String,
-        from_state: String,
-        to_state: String,
-        failure_count: u32,
-    },
-    DegradationChanged {
-        event_id: String,
-        timestamp: String,
-        from_level: u8,
-        to_level: u8,
-        reason: String,
-    },
-}
-
-// Add to BusEvent enum:
 pub enum BusEvent {
+    // Existing 7 variants (unchanged):
     Session(SessionEvent),
     Channel(ChannelEvent),
     Skill(SkillEvent),
     Node(NodeEvent),
     Webhook(WebhookEvent),
     Batch(BatchEvent),
-    Resilience(ResilienceEvent),  // NEW
+    Resilience(ResilienceEvent),
+
+    // New v1.5 variants (7 additions):
+    Compaction(CompactionEvent),      // Triggered, Completed with level/quality
+    Security(SecurityEvent),          // InjectionDetected, PiiFound
+    Memory(MemoryEvent),              // Extracted, Evicted, Validated
+    Scheduler(SchedulerEvent),        // JobTriggered, JobCompleted, JobFailed
+    Config(ConfigEvent),              // Reloaded, ValidationFailed
+    Retention(RetentionEvent),        // Enforced, PolicyUpdated
+    Hook(HookEvent),                  // Executed, Failed, TimedOut
 }
 ```
 
-**Impact:** The `BusEvent::event_type_string()` match is exhaustive, so adding this variant forces updating the match -- which is exactly what we want (compile-time verification that all consumers handle the new domain).
+Each new variant requires: `event_type_string()` match arm, `Serialize`/`Deserialize` derives, and serde roundtrip tests. The exhaustive match on `BusEvent` in `event_type_string()` ensures the compiler catches any unhandled variants.
+
+---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Modifying ProviderAdapter Trait
+### Anti-Pattern 1: Monolithic Migration
+**What:** Putting all 4 schema changes in one massive migration file.
+**Why bad:** If any part fails, the entire migration rolls back. Refinery tracks migrations individually.
+**Instead:** One migration per feature domain (V12 scheduler, V13 memory, V14 audit, V15 retention). Each independently testable and rollback-safe.
 
-**What:** Adding `circuit_breaker()`, `is_healthy()`, or retry logic to the `ProviderAdapter` trait.
+### Anti-Pattern 2: Circular Crate Dependencies
+**What:** blufio-audit depending on blufio-agent which depends on blufio-audit.
+**Why bad:** Compile error. Rust workspace does not allow circular dependencies.
+**Instead:** Audit subscribes to EventBus (one-way). Agent publishes to EventBus. No direct crate dependency between them. AuditLogger injected as `Arc<AuditLogger>` via serve.rs wiring.
 
-**Why bad:** 5 provider crates (anthropic, openai, ollama, openrouter, gemini) implement this trait. Modifying the trait requires changes in all 5. The circuit breaker is a cross-cutting concern that belongs in the call site (agent loop), not in each provider. Each provider already has its own internal retry logic (e.g., `AnthropicClient::max_retries: 1`).
+### Anti-Pattern 3: Synchronous Audit Writes in Hot Path
+**What:** Blocking the agent loop's `handle_inbound()` to write audit entries to SQLite.
+**Why bad:** Audit storage latency (1-5ms per write) directly impacts response latency.
+**Instead:** Audit writes go through a buffered mpsc channel. Background tokio task flushes to SQLite in batches (every 100ms or 50 entries). Agent loop sends and continues immediately.
 
-**Instead:** Wrap provider calls with `CircuitBreaker` in `SessionActor`.
+### Anti-Pattern 4: Hot Reload Without Validation
+**What:** Swapping config on file change without re-running `validate_config()`.
+**Why bad:** Invalid config silently takes effect, causing runtime errors (e.g., negative thresholds, missing required fields).
+**Instead:** ConfigWatcher runs full validation pipeline on new config. If validation fails, keep current config, log error, publish `ConfigEvent::ValidationFailed`. Never swap invalid config.
 
-### Anti-Pattern 2: Token Counter as a New Crate
+### Anti-Pattern 5: PII Stored Then Redacted on Read
+**What:** Storing PII in plain text and redacting every time data is read.
+**Why bad:** PII remains in DB (compliance risk), redaction cost on every read.
+**Instead:** Optionally redact PII before storage write (configurable). Store redacted version. Original only in encrypted audit log for compliance evidence.
 
-**What:** Creating a `blufio-tokenizer` crate for token counting.
+### Anti-Pattern 6: Hook Failures Blocking Agent Loop
+**What:** Agent loop awaiting hook completion before processing next message.
+**Why bad:** A hanging hook script blocks all message processing.
+**Instead:** Hooks triggered via EventBus subscription. Hook execution is fire-and-forget with per-hook timeout. Failures logged and emitted as events but never propagate to the agent loop or block message processing.
 
-**Why bad:** Token counting is a utility function for context assembly. It has exactly one primary consumer (`blufio-context::dynamic`). Creating a separate crate adds a workspace member, a Cargo.toml, CI configuration, and cross-crate dependency management for what amounts to a ~50-line module.
+### Anti-Pattern 7: Global Config Mutex for Hot Reload
+**What:** Using `Arc<RwLock<BlufioConfig>>` for hot reload.
+**Why bad:** Every config read takes a read lock. Under high concurrency, writer starvation or reader contention.
+**Instead:** `ArcSwap` provides lock-free reads (just a pointer load). Writes are also lock-free (atomic pointer swap). Zero contention on reads, which happen thousands of times per second.
 
-**Instead:** Add `token_counter.rs` module to `blufio-context`.
-
-### Anti-Pattern 3: Changing OutboundMessage to Include RichContent
-
-**What:** Adding a `rich_content: Option<RichContent>` field to `OutboundMessage`.
-
-**Why bad:** `OutboundMessage` is constructed in the agent loop and consumed by 8 channel adapters. Changing its shape requires updating construction sites in `blufio-agent` and all 8 adapters simultaneously. The agent loop produces text; the format pipeline converts text to channel-appropriate output.
-
-**Instead:** `FormatPipeline` operates on text content with a `format_text()` convenience method that detects content type markers. The pipeline sits inside each adapter's `send()`, not in the message type.
-
-### Anti-Pattern 4: Global Circuit Breaker
-
-**What:** A single circuit breaker for all external dependencies.
-
-**Why bad:** The LLM provider being down does not mean Telegram is down. A global circuit breaker would disable all channels when one provider fails.
-
-**Instead:** Per-dependency circuit breakers: one for each provider, one for each external service (storage, MCP servers). The degradation ladder aggregates signals from individual breakers to determine the overall system level.
-
-### Anti-Pattern 5: Degradation as Middleware
-
-**What:** Implementing degradation as Tower middleware that intercepts requests.
-
-**Why bad:** Degradation affects different aspects of the system differently (model selection, streaming behavior, skill availability). It is not a simple request/response transform. Tower middleware works for simple concerns (rate limiting, CORS) but degradation requires deep integration with the session actor's decision points.
-
-**Instead:** `DegradationLadder` is a shared state object queried at decision points within the session actor. The ladder exposes `current_level()` and the session actor checks it before each significant operation (model selection, streaming mode, skill invocation).
+---
 
 ## Scalability Considerations
 
-| Concern | At 10 sessions | At 100 sessions | At 1000 sessions |
-|---------|---------------|-----------------|------------------|
-| Token counting | Negligible (~1ms per count) | Still negligible | Consider caching tokenizer instance per thread |
-| Circuit breaker state | 1 per provider (~5 instances) | Same (shared across sessions) | Same (Arc + RwLock) |
-| Degradation ladder | 1 global instance | Same | Same |
-| Event bus load | +2 event types, minimal | Some events per circuit trip | Batch resilience events to reduce bus pressure |
-| Prometheus metrics | +6 metrics | Same metrics, different label values | Cardinality bounded by dependency count |
+| Concern | At 100 users | At 10K users | At 1M users |
+|---------|--------------|--------------|-------------|
+| Audit log size | ~10MB/day, negligible | ~1GB/day, partition by month | Out of scope (single-instance) |
+| Compaction CPU | Negligible (few Haiku calls) | Linear with active sessions | LLM API cost dominates |
+| Memory index | <10K entries, all in LRU | LRU keeps at 10K via eviction | Not applicable |
+| Hook execution | Serial execution fine | Parallel with pool (max 4) | Not applicable |
+| PII regex | ~1ms/message (5 patterns) | ~1ms/message (regex is O(n)) | Not applicable |
+| Config reload | Instant via ArcSwap | Instant (single pointer swap) | N/A |
+| Audit chain verify | <1s for full chain | ~10s for 1M entries | Chunk-based verification needed |
+| Retention enforcement | <1s for 100K messages | ~5s with DELETE batching | Paginated DELETE with LIMIT |
 
-## Dependency Graph (Build Order)
-
-The following build order respects crate dependencies and ensures each phase can compile and test independently.
-
-```
-Phase 1: blufio-core (error enrichment + ChannelCapabilities extension + FormatPipeline Table/List)
-   |
-   +-- No new crate dependencies
-   +-- All downstream crates recompile but DO NOT break (additive changes only)
-   |
-Phase 2: blufio-bus (add Resilience event domain)
-   |
-   +-- Depends on: Phase 1 complete (for ErrorSeverity/ErrorCategory if referenced)
-   +-- Consumers (blufio-agent, blufio-prometheus) can ignore new variant until Phase 4/5
-   |
-Phase 3: blufio-context (token counter module + DynamicZone integration)
-   |
-   +-- Depends on: Phase 1 (uses BlufioError)
-   +-- Independent of Phase 2
-   +-- Adds workspace dep: tokenizers (already in workspace Cargo.toml)
-   |
-Phase 4: blufio-agent (circuit breaker + degradation ladder + wiring)
-   |
-   +-- Depends on: Phase 1 (typed errors), Phase 2 (resilience events), Phase 3 (token counter)
-   +-- This is the integration phase -- brings it all together
-   |
-Phase 5: blufio-prometheus (resilience metrics)
-   |
-   +-- Depends on: Phase 2 (subscribes to Resilience events)
-   +-- Can run in parallel with Phase 4
-   |
-Phase 6: Channel adapters (FormatPipeline + capabilities update)
-   |
-   +-- Depends on: Phase 1 (extended FormatPipeline + ChannelCapabilities)
-   +-- 8 adapters, can be done in parallel
-   +-- Each adapter is a leaf crate (no downstream dependents)
-```
-
-### Integration Points Summary
-
-| Integration Point | Source | Target | Mechanism |
-|-------------------|--------|--------|-----------|
-| Typed errors -> Circuit breaker | `BlufioError::is_retryable()` | `CircuitBreaker::call()` | Method call on error |
-| Circuit breaker -> Event bus | `CircuitBreaker` | `EventBus::publish()` | `Arc<EventBus>` injected |
-| Circuit breaker -> Degradation | `CircuitBreaker` state change | `DegradationLadder::escalate()` | Callback / event handler |
-| Degradation -> Session actor | `DegradationLadder::current_level()` | `SessionActor::process_message()` | Shared `Arc<RwLock<DegradationLadder>>` |
-| Token counter -> Dynamic zone | `TokenCounter::count()` | `DynamicZone::assemble_messages()` | Injected via `DynamicZone::new()` |
-| FormatPipeline -> Channel send | `FormatPipeline::format()` | `ChannelAdapter::send()` | Direct call in each adapter |
-| Event bus -> Prometheus | `BusEvent::Resilience` | `PrometheusAdapter` subscriber | Broadcast subscription |
-| ChannelCapabilities -> FormatPipeline | `ChannelAdapter::capabilities()` | `FormatPipeline::format()` | Passed as parameter |
-
-## Configuration (TOML)
-
-New configuration sections needed in `blufio-config`:
-
-```toml
-[resilience]
-# Circuit breaker settings (per-dependency defaults)
-circuit_failure_threshold = 5      # failures before opening
-circuit_cooldown_secs = 30         # seconds before half-open probe
-circuit_success_threshold = 2      # successes before closing
-
-# Degradation ladder
-degradation_auto_escalate = true   # auto-escalate on circuit open
-degradation_auto_deescalate = true # auto-de-escalate on circuit close
-
-[context]
-# Token counting (extends existing context config)
-tokenizer_path = ""  # custom tokenizer.json path; empty = use built-in
-```
+---
 
 ## Sources
 
-- Direct analysis of 35-crate workspace source code (HIGH confidence)
-- `blufio-core/src/error.rs`: Current 15-variant `BlufioError` enum
-- `blufio-core/src/format.rs`: Existing `FormatPipeline` (defined but unused by adapters)
-- `blufio-core/src/types.rs`: Current 9-field `ChannelCapabilities`
-- `blufio-context/src/dynamic.rs:64`: The `len()/4` heuristic to replace
-- `blufio-bus/src/events.rs`: Current 6-domain event bus (Session, Channel, Skill, Node, Webhook, Batch)
-- `blufio-memory/src/embedder.rs`: HuggingFace `tokenizers` crate already in use for embedding tokenization
-- `blufio-agent/src/session.rs`: `SessionActor` as the integration point for provider calls
-- `blufio-anthropic/src/client.rs`: 17 `BlufioError::Provider` construction sites showing current error pattern
-- `blufio-telegram/src/lib.rs`: Representative channel adapter with custom `format_for_telegram()` (to be replaced by pipeline)
-- [HuggingFace tokenizers crate](https://github.com/huggingface/tokenizers) - Already in workspace deps (v0.21)
-- [tiktoken-rs](https://docs.rs/tiktoken-rs/latest/tiktoken_rs/) - OpenAI tokenizer (not recommended; HF tokenizers covers all providers)
-- [Circuit breaker patterns in Rust](https://github.com/dmexe/failsafe-rs) - Reference implementation (custom implementation preferred to avoid new dependency)
+- Direct analysis of 80,101 LOC across 35 crates (HIGH confidence)
+- [ArcSwap patterns documentation](https://docs.rs/arc-swap/latest/arc_swap/docs/patterns/index.html)
+- [ArcSwap crate](https://crates.io/crates/arc-swap)
+- [OpenTelemetry Rust documentation](https://opentelemetry.io/docs/languages/rust/)
+- [tracing-opentelemetry crate](https://docs.rs/tracing-opentelemetry)
+- [OpenTelemetry tracing integration guide (Feb 2026)](https://oneuptime.com/blog/post/2026-02-06-opentelemetry-tracing-rust-tracing-crate/view)
+- [Litestream - How it works](https://litestream.io/how-it-works/)
+- [Litestream tips and caveats](https://litestream.io/tips/)
+- [utoipa - OpenAPI generation for Rust](https://github.com/juhaku/utoipa)
+- [utoipa-axum integration](https://docs.rs/utoipa-axum)
+- [OWASP Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+- [OWASP LLM01:2025 Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
+- [tldrsec/prompt-injection-defenses](https://github.com/tldrsec/prompt-injection-defenses)
+- [BlueBubbles REST API & Webhooks](https://docs.bluebubbles.app/server/developer-guides/rest-api-and-webhooks)
+- [tokio-cron-scheduler](https://crates.io/crates/tokio-cron-scheduler)
+- [croner crate](https://crates.io/crates/croner)
+- [Hash-chained tamper-evident audit log](https://dev.to/veritaschain/building-a-tamper-evident-audit-log-with-sha-256-hash-chains-zero-dependencies-h0b)
+- [Clawprint: tamper-evident audit trail for agent runs](https://github.com/cyntrisec/clawprint)
