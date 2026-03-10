@@ -54,10 +54,40 @@ pub fn run_integrity_check(path: &Path) -> Result<(), BlufioError> {
     }
 }
 
+/// Derive the audit.db path from the main database path.
+///
+/// If the main DB is at `/data/blufio.db`, audit.db is at `/data/audit.db`.
+fn audit_db_path(db_path: &str) -> String {
+    let db = Path::new(db_path);
+    db.parent()
+        .unwrap_or(Path::new("."))
+        .join("audit.db")
+        .to_string_lossy()
+        .to_string()
+}
+
+/// Derive the audit backup path from the main backup path.
+///
+/// If the backup is at `/backups/blufio-backup.db`, the audit backup is at
+/// `/backups/blufio-backup.audit.db`.
+fn audit_backup_path(backup_path: &str) -> String {
+    let p = Path::new(backup_path);
+    let stem = p
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "backup".to_string());
+    let parent = p.parent().unwrap_or(Path::new("."));
+    parent
+        .join(format!("{stem}.audit.db"))
+        .to_string_lossy()
+        .to_string()
+}
+
 /// Run a backup of the SQLite database to the specified path.
 ///
 /// Uses rusqlite's Backup API for atomic, consistent copies that work
 /// even while the database is being written to in WAL mode.
+/// Also backs up `audit.db` if it exists alongside the main database.
 pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
     let src_path = Path::new(db_path);
     if !src_path.exists() {
@@ -105,6 +135,48 @@ pub fn run_backup(db_path: &str, backup_path: &str) -> Result<(), BlufioError> {
     let encrypted = std::env::var("BLUFIO_DB_KEY").is_ok();
     let enc_status = if encrypted { "enabled" } else { "none" };
     eprintln!("Backup complete: {size_mb:.1} MB, integrity: ok, encryption: {enc_status}");
+
+    // Also back up audit.db if it exists alongside the main database.
+    let audit_src = audit_db_path(db_path);
+    if Path::new(&audit_src).exists() {
+        let audit_dst = audit_backup_path(backup_path);
+        eprintln!("Including audit.db in backup");
+        backup_single_db(&audit_src, &audit_dst)?;
+    }
+
+    Ok(())
+}
+
+/// Back up a single SQLite database file using the Backup API.
+fn backup_single_db(src_path: &str, dst_path: &str) -> Result<(), BlufioError> {
+    let src = blufio_storage::open_connection_sync(
+        src_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+
+    let mut dst = blufio_storage::open_connection_sync(dst_path, rusqlite::OpenFlags::default())?;
+
+    let backup = rusqlite::backup::Backup::new(&src, &mut dst)
+        .map_err(BlufioError::storage_connection_failed)?;
+
+    backup
+        .run_to_completion(100, Duration::from_millis(10), None)
+        .map_err(BlufioError::storage_connection_failed)?;
+
+    drop(backup);
+    drop(src);
+    drop(dst);
+
+    // Verify integrity of the backup.
+    if let Err(e) = run_integrity_check(Path::new(dst_path)) {
+        let _ = std::fs::remove_file(dst_path);
+        eprintln!("Backup of {src_path} FAILED: {e}. Backup file deleted.");
+        return Err(e);
+    }
+
+    let metadata = std::fs::metadata(dst_path).map_err(BlufioError::storage_connection_failed)?;
+    let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
+    eprintln!("  audit.db backup: {size_mb:.1} MB, integrity: ok");
 
     Ok(())
 }
@@ -187,6 +259,54 @@ pub fn run_restore(db_path: &str, restore_from: &str) -> Result<(), BlufioError>
     let encrypted = std::env::var("BLUFIO_DB_KEY").is_ok();
     let enc_status = if encrypted { "enabled" } else { "none" };
     eprintln!("Restore complete: {size_mb:.1} MB, integrity: ok, encryption: {enc_status}");
+
+    // Also restore audit.db if the backup archive contains it.
+    let audit_src = audit_backup_path(restore_from);
+    if Path::new(&audit_src).exists() {
+        let audit_dst = audit_db_path(db_path);
+        eprintln!("Restoring audit.db");
+        restore_single_db(&audit_dst, &audit_src)?;
+    }
+
+    Ok(())
+}
+
+/// Restore a single SQLite database file using the Backup API.
+fn restore_single_db(db_path: &str, restore_from: &str) -> Result<(), BlufioError> {
+    // Pre-check integrity of the source.
+    if let Err(e) = run_integrity_check(Path::new(restore_from)) {
+        eprintln!("Restore of audit.db FAILED: backup file {e}.");
+        return Err(e);
+    }
+
+    let src = blufio_storage::open_connection_sync(
+        restore_from,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+
+    let mut dst = blufio_storage::open_connection_sync(db_path, rusqlite::OpenFlags::default())?;
+
+    let backup = rusqlite::backup::Backup::new(&src, &mut dst)
+        .map_err(BlufioError::storage_connection_failed)?;
+
+    backup
+        .run_to_completion(100, Duration::from_millis(10), None)
+        .map_err(BlufioError::storage_connection_failed)?;
+
+    drop(backup);
+    drop(src);
+    drop(dst);
+
+    // Post-check integrity of the restore.
+    if let Err(e) = run_integrity_check(Path::new(db_path)) {
+        let _ = std::fs::remove_file(db_path);
+        eprintln!("Restore of audit.db FAILED: {e}. Corrupt file removed.");
+        return Err(e);
+    }
+
+    let metadata = std::fs::metadata(db_path).map_err(BlufioError::storage_connection_failed)?;
+    let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
+    eprintln!("  audit.db restore: {size_mb:.1} MB, integrity: ok");
 
     Ok(())
 }

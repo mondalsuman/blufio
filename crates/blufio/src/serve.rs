@@ -237,6 +237,54 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     let event_bus = Arc::new(blufio_bus::EventBus::new(1024));
     info!("global event bus created (capacity=1024)");
 
+    // --- Audit trail subsystem ---
+    // Initialize after EventBus so adapter startup events are captured.
+    let audit_writer: Option<Arc<blufio_audit::AuditWriter>> = if config.audit.enabled {
+        let audit_db_path = config.audit.db_path.clone().unwrap_or_else(|| {
+            let db = std::path::Path::new(&config.storage.database_path);
+            db.parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("audit.db")
+                .to_string_lossy()
+                .to_string()
+        });
+
+        match blufio_audit::AuditWriter::new(&audit_db_path).await {
+            Ok(writer) => {
+                let writer = Arc::new(writer);
+
+                // Create event filter from config.
+                let filter = blufio_audit::EventFilter::new(config.audit.events.clone());
+
+                // Subscribe to EventBus with reliable channel (buffer 256).
+                let audit_rx = event_bus.subscribe_reliable(256).await;
+
+                // Create and spawn AuditSubscriber.
+                let subscriber = blufio_audit::AuditSubscriber::new(writer.clone(), filter);
+                tokio::spawn(subscriber.run(audit_rx));
+
+                info!(db_path = %audit_db_path, "audit trail enabled");
+
+                // Emit audit.enabled meta-event.
+                let _ = event_bus.publish(blufio_bus::events::BusEvent::Audit(
+                    blufio_bus::events::AuditMetaEvent::Enabled {
+                        event_id: blufio_bus::events::new_event_id(),
+                        timestamp: blufio_bus::events::now_timestamp(),
+                    },
+                ));
+
+                Some(writer)
+            }
+            Err(e) => {
+                warn!(error = %e, "audit trail initialization failed, continuing without audit");
+                None
+            }
+        }
+    } else {
+        info!("audit trail disabled");
+        None
+    };
+
     // --- Resilience subsystem ---
     // Construct CircuitBreakerRegistry and DegradationManager if enabled.
     let (resilience_registry, resilience_manager, resilience_cancel_token): (
@@ -1474,6 +1522,24 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     }
 
     agent_loop.run(cancel).await?;
+
+    // Flush and shut down audit trail (after adapters disconnect, before DB close).
+    if let Some(writer) = audit_writer {
+        if let Err(e) = writer.flush().await {
+            warn!(error = %e, "audit trail flush failed during shutdown");
+        }
+        // Arc::try_unwrap to get ownership for shutdown; if other refs exist, flush was enough.
+        match Arc::try_unwrap(writer) {
+            Ok(w) => {
+                w.shutdown().await;
+                info!("audit trail flushed and stopped");
+            }
+            Err(_arc) => {
+                // Other references exist; flush already called above.
+                info!("audit trail flushed (shutdown deferred to last reference drop)");
+            }
+        }
+    }
 
     info!("blufio serve shutdown complete");
     Ok(())

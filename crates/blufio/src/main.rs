@@ -454,9 +454,7 @@ enum AuditCommands {
         json: bool,
     },
     /// Show audit trail statistics.
-    #[command(
-        after_help = "Examples:\n  blufio audit stats\n  blufio audit stats --json"
-    )]
+    #[command(after_help = "Examples:\n  blufio audit stats\n  blufio audit stats --json")]
     Stats {
         /// Output as structured JSON.
         #[arg(long)]
@@ -723,23 +721,17 @@ async fn main() {
         }
         Some(Commands::Audit { action }) => {
             // Resolve audit.db path: config override or default beside main DB.
-            let audit_db_path = config
-                .audit
-                .db_path
-                .clone()
-                .unwrap_or_else(|| {
-                    let db = std::path::Path::new(&config.storage.database_path);
-                    db.parent()
-                        .unwrap_or(std::path::Path::new("."))
-                        .join("audit.db")
-                        .to_string_lossy()
-                        .to_string()
-                });
+            let audit_db_path = config.audit.db_path.clone().unwrap_or_else(|| {
+                let db = std::path::Path::new(&config.storage.database_path);
+                db.parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .join("audit.db")
+                    .to_string_lossy()
+                    .to_string()
+            });
 
             if !config.audit.enabled {
-                eprintln!(
-                    "Note: Audit trail is disabled in config. Showing existing data."
-                );
+                eprintln!("Note: Audit trail is disabled in config. Showing existing data.");
             }
 
             match action {
@@ -855,7 +847,10 @@ fn run_audit_verify(db_path: &str, json: bool) {
             );
         }
         for g in &report.gaps {
-            println!("  GAP: missing entry {} after entry {}", g.missing_id, g.after_id);
+            println!(
+                "  GAP: missing entry {} after entry {}",
+                g.missing_id, g.after_id
+            );
         }
     }
 
@@ -972,7 +967,10 @@ fn run_audit_tail(
     };
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&entries).unwrap_or_else(|_| "[]".to_string()));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&entries).unwrap_or_else(|_| "[]".to_string())
+        );
     } else {
         if entries.is_empty() {
             println!("No audit entries found.");
@@ -1034,19 +1032,19 @@ fn run_audit_stats(db_path: &str, json: bool) {
     };
 
     // Summary stats.
-    let (total, first_ts, last_ts, erased): (i64, Option<String>, Option<String>, i64) =
-        match conn.query_row(
+    let (total, first_ts, last_ts, erased): (i64, Option<String>, Option<String>, i64) = match conn
+        .query_row(
             "SELECT COUNT(*), MIN(timestamp), MAX(timestamp), \
              COALESCE(SUM(pii_marker), 0) FROM audit_entries",
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         ) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("error: failed to query audit stats: {e}");
-                std::process::exit(1);
-            }
-        };
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: failed to query audit stats: {e}");
+            std::process::exit(1);
+        }
+    };
 
     // Per-type breakdown.
     let by_type: Vec<(String, i64)> = {
@@ -1090,14 +1088,8 @@ fn run_audit_stats(db_path: &str, json: bool) {
         );
     } else {
         println!("Total entries: {total}");
-        println!(
-            "First entry: {}",
-            first_ts.as_deref().unwrap_or("(none)")
-        );
-        println!(
-            "Last entry: {}",
-            last_ts.as_deref().unwrap_or("(none)")
-        );
+        println!("First entry: {}", first_ts.as_deref().unwrap_or("(none)"));
+        println!("Last entry: {}", last_ts.as_deref().unwrap_or("(none)"));
         println!("Erased (GDPR): {erased}");
         if !by_type.is_empty() {
             println!("\nBy event type:");
