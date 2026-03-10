@@ -9,9 +9,9 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Compaction
 
-- [ ] **COMP-01**: Context compaction supports 4 levels (L0 raw → L1 turn-pair summaries → L2 session summary → L3 cross-session archive)
+- [ ] **COMP-01**: Context compaction supports 4 levels (L0 raw -> L1 turn-pair summaries -> L2 session summary -> L3 cross-session archive)
 - [ ] **COMP-02**: Quality scoring evaluates compaction output with weighted dimensions (entity retention 35%, decision retention 25%, action retention 25%, numerical retention 15%)
-- [ ] **COMP-03**: Quality gates enforce thresholds (≥0.6 proceed, 0.4-0.6 retry with different prompt, <0.4 abort compaction)
+- [ ] **COMP-03**: Quality gates enforce thresholds (>=0.6 proceed, 0.4-0.6 retry with different prompt, <0.4 abort compaction)
 - [ ] **COMP-04**: Soft trigger fires compaction at configurable threshold (default 50% context window), hard trigger at 85%
 - [ ] **COMP-05**: Archive system stores L3 compacted summaries with cold storage retrieval for historical context
 - [ ] **COMP-06**: Entity/fact extraction runs before compaction to preserve critical facts as separate Memory entries
@@ -53,7 +53,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 - [ ] **AUDT-02**: Audit entries cover: tool execution, memory modification, config changes, provider calls, session lifecycle, classification changes, erasure events
 - [ ] **AUDT-03**: Audit trail stored in dedicated audit.db (separate from main database)
 - [ ] **AUDT-04**: CLI command `blufio audit verify` walks hash chain and reports any breaks
-- [ ] **AUDT-05**: Audit entries are append-only — retention policies never delete them
+- [ ] **AUDT-05**: Audit entries are append-only -- retention policies never delete them
 - [ ] **AUDT-06**: Audit schema supports GDPR redact-in-place (PII fields replaceable with [ERASED] without breaking hash chain)
 - [ ] **AUDT-07**: Async audit writes via buffered mpsc channel with batch flush
 
@@ -94,7 +94,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Hot Reload
 
-- [ ] **HTRL-01**: Config hot reload: file watcher on blufio.toml triggers parse → validate → ArcSwap swap
+- [ ] **HTRL-01**: Config hot reload: file watcher on blufio.toml triggers parse -> validate -> ArcSwap swap
 - [ ] **HTRL-02**: TLS certificate hot reload via rustls ResolvesServerCert with file watcher
 - [ ] **HTRL-03**: Plugin hot reload: re-scan skill directory, reload changed WASM modules, verify signatures
 - [ ] **HTRL-04**: Config propagation via ordered EventBus events with validation-before-swap
@@ -185,13 +185,108 @@ Deferred to v1.6+.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| DCLS-01 | Phase 53 | Pending |
+| DCLS-02 | Phase 53 | Pending |
+| DCLS-03 | Phase 53 | Pending |
+| DCLS-04 | Phase 53 | Pending |
+| DCLS-05 | Phase 53 | Pending |
+| PII-01 | Phase 53 | Pending |
+| PII-02 | Phase 53 | Pending |
+| PII-03 | Phase 53 | Pending |
+| PII-04 | Phase 53 | Pending |
+| PII-05 | Phase 53 | Pending |
+| AUDT-01 | Phase 54 | Pending |
+| AUDT-02 | Phase 54 | Pending |
+| AUDT-03 | Phase 54 | Pending |
+| AUDT-04 | Phase 54 | Pending |
+| AUDT-05 | Phase 54 | Pending |
+| AUDT-06 | Phase 54 | Pending |
+| AUDT-07 | Phase 54 | Pending |
+| MEME-01 | Phase 55 | Pending |
+| MEME-02 | Phase 55 | Pending |
+| MEME-03 | Phase 55 | Pending |
+| MEME-04 | Phase 55 | Pending |
+| MEME-05 | Phase 55 | Pending |
+| MEME-06 | Phase 55 | Pending |
+| COMP-01 | Phase 56 | Pending |
+| COMP-02 | Phase 56 | Pending |
+| COMP-03 | Phase 56 | Pending |
+| COMP-04 | Phase 56 | Pending |
+| COMP-05 | Phase 56 | Pending |
+| COMP-06 | Phase 56 | Pending |
+| CTXE-01 | Phase 56 | Pending |
+| CTXE-02 | Phase 56 | Pending |
+| CTXE-03 | Phase 56 | Pending |
+| INJC-01 | Phase 57 | Pending |
+| INJC-02 | Phase 57 | Pending |
+| INJC-03 | Phase 57 | Pending |
+| INJC-04 | Phase 57 | Pending |
+| INJC-05 | Phase 57 | Pending |
+| INJC-06 | Phase 57 | Pending |
+| CRON-01 | Phase 58 | Pending |
+| CRON-02 | Phase 58 | Pending |
+| CRON-03 | Phase 58 | Pending |
+| CRON-04 | Phase 58 | Pending |
+| CRON-05 | Phase 58 | Pending |
+| CRON-06 | Phase 58 | Pending |
+| RETN-01 | Phase 58 | Pending |
+| RETN-02 | Phase 58 | Pending |
+| RETN-03 | Phase 58 | Pending |
+| RETN-04 | Phase 58 | Pending |
+| RETN-05 | Phase 58 | Pending |
+| HOOK-01 | Phase 59 | Pending |
+| HOOK-02 | Phase 59 | Pending |
+| HOOK-03 | Phase 59 | Pending |
+| HOOK-04 | Phase 59 | Pending |
+| HOOK-05 | Phase 59 | Pending |
+| HOOK-06 | Phase 59 | Pending |
+| HTRL-01 | Phase 59 | Pending |
+| HTRL-02 | Phase 59 | Pending |
+| HTRL-03 | Phase 59 | Pending |
+| HTRL-04 | Phase 59 | Pending |
+| HTRL-05 | Phase 59 | Pending |
+| HTRL-06 | Phase 59 | Pending |
+| GDPR-01 | Phase 60 | Pending |
+| GDPR-02 | Phase 60 | Pending |
+| GDPR-03 | Phase 60 | Pending |
+| GDPR-04 | Phase 60 | Pending |
+| GDPR-05 | Phase 60 | Pending |
+| GDPR-06 | Phase 60 | Pending |
+| CHAN-01 | Phase 61 | Pending |
+| CHAN-02 | Phase 61 | Pending |
+| CHAN-03 | Phase 61 | Pending |
+| CHAN-04 | Phase 61 | Pending |
+| CHAN-05 | Phase 61 | Pending |
+| CHAN-06 | Phase 61 | Pending |
+| CHAN-07 | Phase 61 | Pending |
+| OTEL-01 | Phase 62 | Pending |
+| OTEL-02 | Phase 62 | Pending |
+| OTEL-03 | Phase 62 | Pending |
+| OTEL-04 | Phase 62 | Pending |
+| OTEL-05 | Phase 62 | Pending |
+| OTEL-06 | Phase 62 | Pending |
+| OAPI-01 | Phase 62 | Pending |
+| OAPI-02 | Phase 62 | Pending |
+| OAPI-03 | Phase 62 | Pending |
+| OAPI-04 | Phase 62 | Pending |
+| LITE-01 | Phase 62 | Pending |
+| LITE-02 | Phase 62 | Pending |
+| LITE-03 | Phase 62 | Pending |
+| LITE-04 | Phase 62 | Pending |
+| QUAL-01 | Phase 63 | Pending |
+| QUAL-02 | Phase 63 | Pending |
+| QUAL-03 | Phase 63 | Pending |
+| QUAL-04 | Phase 63 | Pending |
+| QUAL-05 | Phase 63 | Pending |
+| QUAL-06 | Phase 63 | Pending |
+| QUAL-07 | Phase 63 | Pending |
+| QUAL-08 | Phase 63 | Pending |
 
 **Coverage:**
 - v1.5 requirements: 93 total
-- Mapped to phases: 0
-- Unmapped: 93 ⚠️
+- Mapped to phases: 93
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after initial definition*
+*Last updated: 2026-03-10 after roadmap creation (traceability populated)*
