@@ -709,6 +709,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "blufio-audit"
+version = "0.1.0"
+dependencies = [
+ "blufio-core",
+ "blufio-storage",
+ "chrono",
+ "hex",
+ "metrics",
+ "proptest",
+ "refinery",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-rusqlite",
+ "tracing",
+]
+
+[[package]]
 name = "blufio-auth-keypair"
 version = "0.1.0"
 dependencies = [
