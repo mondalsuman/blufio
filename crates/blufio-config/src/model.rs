@@ -140,6 +140,10 @@ pub struct BlufioConfig {
     /// Data classification settings.
     #[serde(default)]
     pub classification: ClassificationConfig,
+
+    /// Audit trail settings.
+    #[serde(default)]
+    pub audit: AuditConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -1845,6 +1849,42 @@ impl Default for ClassificationConfig {
             warn_unencrypted: true,
         }
     }
+}
+
+/// Audit trail configuration.
+///
+/// Controls the tamper-evident hash-chain audit log stored in a dedicated `audit.db`.
+/// When omitted from the config file, all defaults apply (enabled with all events audited).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditConfig {
+    /// Whether the audit trail is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Custom path for the audit database file.
+    /// When `None`, defaults to `{data_dir}/audit.db`.
+    #[serde(default)]
+    pub db_path: Option<String>,
+
+    /// Event types to audit. Supports "all", prefix matching ("session.*"),
+    /// and exact matching ("session.created").
+    #[serde(default = "default_audit_events")]
+    pub events: Vec<String>,
+}
+
+impl Default for AuditConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            db_path: None,
+            events: default_audit_events(),
+        }
+    }
+}
+
+fn default_audit_events() -> Vec<String> {
+    vec!["all".to_string()]
 }
 
 #[cfg(test)]

@@ -50,6 +50,7 @@ pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Resul
     results.push(check_encryption(&config.storage.database_path).await);
     results.push(check_llm_connectivity(config).await);
     results.push(check_health_endpoint(config).await);
+    results.push(check_audit_trail(config).await);
 
     // MCP server checks (if configured)
     #[cfg(feature = "mcp-client")]
@@ -455,6 +456,153 @@ async fn check_mcp_servers(config: &BlufioConfig) -> Vec<CheckResult> {
     }
 
     results
+}
+
+/// Check audit trail health (last 100 entries, not full chain walk).
+async fn check_audit_trail(config: &BlufioConfig) -> CheckResult {
+    let start = Instant::now();
+
+    if !config.audit.enabled {
+        return CheckResult {
+            name: "Audit Trail".to_string(),
+            status: CheckStatus::Warn,
+            message: "audit trail is disabled".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    // Resolve audit.db path.
+    let audit_db_path = config.audit.db_path.clone().unwrap_or_else(|| {
+        let db = std::path::Path::new(&config.storage.database_path);
+        db.parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("audit.db")
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let path = std::path::Path::new(&audit_db_path);
+    if !path.exists() {
+        return CheckResult {
+            name: "Audit Trail".to_string(),
+            status: CheckStatus::Warn,
+            message: "audit database not found (will be created on first serve)".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    // Open a sync connection and verify the last 100 entries.
+    match blufio_storage::open_connection_sync(
+        &audit_db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) {
+        Ok(conn) => {
+            // Get entry count and last timestamp.
+            let stats: Result<(i64, Option<String>), _> = conn.query_row(
+                "SELECT COUNT(*), MAX(timestamp) FROM audit_entries",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            );
+
+            let (entry_count, last_ts) = match stats {
+                Ok(s) => s,
+                Err(e) => {
+                    return CheckResult {
+                        name: "Audit Trail".to_string(),
+                        status: CheckStatus::Fail,
+                        message: format!("query failed: {e}"),
+                        duration: start.elapsed(),
+                    };
+                }
+            };
+
+            // Verify last 100 entries by fetching them and checking the chain.
+            // We read at most 100 entries (ordered by id DESC), then verify in ASC order.
+            let verify_result: Result<bool, _> = (|| -> Result<bool, rusqlite::Error> {
+                let mut stmt = conn.prepare(
+                    "SELECT id, entry_hash, prev_hash, timestamp, event_type, action, \
+                     resource_type, resource_id FROM \
+                     (SELECT * FROM audit_entries ORDER BY id DESC LIMIT 100) \
+                     ORDER BY id ASC",
+                )?;
+                type AuditRow = (i64, String, String, String, String, String, String, String);
+                let entries: Vec<AuditRow> = stmt
+                    .query_map([], |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                            row.get(5)?,
+                            row.get(6)?,
+                            row.get(7)?,
+                        ))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                if entries.is_empty() {
+                    return Ok(true);
+                }
+
+                // For the tail check, we verify each entry's hash matches
+                // its recomputed hash from prev_hash. We trust the first
+                // entry's prev_hash (we're not verifying the full chain).
+                for (_id, entry_hash, prev_hash, ts, et, act, rt, rid) in &entries {
+                    let expected =
+                        blufio_audit::compute_entry_hash(prev_hash, ts, et, act, rt, rid);
+                    if entry_hash != &expected {
+                        return Ok(false);
+                    }
+                }
+
+                // Also verify chain linkage between consecutive entries.
+                for i in 1..entries.len() {
+                    let (_, ref prev_entry_hash, _, _, _, _, _, _) = entries[i - 1];
+                    let (_, _, ref this_prev_hash, _, _, _, _, _) = entries[i];
+                    if this_prev_hash != prev_entry_hash {
+                        return Ok(false);
+                    }
+                }
+
+                Ok(true)
+            })();
+
+            match verify_result {
+                Ok(true) => {
+                    let ts_info = last_ts
+                        .map(|ts| format!(", last: {ts}"))
+                        .unwrap_or_default();
+                    CheckResult {
+                        name: "Audit Trail".to_string(),
+                        status: CheckStatus::Pass,
+                        message: format!("{entry_count} entries, chain intact{ts_info}"),
+                        duration: start.elapsed(),
+                    }
+                }
+                Ok(false) => CheckResult {
+                    name: "Audit Trail".to_string(),
+                    status: CheckStatus::Fail,
+                    message: format!(
+                        "{entry_count} entries, chain BROKEN in last 100 -- run: blufio audit verify"
+                    ),
+                    duration: start.elapsed(),
+                },
+                Err(e) => CheckResult {
+                    name: "Audit Trail".to_string(),
+                    status: CheckStatus::Fail,
+                    message: format!("verification error: {e}"),
+                    duration: start.elapsed(),
+                },
+            }
+        }
+        Err(e) => CheckResult {
+            name: "Audit Trail".to_string(),
+            status: CheckStatus::Fail,
+            message: format!("open failed: {e}"),
+            duration: start.elapsed(),
+        },
+    }
 }
 
 /// Deep check: SQLite integrity check.

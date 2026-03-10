@@ -3,6 +3,10 @@
 
 //! SQLite-backed memory store with vector BLOB storage and FTS5 for BM25.
 
+use std::sync::Arc;
+
+use blufio_bus::EventBus;
+use blufio_bus::events::{BusEvent, MemoryEvent, new_event_id, now_timestamp};
 use blufio_core::classification::DataClassification;
 use blufio_core::error::BlufioError;
 use tokio_rusqlite::Connection;
@@ -20,6 +24,9 @@ fn storage_err(e: tokio_rusqlite::Error) -> BlufioError {
 /// for BM25 keyword search. Sync triggers keep FTS5 up to date.
 pub struct MemoryStore {
     conn: Connection,
+    /// Optional event bus for emitting memory CRUD events.
+    /// Set to `None` in tests and CLI contexts.
+    event_bus: Option<Arc<EventBus>>,
 }
 
 impl MemoryStore {
@@ -28,7 +35,18 @@ impl MemoryStore {
     /// The connection should already have V3 migration applied
     /// (memories table + memories_fts virtual table).
     pub fn new(conn: Connection) -> Self {
-        Self { conn }
+        Self {
+            conn,
+            event_bus: None,
+        }
+    }
+
+    /// Creates a new MemoryStore with an event bus for audit event emission.
+    pub fn with_event_bus(conn: Connection, event_bus: Arc<EventBus>) -> Self {
+        Self {
+            conn,
+            event_bus: Some(event_bus),
+        }
     }
 
     /// Save a memory to the store.
@@ -45,6 +63,9 @@ impl MemoryStore {
         let created_at = memory.created_at.clone();
         let updated_at = memory.updated_at.clone();
 
+        let mem_id = memory.id.clone();
+        let mem_source = memory.source.as_str().to_string();
+
         self.conn
             .call(move |conn| {
                 conn.execute(
@@ -54,13 +75,27 @@ impl MemoryStore {
                 Ok(())
             })
             .await
-            .map_err(storage_err)
+            .map_err(storage_err)?;
+
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(BusEvent::Memory(MemoryEvent::Created {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                memory_id: mem_id,
+                source: mem_source,
+            }))
+            .await;
+        }
+
+        Ok(())
     }
 
     /// Get a memory by ID.
     pub async fn get_by_id(&self, id: &str) -> Result<Option<Memory>, BlufioError> {
+        let mem_id = id.to_string();
         let id = id.to_string();
-        self.conn
+        let result = self
+            .conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE id = ?1",
@@ -73,7 +108,22 @@ impl MemoryStore {
                 Ok(memory)
             })
             .await
-            .map_err(storage_err)
+            .map_err(storage_err)?;
+
+        if result.is_some()
+            && let Some(ref bus) = self.event_bus
+        {
+            let _ = bus
+                .publish(BusEvent::Memory(MemoryEvent::Retrieved {
+                    event_id: new_event_id(),
+                    timestamp: now_timestamp(),
+                    memory_id: mem_id,
+                    query: String::new(),
+                }))
+                .await;
+        }
+
+        Ok(result)
     }
 
     /// Get all active memories, excluding Restricted data.
@@ -143,6 +193,7 @@ impl MemoryStore {
 
     /// Soft-delete a memory (set status to 'forgotten').
     pub async fn soft_delete(&self, id: &str) -> Result<(), BlufioError> {
+        let mem_id = id.to_string();
         let id = id.to_string();
         self.conn
             .call(move |conn| {
@@ -153,11 +204,23 @@ impl MemoryStore {
                 Ok(())
             })
             .await
-            .map_err(storage_err)
+            .map_err(storage_err)?;
+
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(BusEvent::Memory(MemoryEvent::Deleted {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                memory_id: mem_id,
+            }))
+            .await;
+        }
+
+        Ok(())
     }
 
     /// Supersede a memory (mark old as superseded, link to new).
     pub async fn supersede(&self, old_id: &str, new_id: &str) -> Result<(), BlufioError> {
+        let mem_id = old_id.to_string();
         let old_id = old_id.to_string();
         let new_id = new_id.to_string();
         self.conn
@@ -169,7 +232,18 @@ impl MemoryStore {
                 Ok(())
             })
             .await
-            .map_err(storage_err)
+            .map_err(storage_err)?;
+
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(BusEvent::Memory(MemoryEvent::Updated {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                memory_id: mem_id,
+            }))
+            .await;
+        }
+
+        Ok(())
     }
 
     /// Get memories by IDs (batch retrieval after hybrid search), excluding Restricted.

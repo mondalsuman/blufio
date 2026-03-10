@@ -8,6 +8,7 @@
 //! reuses the entire agent loop, session management, and tool pipeline.
 
 pub mod api_keys;
+pub mod audit;
 pub mod auth;
 pub mod batch;
 pub mod classify;

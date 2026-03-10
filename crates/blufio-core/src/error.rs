@@ -168,6 +168,22 @@ pub enum MigrationErrorKind {
     VersionMismatch,
 }
 
+/// Specific kind of audit trail error.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Display,
+)]
+#[non_exhaustive]
+pub enum AuditErrorKind {
+    /// The audit database is unavailable (cannot open, connection lost).
+    DbUnavailable,
+    /// The hash chain is broken (tampered or corrupted entry).
+    ChainBroken,
+    /// A batch flush to the audit database failed.
+    FlushFailed,
+    /// Chain verification failed.
+    VerifyFailed,
+}
+
 // ---------------------------------------------------------------------------
 // ErrorContext
 // ---------------------------------------------------------------------------
@@ -239,6 +255,14 @@ pub enum BlufioError {
     Migration {
         kind: MigrationErrorKind,
         context: ErrorContext,
+    },
+
+    /// Audit trail errors (database unavailable, chain broken, flush failed).
+    #[error("audit: {kind}{}", context.request_id.as_ref().map(|m| format!(": {m}")).unwrap_or_default())]
+    Audit {
+        kind: AuditErrorKind,
+        context: ErrorContext,
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
     // --- Unchanged simple variants ---
@@ -344,6 +368,12 @@ impl BlufioError {
                 MigrationErrorKind::DataCorruption => FailureMode::Internal,
                 MigrationErrorKind::VersionMismatch => FailureMode::Validation,
             },
+            Self::Audit { kind, .. } => match kind {
+                AuditErrorKind::DbUnavailable | AuditErrorKind::FlushFailed => {
+                    FailureMode::Unavailable
+                }
+                AuditErrorKind::ChainBroken | AuditErrorKind::VerifyFailed => FailureMode::Internal,
+            },
             Self::Config(_) => FailureMode::Validation,
             Self::Security(_) | Self::Vault(_) | Self::Signature(_) => FailureMode::Auth,
             Self::BudgetExhausted { .. } => FailureMode::ResourceExhausted,
@@ -392,6 +422,9 @@ impl BlufioError {
             } => Severity::Warning,
             Self::AdapterNotFound { .. } => Severity::Warning,
 
+            // Error: Audit trail errors are security-related
+            Self::Audit { .. } => Severity::Error,
+
             // Error: Classification errors are security-related
             Self::Classification(_) => Severity::Error,
 
@@ -409,6 +442,7 @@ impl BlufioError {
             Self::Skill { .. } => ErrorCategory::Skill,
             Self::Mcp { .. } => ErrorCategory::Mcp,
             Self::Migration { .. } => ErrorCategory::Migration,
+            Self::Audit { .. } => ErrorCategory::Security,
             Self::Config(_) => ErrorCategory::Config,
             Self::Security(_) | Self::Vault(_) | Self::Signature(_) => ErrorCategory::Security,
             Self::BudgetExhausted { .. } => ErrorCategory::Internal,
@@ -452,7 +486,8 @@ impl BlufioError {
                     | Self::Channel { context, .. }
                     | Self::Storage { context, .. }
                     | Self::Skill { context, .. }
-                    | Self::Mcp { context, .. } => context.retry_after,
+                    | Self::Mcp { context, .. }
+                    | Self::Audit { context, .. } => context.retry_after,
                     Self::Migration { context, .. } => context.retry_after,
                     _ => None,
                 };
@@ -544,6 +579,18 @@ impl BlufioError {
                 MigrationErrorKind::VersionMismatch => {
                     Cow::Borrowed("Incompatible data version detected.")
                 }
+            },
+            Self::Audit { kind, .. } => match kind {
+                AuditErrorKind::DbUnavailable => {
+                    Cow::Borrowed("The audit trail database is unavailable.")
+                }
+                AuditErrorKind::ChainBroken => {
+                    Cow::Borrowed("The audit trail integrity check failed.")
+                }
+                AuditErrorKind::FlushFailed => {
+                    Cow::Borrowed("Failed to write audit trail entries.")
+                }
+                AuditErrorKind::VerifyFailed => Cow::Borrowed("Audit trail verification failed."),
             },
             Self::Config(_) => Cow::Borrowed("A configuration error occurred."),
             Self::Vault(_) => Cow::Borrowed("A credential vault error occurred."),
@@ -931,6 +978,56 @@ impl BlufioError {
     pub fn circuit_open(dependency: impl Into<String>) -> Self {
         Self::CircuitOpen {
             dependency: dependency.into(),
+        }
+    }
+
+    // --- Audit constructors ---
+
+    /// Create an audit database unavailable error.
+    pub fn audit_db_unavailable(msg: &str) -> Self {
+        Self::Audit {
+            kind: AuditErrorKind::DbUnavailable,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
+        }
+    }
+
+    /// Create an audit chain broken error.
+    pub fn audit_chain_broken(msg: &str) -> Self {
+        Self::Audit {
+            kind: AuditErrorKind::ChainBroken,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
+        }
+    }
+
+    /// Create an audit flush failed error.
+    pub fn audit_flush_failed(msg: &str) -> Self {
+        Self::Audit {
+            kind: AuditErrorKind::FlushFailed,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
+        }
+    }
+
+    /// Create an audit verify failed error.
+    pub fn audit_verify_failed(msg: &str) -> Self {
+        Self::Audit {
+            kind: AuditErrorKind::VerifyFailed,
+            context: ErrorContext {
+                request_id: Some(msg.to_string()),
+                ..Default::default()
+            },
+            source: None,
         }
     }
 }

@@ -40,6 +40,16 @@ pub enum BusEvent {
     Resilience(ResilienceEvent),
     /// Data classification events (level changes, PII detection, enforcement).
     Classification(ClassificationEvent),
+    /// Configuration change events (settings modified, config reloaded).
+    Config(ConfigEvent),
+    /// Memory CRUD events (created, updated, deleted, retrieved, evicted).
+    Memory(MemoryEvent),
+    /// Audit subsystem meta-events (enabled, disabled, erased).
+    Audit(AuditMetaEvent),
+    /// API request events (mutating HTTP requests through the gateway).
+    Api(ApiEvent),
+    /// Provider call events (LLM call metadata: model, tokens, cost, latency).
+    Provider(ProviderEvent),
 }
 
 impl BusEvent {
@@ -88,6 +98,18 @@ impl BusEvent {
             BusEvent::Classification(ClassificationEvent::BulkChanged { .. }) => {
                 "classification.bulk_changed"
             }
+            BusEvent::Config(ConfigEvent::Changed { .. }) => "config.changed",
+            BusEvent::Config(ConfigEvent::Reloaded { .. }) => "config.reloaded",
+            BusEvent::Memory(MemoryEvent::Created { .. }) => "memory.created",
+            BusEvent::Memory(MemoryEvent::Updated { .. }) => "memory.updated",
+            BusEvent::Memory(MemoryEvent::Deleted { .. }) => "memory.deleted",
+            BusEvent::Memory(MemoryEvent::Retrieved { .. }) => "memory.retrieved",
+            BusEvent::Memory(MemoryEvent::Evicted { .. }) => "memory.evicted",
+            BusEvent::Audit(AuditMetaEvent::Enabled { .. }) => "audit.enabled",
+            BusEvent::Audit(AuditMetaEvent::Disabled { .. }) => "audit.disabled",
+            BusEvent::Audit(AuditMetaEvent::Erased { .. }) => "audit.erased",
+            BusEvent::Api(ApiEvent::Request { .. }) => "api.request",
+            BusEvent::Provider(ProviderEvent::Called { .. }) => "provider.called",
         }
     }
 }
@@ -417,12 +439,183 @@ pub enum ResilienceEvent {
     },
 }
 
+// --- Config events ---
+
+/// Events related to configuration changes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ConfigEvent {
+    /// A configuration value was changed.
+    Changed {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Configuration key that was changed.
+        key: String,
+        /// Previous value (None if newly added).
+        old_value: Option<String>,
+        /// New value (None if removed).
+        new_value: Option<String>,
+    },
+    /// Configuration was reloaded from source.
+    Reloaded {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Source of the reload (e.g., "file", "hot_reload").
+        source: String,
+    },
+}
+
+// --- Memory events ---
+
+/// Events related to memory CRUD operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MemoryEvent {
+    /// A new memory was created.
+    Created {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Memory identifier.
+        memory_id: String,
+        /// Source of the memory (e.g., "conversation", "manual").
+        source: String,
+    },
+    /// An existing memory was updated.
+    Updated {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Memory identifier.
+        memory_id: String,
+    },
+    /// A memory was deleted (soft-delete).
+    Deleted {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Memory identifier.
+        memory_id: String,
+    },
+    /// A memory was retrieved (read access).
+    Retrieved {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Memory identifier.
+        memory_id: String,
+        /// Query that triggered the retrieval.
+        query: String,
+    },
+    /// A memory was evicted from cache or storage.
+    Evicted {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Memory identifier.
+        memory_id: String,
+        /// Reason for eviction.
+        reason: String,
+    },
+}
+
+// --- Audit meta-events ---
+
+/// Meta-events about the audit subsystem itself.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuditMetaEvent {
+    /// Audit trail was enabled.
+    Enabled {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+    },
+    /// Audit trail was disabled.
+    Disabled {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+    },
+    /// GDPR erasure was performed on audit entries.
+    Erased {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// SHA-256 hash of the user ID that was erased (not plaintext).
+        user_id_hash: String,
+    },
+}
+
+// --- API events ---
+
+/// Events related to API requests through the gateway.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ApiEvent {
+    /// A mutating HTTP request was processed.
+    Request {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// HTTP method (POST, PUT, DELETE).
+        method: String,
+        /// Request path.
+        path: String,
+        /// HTTP response status code.
+        status: u16,
+        /// Actor who made the request (e.g., "user:123", "api-key:key_id", "anonymous").
+        actor: String,
+    },
+}
+
+// --- Provider events ---
+
+/// Events related to LLM provider calls.
+///
+/// Carries metadata only (model, tokens, cost, latency) -- never prompt/response content.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProviderEvent {
+    /// An LLM provider was called.
+    Called {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Provider name (e.g., "anthropic", "openai").
+        provider: String,
+        /// Model name used for the call.
+        model: String,
+        /// Number of input tokens.
+        input_tokens: u32,
+        /// Number of output tokens.
+        output_tokens: u32,
+        /// Estimated cost in USD.
+        cost_usd: f64,
+        /// Call latency in milliseconds.
+        latency_ms: u64,
+        /// Whether the call succeeded.
+        success: bool,
+        /// Session identifier.
+        session_id: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn all_eight_bus_event_variants_exist() {
+    fn all_thirteen_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -483,6 +676,48 @@ mod tests {
             old_level: "internal".into(),
             new_level: "confidential".into(),
             changed_by: "auto_pii".into(),
+        });
+
+        let _config = BusEvent::Config(ConfigEvent::Changed {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            key: "provider.model".into(),
+            old_value: Some("sonnet".into()),
+            new_value: Some("opus".into()),
+        });
+
+        let _memory = BusEvent::Memory(MemoryEvent::Created {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            memory_id: "mem-1".into(),
+            source: "conversation".into(),
+        });
+
+        let _audit = BusEvent::Audit(AuditMetaEvent::Enabled {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+        });
+
+        let _api = BusEvent::Api(ApiEvent::Request {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            method: "POST".into(),
+            path: "/v1/messages".into(),
+            status: 200,
+            actor: "user:123".into(),
+        });
+
+        let _provider = BusEvent::Provider(ProviderEvent::Called {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            provider: "anthropic".into(),
+            model: "claude-sonnet-4-20250514".into(),
+            input_tokens: 100,
+            output_tokens: 50,
+            cost_usd: 0.001,
+            latency_ms: 500,
+            success: true,
+            session_id: "sess-1".into(),
         });
     }
 
@@ -746,6 +981,120 @@ mod tests {
                     changed_by: String::new(),
                 }),
                 "classification.bulk_changed",
+            ),
+            // Config events
+            (
+                BusEvent::Config(ConfigEvent::Changed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    key: String::new(),
+                    old_value: None,
+                    new_value: None,
+                }),
+                "config.changed",
+            ),
+            (
+                BusEvent::Config(ConfigEvent::Reloaded {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    source: String::new(),
+                }),
+                "config.reloaded",
+            ),
+            // Memory events
+            (
+                BusEvent::Memory(MemoryEvent::Created {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    memory_id: String::new(),
+                    source: String::new(),
+                }),
+                "memory.created",
+            ),
+            (
+                BusEvent::Memory(MemoryEvent::Updated {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    memory_id: String::new(),
+                }),
+                "memory.updated",
+            ),
+            (
+                BusEvent::Memory(MemoryEvent::Deleted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    memory_id: String::new(),
+                }),
+                "memory.deleted",
+            ),
+            (
+                BusEvent::Memory(MemoryEvent::Retrieved {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    memory_id: String::new(),
+                    query: String::new(),
+                }),
+                "memory.retrieved",
+            ),
+            (
+                BusEvent::Memory(MemoryEvent::Evicted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    memory_id: String::new(),
+                    reason: String::new(),
+                }),
+                "memory.evicted",
+            ),
+            // Audit events
+            (
+                BusEvent::Audit(AuditMetaEvent::Enabled {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                }),
+                "audit.enabled",
+            ),
+            (
+                BusEvent::Audit(AuditMetaEvent::Disabled {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                }),
+                "audit.disabled",
+            ),
+            (
+                BusEvent::Audit(AuditMetaEvent::Erased {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                }),
+                "audit.erased",
+            ),
+            // Api events
+            (
+                BusEvent::Api(ApiEvent::Request {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    method: String::new(),
+                    path: String::new(),
+                    status: 0,
+                    actor: String::new(),
+                }),
+                "api.request",
+            ),
+            // Provider events
+            (
+                BusEvent::Provider(ProviderEvent::Called {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    provider: String::new(),
+                    model: String::new(),
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    cost_usd: 0.0,
+                    latency_ms: 0,
+                    success: false,
+                    session_id: String::new(),
+                }),
+                "provider.called",
             ),
         ];
 

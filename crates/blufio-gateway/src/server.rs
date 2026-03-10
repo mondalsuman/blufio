@@ -160,6 +160,11 @@ pub async fn start_server(
         .route("/v1/batch/:id", get(batch::handlers::get_batch_status))
         // Classification management endpoints (DCLS-04).
         .merge(classify::classify_router())
+        // Audit middleware (runs after auth+rate_limit, emits ApiEvent for mutating requests).
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.event_bus.clone(),
+            crate::audit::audit_middleware,
+        ))
         // Rate limiting middleware (runs after auth, reads AuthContext from extensions).
         .route_layer(axum_middleware::from_fn_with_state(
             state.clone(),
