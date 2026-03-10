@@ -8,3 +8,10 @@
 # auto_classify_pii = true
 # default_level = "internal"
 # warn_unencrypted = true
+
+# [audit]
+# enabled = true
+# db_path = "/custom/path/to/audit.db"
+# events = ["all"]
+# # Selective auditing example:
+# # events = ["session.*", "memory.*", "config.*", "audit.*"]

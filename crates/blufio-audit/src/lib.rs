@@ -36,3 +36,4 @@ pub use chain::{
 };
 pub use filter::EventFilter;
 pub use models::{AuditEntry, AuditErasureReport, AuditError, PendingEntry};
+pub use writer::{AuditCommand, AuditWriter};
