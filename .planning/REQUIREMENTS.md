@@ -52,7 +52,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 - [x] **AUDT-01**: Hash-chained tamper-evident log where each entry hash = SHA-256(prev_hash || canonical_entry)
 - [x] **AUDT-02**: Audit entries cover: tool execution, memory modification, config changes, provider calls, session lifecycle, classification changes, erasure events
 - [x] **AUDT-03**: Audit trail stored in dedicated audit.db (separate from main database)
-- [ ] **AUDT-04**: CLI command `blufio audit verify` walks hash chain and reports any breaks
+- [x] **AUDT-04**: CLI command `blufio audit verify` walks hash chain and reports any breaks
 - [x] **AUDT-05**: Audit entries are append-only -- retention policies never delete them
 - [x] **AUDT-06**: Audit schema supports GDPR redact-in-place (PII fields replaceable with [ERASED] without breaking hash chain)
 - [x] **AUDT-07**: Async audit writes via buffered mpsc channel with batch flush
@@ -198,7 +198,7 @@ Deferred to v1.6+.
 | AUDT-01 | Phase 54 | Complete |
 | AUDT-02 | Phase 54 | Complete |
 | AUDT-03 | Phase 54 | Complete |
-| AUDT-04 | Phase 54 | Pending |
+| AUDT-04 | Phase 54 | Complete |
 | AUDT-05 | Phase 54 | Complete |
 | AUDT-06 | Phase 54 | Complete |
 | AUDT-07 | Phase 54 | Complete |
