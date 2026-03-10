@@ -8,13 +8,7 @@
 
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    extract::State,
-    http::Request,
-    middleware::Next,
-    response::Response,
-};
+use axum::{body::Body, extract::State, http::Request, middleware::Next, response::Response};
 
 use blufio_bus::EventBus;
 use blufio_bus::events::{ApiEvent, BusEvent, new_event_id, now_timestamp};

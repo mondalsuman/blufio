@@ -266,12 +266,14 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 info!(db_path = %audit_db_path, "audit trail enabled");
 
                 // Emit audit.enabled meta-event.
-                let _ = event_bus.publish(blufio_bus::events::BusEvent::Audit(
-                    blufio_bus::events::AuditMetaEvent::Enabled {
-                        event_id: blufio_bus::events::new_event_id(),
-                        timestamp: blufio_bus::events::now_timestamp(),
-                    },
-                ));
+                let _ = event_bus
+                    .publish(blufio_bus::events::BusEvent::Audit(
+                        blufio_bus::events::AuditMetaEvent::Enabled {
+                            event_id: blufio_bus::events::new_event_id(),
+                            timestamp: blufio_bus::events::now_timestamp(),
+                        },
+                    ))
+                    .await;
 
                 Some(writer)
             }

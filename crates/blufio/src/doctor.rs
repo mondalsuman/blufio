@@ -525,8 +525,9 @@ async fn check_audit_trail(config: &BlufioConfig) -> CheckResult {
                      (SELECT * FROM audit_entries ORDER BY id DESC LIMIT 100) \
                      ORDER BY id ASC",
                 )?;
-                let entries: Vec<(i64, String, String, String, String, String, String, String)> =
-                    stmt.query_map([], |row| {
+                type AuditRow = (i64, String, String, String, String, String, String, String);
+                let entries: Vec<AuditRow> = stmt
+                    .query_map([], |row| {
                         Ok((
                             row.get(0)?,
                             row.get(1)?,
@@ -547,20 +548,10 @@ async fn check_audit_trail(config: &BlufioConfig) -> CheckResult {
                 // For the tail check, we verify each entry's hash matches
                 // its recomputed hash from prev_hash. We trust the first
                 // entry's prev_hash (we're not verifying the full chain).
-                for i in 0..entries.len() {
-                    let (
-                        _id,
-                        ref entry_hash,
-                        ref prev_hash,
-                        ref ts,
-                        ref et,
-                        ref act,
-                        ref rt,
-                        ref rid,
-                    ) = entries[i];
+                for (_id, entry_hash, prev_hash, ts, et, act, rt, rid) in &entries {
                     let expected =
                         blufio_audit::compute_entry_hash(prev_hash, ts, et, act, rt, rid);
-                    if *entry_hash != expected {
+                    if entry_hash != &expected {
                         return Ok(false);
                     }
                 }

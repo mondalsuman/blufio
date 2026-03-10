@@ -16,9 +16,8 @@
 use std::sync::Arc;
 
 use blufio_bus::events::{
-    AuditMetaEvent, ApiEvent, BatchEvent, BusEvent, ChannelEvent, ClassificationEvent,
-    ConfigEvent, MemoryEvent, NodeEvent, ProviderEvent, ResilienceEvent, SessionEvent,
-    SkillEvent, WebhookEvent,
+    ApiEvent, AuditMetaEvent, BatchEvent, BusEvent, ChannelEvent, ClassificationEvent, ConfigEvent,
+    MemoryEvent, NodeEvent, ProviderEvent, ResilienceEvent, SessionEvent, SkillEvent, WebhookEvent,
 };
 use metrics::counter;
 use tokio::sync::mpsc;

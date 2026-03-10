@@ -110,16 +110,17 @@ impl MemoryStore {
             .await
             .map_err(storage_err)?;
 
-        if result.is_some() {
-            if let Some(ref bus) = self.event_bus {
-                bus.publish(BusEvent::Memory(MemoryEvent::Retrieved {
+        if result.is_some()
+            && let Some(ref bus) = self.event_bus
+        {
+            let _ = bus
+                .publish(BusEvent::Memory(MemoryEvent::Retrieved {
                     event_id: new_event_id(),
                     timestamp: now_timestamp(),
                     memory_id: mem_id,
                     query: String::new(),
                 }))
                 .await;
-            }
         }
 
         Ok(result)
