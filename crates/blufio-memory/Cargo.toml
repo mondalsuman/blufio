@@ -9,6 +9,7 @@ publish = false
 description = "Long-term memory system with ONNX embeddings and hybrid search for Blufio"
 
 [dependencies]
+blufio-bus = { path = "../blufio-bus" }
 blufio-core = { path = "../blufio-core" }
 blufio-context = { path = "../blufio-context" }
 blufio-storage = { path = "../blufio-storage" }

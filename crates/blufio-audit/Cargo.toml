@@ -9,6 +9,7 @@ publish = false
 description = "Tamper-evident hash-chain audit trail for the Blufio agent framework"
 
 [dependencies]
+blufio-bus = { path = "../blufio-bus" }
 blufio-core = { path = "../blufio-core" }
 blufio-storage = { path = "../blufio-storage" }
 sha2 = { workspace = true }

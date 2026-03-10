@@ -748,6 +748,25 @@ impl SessionActor {
                 cost_usd = cost_usd,
                 "message cost recorded"
             );
+
+            // Emit ProviderEvent for audit trail.
+            if let Some(ref bus) = self.event_bus {
+                bus.publish(blufio_bus::events::BusEvent::Provider(
+                    blufio_bus::events::ProviderEvent::Called {
+                        event_id: blufio_bus::events::new_event_id(),
+                        timestamp: blufio_bus::events::now_timestamp(),
+                        provider: self.provider_name.clone(),
+                        model: model_for_cost.clone(),
+                        input_tokens: usage.input_tokens,
+                        output_tokens: usage.output_tokens,
+                        cost_usd,
+                        latency_ms: 0, // latency not tracked at this level
+                        success: true,
+                        session_id: self.session_id.clone(),
+                    },
+                ))
+                .await;
+            }
         }
 
         // Transition: Responding -> Idle

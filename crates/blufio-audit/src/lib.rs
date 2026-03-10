@@ -27,6 +27,7 @@ pub mod chain;
 pub mod filter;
 pub mod migrations;
 pub mod models;
+pub mod subscriber;
 pub mod writer;
 
 // Re-exports for convenience
@@ -36,4 +37,5 @@ pub use chain::{
 };
 pub use filter::EventFilter;
 pub use models::{AuditEntry, AuditErasureReport, AuditError, PendingEntry};
+pub use subscriber::AuditSubscriber;
 pub use writer::{AuditCommand, AuditWriter};
