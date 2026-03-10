@@ -59,6 +59,7 @@ blufio-signal = { path = "../blufio-signal", optional = true }
 blufio-irc = { path = "../blufio-irc", optional = true }
 blufio-matrix = { path = "../blufio-matrix", optional = true }
 blufio-bridge = { path = "../blufio-bridge", optional = true }
+blufio-audit = { path = "../blufio-audit" }
 blufio-bus = { path = "../blufio-bus" }
 blufio-resilience = { path = "../blufio-resilience" }
 blufio-anthropic = { path = "../blufio-anthropic", optional = true }
