@@ -6,6 +6,7 @@
 //! All structs use `#[serde(deny_unknown_fields)]` to reject unrecognized
 //! config keys at startup, providing actionable error messages.
 
+use blufio_core::classification::DataClassification;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -135,6 +136,10 @@ pub struct BlufioConfig {
     /// Resilience settings (circuit breakers, degradation ladder).
     #[serde(default)]
     pub resilience: ResilienceConfig,
+
+    /// Data classification settings.
+    #[serde(default)]
+    pub classification: ClassificationConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -1794,6 +1799,52 @@ pub struct CircuitBreakerOverride {
     pub reset_timeout_secs: Option<u64>,
     /// Override for half-open probe count.
     pub half_open_probes: Option<u32>,
+}
+
+// ---------------------------------------------------------------------------
+// Data Classification Config
+// ---------------------------------------------------------------------------
+
+/// Configuration for the data classification subsystem.
+///
+/// Controls automatic PII-based classification, default levels, and warnings.
+///
+/// ```toml
+/// [classification]
+/// enabled = true
+/// auto_classify_pii = true
+/// default_level = "internal"
+/// warn_unencrypted = true
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClassificationConfig {
+    /// Whether the classification subsystem is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Automatically classify content as Confidential when PII is detected.
+    #[serde(default = "default_true")]
+    pub auto_classify_pii: bool,
+
+    /// Default classification level for new data.
+    #[serde(default)]
+    pub default_level: DataClassification,
+
+    /// Warn when non-SQLCipher (plaintext) database stores Confidential data.
+    #[serde(default = "default_true")]
+    pub warn_unencrypted: bool,
+}
+
+impl Default for ClassificationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_classify_pii: true,
+            default_level: DataClassification::default(),
+            warn_unencrypted: true,
+        }
+    }
 }
 
 #[cfg(test)]
