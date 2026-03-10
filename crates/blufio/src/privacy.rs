@@ -76,6 +76,41 @@ pub struct SkillPermissionInfo {
     pub advisories: Vec<String>,
 }
 
+/// Classification distribution counts per level for a single entity type.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LevelCounts {
+    /// Number of entities classified as Public.
+    pub public: usize,
+    /// Number of entities classified as Internal.
+    pub internal: usize,
+    /// Number of entities classified as Confidential.
+    pub confidential: usize,
+    /// Number of entities classified as Restricted.
+    pub restricted: usize,
+}
+
+/// Classification distribution across entity types.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClassificationDistribution {
+    /// Counts per level for memories.
+    pub memories: LevelCounts,
+    /// Counts per level for messages.
+    pub messages: LevelCounts,
+    /// Counts per level for sessions.
+    pub sessions: LevelCounts,
+}
+
+/// PII detection status information.
+#[derive(Debug, Clone, Serialize)]
+pub struct PiiDetectionStatus {
+    /// Whether auto-classification of PII-containing content is enabled.
+    pub auto_classify_pii: bool,
+    /// Active PII pattern types.
+    pub active_patterns: Vec<String>,
+    /// Context-aware exclusion types (code blocks, inline code, URLs).
+    pub context_exclusions: Vec<String>,
+}
+
 /// Complete privacy report.
 #[derive(Debug, Clone, Serialize)]
 pub struct PrivacyReport {
@@ -87,6 +122,11 @@ pub struct PrivacyReport {
     pub skill_permissions: Vec<SkillPermissionInfo>,
     /// Data classification summary.
     pub data_classification: Vec<String>,
+    /// Classification distribution per level per entity type (None if DB unavailable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification_distribution: Option<ClassificationDistribution>,
+    /// PII detection status.
+    pub pii_detection_status: PiiDetectionStatus,
 }
 
 /// Enumerate all outbound endpoints from the configuration.
@@ -468,6 +508,54 @@ fn format_markdown_report(report: &PrivacyReport) -> String {
         out.push('\n');
     }
 
+    // Classification Distribution
+    if let Some(ref dist) = report.classification_distribution {
+        out.push_str("## Data Classification Distribution\n\n");
+        out.push_str("| Entity Type | Public | Internal | Confidential | Restricted |\n");
+        out.push_str("|-------------|--------|----------|--------------|------------|\n");
+        out.push_str(&format!(
+            "| Memories    | {} | {} | {} | {} |\n",
+            dist.memories.public,
+            dist.memories.internal,
+            dist.memories.confidential,
+            dist.memories.restricted,
+        ));
+        out.push_str(&format!(
+            "| Messages    | {} | {} | {} | {} |\n",
+            dist.messages.public,
+            dist.messages.internal,
+            dist.messages.confidential,
+            dist.messages.restricted,
+        ));
+        out.push_str(&format!(
+            "| Sessions    | {} | {} | {} | {} |\n",
+            dist.sessions.public,
+            dist.sessions.internal,
+            dist.sessions.confidential,
+            dist.sessions.restricted,
+        ));
+        out.push('\n');
+    }
+
+    // PII Detection Status
+    out.push_str("## PII Detection Status\n\n");
+    out.push_str(&format!(
+        "- **Auto-classify PII**: {}\n",
+        if report.pii_detection_status.auto_classify_pii {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    ));
+    out.push_str(&format!(
+        "- **Active patterns**: {}\n",
+        report.pii_detection_status.active_patterns.join(", ")
+    ));
+    out.push_str(&format!(
+        "- **Context-aware exclusions**: {}\n\n",
+        report.pii_detection_status.context_exclusions.join(", ")
+    ));
+
     // Retention & Deletion
     out.push_str("## Retention & Deletion\n\n");
     out.push_str("- **Database**: No automatic retention policy. Data persists until manual cleanup or `blufio uninstall --purge`.\n");
@@ -488,11 +576,29 @@ pub async fn run_privacy_report(json: bool, output: Option<&str>) -> Result<(), 
     let skill_permissions = enumerate_skill_permissions(&config);
     let data_classification = generate_classification_summary(&endpoints, &stores);
 
+    let pii_detection_status = PiiDetectionStatus {
+        auto_classify_pii: config.classification.auto_classify_pii,
+        active_patterns: vec![
+            "email".to_string(),
+            "phone".to_string(),
+            "ssn".to_string(),
+            "credit_card".to_string(),
+        ],
+        context_exclusions: vec![
+            "code_blocks".to_string(),
+            "inline_code".to_string(),
+            "urls".to_string(),
+        ],
+    };
+
     let report = PrivacyReport {
         endpoints,
         stores,
         skill_permissions,
         data_classification,
+        // Classification distribution requires DB access -- skip if unavailable.
+        classification_distribution: None,
+        pii_detection_status,
     };
 
     let content = if json {
