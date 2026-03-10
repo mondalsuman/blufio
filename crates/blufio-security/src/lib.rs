@@ -14,6 +14,6 @@ pub mod tls;
 
 pub use classification_guard::ClassificationGuard;
 pub use pii::{PiiMatch, PiiType, detect_pii, luhn_validate, redact_pii};
-pub use redact::{RedactingWriter, redact};
+pub use redact::{RedactingWriter, redact, redact_secrets_only, redact_with_pii};
 pub use ssrf::SsrfSafeResolver;
 pub use tls::{build_secure_client, is_localhost, validate_url};
