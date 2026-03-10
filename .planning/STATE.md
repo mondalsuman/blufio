@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 54-01-PLAN.md
-last_updated: "2026-03-10T20:31:25.090Z"
-last_activity: 2026-03-10 -- Phase 54 Plan 01 completed (13min)
+stopped_at: Completed 54-02-PLAN.md
+last_updated: "2026-03-10T20:49:05.561Z"
+last_activity: 2026-03-10 -- Phase 54 Plan 02 completed (15min)
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 18
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 54 of 63 (Audit Trail) -- second of 11 phases in v1.5
-Plan: 1 of 3 in Phase 54 (complete)
+Plan: 2 of 3 in Phase 54 (complete)
 Status: Phase 54 In Progress
-Last activity: 2026-03-10 -- Phase 54 Plan 01 completed (13min)
+Last activity: 2026-03-10 -- Phase 54 Plan 02 completed (15min)
 
 Progress: [#####-------------------------] 18%
 
@@ -50,6 +50,7 @@ Progress: [#####-------------------------] 18%
 | v1.4 | 16 | 1 | ~16 |
 | Phase 53 P05 | 18min | 2 tasks | 6 files |
 | Phase 54 P01 | 13min | 2 tasks | 11 files |
+| Phase 54 P02 | 15min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,11 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - Phase 54 Plan 01: AuditWriter uses tokio::select! with interval for time-based flush
 - Phase 54 Plan 01: Channel overflow drops entries with warning counter, never blocks caller
 - Phase 54 Plan 01: Chain head recovered from last entry_hash on writer restart
+- [Phase 54]: All sub-enums use String fields to avoid cross-crate dependencies
+- [Phase 54]: MemoryStore uses Optional<Arc<EventBus>> pattern (None for tests/CLI)
+- [Phase 54]: ProviderEvent emitted in persist_response after cost recording
+- [Phase 54]: Gateway audit middleware uses tokio::spawn fire-and-forget for event emission
+- [Phase 54]: ApiEvent actor derived from AuthContext (user:master, api-key:{id}, anonymous)
 
 ### Pending Todos
 
@@ -92,6 +98,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-10T20:31:25.086Z
-Stopped at: Completed 54-01-PLAN.md
+Last session: 2026-03-10T20:49:05.557Z
+Stopped at: Completed 54-02-PLAN.md
 Resume file: None
