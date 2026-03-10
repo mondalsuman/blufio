@@ -24,6 +24,17 @@ use colored::Colorize;
 use blufio_core::classification::{ClassificationError, DataClassification};
 use blufio_core::BlufioError;
 
+/// Open a Database connection using the configured database path.
+///
+/// Follows the same pattern as other CLI commands (doctor, backup, migrate):
+/// load_and_validate config, then Database::open on the storage path.
+#[cfg(feature = "sqlite")]
+async fn open_db() -> Result<blufio_storage::Database, BlufioError> {
+    let config = blufio_config::load_and_validate()
+        .map_err(|errors| BlufioError::Config(format!("{} config error(s)", errors.len())))?;
+    blufio_storage::Database::open(&config.storage.database_path).await
+}
+
 /// Classify subcommand actions.
 #[derive(Subcommand, Debug)]
 pub enum ClassifyAction {
@@ -176,9 +187,23 @@ async fn run_classify_set(
     validate_entity_type(entity_type)?;
     let new_level = parse_level(level_str)?;
 
-    // In a real implementation this would connect to the database and update the record.
-    // For now, we validate inputs and demonstrate the downgrade protection logic.
-    let current_level = DataClassification::Internal; // Placeholder: would be fetched from DB.
+    let db = open_db().await?;
+
+    // Fetch current classification from DB.
+    let current_str = blufio_storage::queries::classification::get_entity_classification(
+        &db,
+        entity_type,
+        id,
+    )
+    .await?
+    .ok_or_else(|| {
+        BlufioError::Classification(ClassificationError::EntityNotFound {
+            entity_type: entity_type.to_string(),
+            entity_id: id.to_string(),
+        })
+    })?;
+
+    let current_level = parse_level(&current_str)?;
 
     if new_level.is_downgrade_from(&current_level) && !force {
         return Err(BlufioError::Classification(
@@ -188,6 +213,15 @@ async fn run_classify_set(
             },
         ));
     }
+
+    // Persist the new classification level.
+    blufio_storage::queries::classification::set_entity_classification(
+        &db,
+        entity_type,
+        id,
+        new_level.as_str(),
+    )
+    .await?;
 
     // Emit classification changed event (fire-and-forget).
     let _event = blufio_security::classification_changed_event(
@@ -213,8 +247,22 @@ async fn run_classify_set(
 async fn run_classify_get(entity_type: &str, id: &str) -> Result<(), BlufioError> {
     validate_entity_type(entity_type)?;
 
-    // Placeholder: would fetch from DB.
-    let level = DataClassification::Internal;
+    let db = open_db().await?;
+
+    let level_str = blufio_storage::queries::classification::get_entity_classification(
+        &db,
+        entity_type,
+        id,
+    )
+    .await?
+    .ok_or_else(|| {
+        BlufioError::Classification(ClassificationError::EntityNotFound {
+            entity_type: entity_type.to_string(),
+            entity_id: id.to_string(),
+        })
+    })?;
+
+    let level = parse_level(&level_str)?;
 
     println!(
         "{} {} classification: {}",
@@ -237,8 +285,14 @@ async fn run_classify_list(
         parse_level(l)?;
     }
 
-    // Placeholder: would query DB with filters.
-    let results: Vec<(&str, DataClassification)> = vec![];
+    let db = open_db().await?;
+
+    let results = blufio_storage::queries::classification::list_entities_by_classification(
+        &db,
+        entity_type,
+        level,
+    )
+    .await?;
 
     if json {
         let json_results: Vec<serde_json::Value> = results
@@ -247,7 +301,7 @@ async fn run_classify_list(
                 serde_json::json!({
                     "id": id,
                     "type": entity_type,
-                    "level": lvl.as_str(),
+                    "level": lvl,
                 })
             })
             .collect();
@@ -266,7 +320,9 @@ async fn run_classify_list(
         );
         println!("{}", "-".repeat(55));
         for (id, lvl) in &results {
-            println!("{:<40} {}", id, colored_level(*lvl));
+            let parsed = DataClassification::from_str_value(lvl)
+                .unwrap_or(DataClassification::Internal);
+            println!("{:<40} {}", id, colored_level(parsed));
         }
         println!("\n{} entities total", results.len());
     }
@@ -280,10 +336,10 @@ async fn run_classify_bulk(
     entity_type: &str,
     level_str: &str,
     current_level: Option<&str>,
-    _session_id: Option<&str>,
-    _from: Option<&str>,
-    _to: Option<&str>,
-    _pattern: Option<&str>,
+    session_id: Option<&str>,
+    from: Option<&str>,
+    to: Option<&str>,
+    pattern: Option<&str>,
     dry_run: bool,
     force: bool,
 ) -> Result<(), BlufioError> {
@@ -293,22 +349,8 @@ async fn run_classify_bulk(
         parse_level(cl)?;
     }
 
-    // Placeholder: would query DB to find matching entities and apply updates.
-    let total: usize = 0;
-    let succeeded: usize = 0;
-    let failed: usize = 0;
-    let errors: Vec<String> = vec![];
-
-    if dry_run {
-        println!(
-            "{} {} {} entities would be updated to {}",
-            "DRY RUN:".yellow().bold(),
-            total,
-            entity_type,
-            colored_level(new_level),
-        );
-    } else {
-        // Check downgrade protection for bulk operations.
+    // Check downgrade protection for bulk operations (before DB call).
+    if !dry_run {
         if let Some(cl) = current_level {
             let current = parse_level(cl)?;
             if new_level.is_downgrade_from(&current) && !force {
@@ -320,7 +362,37 @@ async fn run_classify_bulk(
                 ));
             }
         }
+    }
 
+    let db = open_db().await?;
+
+    let result = blufio_storage::queries::classification::bulk_update_classification(
+        &db,
+        entity_type,
+        new_level.as_str(),
+        current_level,
+        session_id,
+        from,
+        to,
+        pattern,
+        dry_run,
+    )
+    .await?;
+
+    let total = result.total;
+    let succeeded = result.succeeded;
+    let failed = result.failed;
+    let errors = result.errors;
+
+    if dry_run {
+        println!(
+            "{} {} {} entities would be updated to {}",
+            "DRY RUN:".yellow().bold(),
+            total,
+            entity_type,
+            colored_level(new_level),
+        );
+    } else {
         // Emit single bulk event (not per-item).
         if succeeded > 0 {
             let _event = blufio_security::bulk_classification_changed_event(
@@ -401,21 +473,7 @@ mod tests {
         assert!(!colored_level(DataClassification::Restricted).is_empty());
     }
 
-    #[tokio::test]
-    async fn classify_set_downgrade_rejected_without_force() {
-        // Internal (current) -> Public (new) is a downgrade, should fail without --force.
-        let result = run_classify_set("memory", "mem-1", "public", false).await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        let msg = format!("{err}");
-        assert!(msg.contains("downgrade rejected"));
-    }
-
-    #[tokio::test]
-    async fn classify_set_downgrade_allowed_with_force() {
-        let result = run_classify_set("memory", "mem-1", "public", true).await;
-        assert!(result.is_ok());
-    }
+    // Input validation tests (run before DB access, so no DB needed).
 
     #[tokio::test]
     async fn classify_set_invalid_entity_type() {
@@ -430,27 +488,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn classify_get_valid() {
-        let result = run_classify_get("memory", "mem-1").await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
     async fn classify_get_invalid_type() {
         let result = run_classify_get("unknown", "id-1").await;
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn classify_list_valid() {
-        let result = run_classify_list("memory", None, false).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn classify_list_json_output() {
-        let result = run_classify_list("memory", Some("internal"), true).await;
-        assert!(result.is_ok());
     }
 
     #[tokio::test]
@@ -460,24 +500,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn classify_bulk_dry_run() {
-        let result = run_classify_bulk(
-            "memory",
-            "confidential",
-            None,
-            None,
-            None,
-            None,
-            None,
-            true,
-            false,
-        )
-        .await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
     async fn classify_bulk_downgrade_rejected() {
+        // Downgrade check happens before DB access when current_level filter is set.
         let result = run_classify_bulk(
             "memory",
             "public",
@@ -491,22 +515,5 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn classify_bulk_downgrade_allowed_with_force() {
-        let result = run_classify_bulk(
-            "memory",
-            "public",
-            Some("confidential"),
-            None,
-            None,
-            None,
-            None,
-            false,
-            true,
-        )
-        .await;
-        assert!(result.is_ok());
     }
 }

@@ -13,9 +13,11 @@
 //! - `GET /v1/classify/{type}/{id}` -- Get current classification
 //! - `POST /v1/classify/bulk` -- Bulk update classifications with filters
 
+use std::sync::Arc;
+
 use axum::{
     Extension, Json, Router,
-    extract::Path,
+    extract::{Path, State},
     http::StatusCode,
     routing::{post, put},
 };
@@ -162,10 +164,26 @@ fn require_classify_scope(
     }
 }
 
+/// Extract the storage adapter from gateway state, returning 503 if unavailable.
+fn require_storage(
+    state: &crate::server::GatewayState,
+) -> Result<Arc<dyn blufio_core::StorageAdapter + Send + Sync>, (StatusCode, Json<ClassifyErrorResponse>)>
+{
+    state.storage.clone().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ClassifyErrorResponse {
+                error: "storage not available".to_string(),
+            }),
+        )
+    })
+}
+
 /// PUT /v1/classify/{type}/{id}
 ///
 /// Set classification level on an entity. Returns 409 if downgrade without force.
 async fn put_classification(
+    State(state): State<crate::server::GatewayState>,
     Path((entity_type, id)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
     Json(body): Json<SetClassificationRequest>,
@@ -173,9 +191,30 @@ async fn put_classification(
     require_classify_scope(&auth)?;
     validate_entity_type(&entity_type)?;
     let new_level = validate_level(&body.level)?;
+    let storage = require_storage(&state)?;
 
-    // Placeholder: would fetch current level from DB.
-    let current_level = blufio_core::classification::DataClassification::Internal;
+    // Fetch current level from DB.
+    let current_str = storage
+        .get_entity_classification(&entity_type, &id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ClassifyErrorResponse {
+                    error: format!("storage error: {e}"),
+                }),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ClassifyErrorResponse {
+                    error: format!("{entity_type} not found: {id}"),
+                }),
+            )
+        })?;
+
+    let current_level = validate_level(&current_str)?;
 
     if new_level.is_downgrade_from(&current_level) && !body.force.unwrap_or(false) {
         return Err((
@@ -190,14 +229,32 @@ async fn put_classification(
         ));
     }
 
+    // Persist the new classification level.
+    storage
+        .set_entity_classification(&entity_type, &id, new_level.as_str())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ClassifyErrorResponse {
+                    error: format!("storage error: {e}"),
+                }),
+            )
+        })?;
+
     // Emit event (fire-and-forget).
-    let _event = blufio_security::classification_changed_event(
+    let event = blufio_security::classification_changed_event(
         &entity_type,
         &id,
         current_level.as_str(),
         new_level.as_str(),
         auth.key_id().unwrap_or("master"),
     );
+
+    // Publish event to EventBus if available.
+    if let Some(ref bus) = state.event_bus {
+        let _ = bus.publish(event).await;
+    }
 
     tracing::info!(
         entity_type = %entity_type,
@@ -216,25 +273,42 @@ async fn put_classification(
 ///
 /// Get current classification level. Returns 404 if entity not found.
 async fn get_classification(
+    State(state): State<crate::server::GatewayState>,
     Path((entity_type, id)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<GetClassificationResponse>, (StatusCode, Json<ClassifyErrorResponse>)> {
     require_classify_scope(&auth)?;
     validate_entity_type(&entity_type)?;
+    let storage = require_storage(&state)?;
 
-    // Placeholder: would fetch from DB and return 404 if not found.
-    let _id = id;
-    let level = blufio_core::classification::DataClassification::Internal;
+    let level_str = storage
+        .get_entity_classification(&entity_type, &id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ClassifyErrorResponse {
+                    error: format!("storage error: {e}"),
+                }),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ClassifyErrorResponse {
+                    error: format!("{entity_type} not found: {id}"),
+                }),
+            )
+        })?;
 
-    Ok(Json(GetClassificationResponse {
-        level: level.as_str().to_string(),
-    }))
+    Ok(Json(GetClassificationResponse { level: level_str }))
 }
 
 /// POST /v1/classify/bulk
 ///
 /// Bulk update classifications with filters and optional dry-run.
 async fn post_bulk_classification(
+    State(state): State<crate::server::GatewayState>,
     Extension(auth): Extension<AuthContext>,
     Json(body): Json<BulkClassificationRequest>,
 ) -> Result<Json<BulkClassificationResponse>, (StatusCode, Json<ClassifyErrorResponse>)> {
@@ -249,8 +323,7 @@ async fn post_bulk_classification(
         validate_level(cl)?;
     }
 
-    let _dry_run = body.dry_run.unwrap_or(false);
-    let _force = body.force.unwrap_or(false);
+    let dry_run = body.dry_run.unwrap_or(false);
 
     // Check downgrade protection when current_level filter is set.
     if let Some(ref filters) = body.filters
@@ -271,11 +344,52 @@ async fn post_bulk_classification(
         }
     }
 
-    // Placeholder: would query and update DB.
-    let total = 0;
-    let succeeded = 0;
-    let failed = 0;
-    let errors: Vec<String> = vec![];
+    let storage = require_storage(&state)?;
+
+    // Extract filter parameters.
+    let filters = body.filters.as_ref();
+    let current_level = filters.and_then(|f| f.current_level.as_deref());
+    let session_id = filters.and_then(|f| f.session_id.as_deref());
+    let from_date = filters.and_then(|f| f.from.as_deref());
+    let to_date = filters.and_then(|f| f.to.as_deref());
+    let pattern = filters.and_then(|f| f.pattern.as_deref());
+
+    let result = storage
+        .bulk_update_classification(
+            &body.entity_type,
+            new_level.as_str(),
+            current_level,
+            session_id,
+            from_date,
+            to_date,
+            pattern,
+            dry_run,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ClassifyErrorResponse {
+                    error: format!("storage error: {e}"),
+                }),
+            )
+        })?;
+
+    let (total, succeeded, failed, errors) = result;
+
+    // Emit bulk event if any entities were updated.
+    if succeeded > 0 {
+        let event = blufio_security::bulk_classification_changed_event(
+            &body.entity_type,
+            succeeded,
+            current_level.unwrap_or("mixed"),
+            new_level.as_str(),
+            auth.key_id().unwrap_or("master"),
+        );
+        if let Some(ref bus) = state.event_bus {
+            let _ = bus.publish(event).await;
+        }
+    }
 
     Ok(Json(BulkClassificationResponse {
         total,
