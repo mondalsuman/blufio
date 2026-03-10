@@ -350,17 +350,17 @@ async fn run_classify_bulk(
     }
 
     // Check downgrade protection for bulk operations (before DB call).
-    if !dry_run {
-        if let Some(cl) = current_level {
-            let current = parse_level(cl)?;
-            if new_level.is_downgrade_from(&current) && !force {
-                return Err(BlufioError::Classification(
-                    ClassificationError::DowngradeRejected {
-                        current: current.as_str().to_string(),
-                        requested: new_level.as_str().to_string(),
-                    },
-                ));
-            }
+    if !dry_run
+        && let Some(cl) = current_level
+    {
+        let current = parse_level(cl)?;
+        if new_level.is_downgrade_from(&current) && !force {
+            return Err(BlufioError::Classification(
+                ClassificationError::DowngradeRejected {
+                    current: current.as_str().to_string(),
+                    requested: new_level.as_str().to_string(),
+                },
+            ));
         }
     }
 
