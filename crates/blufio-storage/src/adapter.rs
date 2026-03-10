@@ -166,6 +166,66 @@ impl StorageAdapter for SqliteStorage {
     async fn fail(&self, id: i64) -> Result<(), BlufioError> {
         queries::queue::fail(self.db()?, id).await
     }
+
+    // --- Classification operations ---
+
+    async fn get_entity_classification(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+    ) -> Result<Option<String>, BlufioError> {
+        queries::classification::get_entity_classification(self.db()?, entity_type, entity_id).await
+    }
+
+    async fn set_entity_classification(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+        level: &str,
+    ) -> Result<bool, BlufioError> {
+        queries::classification::set_entity_classification(
+            self.db()?,
+            entity_type,
+            entity_id,
+            level,
+        )
+        .await
+    }
+
+    async fn list_entities_by_classification(
+        &self,
+        entity_type: &str,
+        level: Option<&str>,
+    ) -> Result<Vec<(String, String)>, BlufioError> {
+        queries::classification::list_entities_by_classification(self.db()?, entity_type, level)
+            .await
+    }
+
+    async fn bulk_update_classification(
+        &self,
+        entity_type: &str,
+        new_level: &str,
+        current_level: Option<&str>,
+        session_id: Option<&str>,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
+        pattern: Option<&str>,
+        dry_run: bool,
+    ) -> Result<(usize, usize, usize, Vec<String>), BlufioError> {
+        let result = queries::classification::bulk_update_classification(
+            self.db()?,
+            entity_type,
+            new_level,
+            current_level,
+            session_id,
+            from_date,
+            to_date,
+            pattern,
+            dry_run,
+        )
+        .await?;
+        Ok((result.total, result.succeeded, result.failed, result.errors))
+    }
 }
 
 #[cfg(test)]
@@ -252,6 +312,7 @@ mod tests {
             metadata: None,
             created_at: "2026-01-01T00:00:00.000Z".to_string(),
             updated_at: "2026-01-01T00:00:00.000Z".to_string(),
+            classification: Default::default(),
         };
         storage.create_session(&session).await.unwrap();
 
@@ -271,6 +332,7 @@ mod tests {
             token_count: Some(5),
             metadata: None,
             created_at: "2026-01-01T00:00:01.000Z".to_string(),
+            classification: Default::default(),
         };
         let m2 = Message {
             id: "m2".to_string(),
@@ -280,6 +342,7 @@ mod tests {
             token_count: Some(8),
             metadata: None,
             created_at: "2026-01-01T00:00:02.000Z".to_string(),
+            classification: Default::default(),
         };
         storage.insert_message(&m1).await.unwrap();
         storage.insert_message(&m2).await.unwrap();
@@ -348,6 +411,7 @@ mod tests {
             metadata: None,
             created_at: "2026-01-01T00:00:00.000Z".to_string(),
             updated_at: "2026-01-01T00:00:00.000Z".to_string(),
+            classification: Default::default(),
         };
         storage.create_session(&session).await.unwrap();
 

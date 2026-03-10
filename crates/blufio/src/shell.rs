@@ -131,6 +131,7 @@ pub async fn run_shell(config: BlufioConfig) -> Result<(), BlufioError> {
         metadata: None,
         created_at: now.clone(),
         updated_at: now,
+        classification: Default::default(),
     };
     storage.create_session(&session).await?;
 
@@ -247,6 +248,7 @@ async fn handle_shell_message(
         token_count: None,
         metadata: None,
         created_at: now,
+        classification: Default::default(),
     };
     storage.insert_message(&user_msg).await?;
 
@@ -567,6 +569,7 @@ async fn handle_shell_message(
         token_count: None,
         metadata: None,
         created_at: now,
+        classification: Default::default(),
     };
     storage.insert_message(&assistant_msg).await?;
 

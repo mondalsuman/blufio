@@ -291,6 +291,10 @@ pub enum BlufioError {
     /// circuit breaker itself (avoids counting fast-fails as additional failures).
     #[error("circuit breaker open for {dependency}")]
     CircuitOpen { dependency: String },
+
+    /// Data classification errors (invalid level, downgrade rejected, entity not found).
+    #[error("classification: {0}")]
+    Classification(#[from] crate::classification::ClassificationError),
 }
 
 // ---------------------------------------------------------------------------
@@ -351,6 +355,7 @@ impl BlufioError {
             // CircuitOpen is a fast-fail signal, not a real failure mode.
             // Internal maps to is_retryable()=false and trips_circuit_breaker()=false.
             Self::CircuitOpen { .. } => FailureMode::Internal,
+            Self::Classification(_) => FailureMode::Validation,
         }
     }
 
@@ -387,6 +392,9 @@ impl BlufioError {
             } => Severity::Warning,
             Self::AdapterNotFound { .. } => Severity::Warning,
 
+            // Error: Classification errors are security-related
+            Self::Classification(_) => Severity::Error,
+
             // Error: everything else
             _ => Severity::Error,
         }
@@ -410,6 +418,7 @@ impl BlufioError {
             Self::Update(_) => ErrorCategory::Internal,
             Self::AdapterNotFound { .. } => ErrorCategory::Internal,
             Self::CircuitOpen { .. } => ErrorCategory::Internal,
+            Self::Classification(_) => ErrorCategory::Security,
         }
     }
 
@@ -551,6 +560,7 @@ impl BlufioError {
             Self::CircuitOpen { .. } => {
                 Cow::Borrowed("The service is temporarily unavailable. Please try again later.")
             }
+            Self::Classification(e) => Cow::Owned(format!("Data classification error: {e}")),
         }
     }
 }
@@ -1349,6 +1359,33 @@ mod tests {
         };
         assert!(err.is_retryable());
         assert_eq!(err.failure_mode(), FailureMode::Unavailable);
+    }
+
+    // -- Classification error classification --
+
+    #[test]
+    fn classification_error_classification() {
+        let err = BlufioError::Classification(
+            crate::classification::ClassificationError::InvalidLevel("bad".into()),
+        );
+        assert!(!err.is_retryable());
+        assert_eq!(err.failure_mode(), FailureMode::Validation);
+        assert_eq!(err.severity(), Severity::Error);
+        assert_eq!(err.category(), ErrorCategory::Security);
+        assert!(!err.trips_circuit_breaker());
+        assert!(err.suggested_backoff().is_none());
+    }
+
+    #[test]
+    fn classification_error_user_message() {
+        let err = BlufioError::Classification(
+            crate::classification::ClassificationError::DowngradeRejected {
+                current: "restricted".into(),
+                requested: "public".into(),
+            },
+        );
+        let msg = err.user_message();
+        assert!(msg.contains("classification"));
     }
 
     // -- HTTP status mapping --

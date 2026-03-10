@@ -331,6 +331,7 @@ mod tests {
                     status TEXT NOT NULL DEFAULT 'active',
                     superseded_by TEXT,
                     session_id TEXT,
+                    classification TEXT NOT NULL DEFAULT 'internal',
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 );
@@ -373,6 +374,7 @@ mod tests {
             status: MemoryStatus::Active,
             superseded_by: None,
             session_id: Some("test-session".to_string()),
+            classification: blufio_core::classification::DataClassification::default(),
             created_at: "2026-03-01T00:00:00.000Z".to_string(),
             updated_at: "2026-03-01T00:00:00.000Z".to_string(),
         }
@@ -471,6 +473,7 @@ mod tests {
                         metadata: None,
                         created_at: "2026-03-01T00:00:00Z".to_string(),
                         updated_at: "2026-03-01T00:00:00Z".to_string(),
+                        classification: Default::default(),
                     },
                     Session {
                         id: "sess-2".to_string(),
@@ -480,6 +483,7 @@ mod tests {
                         metadata: None,
                         created_at: "2026-03-02T00:00:00Z".to_string(),
                         updated_at: "2026-03-02T00:00:00Z".to_string(),
+                        classification: Default::default(),
                     },
                 ],
                 messages: vec![
@@ -491,6 +495,7 @@ mod tests {
                         token_count: None,
                         metadata: None,
                         created_at: "2026-03-01T00:00:01Z".to_string(),
+                        classification: Default::default(),
                     },
                     Message {
                         id: "msg-2".to_string(),
@@ -500,6 +505,7 @@ mod tests {
                         token_count: Some(5),
                         metadata: None,
                         created_at: "2026-03-01T00:00:02Z".to_string(),
+                        classification: Default::default(),
                     },
                 ],
             }
@@ -571,6 +577,41 @@ mod tests {
         }
         async fn fail(&self, _id: i64) -> Result<(), BlufioError> {
             Ok(())
+        }
+        async fn get_entity_classification(
+            &self,
+            _entity_type: &str,
+            _entity_id: &str,
+        ) -> Result<Option<String>, BlufioError> {
+            Ok(None)
+        }
+        async fn set_entity_classification(
+            &self,
+            _entity_type: &str,
+            _entity_id: &str,
+            _level: &str,
+        ) -> Result<bool, BlufioError> {
+            Ok(false)
+        }
+        async fn list_entities_by_classification(
+            &self,
+            _entity_type: &str,
+            _level: Option<&str>,
+        ) -> Result<Vec<(String, String)>, BlufioError> {
+            Ok(vec![])
+        }
+        async fn bulk_update_classification(
+            &self,
+            _entity_type: &str,
+            _new_level: &str,
+            _current_level: Option<&str>,
+            _session_id: Option<&str>,
+            _from_date: Option<&str>,
+            _to_date: Option<&str>,
+            _pattern: Option<&str>,
+            _dry_run: bool,
+        ) -> Result<(usize, usize, usize, Vec<String>), BlufioError> {
+            Ok((0, 0, 0, vec![]))
         }
     }
 

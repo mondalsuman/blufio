@@ -38,6 +38,8 @@ pub enum BusEvent {
     Batch(BatchEvent),
     /// Resilience events (circuit breaker, degradation ladder).
     Resilience(ResilienceEvent),
+    /// Data classification events (level changes, PII detection, enforcement).
+    Classification(ClassificationEvent),
 }
 
 impl BusEvent {
@@ -73,6 +75,18 @@ impl BusEvent {
             }
             BusEvent::Resilience(ResilienceEvent::DegradationLevelChanged { .. }) => {
                 "resilience.degradation_level_changed"
+            }
+            BusEvent::Classification(ClassificationEvent::Changed { .. }) => {
+                "classification.changed"
+            }
+            BusEvent::Classification(ClassificationEvent::PiiDetected { .. }) => {
+                "classification.pii_detected"
+            }
+            BusEvent::Classification(ClassificationEvent::Enforced { .. }) => {
+                "classification.enforced"
+            }
+            BusEvent::Classification(ClassificationEvent::BulkChanged { .. }) => {
+                "classification.bulk_changed"
             }
         }
     }
@@ -290,6 +304,82 @@ pub enum BatchEvent {
     },
 }
 
+// --- Classification events ---
+
+/// Events related to data classification changes, PII detection, and enforcement.
+///
+/// All fields are `String` (not `DataClassification` enum) to avoid a dependency
+/// from `blufio-bus` on `blufio-core`. Events carry metadata only.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ClassificationEvent {
+    /// A classification level was changed on an entity.
+    Changed {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Type of entity (e.g., "memory", "message", "session").
+        entity_type: String,
+        /// Entity identifier.
+        entity_id: String,
+        /// Previous classification level.
+        old_level: String,
+        /// New classification level.
+        new_level: String,
+        /// Who/what initiated the change (e.g., "user", "auto_pii", "bulk").
+        changed_by: String,
+    },
+    /// PII was detected in an entity's content.
+    ///
+    /// Carries only PII type names and counts -- never actual PII values.
+    PiiDetected {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Type of entity (e.g., "memory", "message").
+        entity_type: String,
+        /// Entity identifier.
+        entity_id: String,
+        /// Types of PII detected (e.g., "email", "phone").
+        pii_types: Vec<String>,
+        /// Total number of PII matches found.
+        count: usize,
+    },
+    /// A classification enforcement action occurred (e.g., blocked export).
+    Enforced {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Type of entity.
+        entity_type: String,
+        /// Entity identifier.
+        entity_id: String,
+        /// Classification level that triggered enforcement.
+        level: String,
+        /// The action that was blocked (e.g., "export", "include_in_context").
+        action_blocked: String,
+    },
+    /// A bulk classification change was applied.
+    BulkChanged {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Type of entities changed.
+        entity_type: String,
+        /// Number of entities changed.
+        count: usize,
+        /// Previous classification level.
+        old_level: String,
+        /// New classification level.
+        new_level: String,
+        /// Who/what initiated the change.
+        changed_by: String,
+    },
+}
+
 // --- Resilience events ---
 
 /// Events related to circuit breaker and degradation ladder state changes.
@@ -332,7 +422,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_seven_bus_event_variants_exist() {
+    fn all_eight_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -383,6 +473,16 @@ mod tests {
             dependency: "anthropic".into(),
             from_state: "closed".into(),
             to_state: "open".into(),
+        });
+
+        let _classification = BusEvent::Classification(ClassificationEvent::Changed {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            entity_type: "memory".into(),
+            entity_id: "mem-1".into(),
+            old_level: "internal".into(),
+            new_level: "confidential".into(),
+            changed_by: "auto_pii".into(),
         });
     }
 
@@ -601,6 +701,52 @@ mod tests {
                 }),
                 "resilience.degradation_level_changed",
             ),
+            (
+                BusEvent::Classification(ClassificationEvent::Changed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    entity_type: String::new(),
+                    entity_id: String::new(),
+                    old_level: String::new(),
+                    new_level: String::new(),
+                    changed_by: String::new(),
+                }),
+                "classification.changed",
+            ),
+            (
+                BusEvent::Classification(ClassificationEvent::PiiDetected {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    entity_type: String::new(),
+                    entity_id: String::new(),
+                    pii_types: vec![],
+                    count: 0,
+                }),
+                "classification.pii_detected",
+            ),
+            (
+                BusEvent::Classification(ClassificationEvent::Enforced {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    entity_type: String::new(),
+                    entity_id: String::new(),
+                    level: String::new(),
+                    action_blocked: String::new(),
+                }),
+                "classification.enforced",
+            ),
+            (
+                BusEvent::Classification(ClassificationEvent::BulkChanged {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    entity_type: String::new(),
+                    count: 0,
+                    old_level: String::new(),
+                    new_level: String::new(),
+                    changed_by: String::new(),
+                }),
+                "classification.bulk_changed",
+            ),
         ];
 
         for (event, expected) in &cases {
@@ -640,6 +786,67 @@ mod tests {
                 assert_eq!(to_state, "open");
             }
             _ => panic!("expected Resilience::CircuitBreakerStateChanged"),
+        }
+    }
+
+    #[test]
+    fn classification_changed_roundtrip() {
+        let event = BusEvent::Classification(ClassificationEvent::Changed {
+            event_id: "evt-cls-1".into(),
+            timestamp: "2026-03-10T00:00:00Z".into(),
+            entity_type: "memory".into(),
+            entity_id: "mem-42".into(),
+            old_level: "internal".into(),
+            new_level: "confidential".into(),
+            changed_by: "auto_pii".into(),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: BusEvent = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            BusEvent::Classification(ClassificationEvent::Changed {
+                event_id,
+                entity_type,
+                entity_id,
+                old_level,
+                new_level,
+                changed_by,
+                ..
+            }) => {
+                assert_eq!(event_id, "evt-cls-1");
+                assert_eq!(entity_type, "memory");
+                assert_eq!(entity_id, "mem-42");
+                assert_eq!(old_level, "internal");
+                assert_eq!(new_level, "confidential");
+                assert_eq!(changed_by, "auto_pii");
+            }
+            _ => panic!("expected Classification::Changed"),
+        }
+    }
+
+    #[test]
+    fn classification_pii_detected_roundtrip() {
+        let event = BusEvent::Classification(ClassificationEvent::PiiDetected {
+            event_id: "evt-pii-1".into(),
+            timestamp: "2026-03-10T00:00:00Z".into(),
+            entity_type: "message".into(),
+            entity_id: "msg-99".into(),
+            pii_types: vec!["email".into(), "phone".into()],
+            count: 3,
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: BusEvent = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            BusEvent::Classification(ClassificationEvent::PiiDetected {
+                pii_types, count, ..
+            }) => {
+                assert_eq!(pii_types, vec!["email", "phone"]);
+                assert_eq!(count, 3);
+            }
+            _ => panic!("expected Classification::PiiDetected"),
         }
     }
 

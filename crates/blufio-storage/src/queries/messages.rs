@@ -4,6 +4,7 @@
 //! Message CRUD operations.
 
 use blufio_core::BlufioError;
+use blufio_core::classification::DataClassification;
 use rusqlite::params;
 
 use crate::database::Database;
@@ -15,8 +16,8 @@ pub async fn insert_message(db: &Database, msg: &Message) -> Result<(), BlufioEr
     db.connection()
         .call(move |conn| {
             conn.execute(
-                "INSERT INTO messages (id, session_id, role, content, token_count, metadata, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO messages (id, session_id, role, content, token_count, metadata, created_at, classification)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     msg.id,
                     msg.session_id,
@@ -25,6 +26,7 @@ pub async fn insert_message(db: &Database, msg: &Message) -> Result<(), BlufioEr
                     msg.token_count,
                     msg.metadata,
                     msg.created_at,
+                    msg.classification.as_str(),
                 ],
             )?;
             Ok(())
@@ -46,20 +48,12 @@ pub async fn get_messages_for_session(
             match limit {
                 Some(lim) => {
                     let mut stmt = conn.prepare(
-                        "SELECT id, session_id, role, content, token_count, metadata, created_at
-                         FROM messages WHERE session_id = ?1
+                        "SELECT id, session_id, role, content, token_count, metadata, created_at, classification
+                         FROM messages WHERE session_id = ?1 AND classification != 'restricted'
                          ORDER BY created_at ASC LIMIT ?2",
                     )?;
                     let rows = stmt.query_map(params![session_id, lim], |row| {
-                        Ok(Message {
-                            id: row.get(0)?,
-                            session_id: row.get(1)?,
-                            role: row.get(2)?,
-                            content: row.get(3)?,
-                            token_count: row.get(4)?,
-                            metadata: row.get(5)?,
-                            created_at: row.get(6)?,
-                        })
+                        Ok(row_to_message(row))
                     })?;
                     for row in rows {
                         messages.push(row?);
@@ -67,20 +61,12 @@ pub async fn get_messages_for_session(
                 }
                 None => {
                     let mut stmt = conn.prepare(
-                        "SELECT id, session_id, role, content, token_count, metadata, created_at
-                         FROM messages WHERE session_id = ?1
+                        "SELECT id, session_id, role, content, token_count, metadata, created_at, classification
+                         FROM messages WHERE session_id = ?1 AND classification != 'restricted'
                          ORDER BY created_at ASC",
                     )?;
                     let rows = stmt.query_map(params![session_id], |row| {
-                        Ok(Message {
-                            id: row.get(0)?,
-                            session_id: row.get(1)?,
-                            role: row.get(2)?,
-                            content: row.get(3)?,
-                            token_count: row.get(4)?,
-                            metadata: row.get(5)?,
-                            created_at: row.get(6)?,
-                        })
+                        Ok(row_to_message(row))
                     })?;
                     for row in rows {
                         messages.push(row?);
@@ -93,11 +79,30 @@ pub async fn get_messages_for_session(
         .map_err(crate::database::map_tr_err)
 }
 
+/// Convert a rusqlite Row to a Message struct.
+///
+/// Column order: id(0), session_id(1), role(2), content(3), token_count(4),
+/// metadata(5), created_at(6), classification(7).
+fn row_to_message(row: &rusqlite::Row) -> Message {
+    let classification_str: String = row.get(7).unwrap_or_default();
+    Message {
+        id: row.get(0).unwrap_or_default(),
+        session_id: row.get(1).unwrap_or_default(),
+        role: row.get(2).unwrap_or_default(),
+        content: row.get(3).unwrap_or_default(),
+        token_count: row.get(4).unwrap_or_default(),
+        metadata: row.get(5).unwrap_or_default(),
+        created_at: row.get(6).unwrap_or_default(),
+        classification: DataClassification::from_str_value(&classification_str).unwrap_or_default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::Session;
     use crate::queries::sessions::create_session;
+    use blufio_core::classification::DataClassification;
     use tempfile::tempdir;
 
     async fn setup_db_with_session() -> (Database, tempfile::TempDir) {
@@ -113,6 +118,7 @@ mod tests {
             metadata: None,
             created_at: "2026-01-01T00:00:00.000Z".to_string(),
             updated_at: "2026-01-01T00:00:00.000Z".to_string(),
+            classification: DataClassification::default(),
         };
         create_session(&db, &session).await.unwrap();
         (db, dir)
@@ -127,6 +133,7 @@ mod tests {
             token_count: Some(10),
             metadata: None,
             created_at: timestamp.to_string(),
+            classification: DataClassification::default(),
         }
     }
 

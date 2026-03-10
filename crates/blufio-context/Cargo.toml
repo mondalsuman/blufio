@@ -11,6 +11,7 @@ description = "Three-zone context engine for Blufio LLM prompt assembly"
 [dependencies]
 blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
+blufio-security = { path = "../blufio-security" }
 async-trait.workspace = true
 tracing.workspace = true
 chrono.workspace = true

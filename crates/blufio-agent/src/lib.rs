@@ -414,6 +414,7 @@ impl AgentLoop {
                     token_count: None,
                     metadata: Some(serde_json::json!({"tool_result": true}).to_string()),
                     created_at: now,
+                    classification: Default::default(),
                 };
                 self.storage.insert_message(&msg).await?;
             }
@@ -696,6 +697,7 @@ impl AgentLoop {
             metadata: None,
             created_at: now.clone(),
             updated_at: now,
+            classification: Default::default(),
         };
 
         self.storage.create_session(&new_session).await?;

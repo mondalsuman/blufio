@@ -3,6 +3,7 @@
 
 //! SQLite-backed memory store with vector BLOB storage and FTS5 for BM25.
 
+use blufio_core::classification::DataClassification;
 use blufio_core::error::BlufioError;
 use tokio_rusqlite::Connection;
 
@@ -40,14 +41,15 @@ impl MemoryStore {
         let status = memory.status.as_str().to_string();
         let superseded_by = memory.superseded_by.clone();
         let session_id = memory.session_id.clone();
+        let classification = memory.classification.as_str().to_string();
         let created_at = memory.created_at.clone();
         let updated_at = memory.updated_at.clone();
 
         self.conn
             .call(move |conn| {
                 conn.execute(
-                    "INSERT INTO memories (id, content, embedding, source, confidence, status, superseded_by, session_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                    rusqlite::params![id, content, embedding_blob, source, confidence, status, superseded_by, session_id, created_at, updated_at],
+                    "INSERT INTO memories (id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    rusqlite::params![id, content, embedding_blob, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at],
                 )?;
                 Ok(())
             })
@@ -61,7 +63,7 @@ impl MemoryStore {
         self.conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, created_at, updated_at FROM memories WHERE id = ?1",
+                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE id = ?1",
                 )?;
                 let memory = stmt
                     .query_row(rusqlite::params![id], |row| {
@@ -74,12 +76,12 @@ impl MemoryStore {
             .map_err(storage_err)
     }
 
-    /// Get all active memories.
+    /// Get all active memories, excluding Restricted data.
     pub async fn get_active(&self) -> Result<Vec<Memory>, BlufioError> {
         self.conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, created_at, updated_at FROM memories WHERE status = 'active' ORDER BY created_at DESC",
+                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE status = 'active' AND classification != 'restricted' ORDER BY created_at DESC",
                 )?;
                 let memories = stmt
                     .query_map([], |row| Ok(row_to_memory(row)))?
@@ -90,14 +92,14 @@ impl MemoryStore {
             .map_err(storage_err)
     }
 
-    /// Get all active memory embeddings (lightweight -- no content).
+    /// Get all active memory embeddings (lightweight -- no content), excluding Restricted.
     ///
     /// Returns (id, embedding) pairs for vector search.
     pub async fn get_active_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>, BlufioError> {
         self.conn
             .call(move |conn| {
                 let mut stmt =
-                    conn.prepare("SELECT id, embedding FROM memories WHERE status = 'active'")?;
+                    conn.prepare("SELECT id, embedding FROM memories WHERE status = 'active' AND classification != 'restricted'")?;
                 let results = stmt
                     .query_map([], |row| {
                         let id: String = row.get(0)?;
@@ -111,7 +113,7 @@ impl MemoryStore {
             .map_err(storage_err)
     }
 
-    /// Search memories using BM25 via FTS5.
+    /// Search memories using BM25 via FTS5, excluding Restricted data.
     ///
     /// Returns (memory_id, bm25_score) pairs sorted by relevance.
     /// BM25 scores are negative (more negative = more relevant).
@@ -124,7 +126,7 @@ impl MemoryStore {
         self.conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT m.id, bm25(memories_fts) as score FROM memories_fts JOIN memories m ON m.rowid = memories_fts.rowid WHERE memories_fts MATCH ?1 AND m.status = 'active' ORDER BY bm25(memories_fts) LIMIT ?2",
+                    "SELECT m.id, bm25(memories_fts) as score FROM memories_fts JOIN memories m ON m.rowid = memories_fts.rowid WHERE memories_fts MATCH ?1 AND m.status = 'active' AND m.classification != 'restricted' ORDER BY bm25(memories_fts) LIMIT ?2",
                 )?;
                 let results = stmt
                     .query_map(rusqlite::params![query, limit as i64], |row| {
@@ -170,7 +172,7 @@ impl MemoryStore {
             .map_err(storage_err)
     }
 
-    /// Get memories by IDs (batch retrieval after hybrid search).
+    /// Get memories by IDs (batch retrieval after hybrid search), excluding Restricted.
     pub async fn get_memories_by_ids(&self, ids: &[String]) -> Result<Vec<Memory>, BlufioError> {
         if ids.is_empty() {
             return Ok(vec![]);
@@ -183,7 +185,7 @@ impl MemoryStore {
                 let placeholders: Vec<String> =
                     (1..=ids.len()).map(|i| format!("?{i}")).collect();
                 let sql = format!(
-                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, created_at, updated_at FROM memories WHERE id IN ({}) AND status = 'active'",
+                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE id IN ({}) AND status = 'active' AND classification != 'restricted'",
                     placeholders.join(", ")
                 );
                 let mut stmt = conn.prepare(&sql)?;
@@ -201,10 +203,15 @@ impl MemoryStore {
 }
 
 /// Convert a rusqlite Row to a Memory struct.
+///
+/// Column order: id(0), content(1), embedding(2), source(3), confidence(4),
+/// status(5), superseded_by(6), session_id(7), classification(8),
+/// created_at(9), updated_at(10).
 fn row_to_memory(row: &rusqlite::Row) -> Memory {
     let embedding_blob: Vec<u8> = row.get(2).unwrap_or_default();
     let source_str: String = row.get(3).unwrap_or_default();
     let status_str: String = row.get(5).unwrap_or_default();
+    let classification_str: String = row.get(8).unwrap_or_default();
 
     Memory {
         id: row.get(0).unwrap_or_default(),
@@ -215,8 +222,9 @@ fn row_to_memory(row: &rusqlite::Row) -> Memory {
         status: MemoryStatus::from_str_value(&status_str),
         superseded_by: row.get(6).unwrap_or(None),
         session_id: row.get(7).unwrap_or(None),
-        created_at: row.get(8).unwrap_or_default(),
-        updated_at: row.get(9).unwrap_or_default(),
+        classification: DataClassification::from_str_value(&classification_str).unwrap_or_default(),
+        created_at: row.get(9).unwrap_or_default(),
+        updated_at: row.get(10).unwrap_or_default(),
     }
 }
 
@@ -254,7 +262,7 @@ mod tests {
                     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 );",
             )?;
-            // Run V3 memory schema
+            // Run V3 memory schema + V12 classification column
             conn.execute_batch(
                 "CREATE TABLE IF NOT EXISTS memories (
                     id TEXT PRIMARY KEY NOT NULL,
@@ -265,6 +273,7 @@ mod tests {
                     status TEXT NOT NULL DEFAULT 'active',
                     superseded_by TEXT,
                     session_id TEXT,
+                    classification TEXT NOT NULL DEFAULT 'internal',
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 );
@@ -310,6 +319,7 @@ mod tests {
             status: MemoryStatus::Active,
             superseded_by: None,
             session_id: Some("test-session".to_string()),
+            classification: DataClassification::default(),
             created_at: "2026-03-01T00:00:00.000Z".to_string(),
             updated_at: "2026-03-01T00:00:00.000Z".to_string(),
         }
@@ -472,5 +482,126 @@ mod tests {
 
         let memories = store.get_memories_by_ids(&[]).await.unwrap();
         assert!(memories.is_empty());
+    }
+
+    #[tokio::test]
+    async fn save_includes_classification_column() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        let mut memory = make_test_memory("mem-cls", "Classified memory");
+        memory.classification = DataClassification::Confidential;
+        store.save(&memory).await.unwrap();
+
+        let retrieved = store.get_by_id("mem-cls").await.unwrap().unwrap();
+        assert_eq!(retrieved.classification, DataClassification::Confidential);
+    }
+
+    #[tokio::test]
+    async fn get_active_excludes_restricted() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        // Save an internal memory
+        let internal = make_test_memory("mem-int", "Internal memory");
+        store.save(&internal).await.unwrap();
+
+        // Save a restricted memory
+        let mut restricted = make_test_memory("mem-res", "Restricted memory");
+        restricted.classification = DataClassification::Restricted;
+        store.save(&restricted).await.unwrap();
+
+        // Save a confidential memory
+        let mut confidential = make_test_memory("mem-conf", "Confidential memory");
+        confidential.classification = DataClassification::Confidential;
+        store.save(&confidential).await.unwrap();
+
+        let active = store.get_active().await.unwrap();
+        assert_eq!(active.len(), 2, "restricted memory should be excluded");
+        let ids: Vec<&str> = active.iter().map(|m| m.id.as_str()).collect();
+        assert!(ids.contains(&"mem-int"));
+        assert!(ids.contains(&"mem-conf"));
+        assert!(!ids.contains(&"mem-res"));
+    }
+
+    #[tokio::test]
+    async fn get_active_embeddings_excludes_restricted() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        let internal = make_test_memory("mem-int", "Internal");
+        store.save(&internal).await.unwrap();
+
+        let mut restricted = make_test_memory("mem-res", "Restricted");
+        restricted.classification = DataClassification::Restricted;
+        store.save(&restricted).await.unwrap();
+
+        let embeddings = store.get_active_embeddings().await.unwrap();
+        assert_eq!(embeddings.len(), 1);
+        assert_eq!(embeddings[0].0, "mem-int");
+    }
+
+    #[tokio::test]
+    async fn get_memories_by_ids_excludes_restricted() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        store
+            .save(&make_test_memory("mem-1", "Normal"))
+            .await
+            .unwrap();
+
+        let mut restricted = make_test_memory("mem-2", "Restricted");
+        restricted.classification = DataClassification::Restricted;
+        store.save(&restricted).await.unwrap();
+
+        let ids = vec!["mem-1".to_string(), "mem-2".to_string()];
+        let memories = store.get_memories_by_ids(&ids).await.unwrap();
+        assert_eq!(memories.len(), 1);
+        assert_eq!(memories[0].id, "mem-1");
+    }
+
+    #[tokio::test]
+    async fn search_bm25_excludes_restricted() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        let internal = make_test_memory("mem-int", "The user has a golden retriever");
+        store.save(&internal).await.unwrap();
+
+        let mut restricted = make_test_memory("mem-res", "The user has a golden labrador");
+        restricted.classification = DataClassification::Restricted;
+        store.save(&restricted).await.unwrap();
+
+        let results = store.search_bm25("golden", 10).await.unwrap();
+        assert_eq!(
+            results.len(),
+            1,
+            "restricted should be excluded from search"
+        );
+        assert_eq!(results[0].0, "mem-int");
+    }
+
+    #[tokio::test]
+    async fn classification_round_trips_through_database() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        for level in [
+            DataClassification::Public,
+            DataClassification::Internal,
+            DataClassification::Confidential,
+        ] {
+            let id = format!("mem-{}", level.as_str());
+            let mut memory = make_test_memory(&id, &format!("{} memory", level.as_str()));
+            memory.classification = level;
+            store.save(&memory).await.unwrap();
+
+            let retrieved = store.get_by_id(&id).await.unwrap().unwrap();
+            assert_eq!(
+                retrieved.classification, level,
+                "round-trip failed for {level}"
+            );
+        }
     }
 }

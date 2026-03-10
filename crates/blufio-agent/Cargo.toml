@@ -13,6 +13,7 @@ blufio-bus = { path = "../blufio-bus" }
 blufio-core = { path = "../blufio-core" }
 blufio-auth-keypair = { path = "../blufio-auth-keypair" }
 blufio-config = { path = "../blufio-config" }
+blufio-security = { path = "../blufio-security" }
 blufio-context = { path = "../blufio-context" }
 blufio-cost = { path = "../blufio-cost" }
 blufio-memory = { path = "../blufio-memory" }

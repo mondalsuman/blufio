@@ -144,6 +144,7 @@ impl DelegationRouter {
             metadata: None,
             created_at: now.clone(),
             updated_at: now,
+            classification: Default::default(),
         };
         self.storage.create_session(&session).await?;
 

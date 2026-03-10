@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: active
-stopped_at: Defining requirements
-last_updated: "2026-03-10"
-last_activity: 2026-03-10 -- Milestone v1.5 started
+status: completed
+stopped_at: Completed 53-05-PLAN.md (Phase 53 complete)
+last_updated: "2026-03-10T12:54:02.723Z"
+last_activity: 2026-03-10 -- Phase 53 Plan 05 completed (18min)
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 11
+  completed_phases: 1
+  total_plans: 5
+  completed_plans: 5
+  percent: 14
 ---
 
 # Project State
@@ -21,47 +21,56 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure — defining requirements
+**Current focus:** v1.5 PRD Gap Closure -- Phase 53 Data Classification & PII Foundation
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-10 — Milestone v1.5 started
+Phase: 53 of 63 (Data Classification & PII Foundation) -- first of 11 phases in v1.5 -- COMPLETE
+Plan: 5 of 5 in Phase 53 (all complete)
+Status: Phase 53 Complete
+Last activity: 2026-03-10 -- Phase 53 Plan 05 completed (18min)
+
+Progress: [####--------------------------] 14%
 
 ## Performance Metrics
 
-**Velocity (v1.0):**
-- Total plans completed: 43
-- Total execution time: ~3 days
-- Average: ~10 plans/day
+**Velocity (v1.0-v1.4):**
+- Total plans completed: 151
+- Total execution time: ~11 days
+- Average: ~14 plans/day
 
-**Velocity (v1.1):**
-- Total plans completed: 32
-- Total execution time: ~2 days
-- Average: ~16 plans/day
+**By Milestone:**
 
-**Velocity (v1.2):**
-- Total plans completed: 13
-- Total execution time: ~1 day
-- Average: ~13 plans/day
-
-**Velocity (v1.3):**
-- Total plans completed: 47
-- Total execution time: ~4 days
-- Average: ~12 plans/day
-
-**Velocity (v1.4):**
-- Total plans completed: 16
-- Total execution time: ~1 day
-- Average: ~16 plans/day
+| Milestone | Plans | Days | Avg/Day |
+|-----------|-------|------|---------|
+| v1.0 | 43 | 3 | ~14 |
+| v1.1 | 32 | 2 | ~16 |
+| v1.2 | 13 | 1 | ~13 |
+| v1.3 | 47 | 4 | ~12 |
+| v1.4 | 16 | 1 | ~16 |
+| Phase 53 P05 | 18min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories at fine granularity.
+- Phase 53 Plan 01: PII patterns in single source-of-truth array preventing RegexSet index mismatch
+- Phase 53 Plan 01: Overlapping PII match deduplication (longest match wins)
+- Phase 53 Plan 01: DataClassification uses derive(Default) with #[default] per clippy
+- Phase 53 Plan 02: ClassificationEvent uses String fields to avoid blufio-bus -> blufio-core dependency
+- Phase 53 Plan 02: PII redaction runs before secret redaction in combined pipeline
+- Phase 53 Plan 02: Restricted data excluded from memory retrieval via SQL WHERE clause
+- Phase 53 Plan 03: API routes use {param} syntax (axum v0.8+) for route path parameters
+- Phase 53 Plan 03: PII detection in agent uses catch_unwind for panic safety
+- Phase 53 Plan 03: Context filtering uses defense-in-depth (SQL primary + guard reference)
+- Phase 53 Plan 04: Default::default() for classification field in struct literals across workspace
+- Phase 53 Plan 04: row_to_message/row_to_session helpers with unwrap_or_default for resilient parsing
+- Phase 53 Plan 04: Closure-based condition builder in bulk_update to avoid dry_run/execute duplication
+- Phase 53 Plan 05: CLI uses Database::open (not raw open_connection) for classification query access
+- Phase 53 Plan 05: Context defense-in-depth filtering placed in dynamic.rs where Message has classification field
+- Phase 53 Plan 05: Export utility split into redact_for_export (single) + filter_for_export (batch)
 
 ### Pending Todos
 
@@ -69,12 +78,14 @@ None.
 
 ### Blockers/Concerns
 
-- Claude tokenizer accuracy: Xenova/claude-tokenizer is community artifact (~80-95% accuracy for Claude 3+). Monitor and calibrate.
-- tiktoken-rs binary size: Embeds BPE vocabulary data. Measure impact against <50MB binary constraint.
-- v1.5 scope is large (~18 gap items). May need to defer lowest-priority items if velocity doesn't support.
+- Claude tokenizer accuracy: Xenova/claude-tokenizer is community artifact (~80-95% accuracy for Claude 3+)
+- tiktoken-rs binary size: Embeds BPE vocabulary data. Measure impact against <50MB binary constraint
+- v1.5 scope is largest milestone yet (93 requirements). Monitor velocity against prior milestones
+- Litestream + SQLCipher incompatibility: Must document and provide application-level backup alternative
+- Hot reload complexity: Research recommends careful phasing. ArcSwap swap is atomic but downstream propagation is not
 
 ## Session Continuity
 
-Last session: 2026-03-10
-Stopped at: Defining requirements for v1.5
+Last session: 2026-03-10T12:48:07.491Z
+Stopped at: Completed 53-05-PLAN.md (Phase 53 complete)
 Resume file: None

@@ -1,0 +1,10 @@
+# Blufio Example Configuration
+#
+# This file documents available configuration sections with sensible defaults.
+# Copy this to ~/.config/blufio/blufio.toml and customize as needed.
+
+# [classification]
+# enabled = true
+# auto_classify_pii = true
+# default_level = "internal"
+# warn_unencrypted = true

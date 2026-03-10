@@ -116,6 +116,8 @@ impl ContextEngine {
             .await?;
 
         // 4. Combine conditional + dynamic messages.
+        //    Classification filtering is applied in dynamic.rs (defense-in-depth)
+        //    and at SQL level in get_messages_for_session (primary filter).
         let mut all_messages = conditional_messages;
         all_messages.extend(dynamic_result.messages);
 

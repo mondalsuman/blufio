@@ -15,12 +15,14 @@ static GLOBAL: Jemalloc = Jemalloc;
 mod backup;
 mod bench;
 mod bundle;
+mod classify;
 mod doctor;
 mod encrypt;
 mod healthcheck;
 #[cfg(feature = "mcp-server")]
 mod mcp_server;
 mod migrate;
+mod pii_cmd;
 mod privacy;
 mod providers;
 mod serve;
@@ -170,6 +172,22 @@ enum Commands {
         /// Remove all data without prompting (auto-backup created first).
         #[arg(long)]
         purge: bool,
+    },
+    /// Manage data classification levels on memories, messages, and sessions.
+    #[command(
+        after_help = "Examples:\n  blufio classify set memory mem-42 confidential\n  blufio classify get memory mem-42\n  blufio classify list --type memory --level confidential --json\n  blufio classify bulk --type memory --level restricted --current-level internal --dry-run"
+    )]
+    Classify {
+        #[command(subcommand)]
+        action: classify::ClassifyAction,
+    },
+    /// Scan text for PII (Personally Identifiable Information).
+    #[command(
+        after_help = "Examples:\n  blufio pii scan \"test@example.com or 555-123-4567\"\n  blufio pii scan --file /path/to/data.txt\n  echo \"SSN: 123-45-6789\" | blufio pii scan\n  blufio pii scan --file /tmp/data.txt --json"
+    )]
+    Pii {
+        #[command(subcommand)]
+        action: pii_cmd::PiiAction,
     },
 }
 
@@ -632,6 +650,18 @@ async fn main() {
         }
         Some(Commands::Uninstall { purge }) => {
             if let Err(e) = uninstall::run_uninstall(purge).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Classify { action }) => {
+            if let Err(e) = classify::run_classify(action).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Pii { action }) => {
+            if let Err(e) = pii_cmd::run_pii(action).await {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }

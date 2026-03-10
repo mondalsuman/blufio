@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+use blufio_core::classification::DataClassification;
 use blufio_core::error::BlufioError;
 use blufio_core::traits::{EmbeddingAdapter, ProviderAdapter};
 use blufio_core::types::{ContentBlock, EmbeddingInput, ProviderMessage, ProviderRequest};
@@ -186,6 +187,7 @@ impl MemoryExtractor {
             status: MemoryStatus::Active,
             superseded_by: None,
             session_id: Some(session_id.to_string()),
+            classification: DataClassification::default(),
             created_at: now.clone(),
             updated_at: now,
         };
@@ -238,6 +240,7 @@ impl MemoryExtractor {
                     status: MemoryStatus::Active,
                     superseded_by: None,
                     session_id: Some(session_id.to_string()),
+                    classification: DataClassification::default(),
                     created_at: now.clone(),
                     updated_at: now,
                 };
@@ -259,6 +262,7 @@ impl MemoryExtractor {
             status: MemoryStatus::Active,
             superseded_by: None,
             session_id: Some(session_id.to_string()),
+            classification: DataClassification::default(),
             created_at: now.clone(),
             updated_at: now,
         };

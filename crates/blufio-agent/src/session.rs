@@ -258,16 +258,45 @@ impl SessionActor {
         let (_, clean_text) = blufio_router::parse_model_override(&raw_text);
         let text_content = clean_text.to_string();
 
+        // PII detection before message storage (DCLS-04, PII-03).
+        // Scan user message for PII and auto-classify if enabled.
+        // Errors are logged and never block the agent loop.
+        let msg_id = uuid::Uuid::new_v4().to_string();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            blufio_security::scan_and_classify(&text_content, true)
+        })) {
+            Ok(scan_result) => {
+                if !scan_result.matches.is_empty()
+                    && let Some(ref bus) = self.event_bus
+                {
+                    // Emit PII detected event (fire-and-forget, metadata only).
+                    let event = blufio_security::pii_detected_event(
+                        "message",
+                        &msg_id,
+                        &scan_result.matches,
+                    );
+                    bus.publish(event).await;
+                }
+            }
+            Err(_) => {
+                warn!(
+                    session_id = %self.session_id,
+                    "PII detection panicked, continuing without classification"
+                );
+            }
+        }
+
         // Persist the inbound user message (with override prefix stripped).
         let now = chrono::Utc::now().to_rfc3339();
         let msg = Message {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: msg_id,
             session_id: self.session_id.clone(),
             role: "user".to_string(),
             content: text_content.clone(),
             token_count: None,
             metadata: inbound.metadata.clone(),
             created_at: now,
+            classification: Default::default(),
         };
         self.storage.insert_message(&msg).await?;
 
@@ -571,7 +600,8 @@ impl SessionActor {
                             transition.to_state.as_str(),
                         );
                     }
-                    self.publish_cb_transition(&self.provider_name, &transition).await;
+                    self.publish_cb_transition(&self.provider_name, &transition)
+                        .await;
                 }
                 self.last_call_was_fallback = false;
             }
@@ -600,7 +630,8 @@ impl SessionActor {
                                 transition.to_state.as_str(),
                             );
                         }
-                        self.publish_cb_transition(&self.provider_name, &transition).await;
+                        self.publish_cb_transition(&self.provider_name, &transition)
+                            .await;
                     }
                 }
             }
@@ -620,15 +651,41 @@ impl SessionActor {
         full_text: &str,
         usage: Option<TokenUsage>,
     ) -> Result<(), BlufioError> {
+        // PII detection before assistant response storage (DCLS-04, PII-03).
+        let msg_id = uuid::Uuid::new_v4().to_string();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            blufio_security::scan_and_classify(full_text, true)
+        })) {
+            Ok(scan_result) => {
+                if !scan_result.matches.is_empty()
+                    && let Some(ref bus) = self.event_bus
+                {
+                    let event = blufio_security::pii_detected_event(
+                        "message",
+                        &msg_id,
+                        &scan_result.matches,
+                    );
+                    bus.publish(event).await;
+                }
+            }
+            Err(_) => {
+                warn!(
+                    session_id = %self.session_id,
+                    "PII detection panicked on assistant response, continuing"
+                );
+            }
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         let msg = Message {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: msg_id,
             session_id: self.session_id.clone(),
             role: "assistant".to_string(),
             content: full_text.to_string(),
             token_count: usage.as_ref().map(|u| i64::from(u.output_tokens)),
             metadata: None,
             created_at: now,
+            classification: Default::default(),
         };
         self.storage.insert_message(&msg).await?;
 
@@ -1045,7 +1102,11 @@ mod tests {
         provider: Arc<dyn blufio_core::ProviderAdapter + Send + Sync>,
         event_bus: Option<Arc<blufio_bus::EventBus>>,
         circuit_breaker_registry: Option<Arc<CircuitBreakerRegistry>>,
-    ) -> (SessionActor, Arc<dyn StorageAdapter + Send + Sync>, tempfile::TempDir) {
+    ) -> (
+        SessionActor,
+        Arc<dyn StorageAdapter + Send + Sync>,
+        tempfile::TempDir,
+    ) {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let storage_config = blufio_config::model::StorageConfig {
@@ -1066,9 +1127,9 @@ mod tests {
             monthly_budget_usd: None,
             track_tokens: true,
         };
-        let budget_tracker = Arc::new(tokio::sync::Mutex::new(
-            blufio_cost::BudgetTracker::new(&cost_config),
-        ));
+        let budget_tracker = Arc::new(tokio::sync::Mutex::new(blufio_cost::BudgetTracker::new(
+            &cost_config,
+        )));
 
         let agent_config = blufio_config::model::AgentConfig {
             system_prompt: Some("Test assistant.".to_string()),
@@ -1101,6 +1162,7 @@ mod tests {
             metadata: None,
             created_at: now.clone(),
             updated_at: now,
+            classification: Default::default(),
         };
         storage.create_session(&session).await.unwrap();
 
@@ -1233,10 +1295,7 @@ mod tests {
 
         // No event should be on the bus.
         let result = tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await;
-        assert!(
-            result.is_err(),
-            "expected no event on bus but got one"
-        );
+        assert!(result.is_err(), "expected no event on bus but got one");
     }
 
     #[test]

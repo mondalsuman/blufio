@@ -4,6 +4,7 @@
 //! Session CRUD operations.
 
 use blufio_core::BlufioError;
+use blufio_core::classification::DataClassification;
 use rusqlite::params;
 
 use crate::database::Database;
@@ -15,8 +16,8 @@ pub async fn create_session(db: &Database, session: &Session) -> Result<(), Bluf
     db.connection()
         .call(move |conn| {
             conn.execute(
-                "INSERT INTO sessions (id, channel, user_id, state, metadata, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO sessions (id, channel, user_id, state, metadata, created_at, updated_at, classification)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     session.id,
                     session.channel,
@@ -25,6 +26,7 @@ pub async fn create_session(db: &Database, session: &Session) -> Result<(), Bluf
                     session.metadata,
                     session.created_at,
                     session.updated_at,
+                    session.classification.as_str(),
                 ],
             )?;
             Ok(())
@@ -39,19 +41,11 @@ pub async fn get_session(db: &Database, id: &str) -> Result<Option<Session>, Blu
     db.connection()
         .call(move |conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, channel, user_id, state, metadata, created_at, updated_at
+                "SELECT id, channel, user_id, state, metadata, created_at, updated_at, classification
                  FROM sessions WHERE id = ?1",
             )?;
             let result = stmt.query_row(params![id], |row| {
-                Ok(Session {
-                    id: row.get(0)?,
-                    channel: row.get(1)?,
-                    user_id: row.get(2)?,
-                    state: row.get(3)?,
-                    metadata: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
-                })
+                Ok(row_to_session(row))
             });
             match result {
                 Ok(session) => Ok(Some(session)),
@@ -75,19 +69,11 @@ pub async fn list_sessions(
             match &state {
                 Some(state_filter) => {
                     let mut stmt = conn.prepare(
-                        "SELECT id, channel, user_id, state, metadata, created_at, updated_at
+                        "SELECT id, channel, user_id, state, metadata, created_at, updated_at, classification
                          FROM sessions WHERE state = ?1 ORDER BY created_at DESC",
                     )?;
                     let rows = stmt.query_map(params![state_filter], |row| {
-                        Ok(Session {
-                            id: row.get(0)?,
-                            channel: row.get(1)?,
-                            user_id: row.get(2)?,
-                            state: row.get(3)?,
-                            metadata: row.get(4)?,
-                            created_at: row.get(5)?,
-                            updated_at: row.get(6)?,
-                        })
+                        Ok(row_to_session(row))
                     })?;
                     for row in rows {
                         sessions.push(row?);
@@ -95,19 +81,11 @@ pub async fn list_sessions(
                 }
                 None => {
                     let mut stmt = conn.prepare(
-                        "SELECT id, channel, user_id, state, metadata, created_at, updated_at
+                        "SELECT id, channel, user_id, state, metadata, created_at, updated_at, classification
                          FROM sessions ORDER BY created_at DESC",
                     )?;
                     let rows = stmt.query_map([], |row| {
-                        Ok(Session {
-                            id: row.get(0)?,
-                            channel: row.get(1)?,
-                            user_id: row.get(2)?,
-                            state: row.get(3)?,
-                            metadata: row.get(4)?,
-                            created_at: row.get(5)?,
-                            updated_at: row.get(6)?,
-                        })
+                        Ok(row_to_session(row))
                     })?;
                     for row in rows {
                         sessions.push(row?);
@@ -137,6 +115,24 @@ pub async fn update_session_state(db: &Database, id: &str, state: &str) -> Resul
         .map_err(crate::database::map_tr_err)
 }
 
+/// Convert a rusqlite Row to a Session struct.
+///
+/// Column order: id(0), channel(1), user_id(2), state(3), metadata(4),
+/// created_at(5), updated_at(6), classification(7).
+fn row_to_session(row: &rusqlite::Row) -> Session {
+    let classification_str: String = row.get(7).unwrap_or_default();
+    Session {
+        id: row.get(0).unwrap_or_default(),
+        channel: row.get(1).unwrap_or_default(),
+        user_id: row.get(2).unwrap_or_default(),
+        state: row.get(3).unwrap_or_default(),
+        metadata: row.get(4).unwrap_or_default(),
+        created_at: row.get(5).unwrap_or_default(),
+        updated_at: row.get(6).unwrap_or_default(),
+        classification: DataClassification::from_str_value(&classification_str).unwrap_or_default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,6 +154,7 @@ mod tests {
             metadata: None,
             created_at: "2026-01-01T00:00:00.000Z".to_string(),
             updated_at: "2026-01-01T00:00:00.000Z".to_string(),
+            classification: DataClassification::default(),
         }
     }
 

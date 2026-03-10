@@ -12,6 +12,8 @@ use std::sync::{Arc, LazyLock, RwLock};
 
 use regex::Regex;
 
+use crate::pii::redact_pii;
+
 /// Known secret patterns to redact from output.
 static REDACTION_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
@@ -29,11 +31,48 @@ static REDACTION_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 /// The redaction placeholder.
 const REDACTED: &str = "[REDACTED]";
 
-/// Redact secrets from a string using regex patterns and optional exact-match values.
+/// Redact secrets and PII from a string.
 ///
-/// This is a standalone function for use outside the logging pipeline (e.g.,
-/// error messages, debug output).
+/// Combined pipeline: PII patterns get type-specific placeholders ([EMAIL], [PHONE],
+/// [SSN], [CREDIT_CARD]), then secret patterns and vault values get [REDACTED].
+///
+/// This is the primary redaction entry point -- used by [`RedactingWriter`] and
+/// available for standalone use in error messages and debug output.
 pub fn redact(input: &str, vault_values: &[String]) -> String {
+    redact_with_pii(input, vault_values)
+}
+
+/// Redact both PII and secrets from a string.
+///
+/// Order: PII redaction first (type-specific placeholders), then secret pattern
+/// redaction and vault value redaction ([REDACTED]). This order ensures that
+/// PII patterns are matched on the original text before secret patterns
+/// potentially alter the string.
+pub fn redact_with_pii(input: &str, vault_values: &[String]) -> String {
+    // Step 1: Apply PII redaction (type-specific placeholders: [EMAIL], [PHONE], etc.)
+    let mut result = redact_pii(input);
+
+    // Step 2: Apply secret regex patterns ([REDACTED]).
+    for pattern in REDACTION_PATTERNS.iter() {
+        result = pattern.replace_all(&result, REDACTED).to_string();
+    }
+
+    // Step 3: Apply exact-match vault values (longest first to avoid partial matches).
+    let mut sorted_values: Vec<&String> = vault_values.iter().collect();
+    sorted_values.sort_by_key(|v| std::cmp::Reverse(v.len()));
+    for value in sorted_values {
+        if !value.is_empty() {
+            result = result.replace(value.as_str(), REDACTED);
+        }
+    }
+
+    result
+}
+
+/// Redact secrets only (no PII detection).
+///
+/// Use this when PII detection is not needed or has already been applied.
+pub fn redact_secrets_only(input: &str, vault_values: &[String]) -> String {
     let mut result = input.to_string();
 
     // Apply regex patterns.
@@ -188,5 +227,60 @@ mod tests {
         let result = redact(input, &vault_values);
         // "short-longer" should be replaced first (it's longer), not "short" within it.
         assert_eq!(result, "prefix [REDACTED] suffix");
+    }
+
+    // --- Combined PII + secret redaction ---
+
+    #[test]
+    fn redact_combined_pii_and_secret() {
+        let input = "Email: test@example.com with key sk-ant-api03-abcdefghijklmnopqrstuvwxyz";
+        let result = redact(input, &[]);
+        assert!(result.contains("[EMAIL]"), "should redact email as [EMAIL]");
+        assert!(
+            result.contains(REDACTED),
+            "should redact API key as [REDACTED]"
+        );
+        assert!(!result.contains("test@example.com"));
+        assert!(!result.contains("sk-ant-api03"));
+    }
+
+    #[test]
+    fn redact_pii_only_no_secrets() {
+        let input = "SSN is 555-12-3456";
+        let result = redact(input, &[]);
+        assert!(result.contains("[SSN]"));
+        assert!(!result.contains("555-12-3456"));
+    }
+
+    #[test]
+    fn redacting_writer_redacts_pii_and_secrets() {
+        let vault_values = Arc::new(RwLock::new(vec!["vault-secret-42".to_string()]));
+        let mut buf = Vec::new();
+        {
+            let mut writer = RedactingWriter::new(&mut buf, vault_values);
+            write!(writer, "Email test@example.com and vault-secret-42 here").unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("[EMAIL]"), "writer should redact PII");
+        assert!(
+            output.contains(REDACTED),
+            "writer should redact vault secrets"
+        );
+        assert!(!output.contains("test@example.com"));
+        assert!(!output.contains("vault-secret-42"));
+    }
+
+    #[test]
+    fn redact_secrets_only_skips_pii() {
+        let input = "Email: test@example.com with key sk-ant-api03-abcdefghijklmnopqrstuvwxyz";
+        let result = redact_secrets_only(input, &[]);
+        // PII should NOT be redacted
+        assert!(
+            result.contains("test@example.com"),
+            "secrets-only should not redact PII"
+        );
+        // Secret should be redacted
+        assert!(result.contains(REDACTED));
+        assert!(!result.contains("sk-ant-api03"));
     }
 }

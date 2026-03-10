@@ -23,6 +23,7 @@ use tower_http::cors::CorsLayer;
 use crate::api_keys;
 use crate::auth::{AuthConfig, auth_middleware};
 use crate::batch;
+use crate::classify;
 use crate::handlers;
 use crate::openai_compat;
 use crate::rate_limit::rate_limit_middleware;
@@ -157,6 +158,8 @@ pub async fn start_server(
         // Batch processing endpoints (API-17, API-18).
         .route("/v1/batch", post(batch::handlers::post_create_batch))
         .route("/v1/batch/:id", get(batch::handlers::get_batch_status))
+        // Classification management endpoints (DCLS-04).
+        .merge(classify::classify_router())
         // Rate limiting middleware (runs after auth, reads AuthContext from extensions).
         .route_layer(axum_middleware::from_fn_with_state(
             state.clone(),

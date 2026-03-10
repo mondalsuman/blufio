@@ -61,4 +61,51 @@ pub trait StorageAdapter: PluginAdapter {
 
     /// Mark a queue entry as failed (increments attempts, may retry or mark permanently failed).
     async fn fail(&self, id: i64) -> Result<(), BlufioError>;
+
+    // --- Classification operations ---
+
+    /// Get classification level for an entity.
+    ///
+    /// `entity_type` is one of "memory", "message", or "session".
+    /// Returns `None` if the entity does not exist.
+    async fn get_entity_classification(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+    ) -> Result<Option<String>, BlufioError>;
+
+    /// Set classification level on an entity.
+    ///
+    /// Returns `true` if the entity was found and updated, `false` otherwise.
+    async fn set_entity_classification(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+        level: &str,
+    ) -> Result<bool, BlufioError>;
+
+    /// List entities with their classification levels, optionally filtered by level.
+    ///
+    /// Returns `Vec<(id, classification_string)>` pairs.
+    async fn list_entities_by_classification(
+        &self,
+        entity_type: &str,
+        level: Option<&str>,
+    ) -> Result<Vec<(String, String)>, BlufioError>;
+
+    /// Bulk update classification levels with filters.
+    ///
+    /// Returns `(total, succeeded, failed, errors)`.
+    #[allow(clippy::too_many_arguments)]
+    async fn bulk_update_classification(
+        &self,
+        entity_type: &str,
+        new_level: &str,
+        current_level: Option<&str>,
+        session_id: Option<&str>,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
+        pattern: Option<&str>,
+        dry_run: bool,
+    ) -> Result<(usize, usize, usize, Vec<String>), BlufioError>;
 }

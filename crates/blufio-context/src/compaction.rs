@@ -101,6 +101,7 @@ pub async fn persist_compaction_summary(
         token_count: None,
         metadata: Some(metadata.to_string()),
         created_at: now,
+        classification: Default::default(),
     };
 
     storage.insert_message(&message).await?;
