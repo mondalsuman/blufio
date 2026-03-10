@@ -34,9 +34,9 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 ### PII Detection
 
 - [x] **PII-01**: Regex-based PII detection covers email addresses, phone numbers (international formats), SSN patterns, and credit card numbers (Luhn-validated)
-- [ ] **PII-02**: PII detection integrates with existing RedactingWriter for log output
+- [x] **PII-02**: PII detection integrates with existing RedactingWriter for log output
 - [ ] **PII-03**: PII detection applies to data exports with configurable redaction
-- [ ] **PII-04**: PII-containing content auto-classifies as Confidential when data classification is active
+- [x] **PII-04**: PII-containing content auto-classifies as Confidential when data classification is active
 - [x] **PII-05**: Context-aware redaction skips PII patterns inside code blocks and URLs
 
 ### Data Classification
@@ -45,7 +45,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 - [x] **DCLS-02**: Classifiable trait allows tagging memories, messages, exports, and config values
 - [x] **DCLS-03**: Per-level controls matrix: Restricted = never exported + never in LLM context; Confidential = encrypted at rest + redacted in logs; Internal = audit-logged; Public = no restrictions
 - [ ] **DCLS-04**: Classification can be set explicitly via API/CLI or inferred from PII detection
-- [ ] **DCLS-05**: Classification changes logged in audit trail
+- [x] **DCLS-05**: Classification changes logged in audit trail
 
 ### Audit Trail
 
@@ -189,11 +189,11 @@ Deferred to v1.6+.
 | DCLS-02 | Phase 53 | Complete |
 | DCLS-03 | Phase 53 | Complete |
 | DCLS-04 | Phase 53 | Pending |
-| DCLS-05 | Phase 53 | Pending |
+| DCLS-05 | Phase 53 | Complete |
 | PII-01 | Phase 53 | Complete |
-| PII-02 | Phase 53 | Pending |
+| PII-02 | Phase 53 | Complete |
 | PII-03 | Phase 53 | Pending |
-| PII-04 | Phase 53 | Pending |
+| PII-04 | Phase 53 | Complete |
 | PII-05 | Phase 53 | Complete |
 | AUDT-01 | Phase 54 | Pending |
 | AUDT-02 | Phase 54 | Pending |
