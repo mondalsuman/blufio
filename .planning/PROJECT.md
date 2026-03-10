@@ -88,7 +88,66 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Active
 
-(None — planning next milestone)
+<!-- Current milestone: v1.5 PRD Gap Closure -->
+
+**Compaction & Context:**
+- [ ] Multi-level compaction (L0-L3) with quality scoring and quality gates
+- [ ] Soft/hard trigger thresholds with archive system and cold storage retrieval
+
+**Security Hardening:**
+- [ ] Prompt injection defense: L1 pattern classifier, L3 HMAC boundary tokens, L4 output validator, L5 human-in-the-loop
+- [ ] PII redaction expansion (email, phone, SSN, credit cards)
+- [ ] Data classification system (4 levels: Public/Internal/Confidential/Restricted)
+- [ ] Audit trail with hash-chained tamper-evident log
+
+**Memory Enhancements:**
+- [ ] Temporal decay (0.95^days), importance boost, MMR diversity
+- [ ] Bounded index with LRU eviction (default 10,000)
+- [ ] Background memory validation and file watcher auto re-indexing
+
+**Operational Automation:**
+- [ ] Cron/scheduler system with TOML config and systemd timer generation
+- [ ] Hook system (11 lifecycle hooks with BTreeMap priority, shell-based, sandboxed)
+- [ ] Hot reload (TLS certs, config, plugins via ArcSwap/file watchers)
+- [ ] Retention policies with configurable per-type automatic enforcement
+
+**Compliance & Privacy:**
+- [ ] GDPR tooling (right to erasure, retention enforcement, transparency disclosures)
+- [ ] Data export (JSON, CSV with filtering by session/date/type)
+
+**Observability & API:**
+- [ ] OpenTelemetry distributed tracing (optional, disabled by default)
+- [ ] OpenAPI spec auto-generated from route definitions
+
+**Additional Channels:**
+- [ ] iMessage (BlueBubbles), Email, SMS adapters
+
+**Infrastructure:**
+- [ ] Litestream WAL-based replication to object storage
+- [ ] Context engine token budget enforcement verification
+
+**Code Quality:**
+- [ ] Clippy unwrap enforcement (#![deny(clippy::unwrap_used)]) across library crates
+- [ ] Fix hardcoded uptime, mock unimplemented!(), large function decomposition
+- [ ] Test coverage expansion (integration tests, property-based, benchmark regression)
+
+## Current Milestone: v1.5 PRD Gap Closure
+
+**Goal:** Close all remaining PRD gaps — compaction overhaul, prompt injection defense, cron/hooks/hot-reload, memory enhancements, audit trail, data classification, retention policies, GDPR tooling, additional channels, OpenTelemetry, and code quality hardening.
+
+**Target features:**
+- Multi-level compaction with quality scoring
+- 5-layer prompt injection defense
+- Cron scheduler with systemd timer generation
+- Memory temporal decay, MMR, LRU eviction
+- Hash-chained audit trail
+- Data classification and retention policies
+- Hook system with 11 lifecycle events
+- Hot reload (config, TLS, plugins)
+- iMessage, Email, SMS channel adapters
+- OpenTelemetry, OpenAPI spec, Litestream replication
+- GDPR erasure + data export
+- Clippy unwrap enforcement + test coverage expansion
 
 ## Shipped Milestones
 
@@ -209,4 +268,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | ADR documentation in MADR 4.0.0 format | Standardized decision records with context, options, consequences | ✓ Good — ADR-001 (ORT) and ADR-002 (plugins) documented |
 
 ---
-*Last updated: 2026-03-10 after v1.4 milestone*
+*Last updated: 2026-03-10 after v1.5 milestone started*

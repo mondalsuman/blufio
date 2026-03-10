@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Quality & Resilience
-status: completed
-stopped_at: Milestone v1.4 archived
+milestone: v1.5
+milestone_name: PRD Gap Closure
+status: active
+stopped_at: Defining requirements
 last_updated: "2026-03-10"
-last_activity: 2026-03-10 -- v1.4 milestone archived, planning next milestone
+last_activity: 2026-03-10 -- Milestone v1.5 started
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,12 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.4 shipped — planning next milestone
+**Current focus:** v1.5 PRD Gap Closure — defining requirements
 
 ## Current Position
 
-Milestone: v1.4 Quality & Resilience — SHIPPED 2026-03-09
-All phases complete: 46-52 (7 phases, 16 plans, 39 requirements)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-10 — Milestone v1.5 started
 
 ## Performance Metrics
 
@@ -69,9 +71,10 @@ None.
 
 - Claude tokenizer accuracy: Xenova/claude-tokenizer is community artifact (~80-95% accuracy for Claude 3+). Monitor and calibrate.
 - tiktoken-rs binary size: Embeds BPE vocabulary data. Measure impact against <50MB binary constraint.
+- v1.5 scope is large (~18 gap items). May need to defer lowest-priority items if velocity doesn't support.
 
 ## Session Continuity
 
 Last session: 2026-03-10
-Stopped at: Milestone v1.4 archived
+Stopped at: Defining requirements for v1.5
 Resume file: None
