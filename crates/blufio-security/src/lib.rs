@@ -13,7 +13,11 @@ pub mod ssrf;
 pub mod tls;
 
 pub use classification_guard::ClassificationGuard;
-pub use pii::{PiiMatch, PiiType, detect_pii, luhn_validate, redact_pii};
+pub use pii::{
+    PiiMatch, PiiScanResult, PiiType, bulk_classification_changed_event,
+    classification_changed_event, classification_enforced_event, detect_pii, luhn_validate,
+    pii_detected_event, redact_pii, scan_and_classify,
+};
 pub use redact::{RedactingWriter, redact, redact_secrets_only, redact_with_pii};
 pub use ssrf::SsrfSafeResolver;
 pub use tls::{build_secure_client, is_localhost, validate_url};

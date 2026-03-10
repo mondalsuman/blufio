@@ -328,6 +328,148 @@ pub fn redact_pii(text: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Scan-and-classify pipeline
+// ---------------------------------------------------------------------------
+
+/// Result of a combined PII scan and auto-classification.
+#[derive(Debug, Clone)]
+pub struct PiiScanResult {
+    /// PII matches found in the text.
+    pub matches: Vec<PiiMatch>,
+    /// Suggested classification level (Some(Confidential) when PII detected and
+    /// auto_classify is enabled).
+    pub suggested_classification: Option<blufio_core::classification::DataClassification>,
+    /// Text with PII redacted using type-specific placeholders.
+    pub redacted_text: String,
+}
+
+/// Scan text for PII, optionally auto-classify, and return redacted version.
+///
+/// When `auto_classify` is true and PII is found, suggests `Confidential` classification.
+/// Logs PII detection at info level per CONTEXT.md.
+pub fn scan_and_classify(text: &str, auto_classify: bool) -> PiiScanResult {
+    let matches = detect_pii(text);
+    let suggested = if auto_classify && !matches.is_empty() {
+        let pii_types: Vec<String> = matches.iter().map(|m| m.pii_type.to_string()).collect();
+        let unique_types: std::collections::BTreeSet<&str> =
+            pii_types.iter().map(|s| s.as_str()).collect();
+        tracing::info!(
+            "PII detected: {} match(es) [{}] -- auto-classified as Confidential",
+            matches.len(),
+            unique_types.into_iter().collect::<Vec<_>>().join(", ")
+        );
+        Some(blufio_core::classification::DataClassification::Confidential)
+    } else if !matches.is_empty() {
+        let pii_types: Vec<String> = matches.iter().map(|m| m.pii_type.to_string()).collect();
+        let unique_types: std::collections::BTreeSet<&str> =
+            pii_types.iter().map(|s| s.as_str()).collect();
+        tracing::info!(
+            "PII detected: {} match(es) [{}]",
+            matches.len(),
+            unique_types.into_iter().collect::<Vec<_>>().join(", ")
+        );
+        None
+    } else {
+        None
+    };
+    let redacted = if matches.is_empty() {
+        text.to_string()
+    } else {
+        redact_pii(text)
+    };
+    PiiScanResult {
+        matches,
+        suggested_classification: suggested,
+        redacted_text: redacted,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Event helpers
+// ---------------------------------------------------------------------------
+
+/// Create a `BusEvent::Classification(PiiDetected)` event.
+///
+/// Carries only PII type names and counts -- never actual PII values.
+pub fn pii_detected_event(entity_type: &str, entity_id: &str, matches: &[PiiMatch]) -> blufio_bus::events::BusEvent {
+    use blufio_bus::events::{BusEvent, ClassificationEvent, new_event_id, now_timestamp};
+
+    let pii_types: std::collections::BTreeSet<String> =
+        matches.iter().map(|m| m.pii_type.to_string()).collect();
+    let pii_types_vec: Vec<String> = pii_types.into_iter().collect();
+
+    BusEvent::Classification(ClassificationEvent::PiiDetected {
+        event_id: new_event_id(),
+        timestamp: now_timestamp(),
+        entity_type: entity_type.to_string(),
+        entity_id: entity_id.to_string(),
+        pii_types: pii_types_vec,
+        count: matches.len(),
+    })
+}
+
+/// Create a `BusEvent::Classification(Changed)` event.
+pub fn classification_changed_event(
+    entity_type: &str,
+    entity_id: &str,
+    old_level: &str,
+    new_level: &str,
+    changed_by: &str,
+) -> blufio_bus::events::BusEvent {
+    use blufio_bus::events::{BusEvent, ClassificationEvent, new_event_id, now_timestamp};
+
+    BusEvent::Classification(ClassificationEvent::Changed {
+        event_id: new_event_id(),
+        timestamp: now_timestamp(),
+        entity_type: entity_type.to_string(),
+        entity_id: entity_id.to_string(),
+        old_level: old_level.to_string(),
+        new_level: new_level.to_string(),
+        changed_by: changed_by.to_string(),
+    })
+}
+
+/// Create a `BusEvent::Classification(Enforced)` event.
+pub fn classification_enforced_event(
+    entity_type: &str,
+    entity_id: &str,
+    level: &str,
+    action_blocked: &str,
+) -> blufio_bus::events::BusEvent {
+    use blufio_bus::events::{BusEvent, ClassificationEvent, new_event_id, now_timestamp};
+
+    BusEvent::Classification(ClassificationEvent::Enforced {
+        event_id: new_event_id(),
+        timestamp: now_timestamp(),
+        entity_type: entity_type.to_string(),
+        entity_id: entity_id.to_string(),
+        level: level.to_string(),
+        action_blocked: action_blocked.to_string(),
+    })
+}
+
+/// Create a `BusEvent::Classification(BulkChanged)` event.
+pub fn bulk_classification_changed_event(
+    entity_type: &str,
+    count: usize,
+    old_level: &str,
+    new_level: &str,
+    changed_by: &str,
+) -> blufio_bus::events::BusEvent {
+    use blufio_bus::events::{BusEvent, ClassificationEvent, new_event_id, now_timestamp};
+
+    BusEvent::Classification(ClassificationEvent::BulkChanged {
+        event_id: new_event_id(),
+        timestamp: now_timestamp(),
+        entity_type: entity_type.to_string(),
+        count,
+        old_level: old_level.to_string(),
+        new_level: new_level.to_string(),
+        changed_by: changed_by.to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -823,6 +965,180 @@ mod tests {
         assert!(result.contains("[EMAIL]"), "should redact real email");
         // The code block content is preserved (not redacted)
         assert!(result.contains("```test@code.com```"), "code block should be preserved");
+    }
+
+    // ── scan_and_classify ──────────────────────────────────────────────
+
+    #[test]
+    fn scan_and_classify_pii_present_auto_classify() {
+        let result = scan_and_classify("Email: user@example.com", true);
+        assert!(!result.matches.is_empty());
+        assert_eq!(
+            result.suggested_classification,
+            Some(blufio_core::classification::DataClassification::Confidential)
+        );
+        assert!(result.redacted_text.contains("[EMAIL]"));
+    }
+
+    #[test]
+    fn scan_and_classify_pii_present_no_auto_classify() {
+        let result = scan_and_classify("Email: user@example.com", false);
+        assert!(!result.matches.is_empty());
+        assert_eq!(result.suggested_classification, None);
+        assert!(result.redacted_text.contains("[EMAIL]"));
+    }
+
+    #[test]
+    fn scan_and_classify_no_pii() {
+        let result = scan_and_classify("just regular text", true);
+        assert!(result.matches.is_empty());
+        assert_eq!(result.suggested_classification, None);
+        assert_eq!(result.redacted_text, "just regular text");
+    }
+
+    #[test]
+    fn scan_and_classify_multiple_pii_types() {
+        let result = scan_and_classify("Email: test@example.com SSN: 555-12-3456", true);
+        assert!(result.matches.len() >= 2);
+        assert_eq!(
+            result.suggested_classification,
+            Some(blufio_core::classification::DataClassification::Confidential)
+        );
+    }
+
+    // ── Event helpers ──────────────────────────────────────────────────
+
+    #[test]
+    fn pii_detected_event_creates_valid_bus_event() {
+        let matches = detect_pii("Email: test@example.com and SSN: 555-12-3456");
+        let event = pii_detected_event("message", "msg-1", &matches);
+
+        match event {
+            blufio_bus::events::BusEvent::Classification(
+                blufio_bus::events::ClassificationEvent::PiiDetected {
+                    entity_type,
+                    entity_id,
+                    pii_types,
+                    count,
+                    event_id,
+                    ..
+                },
+            ) => {
+                assert_eq!(entity_type, "message");
+                assert_eq!(entity_id, "msg-1");
+                assert!(!event_id.is_empty());
+                assert!(pii_types.contains(&"email".to_string()));
+                assert!(pii_types.contains(&"ssn".to_string()));
+                assert_eq!(count, matches.len());
+            }
+            _ => panic!("expected Classification::PiiDetected"),
+        }
+    }
+
+    #[test]
+    fn pii_detected_event_contains_no_actual_pii() {
+        let matches = detect_pii("Email: test@example.com");
+        let event = pii_detected_event("message", "msg-1", &matches);
+        let json = serde_json::to_string(&event).unwrap();
+
+        // The JSON should NOT contain the actual email address
+        assert!(
+            !json.contains("test@example.com"),
+            "event should not contain actual PII values"
+        );
+        // But should contain the PII type
+        assert!(json.contains("email"));
+    }
+
+    #[test]
+    fn pii_detected_event_deduplicates_types() {
+        // Detect multiple emails -- should still only have "email" once in types
+        let matches = detect_pii("user1@example.com and user2@example.com");
+        let event = pii_detected_event("message", "msg-1", &matches);
+
+        match event {
+            blufio_bus::events::BusEvent::Classification(
+                blufio_bus::events::ClassificationEvent::PiiDetected { pii_types, count, .. },
+            ) => {
+                assert_eq!(
+                    pii_types.iter().filter(|t| *t == "email").count(),
+                    1,
+                    "email type should appear only once"
+                );
+                assert_eq!(count, 2, "count should reflect all matches");
+            }
+            _ => panic!("expected Classification::PiiDetected"),
+        }
+    }
+
+    #[test]
+    fn classification_changed_event_creates_valid_bus_event() {
+        let event = classification_changed_event("memory", "mem-1", "internal", "confidential", "auto_pii");
+        match event {
+            blufio_bus::events::BusEvent::Classification(
+                blufio_bus::events::ClassificationEvent::Changed {
+                    entity_type,
+                    entity_id,
+                    old_level,
+                    new_level,
+                    changed_by,
+                    ..
+                },
+            ) => {
+                assert_eq!(entity_type, "memory");
+                assert_eq!(entity_id, "mem-1");
+                assert_eq!(old_level, "internal");
+                assert_eq!(new_level, "confidential");
+                assert_eq!(changed_by, "auto_pii");
+            }
+            _ => panic!("expected Classification::Changed"),
+        }
+    }
+
+    #[test]
+    fn classification_enforced_event_creates_valid_bus_event() {
+        let event = classification_enforced_event("memory", "mem-1", "restricted", "export");
+        match event {
+            blufio_bus::events::BusEvent::Classification(
+                blufio_bus::events::ClassificationEvent::Enforced {
+                    entity_type,
+                    entity_id,
+                    level,
+                    action_blocked,
+                    ..
+                },
+            ) => {
+                assert_eq!(entity_type, "memory");
+                assert_eq!(entity_id, "mem-1");
+                assert_eq!(level, "restricted");
+                assert_eq!(action_blocked, "export");
+            }
+            _ => panic!("expected Classification::Enforced"),
+        }
+    }
+
+    #[test]
+    fn bulk_classification_changed_event_creates_valid_bus_event() {
+        let event = bulk_classification_changed_event("memory", 42, "internal", "confidential", "admin");
+        match event {
+            blufio_bus::events::BusEvent::Classification(
+                blufio_bus::events::ClassificationEvent::BulkChanged {
+                    entity_type,
+                    count,
+                    old_level,
+                    new_level,
+                    changed_by,
+                    ..
+                },
+            ) => {
+                assert_eq!(entity_type, "memory");
+                assert_eq!(count, 42);
+                assert_eq!(old_level, "internal");
+                assert_eq!(new_level, "confidential");
+                assert_eq!(changed_by, "admin");
+            }
+            _ => panic!("expected Classification::BulkChanged"),
+        }
     }
 }
 
