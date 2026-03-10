@@ -54,6 +54,7 @@ pub fn register_metrics() {
     );
 
     register_resilience_metrics();
+    register_classification_metrics();
 }
 
 /// Record a processed message.
@@ -163,6 +164,31 @@ pub fn set_mcp_context_utilization(ratio: f64) {
 }
 
 // ---- Resilience metrics (CB-04, CB-05) ----
+
+/// Register classification metric descriptions.
+///
+/// Called from [`register_metrics()`] at startup.
+fn register_classification_metrics() {
+    describe_counter!(
+        "blufio_classification_blocked_total",
+        "Total classification enforcement actions by level and action"
+    );
+}
+
+/// Record a classification enforcement action.
+///
+/// Tracks when content is blocked from export, context inclusion, or requires
+/// log redaction due to its classification level.
+///
+/// `action` is one of: "export", "context_include", "log_redact"
+pub fn record_classification_blocked(level: &str, action: &str) {
+    metrics::counter!(
+        "blufio_classification_blocked_total",
+        "level" => level.to_string(),
+        "action" => action.to_string(),
+    )
+    .increment(1);
+}
 
 /// Register resilience metric descriptions.
 ///

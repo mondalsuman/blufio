@@ -258,10 +258,38 @@ impl SessionActor {
         let (_, clean_text) = blufio_router::parse_model_override(&raw_text);
         let text_content = clean_text.to_string();
 
+        // PII detection before message storage (DCLS-04, PII-03).
+        // Scan user message for PII and auto-classify if enabled.
+        // Errors are logged and never block the agent loop.
+        let msg_id = uuid::Uuid::new_v4().to_string();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            blufio_security::scan_and_classify(&text_content, true)
+        })) {
+            Ok(scan_result) => {
+                if !scan_result.matches.is_empty()
+                    && let Some(ref bus) = self.event_bus
+                {
+                    // Emit PII detected event (fire-and-forget, metadata only).
+                    let event = blufio_security::pii_detected_event(
+                        "message",
+                        &msg_id,
+                        &scan_result.matches,
+                    );
+                    bus.publish(event).await;
+                }
+            }
+            Err(_) => {
+                warn!(
+                    session_id = %self.session_id,
+                    "PII detection panicked, continuing without classification"
+                );
+            }
+        }
+
         // Persist the inbound user message (with override prefix stripped).
         let now = chrono::Utc::now().to_rfc3339();
         let msg = Message {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: msg_id,
             session_id: self.session_id.clone(),
             role: "user".to_string(),
             content: text_content.clone(),
@@ -620,9 +648,34 @@ impl SessionActor {
         full_text: &str,
         usage: Option<TokenUsage>,
     ) -> Result<(), BlufioError> {
+        // PII detection before assistant response storage (DCLS-04, PII-03).
+        let msg_id = uuid::Uuid::new_v4().to_string();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            blufio_security::scan_and_classify(full_text, true)
+        })) {
+            Ok(scan_result) => {
+                if !scan_result.matches.is_empty()
+                    && let Some(ref bus) = self.event_bus
+                {
+                    let event = blufio_security::pii_detected_event(
+                        "message",
+                        &msg_id,
+                        &scan_result.matches,
+                    );
+                    bus.publish(event).await;
+                }
+            }
+            Err(_) => {
+                warn!(
+                    session_id = %self.session_id,
+                    "PII detection panicked on assistant response, continuing"
+                );
+            }
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         let msg = Message {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: msg_id,
             session_id: self.session_id.clone(),
             role: "assistant".to_string(),
             content: full_text.to_string(),

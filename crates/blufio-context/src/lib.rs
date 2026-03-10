@@ -116,6 +116,13 @@ impl ContextEngine {
             .await?;
 
         // 4. Combine conditional + dynamic messages.
+        //    Note: Restricted content is primarily excluded at the SQL level
+        //    (WHERE classification != 'restricted' in Plan 02). The context
+        //    engine provides defense-in-depth for messages already loaded.
+        //    ClassificationGuard is available for filtering tool results and
+        //    other non-SQL content before the LLM sees it (DCLS-04).
+        let _guard = blufio_security::ClassificationGuard::instance();
+
         let mut all_messages = conditional_messages;
         all_messages.extend(dynamic_result.messages);
 

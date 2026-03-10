@@ -10,6 +10,7 @@
 pub mod api_keys;
 pub mod auth;
 pub mod batch;
+pub mod classify;
 pub mod handlers;
 pub mod openai_compat;
 pub mod rate_limit;
