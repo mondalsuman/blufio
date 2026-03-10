@@ -118,7 +118,9 @@ pub struct ClassifyErrorResponse {
 // ---------------------------------------------------------------------------
 
 /// Validate entity type string.
-fn validate_entity_type(entity_type: &str) -> Result<(), (StatusCode, Json<ClassifyErrorResponse>)> {
+fn validate_entity_type(
+    entity_type: &str,
+) -> Result<(), (StatusCode, Json<ClassifyErrorResponse>)> {
     match entity_type {
         "memory" | "message" | "session" => Ok(()),
         _ => Err((
@@ -134,7 +136,12 @@ fn validate_entity_type(entity_type: &str) -> Result<(), (StatusCode, Json<Class
 }
 
 /// Parse and validate a classification level string.
-fn validate_level(level: &str) -> Result<blufio_core::classification::DataClassification, (StatusCode, Json<ClassifyErrorResponse>)> {
+fn validate_level(
+    level: &str,
+) -> Result<
+    blufio_core::classification::DataClassification,
+    (StatusCode, Json<ClassifyErrorResponse>),
+> {
     blufio_core::classification::DataClassification::from_str_value(level).ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
@@ -167,8 +174,10 @@ fn require_classify_scope(
 /// Extract the storage adapter from gateway state, returning 503 if unavailable.
 fn require_storage(
     state: &crate::server::GatewayState,
-) -> Result<Arc<dyn blufio_core::StorageAdapter + Send + Sync>, (StatusCode, Json<ClassifyErrorResponse>)>
-{
+) -> Result<
+    Arc<dyn blufio_core::StorageAdapter + Send + Sync>,
+    (StatusCode, Json<ClassifyErrorResponse>),
+> {
     state.storage.clone().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,

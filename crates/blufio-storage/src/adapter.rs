@@ -183,8 +183,13 @@ impl StorageAdapter for SqliteStorage {
         entity_id: &str,
         level: &str,
     ) -> Result<bool, BlufioError> {
-        queries::classification::set_entity_classification(self.db()?, entity_type, entity_id, level)
-            .await
+        queries::classification::set_entity_classification(
+            self.db()?,
+            entity_type,
+            entity_id,
+            level,
+        )
+        .await
     }
 
     async fn list_entities_by_classification(

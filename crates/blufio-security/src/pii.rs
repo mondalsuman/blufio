@@ -149,12 +149,9 @@ static PII_INDIVIDUAL_REGEXES: LazyLock<Vec<(PiiType, Regex)>> = LazyLock::new(|
 
 /// Regex patterns for stripping code blocks, inline code, and URLs.
 /// Replaced with equal-length whitespace to preserve span offsets (Pitfall 2).
-static FENCED_CODE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?s)```[^`]*```").unwrap());
-static INLINE_CODE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"`[^`]+`").unwrap());
-static URL_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"https?://[^\s)>\]]+").unwrap());
+static FENCED_CODE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)```[^`]*```").unwrap());
+static INLINE_CODE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`[^`]+`").unwrap());
+static URL_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"https?://[^\s)>\]]+").unwrap());
 
 /// Replace code blocks, inline code, and URLs with equal-length whitespace.
 ///
@@ -391,7 +388,11 @@ pub fn scan_and_classify(text: &str, auto_classify: bool) -> PiiScanResult {
 /// Create a `BusEvent::Classification(PiiDetected)` event.
 ///
 /// Carries only PII type names and counts -- never actual PII values.
-pub fn pii_detected_event(entity_type: &str, entity_id: &str, matches: &[PiiMatch]) -> blufio_bus::events::BusEvent {
+pub fn pii_detected_event(
+    entity_type: &str,
+    entity_id: &str,
+    matches: &[PiiMatch],
+) -> blufio_bus::events::BusEvent {
     use blufio_bus::events::{BusEvent, ClassificationEvent, new_event_id, now_timestamp};
 
     let pii_types: std::collections::BTreeSet<String> =
@@ -534,50 +535,89 @@ mod tests {
     #[test]
     fn detects_us_phone_with_country_code() {
         let matches = detect_pii("+1 (555) 123-4567");
-        let phone_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Phone).collect();
-        assert!(!phone_matches.is_empty(), "should detect US phone with country code");
+        let phone_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Phone)
+            .collect();
+        assert!(
+            !phone_matches.is_empty(),
+            "should detect US phone with country code"
+        );
     }
 
     #[test]
     fn detects_us_phone_with_dashes() {
         let matches = detect_pii("555-123-4567");
-        let phone_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Phone).collect();
-        assert!(!phone_matches.is_empty(), "should detect US phone with dashes");
+        let phone_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Phone)
+            .collect();
+        assert!(
+            !phone_matches.is_empty(),
+            "should detect US phone with dashes"
+        );
     }
 
     #[test]
     fn detects_us_phone_with_dots() {
         let matches = detect_pii("555.123.4567");
-        let phone_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Phone).collect();
-        assert!(!phone_matches.is_empty(), "should detect US phone with dots");
+        let phone_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Phone)
+            .collect();
+        assert!(
+            !phone_matches.is_empty(),
+            "should detect US phone with dots"
+        );
     }
 
     #[test]
     fn detects_us_phone_with_parens() {
         let matches = detect_pii("(555) 123-4567");
-        let phone_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Phone).collect();
-        assert!(!phone_matches.is_empty(), "should detect US phone with parentheses");
+        let phone_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Phone)
+            .collect();
+        assert!(
+            !phone_matches.is_empty(),
+            "should detect US phone with parentheses"
+        );
     }
 
     #[test]
     fn detects_uk_phone() {
         let matches = detect_pii("+44 20 7946 0958");
-        let phone_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Phone).collect();
+        let phone_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Phone)
+            .collect();
         assert!(!phone_matches.is_empty(), "should detect UK phone number");
     }
 
     #[test]
     fn detects_eu_phone_germany() {
         let matches = detect_pii("+49 30 1234 5678");
-        let phone_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Phone).collect();
-        assert!(!phone_matches.is_empty(), "should detect German phone number");
+        let phone_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Phone)
+            .collect();
+        assert!(
+            !phone_matches.is_empty(),
+            "should detect German phone number"
+        );
     }
 
     #[test]
     fn detects_eu_phone_france() {
         let matches = detect_pii("+33 1 2345 6789");
-        let phone_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Phone).collect();
-        assert!(!phone_matches.is_empty(), "should detect French phone number");
+        let phone_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Phone)
+            .collect();
+        assert!(
+            !phone_matches.is_empty(),
+            "should detect French phone number"
+        );
     }
 
     // ── SSN detection ────────────────────────────────────────────────
@@ -585,49 +625,70 @@ mod tests {
     #[test]
     fn detects_valid_ssn() {
         let matches = detect_pii("555-12-3456");
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert_eq!(ssn_matches.len(), 1, "should detect valid SSN");
     }
 
     #[test]
     fn detects_ssn_area_001() {
         let matches = detect_pii("001-12-3456");
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert_eq!(ssn_matches.len(), 1, "area 001 is valid");
     }
 
     #[test]
     fn rejects_ssn_area_000() {
         let matches = detect_pii("000-12-3456");
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert_eq!(ssn_matches.len(), 0, "area 000 is invalid");
     }
 
     #[test]
     fn rejects_ssn_area_666() {
         let matches = detect_pii("666-12-3456");
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert_eq!(ssn_matches.len(), 0, "area 666 is invalid");
     }
 
     #[test]
     fn rejects_ssn_area_900_plus() {
         let matches = detect_pii("900-12-3456");
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert_eq!(ssn_matches.len(), 0, "area 900+ is invalid");
     }
 
     #[test]
     fn rejects_ssn_area_999() {
         let matches = detect_pii("999-12-3456");
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert_eq!(ssn_matches.len(), 0, "area 999 is invalid");
     }
 
     #[test]
     fn detects_ssn_area_899() {
         let matches = detect_pii("899-12-3456");
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert_eq!(ssn_matches.len(), 1, "area 899 is the upper valid boundary");
     }
 
@@ -637,7 +698,10 @@ mod tests {
     fn detects_valid_visa() {
         // 4111111111111111 passes Luhn
         let matches = detect_pii("4111111111111111");
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
         assert_eq!(cc_matches.len(), 1, "should detect valid Visa number");
     }
 
@@ -645,7 +709,10 @@ mod tests {
     fn rejects_invalid_luhn() {
         // 4111111111111112 fails Luhn
         let matches = detect_pii("4111111111111112");
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
         assert_eq!(cc_matches.len(), 0, "should reject invalid Luhn number");
     }
 
@@ -653,7 +720,10 @@ mod tests {
     fn detects_mastercard() {
         // 5500000000000004 passes Luhn (Mastercard)
         let matches = detect_pii("5500000000000004");
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
         assert_eq!(cc_matches.len(), 1, "should detect valid Mastercard");
     }
 
@@ -661,7 +731,10 @@ mod tests {
     fn detects_amex() {
         // 340000000000009 passes Luhn (Amex, 15 digits)
         let matches = detect_pii("340000000000009");
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
         assert_eq!(cc_matches.len(), 1, "should detect valid Amex number");
     }
 
@@ -669,7 +742,10 @@ mod tests {
     fn detects_credit_card_with_spaces() {
         // 4111 1111 1111 1111
         let matches = detect_pii("4111 1111 1111 1111");
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
         assert_eq!(cc_matches.len(), 1, "should detect card with spaces");
     }
 
@@ -677,7 +753,10 @@ mod tests {
     fn detects_credit_card_with_dashes() {
         // 4111-1111-1111-1111
         let matches = detect_pii("4111-1111-1111-1111");
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
         assert_eq!(cc_matches.len(), 1, "should detect card with dashes");
     }
 
@@ -687,7 +766,10 @@ mod tests {
     fn skips_email_in_fenced_code_block() {
         let text = "```code with test@example.com```";
         let matches = detect_pii(text);
-        let email_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Email).collect();
+        let email_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Email)
+            .collect();
         assert_eq!(email_matches.len(), 0, "should skip email in code block");
     }
 
@@ -695,7 +777,10 @@ mod tests {
     fn skips_email_in_inline_code() {
         let text = "`test@example.com`";
         let matches = detect_pii(text);
-        let email_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Email).collect();
+        let email_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Email)
+            .collect();
         assert_eq!(email_matches.len(), 0, "should skip email in inline code");
     }
 
@@ -703,7 +788,10 @@ mod tests {
     fn skips_email_in_url() {
         let text = "https://example.com/path?email=test@test.com";
         let matches = detect_pii(text);
-        let email_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Email).collect();
+        let email_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Email)
+            .collect();
         assert_eq!(email_matches.len(), 0, "should skip email in URL");
     }
 
@@ -711,15 +799,25 @@ mod tests {
     fn detects_email_outside_code_block() {
         let text = "```code block```  contact: real@email.com";
         let matches = detect_pii(text);
-        let email_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Email).collect();
-        assert_eq!(email_matches.len(), 1, "should detect email outside code block");
+        let email_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Email)
+            .collect();
+        assert_eq!(
+            email_matches.len(),
+            1,
+            "should detect email outside code block"
+        );
     }
 
     #[test]
     fn skips_multiline_code_block() {
         let text = "Before\n```\ntest@example.com\n555-12-3456\n```\nAfter";
         let matches = detect_pii(text);
-        assert!(matches.is_empty(), "should skip PII in multiline code block");
+        assert!(
+            matches.is_empty(),
+            "should skip PII in multiline code block"
+        );
     }
 
     // ── Edge cases ───────────────────────────────────────────────────
@@ -749,7 +847,10 @@ mod tests {
         let types: Vec<PiiType> = matches.iter().map(|m| m.pii_type).collect();
         assert!(types.contains(&PiiType::Email), "should find email");
         assert!(types.contains(&PiiType::Ssn), "should find SSN");
-        assert!(types.contains(&PiiType::CreditCard), "should find credit card");
+        assert!(
+            types.contains(&PiiType::CreditCard),
+            "should find credit card"
+        );
     }
 
     // ── Redaction ────────────────────────────────────────────────────
@@ -848,22 +949,34 @@ mod tests {
     fn no_false_positive_github_url() {
         let text = "https://github.com/user/repo/commit/abc123def456";
         let matches = detect_pii(text);
-        assert!(matches.is_empty(), "GitHub URL should not trigger PII detection");
+        assert!(
+            matches.is_empty(),
+            "GitHub URL should not trigger PII detection"
+        );
     }
 
     #[test]
     fn no_false_positive_docker_sha() {
         let text = "sha256:abc123def456789012345678901234567890123456789012345678901234";
         let matches = detect_pii(text);
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
-        assert!(cc_matches.is_empty(), "Docker SHA should not be detected as credit card");
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
+        assert!(
+            cc_matches.is_empty(),
+            "Docker SHA should not be detected as credit card"
+        );
     }
 
     #[test]
     fn no_false_positive_uuid() {
         let text = "550e8400-e29b-41d4-a716-446655440000";
         let matches = detect_pii(text);
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert!(ssn_matches.is_empty(), "UUID should not be detected as SSN");
     }
 
@@ -871,8 +984,14 @@ mod tests {
     fn no_false_positive_timestamp() {
         let text = "2026-03-10T12:30:45Z";
         let matches = detect_pii(text);
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
-        assert!(ssn_matches.is_empty(), "ISO timestamp should not be detected as SSN");
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
+        assert!(
+            ssn_matches.is_empty(),
+            "ISO timestamp should not be detected as SSN"
+        );
     }
 
     // ── PiiType Display ──────────────────────────────────────────────
@@ -924,14 +1043,20 @@ mod tests {
     fn detects_discover_card() {
         // 6011000000000004 passes Luhn (Discover)
         let matches = detect_pii("6011000000000004");
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
         assert_eq!(cc_matches.len(), 1, "should detect valid Discover card");
     }
 
     #[test]
     fn detects_ssn_embedded_in_text() {
         let matches = detect_pii("My SSN is 123-45-6789, keep it safe");
-        let ssn_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::Ssn).collect();
+        let ssn_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::Ssn)
+            .collect();
         assert_eq!(ssn_matches.len(), 1);
     }
 
@@ -939,7 +1064,10 @@ mod tests {
     fn rejects_non_card_digit_sequence() {
         // A sequence of digits that doesn't start with valid BIN prefix
         let matches = detect_pii("1234567890123");
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
         assert!(cc_matches.is_empty(), "non-card prefix should be rejected");
     }
 
@@ -954,8 +1082,14 @@ mod tests {
     fn no_false_positive_stack_trace_line_numbers() {
         let text = "at Object.<anonymous> (file.js:123:456)";
         let matches = detect_pii(text);
-        let cc_matches: Vec<_> = matches.iter().filter(|m| m.pii_type == PiiType::CreditCard).collect();
-        assert!(cc_matches.is_empty(), "stack trace should not trigger credit card detection");
+        let cc_matches: Vec<_> = matches
+            .iter()
+            .filter(|m| m.pii_type == PiiType::CreditCard)
+            .collect();
+        assert!(
+            cc_matches.is_empty(),
+            "stack trace should not trigger credit card detection"
+        );
     }
 
     #[test]
@@ -964,7 +1098,10 @@ mod tests {
         let result = redact_pii(text);
         assert!(result.contains("[EMAIL]"), "should redact real email");
         // The code block content is preserved (not redacted)
-        assert!(result.contains("```test@code.com```"), "code block should be preserved");
+        assert!(
+            result.contains("```test@code.com```"),
+            "code block should be preserved"
+        );
     }
 
     // ── scan_and_classify ──────────────────────────────────────────────
@@ -1058,7 +1195,9 @@ mod tests {
 
         match event {
             blufio_bus::events::BusEvent::Classification(
-                blufio_bus::events::ClassificationEvent::PiiDetected { pii_types, count, .. },
+                blufio_bus::events::ClassificationEvent::PiiDetected {
+                    pii_types, count, ..
+                },
             ) => {
                 assert_eq!(
                     pii_types.iter().filter(|t| *t == "email").count(),
@@ -1073,7 +1212,8 @@ mod tests {
 
     #[test]
     fn classification_changed_event_creates_valid_bus_event() {
-        let event = classification_changed_event("memory", "mem-1", "internal", "confidential", "auto_pii");
+        let event =
+            classification_changed_event("memory", "mem-1", "internal", "confidential", "auto_pii");
         match event {
             blufio_bus::events::BusEvent::Classification(
                 blufio_bus::events::ClassificationEvent::Changed {
@@ -1119,7 +1259,8 @@ mod tests {
 
     #[test]
     fn bulk_classification_changed_event_creates_valid_bus_event() {
-        let event = bulk_classification_changed_event("memory", 42, "internal", "confidential", "admin");
+        let event =
+            bulk_classification_changed_event("memory", 42, "internal", "confidential", "admin");
         match event {
             blufio_bus::events::BusEvent::Classification(
                 blufio_bus::events::ClassificationEvent::BulkChanged {

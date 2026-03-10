@@ -600,7 +600,8 @@ impl SessionActor {
                             transition.to_state.as_str(),
                         );
                     }
-                    self.publish_cb_transition(&self.provider_name, &transition).await;
+                    self.publish_cb_transition(&self.provider_name, &transition)
+                        .await;
                 }
                 self.last_call_was_fallback = false;
             }
@@ -629,7 +630,8 @@ impl SessionActor {
                                 transition.to_state.as_str(),
                             );
                         }
-                        self.publish_cb_transition(&self.provider_name, &transition).await;
+                        self.publish_cb_transition(&self.provider_name, &transition)
+                            .await;
                     }
                 }
             }
@@ -1100,7 +1102,11 @@ mod tests {
         provider: Arc<dyn blufio_core::ProviderAdapter + Send + Sync>,
         event_bus: Option<Arc<blufio_bus::EventBus>>,
         circuit_breaker_registry: Option<Arc<CircuitBreakerRegistry>>,
-    ) -> (SessionActor, Arc<dyn StorageAdapter + Send + Sync>, tempfile::TempDir) {
+    ) -> (
+        SessionActor,
+        Arc<dyn StorageAdapter + Send + Sync>,
+        tempfile::TempDir,
+    ) {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let storage_config = blufio_config::model::StorageConfig {
@@ -1121,9 +1127,9 @@ mod tests {
             monthly_budget_usd: None,
             track_tokens: true,
         };
-        let budget_tracker = Arc::new(tokio::sync::Mutex::new(
-            blufio_cost::BudgetTracker::new(&cost_config),
-        ));
+        let budget_tracker = Arc::new(tokio::sync::Mutex::new(blufio_cost::BudgetTracker::new(
+            &cost_config,
+        )));
 
         let agent_config = blufio_config::model::AgentConfig {
             system_prompt: Some("Test assistant.".to_string()),
@@ -1289,10 +1295,7 @@ mod tests {
 
         // No event should be on the bus.
         let result = tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await;
-        assert!(
-            result.is_err(),
-            "expected no event on bus but got one"
-        );
+        assert!(result.is_err(), "expected no event on bus but got one");
     }
 
     #[test]

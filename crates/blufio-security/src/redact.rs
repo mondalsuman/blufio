@@ -258,11 +258,7 @@ mod tests {
         let mut buf = Vec::new();
         {
             let mut writer = RedactingWriter::new(&mut buf, vault_values);
-            write!(
-                writer,
-                "Email test@example.com and vault-secret-42 here"
-            )
-            .unwrap();
+            write!(writer, "Email test@example.com and vault-secret-42 here").unwrap();
         }
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("[EMAIL]"), "writer should redact PII");

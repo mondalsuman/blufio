@@ -3,8 +3,8 @@
 
 //! Message CRUD operations.
 
-use blufio_core::classification::DataClassification;
 use blufio_core::BlufioError;
+use blufio_core::classification::DataClassification;
 use rusqlite::params;
 
 use crate::database::Database;
@@ -93,8 +93,7 @@ fn row_to_message(row: &rusqlite::Row) -> Message {
         token_count: row.get(4).unwrap_or_default(),
         metadata: row.get(5).unwrap_or_default(),
         created_at: row.get(6).unwrap_or_default(),
-        classification: DataClassification::from_str_value(&classification_str)
-            .unwrap_or_default(),
+        classification: DataClassification::from_str_value(&classification_str).unwrap_or_default(),
     }
 }
 

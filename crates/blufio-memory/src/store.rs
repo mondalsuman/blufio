@@ -222,8 +222,7 @@ fn row_to_memory(row: &rusqlite::Row) -> Memory {
         status: MemoryStatus::from_str_value(&status_str),
         superseded_by: row.get(6).unwrap_or(None),
         session_id: row.get(7).unwrap_or(None),
-        classification: DataClassification::from_str_value(&classification_str)
-            .unwrap_or_default(),
+        classification: DataClassification::from_str_value(&classification_str).unwrap_or_default(),
         created_at: row.get(9).unwrap_or_default(),
         updated_at: row.get(10).unwrap_or_default(),
     }
@@ -547,7 +546,10 @@ mod tests {
         let conn = setup_test_db().await;
         let store = MemoryStore::new(conn);
 
-        store.save(&make_test_memory("mem-1", "Normal")).await.unwrap();
+        store
+            .save(&make_test_memory("mem-1", "Normal"))
+            .await
+            .unwrap();
 
         let mut restricted = make_test_memory("mem-2", "Restricted");
         restricted.classification = DataClassification::Restricted;
@@ -572,7 +574,11 @@ mod tests {
         store.save(&restricted).await.unwrap();
 
         let results = store.search_bm25("golden", 10).await.unwrap();
-        assert_eq!(results.len(), 1, "restricted should be excluded from search");
+        assert_eq!(
+            results.len(),
+            1,
+            "restricted should be excluded from search"
+        );
         assert_eq!(results[0].0, "mem-int");
     }
 
@@ -592,7 +598,10 @@ mod tests {
             store.save(&memory).await.unwrap();
 
             let retrieved = store.get_by_id(&id).await.unwrap().unwrap();
-            assert_eq!(retrieved.classification, level, "round-trip failed for {level}");
+            assert_eq!(
+                retrieved.classification, level,
+                "round-trip failed for {level}"
+            );
         }
     }
 }

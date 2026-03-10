@@ -21,8 +21,8 @@
 use clap::Subcommand;
 use colored::Colorize;
 
-use blufio_core::classification::{ClassificationError, DataClassification};
 use blufio_core::BlufioError;
+use blufio_core::classification::{ClassificationError, DataClassification};
 
 /// Open a Database connection using the configured database path.
 ///
@@ -190,18 +190,15 @@ async fn run_classify_set(
     let db = open_db().await?;
 
     // Fetch current classification from DB.
-    let current_str = blufio_storage::queries::classification::get_entity_classification(
-        &db,
-        entity_type,
-        id,
-    )
-    .await?
-    .ok_or_else(|| {
-        BlufioError::Classification(ClassificationError::EntityNotFound {
-            entity_type: entity_type.to_string(),
-            entity_id: id.to_string(),
-        })
-    })?;
+    let current_str =
+        blufio_storage::queries::classification::get_entity_classification(&db, entity_type, id)
+            .await?
+            .ok_or_else(|| {
+                BlufioError::Classification(ClassificationError::EntityNotFound {
+                    entity_type: entity_type.to_string(),
+                    entity_id: id.to_string(),
+                })
+            })?;
 
     let current_level = parse_level(&current_str)?;
 
@@ -249,18 +246,15 @@ async fn run_classify_get(entity_type: &str, id: &str) -> Result<(), BlufioError
 
     let db = open_db().await?;
 
-    let level_str = blufio_storage::queries::classification::get_entity_classification(
-        &db,
-        entity_type,
-        id,
-    )
-    .await?
-    .ok_or_else(|| {
-        BlufioError::Classification(ClassificationError::EntityNotFound {
-            entity_type: entity_type.to_string(),
-            entity_id: id.to_string(),
-        })
-    })?;
+    let level_str =
+        blufio_storage::queries::classification::get_entity_classification(&db, entity_type, id)
+            .await?
+            .ok_or_else(|| {
+                BlufioError::Classification(ClassificationError::EntityNotFound {
+                    entity_type: entity_type.to_string(),
+                    entity_id: id.to_string(),
+                })
+            })?;
 
     let level = parse_level(&level_str)?;
 
@@ -313,15 +307,11 @@ async fn run_classify_list(
     } else if results.is_empty() {
         println!("No {} entities found matching criteria.", entity_type);
     } else {
-        println!(
-            "{:<40} {:<15}",
-            "ID".bold(),
-            "Classification".bold()
-        );
+        println!("{:<40} {:<15}", "ID".bold(), "Classification".bold());
         println!("{}", "-".repeat(55));
         for (id, lvl) in &results {
-            let parsed = DataClassification::from_str_value(lvl)
-                .unwrap_or(DataClassification::Internal);
+            let parsed =
+                DataClassification::from_str_value(lvl).unwrap_or(DataClassification::Internal);
             println!("{:<40} {}", id, colored_level(parsed));
         }
         println!("\n{} entities total", results.len());
@@ -350,9 +340,7 @@ async fn run_classify_bulk(
     }
 
     // Check downgrade protection for bulk operations (before DB call).
-    if !dry_run
-        && let Some(cl) = current_level
-    {
+    if !dry_run && let Some(cl) = current_level {
         let current = parse_level(cl)?;
         if new_level.is_downgrade_from(&current) && !force {
             return Err(BlufioError::Classification(

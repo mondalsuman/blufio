@@ -46,22 +46,22 @@ pub enum PiiAction {
 fn resolve_input(text: Option<&str>, file: Option<&str>) -> Result<String, BlufioError> {
     // Priority: --file > positional > stdin
     if let Some(path) = file {
-        std::fs::read_to_string(path).map_err(|e| {
-            BlufioError::Internal(format!("failed to read file '{}': {}", path, e))
-        })
+        std::fs::read_to_string(path)
+            .map_err(|e| BlufioError::Internal(format!("failed to read file '{}': {}", path, e)))
     } else if let Some(t) = text {
         Ok(t.to_string())
     } else {
         // Try reading from stdin (non-interactive).
         if std::io::stdin().is_terminal() {
             return Err(BlufioError::Internal(
-                "no input provided: pass text as argument, use --file, or pipe to stdin".to_string(),
+                "no input provided: pass text as argument, use --file, or pipe to stdin"
+                    .to_string(),
             ));
         }
         let mut buffer = String::new();
-        std::io::stdin().read_to_string(&mut buffer).map_err(|e| {
-            BlufioError::Internal(format!("failed to read from stdin: {}", e))
-        })?;
+        std::io::stdin()
+            .read_to_string(&mut buffer)
+            .map_err(|e| BlufioError::Internal(format!("failed to read from stdin: {}", e)))?;
         Ok(buffer)
     }
 }

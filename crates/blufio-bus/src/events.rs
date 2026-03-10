@@ -841,9 +841,7 @@ mod tests {
 
         match deserialized {
             BusEvent::Classification(ClassificationEvent::PiiDetected {
-                pii_types,
-                count,
-                ..
+                pii_types, count, ..
             }) => {
                 assert_eq!(pii_types, vec!["email", "phone"]);
                 assert_eq!(count, 3);

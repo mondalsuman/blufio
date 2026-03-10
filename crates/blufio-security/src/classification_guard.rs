@@ -146,8 +146,7 @@ mod tests {
     #[test]
     fn restricted_cannot_include_in_context() {
         assert!(
-            !ClassificationGuard::instance()
-                .can_include_in_context(DataClassification::Restricted)
+            !ClassificationGuard::instance().can_include_in_context(DataClassification::Restricted)
         );
     }
 
@@ -210,8 +209,7 @@ mod tests {
                 .can_include_in_context(DataClassification::Confidential)
         );
         assert!(
-            !ClassificationGuard::instance()
-                .can_include_in_context(DataClassification::Restricted)
+            !ClassificationGuard::instance().can_include_in_context(DataClassification::Restricted)
         );
     }
 
@@ -250,10 +248,8 @@ mod tests {
     #[test]
     fn redact_for_export_with_email_returns_redacted() {
         let guard = ClassificationGuard::instance();
-        let result = guard.redact_for_export(
-            "Send to admin@corp.com",
-            DataClassification::Internal,
-        );
+        let result =
+            guard.redact_for_export("Send to admin@corp.com", DataClassification::Internal);
         assert!(result.is_some());
         let redacted = result.unwrap();
         assert!(redacted.contains("[EMAIL]"));
@@ -265,9 +261,18 @@ mod tests {
         let items = vec![
             ("public data".to_string(), DataClassification::Public),
             ("internal data".to_string(), DataClassification::Internal),
-            ("restricted secret".to_string(), DataClassification::Restricted),
-            ("confidential info".to_string(), DataClassification::Confidential),
-            ("another restricted".to_string(), DataClassification::Restricted),
+            (
+                "restricted secret".to_string(),
+                DataClassification::Restricted,
+            ),
+            (
+                "confidential info".to_string(),
+                DataClassification::Confidential,
+            ),
+            (
+                "another restricted".to_string(),
+                DataClassification::Restricted,
+            ),
         ];
         let (exported, excluded) = filter_for_export(&items);
         assert_eq!(exported.len(), 3);

@@ -174,13 +174,17 @@ enum Commands {
         purge: bool,
     },
     /// Manage data classification levels on memories, messages, and sessions.
-    #[command(after_help = "Examples:\n  blufio classify set memory mem-42 confidential\n  blufio classify get memory mem-42\n  blufio classify list --type memory --level confidential --json\n  blufio classify bulk --type memory --level restricted --current-level internal --dry-run")]
+    #[command(
+        after_help = "Examples:\n  blufio classify set memory mem-42 confidential\n  blufio classify get memory mem-42\n  blufio classify list --type memory --level confidential --json\n  blufio classify bulk --type memory --level restricted --current-level internal --dry-run"
+    )]
     Classify {
         #[command(subcommand)]
         action: classify::ClassifyAction,
     },
     /// Scan text for PII (Personally Identifiable Information).
-    #[command(after_help = "Examples:\n  blufio pii scan \"test@example.com or 555-123-4567\"\n  blufio pii scan --file /path/to/data.txt\n  echo \"SSN: 123-45-6789\" | blufio pii scan\n  blufio pii scan --file /tmp/data.txt --json")]
+    #[command(
+        after_help = "Examples:\n  blufio pii scan \"test@example.com or 555-123-4567\"\n  blufio pii scan --file /path/to/data.txt\n  echo \"SSN: 123-45-6789\" | blufio pii scan\n  blufio pii scan --file /tmp/data.txt --json"
+    )]
     Pii {
         #[command(subcommand)]
         action: pii_cmd::PiiAction,

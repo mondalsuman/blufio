@@ -95,16 +95,39 @@ fn create_test_handler_with_resources() -> BlufioMcpHandler {
         async fn fail(&self, _id: i64) -> Result<(), BlufioError> {
             Ok(())
         }
-        async fn get_entity_classification(&self, _entity_type: &str, _entity_id: &str) -> Result<Option<String>, BlufioError> {
+        async fn get_entity_classification(
+            &self,
+            _entity_type: &str,
+            _entity_id: &str,
+        ) -> Result<Option<String>, BlufioError> {
             Ok(None)
         }
-        async fn set_entity_classification(&self, _entity_type: &str, _entity_id: &str, _level: &str) -> Result<bool, BlufioError> {
+        async fn set_entity_classification(
+            &self,
+            _entity_type: &str,
+            _entity_id: &str,
+            _level: &str,
+        ) -> Result<bool, BlufioError> {
             Ok(false)
         }
-        async fn list_entities_by_classification(&self, _entity_type: &str, _level: Option<&str>) -> Result<Vec<(String, String)>, BlufioError> {
+        async fn list_entities_by_classification(
+            &self,
+            _entity_type: &str,
+            _level: Option<&str>,
+        ) -> Result<Vec<(String, String)>, BlufioError> {
             Ok(vec![])
         }
-        async fn bulk_update_classification(&self, _entity_type: &str, _new_level: &str, _current_level: Option<&str>, _session_id: Option<&str>, _from_date: Option<&str>, _to_date: Option<&str>, _pattern: Option<&str>, _dry_run: bool) -> Result<(usize, usize, usize, Vec<String>), BlufioError> {
+        async fn bulk_update_classification(
+            &self,
+            _entity_type: &str,
+            _new_level: &str,
+            _current_level: Option<&str>,
+            _session_id: Option<&str>,
+            _from_date: Option<&str>,
+            _to_date: Option<&str>,
+            _pattern: Option<&str>,
+            _dry_run: bool,
+        ) -> Result<(usize, usize, usize, Vec<String>), BlufioError> {
             Ok((0, 0, 0, vec![]))
         }
     }

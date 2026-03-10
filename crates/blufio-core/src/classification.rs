@@ -198,7 +198,9 @@ mod tests {
 
     #[test]
     fn is_downgrade_from_confidential_to_restricted() {
-        assert!(DataClassification::Confidential.is_downgrade_from(&DataClassification::Restricted));
+        assert!(
+            DataClassification::Confidential.is_downgrade_from(&DataClassification::Restricted)
+        );
     }
 
     #[test]
@@ -208,9 +210,7 @@ mod tests {
 
     #[test]
     fn is_not_downgrade_same_level() {
-        assert!(
-            !DataClassification::Internal.is_downgrade_from(&DataClassification::Internal)
-        );
+        assert!(!DataClassification::Internal.is_downgrade_from(&DataClassification::Internal));
     }
 
     #[test]

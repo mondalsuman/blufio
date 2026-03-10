@@ -3,8 +3,8 @@
 
 //! Session CRUD operations.
 
-use blufio_core::classification::DataClassification;
 use blufio_core::BlufioError;
+use blufio_core::classification::DataClassification;
 use rusqlite::params;
 
 use crate::database::Database;
@@ -129,8 +129,7 @@ fn row_to_session(row: &rusqlite::Row) -> Session {
         metadata: row.get(4).unwrap_or_default(),
         created_at: row.get(5).unwrap_or_default(),
         updated_at: row.get(6).unwrap_or_default(),
-        classification: DataClassification::from_str_value(&classification_str)
-            .unwrap_or_default(),
+        classification: DataClassification::from_str_value(&classification_str).unwrap_or_default(),
     }
 }
 
