@@ -1144,6 +1144,7 @@ version = "0.1.0"
 dependencies = [
  "blufio-config",
  "blufio-core",
+ "proptest",
  "regex",
  "reqwest 0.13.2",
  "thiserror 2.0.18",
