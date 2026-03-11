@@ -154,7 +154,12 @@ Plans:
   3. Memory index stays bounded at configurable max entries (default 10,000) with LRU eviction of lowest-scored entries
   4. Background validation detects and flags duplicate, stale, or conflicting memory entries on a configurable schedule
   5. Workspace file changes trigger automatic re-indexing with 500ms debounce
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 55-01-PLAN.md -- Foundation types: MemoryConfig extension, MemorySource::FileWatcher, MemoryEvent::Evicted bulk format, notify deps
+- [ ] 55-02-PLAN.md -- Scoring pipeline: temporal decay, importance boost, MMR diversity reranking in retriever.rs
+- [ ] 55-03-PLAN.md -- Eviction and validation: store methods, eviction sweep, background validation, combined background task
+- [ ] 55-04-PLAN.md -- File watcher, CLI subcommand, Prometheus metrics, serve.rs wiring
 
 ### Phase 56: Multi-Level Compaction & Context Budget
 **Goal**: Long-running sessions maintain context quality through progressive summarization with quality guarantees, and each context zone enforces its token budget
@@ -311,7 +316,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 52. Fix Tracking Gaps | v1.4 | 1/1 | Complete | 2026-03-09 |
 | 53. Data Classification & PII Foundation | 5/5 | Complete    | 2026-03-10 | - |
 | 54. Audit Trail | 3/3 | Complete    | 2026-03-10 | - |
-| 55. Memory Enhancements | v1.5 | 0/0 | Not started | - |
+| 55. Memory Enhancements | v1.5 | 0/4 | Planned | - |
 | 56. Multi-Level Compaction & Context Budget | v1.5 | 0/0 | Not started | - |
 | 57. Prompt Injection Defense | v1.5 | 0/0 | Not started | - |
 | 58. Cron Scheduler & Retention Policies | v1.5 | 0/0 | Not started | - |
@@ -323,4 +328,4 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-10 after Phase 54 planning*
+*Last updated: 2026-03-11 after Phase 55 planning*
