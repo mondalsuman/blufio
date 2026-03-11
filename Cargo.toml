@@ -74,6 +74,8 @@ sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 indicatif = "0.17"
 proptest = "1"
 tracing-test = "0.2"
+notify = "8.2"
+notify-debouncer-mini = "0.7"
 
 [profile.release]
 lto = "thin"

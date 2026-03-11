@@ -28,6 +28,11 @@ uuid.workspace = true
 chrono.workspace = true
 tracing.workspace = true
 semver.workspace = true
+sha2.workspace = true
+tokio-util.workspace = true
+notify.workspace = true
+notify-debouncer-mini.workspace = true
+metrics.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

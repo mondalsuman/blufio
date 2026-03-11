@@ -513,16 +513,18 @@ pub enum MemoryEvent {
         /// Query that triggered the retrieval.
         query: String,
     },
-    /// A memory was evicted from cache or storage.
+    /// A batch of memories was evicted during a sweep.
     Evicted {
         /// Unique event identifier.
         event_id: String,
         /// ISO 8601 timestamp.
         timestamp: String,
-        /// Memory identifier.
-        memory_id: String,
-        /// Reason for eviction.
-        reason: String,
+        /// Number of memories evicted in this sweep.
+        count: u32,
+        /// Lowest composite score among evicted memories.
+        lowest_score: f64,
+        /// Highest composite score among evicted memories.
+        highest_score: f64,
     },
 }
 
@@ -1040,8 +1042,9 @@ mod tests {
                 BusEvent::Memory(MemoryEvent::Evicted {
                     event_id: String::new(),
                     timestamp: String::new(),
-                    memory_id: String::new(),
-                    reason: String::new(),
+                    count: 0,
+                    lowest_score: 0.0,
+                    highest_score: 0.0,
                 }),
                 "memory.evicted",
             ),

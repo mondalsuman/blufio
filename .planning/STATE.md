@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: completed
-stopped_at: Phase 54 context updated (post-implementation review)
-last_updated: "2026-03-11T14:07:24.623Z"
-last_activity: 2026-03-10 -- Phase 54 Plan 03 completed (18min)
+stopped_at: Completed 55-04-PLAN.md (Phase 55 complete)
+last_updated: "2026-03-11T20:30:36.512Z"
+last_activity: 2026-03-11 -- Phase 55 Plan 04 completed (11min)
 progress:
   total_phases: 11
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 8
-  percent: 20
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 12
+  percent: 27
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- Phase 54 Audit Trail (complete)
+**Current focus:** v1.5 PRD Gap Closure -- Phase 55 Memory Enhancements
 
 ## Current Position
 
-Phase: 54 of 63 (Audit Trail) -- second of 11 phases in v1.5
-Plan: 3 of 3 in Phase 54 (complete)
-Status: Phase 54 Complete
-Last activity: 2026-03-10 -- Phase 54 Plan 03 completed (18min)
+Phase: 55 of 63 (Memory Enhancements) -- third of 11 phases in v1.5
+Plan: 4 of 4 in Phase 55 (complete)
+Status: Phase 55 Complete
+Last activity: 2026-03-11 -- Phase 55 Plan 04 completed (11min)
 
-Progress: [######------------------------] 20%
+Progress: [########+-----------------------] 27%
 
 ## Performance Metrics
 
@@ -52,6 +52,10 @@ Progress: [######------------------------] 20%
 | Phase 54 P01 | 13min | 2 tasks | 11 files |
 | Phase 54 P02 | 15min | 2 tasks | 10 files |
 | Phase 54 P03 | 18min | 2 tasks | 5 files |
+| Phase 55 P01 | 8min | 2 tasks | 6 files |
+| Phase 55 P02 | 5min | 2 tasks | 1 files |
+| Phase 55 P03 | 7min | 2 tasks | 5 files |
+| Phase 55 P04 | 11min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -88,6 +92,18 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 54]: Audit init in serve.rs after EventBus, before resilience subsystem
 - [Phase 54]: Doctor checks last 100 entries for speed; full verify via blufio audit verify
 - [Phase 54]: Backup stores audit.db as {stem}.audit.db alongside main backup
+- Phase 55 Plan 01: FileWatcherConfig uses manual Default impl (not derive) for correct max_file_size=102400
+- Phase 55 Plan 01: MemorySource::from_str_value matches file_watcher before Extracted catch-all
+- [Phase 55]: Relevance scores normalized to [0,1] range inside MMR for balanced lambda weighting
+- [Phase 55]: FileWatcher memories skip temporal decay entirely (always 1.0) for stable file-sourced knowledge
+- Phase 55 Plan 03: Eviction scores computed in Rust (not SQL) because SQLite lacks native power() function
+- Phase 55 Plan 03: Pairwise O(n^2) validation acceptable for bounded max_entries (10k default)
+- Phase 55 Plan 03: Conflict resolution uses newer-wins (created_at lexicographic comparison)
+- Phase 55 Plan 03: Test embeddings use single-hot-dimension vectors for deterministic similarity control
+- Phase 55 Plan 04: File memory IDs use file: + SHA-256(canonical_path) for deterministic collision-free IDs
+- Phase 55 Plan 04: File update re-indexes by hard-delete then save (FTS5 trigger consistency)
+- Phase 55 Plan 04: notify callback uses tx.blocking_send() (not async) since it runs on notify's own thread
+- Phase 55 Plan 04: conn() accessor added to MemoryStore for advanced SQL operations
 
 ### Pending Todos
 
@@ -103,6 +119,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-11T14:07:24.621Z
-Stopped at: Phase 54 context updated (post-implementation review)
-Resume file: .planning/phases/54-audit-trail/54-CONTEXT.md
+Last session: 2026-03-11T20:22:41Z
+Stopped at: Completed 55-04-PLAN.md (Phase 55 complete)
+Resume file: .planning/phases/55-memory-enhancements/55-04-SUMMARY.md

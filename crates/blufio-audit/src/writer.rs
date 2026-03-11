@@ -360,10 +360,10 @@ mod tests {
                 .unwrap();
         }
 
-        // Give the background task a moment to process
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Flush to ensure all entries are written
+        writer.flush().await.unwrap();
 
-        // Verify entries were flushed (batch size trigger)
+        // Verify entries were flushed
         let conn = rusqlite::Connection::open(&db_path).unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))

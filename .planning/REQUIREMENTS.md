@@ -59,12 +59,12 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Memory Enhancements
 
-- [ ] **MEME-01**: Temporal decay applies configurable decay factor (default 0.95^days) to retrieval scores
-- [ ] **MEME-02**: Importance boost multiplier distinguishes explicit memories (1.0) from extracted memories (0.6)
-- [ ] **MEME-03**: MMR diversity reranking reduces redundant results using lambda-weighted relevance vs. similarity penalty
-- [ ] **MEME-04**: Bounded memory index with configurable max entries (default 10,000) and LRU eviction of lowest-scored entries
-- [ ] **MEME-05**: Background memory validation detects duplicates, stale entries, and conflicts on configurable interval
-- [ ] **MEME-06**: File watcher auto re-indexes workspace files on change with 500ms debounce
+- [x] **MEME-01**: Temporal decay applies configurable decay factor (default 0.95^days) to retrieval scores
+- [x] **MEME-02**: Importance boost multiplier distinguishes explicit memories (1.0) from extracted memories (0.6)
+- [x] **MEME-03**: MMR diversity reranking reduces redundant results using lambda-weighted relevance vs. similarity penalty
+- [x] **MEME-04**: Bounded memory index with configurable max entries (default 10,000) and LRU eviction of lowest-scored entries
+- [x] **MEME-05**: Background memory validation detects duplicates, stale entries, and conflicts on configurable interval
+- [x] **MEME-06**: File watcher auto re-indexes workspace files on change with 500ms debounce
 
 ### Retention Policies
 
@@ -202,12 +202,12 @@ Deferred to v1.6+.
 | AUDT-05 | Phase 54 | Complete |
 | AUDT-06 | Phase 54 | Complete |
 | AUDT-07 | Phase 54 | Complete |
-| MEME-01 | Phase 55 | Pending |
-| MEME-02 | Phase 55 | Pending |
-| MEME-03 | Phase 55 | Pending |
-| MEME-04 | Phase 55 | Pending |
-| MEME-05 | Phase 55 | Pending |
-| MEME-06 | Phase 55 | Pending |
+| MEME-01 | Phase 55 | Complete |
+| MEME-02 | Phase 55 | Complete |
+| MEME-03 | Phase 55 | Complete |
+| MEME-04 | Phase 55 | Complete |
+| MEME-05 | Phase 55 | Complete |
+| MEME-06 | Phase 55 | Complete |
 | COMP-01 | Phase 56 | Pending |
 | COMP-02 | Phase 56 | Pending |
 | COMP-03 | Phase 56 | Pending |

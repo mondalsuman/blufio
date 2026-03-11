@@ -55,6 +55,7 @@ pub fn register_metrics() {
 
     register_resilience_metrics();
     register_classification_metrics();
+    register_memory_validation_metrics();
 }
 
 /// Record a processed message.
@@ -230,4 +231,48 @@ pub fn record_circuit_breaker_transition(dependency: &str, from: &str, to: &str)
         "to" => to.to_string(),
     )
     .increment(1);
+}
+
+// ---- Memory validation metrics (MEME-06) ----
+
+/// Register memory validation metric descriptions.
+///
+/// Called from [`register_metrics()`] at startup.
+fn register_memory_validation_metrics() {
+    describe_counter!(
+        "blufio_memory_validation_duplicates_total",
+        "Total duplicate memories detected by validation"
+    );
+    describe_counter!(
+        "blufio_memory_validation_stale_total",
+        "Total stale memories detected by validation"
+    );
+    describe_counter!(
+        "blufio_memory_validation_conflicts_total",
+        "Total conflicting memories detected by validation"
+    );
+    describe_gauge!(
+        "blufio_memory_active_count",
+        "Current count of active memories"
+    );
+}
+
+/// Record duplicate memories found during validation.
+pub fn record_validation_duplicates(count: u64) {
+    metrics::counter!("blufio_memory_validation_duplicates_total").increment(count);
+}
+
+/// Record stale memories found during validation.
+pub fn record_validation_stale(count: u64) {
+    metrics::counter!("blufio_memory_validation_stale_total").increment(count);
+}
+
+/// Record conflicting memories found during validation.
+pub fn record_validation_conflicts(count: u64) {
+    metrics::counter!("blufio_memory_validation_conflicts_total").increment(count);
+}
+
+/// Set the current count of active memories.
+pub fn set_memory_active_count(count: f64) {
+    metrics::gauge!("blufio_memory_active_count").set(count);
 }

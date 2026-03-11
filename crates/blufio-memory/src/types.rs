@@ -53,6 +53,8 @@ pub enum MemorySource {
     Explicit,
     /// LLM extracted from conversation at end of session.
     Extracted,
+    /// Auto-indexed from a watched file.
+    FileWatcher,
 }
 
 impl MemorySource {
@@ -61,6 +63,7 @@ impl MemorySource {
         match self {
             MemorySource::Explicit => "explicit",
             MemorySource::Extracted => "extracted",
+            MemorySource::FileWatcher => "file_watcher",
         }
     }
 
@@ -68,6 +71,7 @@ impl MemorySource {
     pub fn from_str_value(s: &str) -> Self {
         match s {
             "explicit" => MemorySource::Explicit,
+            "file_watcher" => MemorySource::FileWatcher,
             _ => MemorySource::Extracted,
         }
     }
@@ -232,12 +236,22 @@ mod tests {
     fn memory_source_variants() {
         assert_eq!(MemorySource::Explicit.as_str(), "explicit");
         assert_eq!(MemorySource::Extracted.as_str(), "extracted");
+        assert_eq!(MemorySource::FileWatcher.as_str(), "file_watcher");
         assert_eq!(
             MemorySource::from_str_value("explicit"),
             MemorySource::Explicit
         );
         assert_eq!(
             MemorySource::from_str_value("extracted"),
+            MemorySource::Extracted
+        );
+        assert_eq!(
+            MemorySource::from_str_value("file_watcher"),
+            MemorySource::FileWatcher
+        );
+        // Unknown values fall back to Extracted
+        assert_eq!(
+            MemorySource::from_str_value("unknown"),
             MemorySource::Extracted
         );
     }

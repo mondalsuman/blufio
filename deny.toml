@@ -46,6 +46,7 @@ allow = [
     "Unicode-DFS-2016",
     "CDLA-Permissive-2.0",
     "OpenSSL",
+    "CC0-1.0",
 ]
 
 [[licenses.clarify]]
