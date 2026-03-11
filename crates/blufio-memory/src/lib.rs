@@ -27,6 +27,7 @@ pub mod retriever;
 pub mod store;
 pub mod types;
 pub mod validation;
+pub mod watcher;
 
 pub use embedder::OnnxEmbedder;
 pub use extractor::MemoryExtractor;

@@ -49,6 +49,11 @@ impl MemoryStore {
         }
     }
 
+    /// Access the underlying connection (for advanced operations like hard-delete).
+    pub fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     /// Save a memory to the store.
     pub async fn save(&self, memory: &Memory) -> Result<(), BlufioError> {
         let id = memory.id.clone();
