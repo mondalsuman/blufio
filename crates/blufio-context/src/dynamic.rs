@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Blufio Contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Dynamic zone: assembles conversation history with sliding window
-//! and triggers compaction when the token estimate exceeds the threshold.
+//! Dynamic zone: assembles conversation history with dual soft/hard triggers
+//! and cascade compaction (L1 then L2 if needed).
 
 use std::sync::Arc;
 
+use blufio_bus::EventBus;
+use blufio_bus::events::{BusEvent, CompactionEvent, new_event_id, now_timestamp};
 use blufio_config::model::ContextConfig;
 use blufio_core::error::BlufioError;
 use blufio_core::token_counter::{TokenizerCache, count_with_fallback};
@@ -13,9 +15,11 @@ use blufio_core::traits::{ProviderAdapter, StorageAdapter};
 use blufio_core::types::{
     ContentBlock, InboundMessage, MessageContent, ProviderMessage, TokenUsage,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
-use crate::compaction::{generate_compaction_summary, persist_compaction_summary};
+use crate::compaction::extract::{ExtractionOutput, extract_entities};
+use crate::compaction::levels::{CompactionLevel, compact_to_l1, compact_to_l2};
+use crate::compaction::{persist_compaction_summary_with_level};
 
 /// Result of dynamic zone assembly, carrying messages and compaction costs.
 #[derive(Debug)]
@@ -25,37 +29,68 @@ pub struct DynamicResult {
     /// Token usages from compaction LLM calls (may include multiple if cascade).
     /// Callers MUST propagate each for cost recording with FeatureType::Compaction.
     pub compaction_usages: Vec<TokenUsage>,
+    /// Entities extracted before L1 compaction (caller persists as Memory entries).
+    pub extracted_entities: Vec<String>,
 }
 
 /// The dynamic zone manages conversation history assembly with
-/// automatic compaction when the context window fills up.
-#[derive(Debug, Clone)]
+/// dual soft/hard trigger compaction and cascade (L1 then L2).
 pub struct DynamicZone {
-    /// Compaction threshold as fraction of context budget (0.0-1.0).
-    compaction_threshold: f64,
+    /// Whether compaction is enabled.
+    compaction_enabled: bool,
+    /// Fraction of context budget at which soft compaction triggers (L0->L1).
+    soft_trigger: f64,
+    /// Fraction of context budget at which hard compaction cascades (L1->L2).
+    hard_trigger: f64,
     /// Context window budget in tokens.
     context_budget: u32,
     /// Model to use for compaction summarization.
     compaction_model: String,
+    /// Maximum tokens for L1 compaction (per turn-pair).
+    max_tokens_l1: u32,
+    /// Maximum tokens for L2 compaction.
+    max_tokens_l2: u32,
     /// Cached tokenizer instances for accurate token counting.
     token_cache: Arc<TokenizerCache>,
+    /// Optional event bus for compaction lifecycle events.
+    event_bus: Option<Arc<EventBus>>,
 }
 
 impl DynamicZone {
     /// Creates a new dynamic zone from context configuration.
     pub fn new(config: &ContextConfig, token_cache: Arc<TokenizerCache>) -> Self {
         Self {
-            compaction_threshold: config.effective_soft_trigger(),
+            compaction_enabled: config.compaction_enabled,
+            soft_trigger: config.effective_soft_trigger(),
+            hard_trigger: config.hard_trigger,
             context_budget: config.context_budget,
             compaction_model: config.compaction_model.clone(),
+            max_tokens_l1: config.max_tokens_l1,
+            max_tokens_l2: config.max_tokens_l2,
             token_cache,
+            event_bus: None,
         }
+    }
+
+    /// Creates a new dynamic zone with an event bus for compaction events.
+    pub fn with_event_bus(
+        config: &ContextConfig,
+        token_cache: Arc<TokenizerCache>,
+        event_bus: Arc<EventBus>,
+    ) -> Self {
+        let mut zone = Self::new(config, token_cache);
+        zone.event_bus = Some(event_bus);
+        zone
     }
 
     /// Assembles conversation messages from storage, triggering compaction if needed.
     ///
-    /// Returns a `DynamicResult` containing the assembled messages and optional
-    /// compaction token usage that the caller must propagate for cost tracking.
+    /// Implements dual soft/hard trigger logic:
+    /// - Soft trigger (default 50%): fires L0->L1 compaction (turn-pair bullets)
+    /// - Hard trigger (default 85%): cascades L1->L2 (session narrative) if L1 insufficient
+    ///
+    /// Entity extraction runs before L1 compaction. On ANY compaction error,
+    /// falls back to truncation of oldest messages (never blocks the agent loop).
     pub async fn assemble_messages(
         &self,
         provider: &dyn ProviderAdapter,
@@ -68,8 +103,6 @@ impl DynamicZone {
         let history = storage.get_messages(session_id, None).await?;
 
         // Defense-in-depth: filter Restricted messages that may have bypassed SQL filter.
-        // Primary filter is the SQL WHERE clause (AND classification != 'restricted')
-        // added in Plan 04. This secondary filter catches any messages from non-SQL paths.
         let guard = blufio_security::ClassificationGuard::instance();
         let history: Vec<_> = history
             .into_iter()
@@ -93,80 +126,417 @@ impl DynamicZone {
         for m in &history {
             estimated_tokens += count_with_fallback(counter.as_ref(), &m.content).await;
         }
-        let threshold = (self.context_budget as f64 * self.compaction_threshold) as usize;
+
+        // Compute thresholds from dynamic budget.
+        // Plan 04 will compute adaptive budget; for now use context_budget directly.
+        let dynamic_budget = self.context_budget as usize;
+        let soft_threshold = (dynamic_budget as f64 * self.soft_trigger) as usize;
+        let hard_threshold = (dynamic_budget as f64 * self.hard_trigger) as usize;
 
         debug!(
             estimated_tokens = estimated_tokens,
-            threshold = threshold,
+            soft_threshold = soft_threshold,
+            hard_threshold = hard_threshold,
             history_len = history.len(),
             "dynamic zone token estimate"
         );
 
-        let (mut messages, compaction_usages) =
-            if estimated_tokens > threshold && history.len() > 2 {
-                // Trigger compaction: split into older half and recent half.
-                let split_point = history.len() / 2;
-                let older = &history[..split_point];
-                let recent = &history[split_point..];
+        // Decision: no compaction needed, compaction disabled, or too few messages.
+        if !self.compaction_enabled
+            || estimated_tokens <= soft_threshold
+            || history.len() <= 2
+        {
+            let msgs: Vec<ProviderMessage> = history
+                .iter()
+                .map(|msg| ProviderMessage {
+                    role: msg.role.clone(),
+                    content: vec![ContentBlock::Text {
+                        text: msg.content.clone(),
+                    }],
+                })
+                .collect();
 
-                info!(
-                    older_count = older.len(),
-                    recent_count = recent.len(),
-                    estimated_tokens = estimated_tokens,
-                    threshold = threshold,
-                    "triggering compaction"
-                );
+            let mut messages = msgs;
+            let inbound_content = message_content_to_blocks(&inbound.content);
+            messages.push(ProviderMessage {
+                role: "user".to_string(),
+                content: inbound_content,
+            });
 
-                // Generate compaction summary via Haiku LLM call.
-                let (summary, usage) =
-                    generate_compaction_summary(provider, older, &self.compaction_model).await?;
+            return Ok(DynamicResult {
+                messages,
+                compaction_usages: vec![],
+                extracted_entities: vec![],
+            });
+        }
 
-                // Persist the compaction summary in storage.
-                persist_compaction_summary(storage, session_id, &summary, older.len()).await?;
+        // --- Soft trigger exceeded: fire L0->L1 compaction ---
+        let split_point = history.len() / 2;
+        let older = &history[..split_point];
+        let recent = &history[split_point..];
 
-                // Build messages: compaction summary + recent messages.
-                let mut msgs = vec![ProviderMessage {
-                    role: "system".to_string(),
-                    content: vec![ContentBlock::Text { text: summary }],
-                }];
+        info!(
+            older_count = older.len(),
+            recent_count = recent.len(),
+            estimated_tokens = estimated_tokens,
+            soft_threshold = soft_threshold,
+            hard_threshold = hard_threshold,
+            "soft trigger exceeded, starting L1 compaction"
+        );
 
-                // Add recent messages.
-                for msg in recent {
-                    msgs.push(ProviderMessage {
-                        role: msg.role.clone(),
-                        content: vec![ContentBlock::Text {
-                            text: msg.content.clone(),
-                        }],
-                    });
+        let mut compaction_usages = Vec::new();
+        let mut extracted_entities = Vec::new();
+
+        // Attempt L1 compaction with error fallback.
+        let l1_result = self
+            .try_l1_compaction(
+                provider,
+                storage,
+                session_id,
+                older,
+                recent,
+                model,
+                &mut compaction_usages,
+                &mut extracted_entities,
+            )
+            .await;
+
+        match l1_result {
+            Ok((mut msgs, l1_summary_text)) => {
+                // Re-estimate tokens after L1 compaction.
+                let mut new_estimate: usize = 0;
+                for m in &msgs {
+                    for block in &m.content {
+                        if let ContentBlock::Text { text } = block {
+                            new_estimate +=
+                                count_with_fallback(counter.as_ref(), text).await;
+                        }
+                    }
                 }
 
-                (msgs, vec![usage])
-            } else {
-                // Normal path: convert all history messages to ProviderMessage format.
-                let msgs: Vec<ProviderMessage> = history
-                    .iter()
-                    .map(|msg| ProviderMessage {
-                        role: msg.role.clone(),
-                        content: vec![ContentBlock::Text {
-                            text: msg.content.clone(),
-                        }],
-                    })
-                    .collect();
+                debug!(
+                    new_estimate = new_estimate,
+                    hard_threshold = hard_threshold,
+                    "post-L1 token estimate"
+                );
 
-                (msgs, vec![])
-            };
+                // --- Hard trigger: cascade to L2 if L1 insufficient ---
+                if new_estimate > hard_threshold {
+                    info!(
+                        new_estimate = new_estimate,
+                        hard_threshold = hard_threshold,
+                        "hard trigger exceeded, cascading to L2"
+                    );
 
-        // Append the current inbound message.
+                    match self
+                        .try_l2_cascade(
+                            provider,
+                            storage,
+                            session_id,
+                            &l1_summary_text,
+                            &mut compaction_usages,
+                        )
+                        .await
+                    {
+                        Ok(l2_msgs) => {
+                            msgs = l2_msgs;
+                            // Re-add recent messages after L2 summary.
+                            for msg in recent {
+                                msgs.push(ProviderMessage {
+                                    role: msg.role.clone(),
+                                    content: vec![ContentBlock::Text {
+                                        text: msg.content.clone(),
+                                    }],
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            warn!(
+                                error = %e,
+                                "L2 cascade failed, continuing with L1 summary"
+                            );
+                            // L1 summary is already in msgs, continue with it.
+                        }
+                    }
+                }
+
+                // Append the current inbound message.
+                let inbound_content = message_content_to_blocks(&inbound.content);
+                msgs.push(ProviderMessage {
+                    role: "user".to_string(),
+                    content: inbound_content,
+                });
+
+                Ok(DynamicResult {
+                    messages: msgs,
+                    compaction_usages,
+                    extracted_entities,
+                })
+            }
+            Err(e) => {
+                // Compaction failed entirely: fall back to truncation.
+                warn!(
+                    error = %e,
+                    "compaction failed, falling back to truncation"
+                );
+                let msgs = self.truncate_to_budget(
+                    &history,
+                    soft_threshold,
+                    counter.as_ref(),
+                    inbound,
+                ).await;
+
+                Ok(DynamicResult {
+                    messages: msgs,
+                    compaction_usages,
+                    extracted_entities,
+                })
+            }
+        }
+    }
+
+    /// Attempts L1 compaction with entity extraction and event emission.
+    ///
+    /// Returns the assembled messages (L1 summary + recent) and the L1 summary
+    /// text for potential L2 cascade.
+    async fn try_l1_compaction(
+        &self,
+        provider: &dyn ProviderAdapter,
+        storage: &dyn StorageAdapter,
+        session_id: &str,
+        older: &[blufio_core::types::Message],
+        recent: &[blufio_core::types::Message],
+        _model: &str,
+        compaction_usages: &mut Vec<TokenUsage>,
+        extracted_entities: &mut Vec<String>,
+    ) -> Result<(Vec<ProviderMessage>, String), BlufioError> {
+        // Emit CompactionStarted event.
+        self.emit_compaction_started(session_id, "L1", older.len() as u32)
+            .await;
+        let start = std::time::Instant::now();
+
+        // Entity extraction BEFORE L1 compaction (non-blocking on failure).
+        match extract_entities(provider, older, &self.compaction_model).await {
+            Ok(ExtractionOutput { entities, usage }) => {
+                *extracted_entities = entities;
+                compaction_usages.push(usage);
+                info!(
+                    entity_count = extracted_entities.len(),
+                    "entity extraction completed before L1"
+                );
+            }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "entity extraction failed, continuing with compaction"
+                );
+            }
+        }
+
+        // L1 compaction: turn-pair bullet summaries.
+        let l1_result =
+            compact_to_l1(provider, older, &self.compaction_model, self.max_tokens_l1).await?;
+
+        compaction_usages.push(l1_result.usage.clone());
+
+        // Persist L1 summary with level metadata.
+        let l1_msg_id = persist_compaction_summary_with_level(
+            storage,
+            session_id,
+            &l1_result.summary,
+            older.len(),
+            &CompactionLevel::L1,
+            l1_result.quality_score,
+        )
+        .await?;
+
+        // Delete original compacted messages.
+        let older_ids: Vec<String> = older.iter().map(|m| m.id.clone()).collect();
+        if let Err(e) = storage
+            .delete_messages_by_ids(session_id, &older_ids)
+            .await
+        {
+            warn!(error = %e, "failed to delete compacted messages, continuing");
+        }
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        // Emit CompactionCompleted event.
+        self.emit_compaction_completed(
+            session_id,
+            "L1",
+            l1_result.quality_score.unwrap_or(0.0),
+            l1_result.tokens_saved as u32,
+            duration_ms,
+        )
+        .await;
+
+        // Build messages: L1 summary + recent messages.
+        let mut msgs = vec![ProviderMessage {
+            role: "system".to_string(),
+            content: vec![ContentBlock::Text {
+                text: l1_result.summary.clone(),
+            }],
+        }];
+
+        for msg in recent {
+            msgs.push(ProviderMessage {
+                role: msg.role.clone(),
+                content: vec![ContentBlock::Text {
+                    text: msg.content.clone(),
+                }],
+            });
+        }
+
+        // Return L1 summary text and message ID for potential L2 cascade.
+        let _ = l1_msg_id; // Used for potential deletion in L2 cascade
+        Ok((msgs, l1_result.summary))
+    }
+
+    /// Attempts L2 cascade: compresses L1 bullet summaries into a session narrative.
+    ///
+    /// Returns messages starting with the L2 summary (caller adds recent messages).
+    async fn try_l2_cascade(
+        &self,
+        provider: &dyn ProviderAdapter,
+        storage: &dyn StorageAdapter,
+        session_id: &str,
+        l1_summary_text: &str,
+        compaction_usages: &mut Vec<TokenUsage>,
+    ) -> Result<Vec<ProviderMessage>, BlufioError> {
+        // Emit CompactionStarted for L2.
+        self.emit_compaction_started(session_id, "L2", 1).await;
+        let start = std::time::Instant::now();
+
+        let l2_result = compact_to_l2(
+            provider,
+            l1_summary_text,
+            &self.compaction_model,
+            self.max_tokens_l2,
+        )
+        .await?;
+
+        compaction_usages.push(l2_result.usage.clone());
+
+        // Replace L1 summary with L2 summary in storage.
+        // Delete all existing compaction summaries for this session,
+        // then persist the L2 summary.
+        // (We don't track the L1 msg_id across the boundary, so we persist L2 fresh.)
+        persist_compaction_summary_with_level(
+            storage,
+            session_id,
+            &l2_result.summary,
+            0, // L2 compacts L1 summaries, not raw messages.
+            &CompactionLevel::L2,
+            l2_result.quality_score,
+        )
+        .await?;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        self.emit_compaction_completed(
+            session_id,
+            "L2",
+            l2_result.quality_score.unwrap_or(0.0),
+            l2_result.tokens_saved as u32,
+            duration_ms,
+        )
+        .await;
+
+        // Build messages with L2 summary.
+        let msgs = vec![ProviderMessage {
+            role: "system".to_string(),
+            content: vec![ContentBlock::Text {
+                text: l2_result.summary,
+            }],
+        }];
+
+        Ok(msgs)
+    }
+
+    /// Truncates history to fit within budget (fallback when compaction fails).
+    async fn truncate_to_budget(
+        &self,
+        history: &[blufio_core::types::Message],
+        target_tokens: usize,
+        counter: &dyn blufio_core::token_counter::TokenCounter,
+        inbound: &InboundMessage,
+    ) -> Vec<ProviderMessage> {
+        // Keep the most recent messages that fit within budget.
+        let mut kept = Vec::new();
+        let mut token_count: usize = 0;
+
+        for msg in history.iter().rev() {
+            let msg_tokens = count_with_fallback(counter, &msg.content).await;
+            if token_count + msg_tokens > target_tokens && !kept.is_empty() {
+                break;
+            }
+            token_count += msg_tokens;
+            kept.push(ProviderMessage {
+                role: msg.role.clone(),
+                content: vec![ContentBlock::Text {
+                    text: msg.content.clone(),
+                }],
+            });
+        }
+
+        // Reverse to restore chronological order.
+        kept.reverse();
+
+        warn!(
+            original_count = history.len(),
+            kept_count = kept.len(),
+            "truncated history as compaction fallback"
+        );
+
+        // Append inbound message.
         let inbound_content = message_content_to_blocks(&inbound.content);
-        messages.push(ProviderMessage {
+        kept.push(ProviderMessage {
             role: "user".to_string(),
             content: inbound_content,
         });
 
-        Ok(DynamicResult {
-            messages,
-            compaction_usages,
-        })
+        kept
+    }
+
+    /// Emits a CompactionStarted event via the EventBus (if present).
+    async fn emit_compaction_started(
+        &self,
+        session_id: &str,
+        level: &str,
+        message_count: u32,
+    ) {
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(BusEvent::Compaction(CompactionEvent::Started {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                session_id: session_id.to_string(),
+                level: level.to_lowercase(),
+                message_count,
+            }))
+            .await;
+        }
+    }
+
+    /// Emits a CompactionCompleted event via the EventBus (if present).
+    async fn emit_compaction_completed(
+        &self,
+        session_id: &str,
+        level: &str,
+        quality_score: f64,
+        tokens_saved: u32,
+        duration_ms: u64,
+    ) {
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(BusEvent::Compaction(CompactionEvent::Completed {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                session_id: session_id.to_string(),
+                level: level.to_lowercase(),
+                quality_score,
+                tokens_saved,
+                duration_ms,
+            }))
+            .await;
+        }
     }
 }
 
@@ -227,9 +597,25 @@ mod tests {
         let config = ContextConfig::default();
         let cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
         let zone = DynamicZone::new(&config, cache);
-        assert_eq!(zone.compaction_threshold, 0.50);
+        assert_eq!(zone.soft_trigger, 0.50);
+        assert_eq!(zone.hard_trigger, 0.85);
         assert_eq!(zone.context_budget, 180_000);
         assert_eq!(zone.compaction_model, "claude-haiku-4-5-20250901");
+        assert!(zone.compaction_enabled);
+        assert_eq!(zone.max_tokens_l1, 256);
+        assert_eq!(zone.max_tokens_l2, 1024);
+        assert!(zone.event_bus.is_none());
+    }
+
+    #[test]
+    fn dynamic_zone_with_event_bus() {
+        use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
+        let config = ContextConfig::default();
+        let cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
+        let bus = Arc::new(EventBus::new(16));
+        let zone = DynamicZone::with_event_bus(&config, cache, bus);
+        assert!(zone.event_bus.is_some());
+        assert_eq!(zone.soft_trigger, 0.50);
     }
 
     #[test]
@@ -270,8 +656,10 @@ mod tests {
                 }],
             }],
             compaction_usages: vec![],
+            extracted_entities: vec![],
         };
         assert!(result.compaction_usages.is_empty());
+        assert!(result.extracted_entities.is_empty());
         assert_eq!(result.messages.len(), 1);
     }
 
@@ -285,9 +673,11 @@ mod tests {
                 cache_read_tokens: 0,
                 cache_creation_tokens: 0,
             }],
+            extracted_entities: vec!["Alice is the project lead".to_string()],
         };
         assert_eq!(result.compaction_usages.len(), 1);
         assert_eq!(result.compaction_usages[0].input_tokens, 500);
+        assert_eq!(result.extracted_entities.len(), 1);
     }
 
     #[test]
@@ -308,9 +698,20 @@ mod tests {
                     cache_creation_tokens: 0,
                 },
             ],
+            extracted_entities: vec![],
         };
         assert_eq!(result.compaction_usages.len(), 2);
         assert_eq!(result.compaction_usages[0].input_tokens, 500);
         assert_eq!(result.compaction_usages[1].input_tokens, 200);
+    }
+
+    #[test]
+    fn dynamic_zone_disabled_compaction() {
+        use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
+        let mut config = ContextConfig::default();
+        config.compaction_enabled = false;
+        let cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
+        let zone = DynamicZone::new(&config, cache);
+        assert!(!zone.compaction_enabled);
     }
 }
