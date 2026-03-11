@@ -197,7 +197,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Initialize context engine.
     let mut context_engine =
-        ContextEngine::new(&config.agent, &config.context, token_cache).await?;
+        ContextEngine::new(&config.agent, &config.context, token_cache.clone()).await?;
 
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]
@@ -572,6 +572,22 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         debug!("no MCP servers configured");
         (None, None)
     };
+
+    // Register ArchiveConditionalProvider LAST (lowest priority, after memory, skills, trust zone).
+    if config.context.archive_enabled {
+        let archive_db = Arc::new(
+            blufio_storage::Database::open(&config.storage.database_path).await?,
+        );
+        let archive_provider = blufio_context::conditional::ArchiveConditionalProvider::new(
+            archive_db,
+            token_cache.clone(),
+            config.context.conditional_zone_budget,
+            config.context.archive_enabled,
+            config.context.compaction_model.clone(),
+        );
+        context_engine.add_conditional_provider(Box::new(archive_provider));
+        info!("archive conditional provider registered (lowest priority)");
+    }
 
     let context_engine = Arc::new(context_engine);
 

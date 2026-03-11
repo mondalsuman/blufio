@@ -56,6 +56,7 @@ pub fn register_metrics() {
     register_resilience_metrics();
     register_classification_metrics();
     register_memory_validation_metrics();
+    register_compaction_metrics();
 }
 
 /// Record a processed message.
@@ -275,4 +276,51 @@ pub fn record_validation_conflicts(count: u64) {
 /// Set the current count of active memories.
 pub fn set_memory_active_count(count: f64) {
     metrics::gauge!("blufio_memory_active_count").set(count);
+}
+
+// ---- Compaction & zone budget metrics (COMP-*, CTXE-*) ----
+
+/// Register compaction and zone budget metric descriptions.
+///
+/// Called from [`register_metrics()`] at startup.
+fn register_compaction_metrics() {
+    describe_histogram!(
+        "blufio_compaction_quality_score",
+        "Quality scores from compaction evaluation"
+    );
+    describe_counter!(
+        "blufio_compaction_gate_total",
+        "Compaction quality gate results by outcome"
+    );
+    describe_counter!(
+        "blufio_compaction_total",
+        "Total compaction operations by level"
+    );
+}
+
+/// Record a compaction quality score.
+pub fn record_compaction_quality_score(score: f64) {
+    metrics::histogram!("blufio_compaction_quality_score").record(score);
+}
+
+/// Record a compaction quality gate result.
+///
+/// `result` is one of: "proceed", "retry", "abort"
+pub fn record_compaction_gate(result: &str) {
+    metrics::counter!(
+        "blufio_compaction_gate_total",
+        "result" => result.to_string()
+    )
+    .increment(1);
+}
+
+/// Record a completed compaction operation by level.
+///
+/// `level` is one of: "L1", "L2", "L3"
+pub fn record_compaction_total(level: &str) {
+    metrics::counter!(
+        "blufio_compaction_total",
+        "level" => level.to_string()
+    )
+    .increment(1);
 }
