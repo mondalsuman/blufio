@@ -10,6 +10,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use chrono::Utc;
+use tracing::warn;
+
 use blufio_config::model::MemoryConfig;
 use blufio_core::error::BlufioError;
 use blufio_core::traits::EmbeddingAdapter;
@@ -17,10 +20,52 @@ use blufio_core::types::EmbeddingInput;
 
 use crate::embedder::OnnxEmbedder;
 use crate::store::MemoryStore;
-use crate::types::{ScoredMemory, cosine_similarity};
+use crate::types::{Memory, MemorySource, ScoredMemory, cosine_similarity};
 
 /// RRF constant per research literature.
 const RRF_K: f32 = 60.0;
+
+/// Compute temporal decay factor for a memory based on its age.
+///
+/// File-sourced memories skip decay entirely (always 1.0).
+/// Unparseable timestamps default to no decay (1.0) with a warning.
+/// Formula: `max(decay_factor^days, decay_floor)`.
+fn temporal_decay(
+    memory: &Memory,
+    now: chrono::DateTime<Utc>,
+    config: &MemoryConfig,
+) -> f32 {
+    // FileWatcher memories skip temporal decay entirely
+    if memory.source == MemorySource::FileWatcher {
+        return 1.0;
+    }
+
+    let created = match chrono::DateTime::parse_from_rfc3339(&memory.created_at) {
+        Ok(dt) => dt.with_timezone(&Utc),
+        Err(_) => {
+            warn!(
+                memory_id = %memory.id,
+                created_at = %memory.created_at,
+                "Unparseable created_at timestamp, skipping temporal decay"
+            );
+            return 1.0;
+        }
+    };
+
+    let days = (now - created).num_days().max(0) as f32;
+    (config.decay_factor as f32)
+        .powf(days)
+        .max(config.decay_floor as f32)
+}
+
+/// Return the importance boost multiplier for a given memory source.
+fn importance_boost_for_source(source: &MemorySource, config: &MemoryConfig) -> f32 {
+    match source {
+        MemorySource::Explicit => config.importance_boost_explicit as f32,
+        MemorySource::Extracted => config.importance_boost_extracted as f32,
+        MemorySource::FileWatcher => config.importance_boost_file as f32,
+    }
+}
 
 /// Hybrid retriever combining vector similarity search and BM25 keyword search.
 ///
@@ -44,13 +89,16 @@ impl HybridRetriever {
 
     /// Retrieve relevant memories for a query using hybrid search.
     ///
-    /// 1. Embeds the query text
-    /// 2. Runs vector similarity search (cosine similarity with threshold filter)
-    /// 3. Runs BM25 keyword search via FTS5
-    /// 4. Fuses results with RRF (k=60)
-    /// 5. Fetches full Memory structs for top results
-    /// 6. Applies confidence boost (explicit 0.9 > extracted 0.6)
-    /// 7. Returns sorted Vec<ScoredMemory>
+    /// Pipeline:
+    /// 1. Embed the query text
+    /// 2. Run vector similarity search (cosine similarity with threshold filter)
+    /// 3. Run BM25 keyword search via FTS5
+    /// 4. Fuse results with RRF (k=60)
+    /// 5. Fetch full Memory structs for top results
+    /// 6. Apply importance boost and temporal decay: `rrf_score * importance * decay`
+    /// 7. Sort by combined score descending
+    /// 8. MMR diversity reranking (greedy, lambda-weighted)
+    /// 9. Return Vec<ScoredMemory>
     pub async fn retrieve(&self, query: &str) -> Result<Vec<ScoredMemory>, BlufioError> {
         // Step 1: Embed the query
         let output = self
@@ -91,20 +139,23 @@ impl HybridRetriever {
             .map(|(id, score)| (id.as_str(), *score))
             .collect();
 
-        // Step 6: Apply confidence boost and build ScoredMemory
+        // Step 6: Apply importance boost + temporal decay
+        let now = Utc::now();
         let mut scored: Vec<ScoredMemory> = memories
             .into_iter()
             .map(|memory| {
                 let rrf_score = score_map.get(memory.id.as_str()).copied().unwrap_or(0.0);
-                let boosted_score = rrf_score * memory.confidence as f32;
+                let importance = importance_boost_for_source(&memory.source, &self.config);
+                let decay = temporal_decay(&memory, now, &self.config);
+                let final_score = rrf_score * importance * decay;
                 ScoredMemory {
                     memory,
-                    score: boosted_score,
+                    score: final_score,
                 }
             })
             .collect();
 
-        // Step 7: Sort by boosted score descending
+        // Step 7: Sort by combined score descending
         scored.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
@@ -286,6 +337,190 @@ mod tests {
         assert!(
             explicit_boosted > extracted_boosted,
             "Explicit memories should rank higher with confidence boost"
+        );
+    }
+
+    // --- Helper to create test memories ---
+
+    fn make_memory(id: &str, source: MemorySource, created_at: &str) -> Memory {
+        use blufio_core::classification::DataClassification;
+        use crate::types::MemoryStatus;
+        Memory {
+            id: id.to_string(),
+            content: format!("memory {id}"),
+            embedding: vec![],
+            source,
+            confidence: 1.0,
+            status: MemoryStatus::Active,
+            superseded_by: None,
+            session_id: None,
+            classification: DataClassification::default(),
+            created_at: created_at.to_string(),
+            updated_at: created_at.to_string(),
+        }
+    }
+
+    fn default_config() -> MemoryConfig {
+        MemoryConfig::default()
+    }
+
+    // --- temporal_decay tests ---
+
+    #[test]
+    fn temporal_decay_today_returns_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let mem = make_memory("m1", MemorySource::Explicit, &now.to_rfc3339());
+        let decay = temporal_decay(&mem, now, &config);
+        assert!(
+            (decay - 1.0).abs() < 0.001,
+            "Memory created now should have decay ~1.0, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_seven_days_old() {
+        let config = default_config();
+        let now = Utc::now();
+        let seven_days_ago = now - chrono::Duration::days(7);
+        let mem = make_memory("m2", MemorySource::Explicit, &seven_days_ago.to_rfc3339());
+        let decay = temporal_decay(&mem, now, &config);
+        let expected = 0.95_f32.powf(7.0);
+        assert!(
+            (decay - expected).abs() < 0.001,
+            "7-day-old memory should have decay ~{expected}, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_very_old_hits_floor() {
+        let config = default_config();
+        let now = Utc::now();
+        let old = now - chrono::Duration::days(1000);
+        let mem = make_memory("m3", MemorySource::Explicit, &old.to_rfc3339());
+        let decay = temporal_decay(&mem, now, &config);
+        assert!(
+            (decay - config.decay_floor as f32).abs() < 0.001,
+            "Very old memory should hit floor {}, got {decay}",
+            config.decay_floor
+        );
+    }
+
+    #[test]
+    fn temporal_decay_file_watcher_always_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let old = now - chrono::Duration::days(365);
+        let mem = make_memory("m4", MemorySource::FileWatcher, &old.to_rfc3339());
+        let decay = temporal_decay(&mem, now, &config);
+        assert!(
+            (decay - 1.0).abs() < f32::EPSILON,
+            "FileWatcher memory should always have decay 1.0, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_unparseable_timestamp_returns_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let mem = make_memory("m5", MemorySource::Extracted, "not-a-date");
+        let decay = temporal_decay(&mem, now, &config);
+        assert!(
+            (decay - 1.0).abs() < f32::EPSILON,
+            "Unparseable timestamp should return 1.0, got {decay}"
+        );
+    }
+
+    // --- importance_boost_for_source tests ---
+
+    #[test]
+    fn importance_boost_explicit() {
+        let config = default_config();
+        let boost = importance_boost_for_source(&MemorySource::Explicit, &config);
+        assert!(
+            (boost - 1.0).abs() < f32::EPSILON,
+            "Explicit boost should be 1.0, got {boost}"
+        );
+    }
+
+    #[test]
+    fn importance_boost_extracted() {
+        let config = default_config();
+        let boost = importance_boost_for_source(&MemorySource::Extracted, &config);
+        assert!(
+            (boost - 0.6).abs() < 0.001,
+            "Extracted boost should be 0.6, got {boost}"
+        );
+    }
+
+    #[test]
+    fn importance_boost_file_watcher() {
+        let config = default_config();
+        let boost = importance_boost_for_source(&MemorySource::FileWatcher, &config);
+        assert!(
+            (boost - 0.8).abs() < 0.001,
+            "FileWatcher boost should be 0.8, got {boost}"
+        );
+    }
+
+    // --- Combined scoring formula tests ---
+
+    #[test]
+    fn scoring_formula_is_multiplicative() {
+        let config = default_config();
+        let now = Utc::now();
+        let mem = make_memory("m6", MemorySource::Explicit, &now.to_rfc3339());
+        let rrf_score = 0.5_f32;
+        let importance = importance_boost_for_source(&mem.source, &config);
+        let decay = temporal_decay(&mem, now, &config);
+        let final_score = rrf_score * importance * decay;
+        // Explicit today: 0.5 * 1.0 * 1.0 = 0.5
+        assert!(
+            (final_score - 0.5).abs() < 0.001,
+            "Score should be rrf * importance * decay = 0.5, got {final_score}"
+        );
+    }
+
+    #[test]
+    fn explicit_ranks_above_extracted_same_rrf() {
+        let config = default_config();
+        let now = Utc::now();
+        let explicit = make_memory("e1", MemorySource::Explicit, &now.to_rfc3339());
+        let extracted = make_memory("e2", MemorySource::Extracted, &now.to_rfc3339());
+        let rrf = 0.5_f32;
+
+        let score_explicit = rrf
+            * importance_boost_for_source(&explicit.source, &config)
+            * temporal_decay(&explicit, now, &config);
+        let score_extracted = rrf
+            * importance_boost_for_source(&extracted.source, &config)
+            * temporal_decay(&extracted, now, &config);
+
+        assert!(
+            score_explicit > score_extracted,
+            "Explicit ({score_explicit}) should rank above Extracted ({score_extracted})"
+        );
+    }
+
+    #[test]
+    fn older_memory_ranks_below_newer_same_source_and_rrf() {
+        let config = default_config();
+        let now = Utc::now();
+        let newer = make_memory("n1", MemorySource::Explicit, &now.to_rfc3339());
+        let older_time = now - chrono::Duration::days(30);
+        let older = make_memory("o1", MemorySource::Explicit, &older_time.to_rfc3339());
+        let rrf = 0.5_f32;
+
+        let score_newer = rrf
+            * importance_boost_for_source(&newer.source, &config)
+            * temporal_decay(&newer, now, &config);
+        let score_older = rrf
+            * importance_boost_for_source(&older.source, &config)
+            * temporal_decay(&older, now, &config);
+
+        assert!(
+            score_newer > score_older,
+            "Newer ({score_newer}) should rank above older ({score_older})"
         );
     }
 }
