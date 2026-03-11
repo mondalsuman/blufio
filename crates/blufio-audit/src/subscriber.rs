@@ -551,18 +551,24 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
         },
         BusEvent::Memory(MemoryEvent::Evicted {
             timestamp,
-            memory_id,
-            reason,
+            count,
+            lowest_score,
+            highest_score,
             ..
         }) => PendingEntry {
             timestamp: timestamp.clone(),
             event_type,
             action: "evict".to_string(),
             resource_type: "memory".to_string(),
-            resource_id: memory_id.clone(),
+            resource_id: format!("batch:{count}"),
             actor: "system".to_string(),
             session_id: String::new(),
-            details_json: serde_json::json!({ "reason": reason }).to_string(),
+            details_json: serde_json::json!({
+                "count": count,
+                "lowest_score": lowest_score,
+                "highest_score": highest_score,
+            })
+            .to_string(),
         },
 
         // --- Audit meta-events ---
@@ -985,8 +991,9 @@ mod tests {
             BusEvent::Memory(MemoryEvent::Evicted {
                 event_id: new_event_id(),
                 timestamp: now_timestamp(),
-                memory_id: "m".into(),
-                reason: "r".into(),
+                count: 5,
+                lowest_score: 0.1,
+                highest_score: 0.5,
             }),
             BusEvent::Audit(AuditMetaEvent::Enabled {
                 event_id: new_event_id(),
