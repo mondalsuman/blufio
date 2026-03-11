@@ -13,8 +13,10 @@
 
 pub mod extract;
 pub mod levels;
+pub mod quality;
 
 pub use levels::{CompactionLevel, CompactionResult, compact_to_l1, compact_to_l2};
+pub use quality::{GateResult, QualityScores, QualityWeights, apply_gate, evaluate_and_gate, evaluate_quality};
 
 use blufio_core::error::BlufioError;
 use blufio_core::traits::ProviderAdapter;

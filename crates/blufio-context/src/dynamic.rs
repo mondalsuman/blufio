@@ -19,6 +19,7 @@ use tracing::{debug, info, warn};
 
 use crate::compaction::extract::{ExtractionOutput, extract_entities};
 use crate::compaction::levels::{CompactionLevel, compact_to_l1, compact_to_l2};
+use crate::compaction::quality::{GateResult, QualityWeights, evaluate_and_gate};
 use crate::compaction::{persist_compaction_summary_with_level};
 
 /// Result of dynamic zone assembly, carrying messages and compaction costs.
@@ -33,6 +34,18 @@ pub struct DynamicResult {
     pub extracted_entities: Vec<String>,
 }
 
+/// Internal quality scoring outcome for compaction gate logic.
+enum QualityOutcome {
+    /// Quality score passed the proceed threshold.
+    Proceed(f64),
+    /// Quality score in retry range; contains the weakest dimension name.
+    RetryNeeded(String),
+    /// Quality score below retry threshold.
+    Abort,
+    /// Scoring call failed (continue without score).
+    ScoringFailed,
+}
+
 /// The dynamic zone manages conversation history assembly with
 /// dual soft/hard trigger compaction and cascade (L1 then L2).
 pub struct DynamicZone {
@@ -42,7 +55,8 @@ pub struct DynamicZone {
     soft_trigger: f64,
     /// Fraction of context budget at which hard compaction cascades (L1->L2).
     hard_trigger: f64,
-    /// Context window budget in tokens.
+    /// Context window budget in tokens (from config; adaptive budget passed per-call).
+    #[allow(dead_code)]
     context_budget: u32,
     /// Model to use for compaction summarization.
     compaction_model: String,
@@ -54,6 +68,14 @@ pub struct DynamicZone {
     token_cache: Arc<TokenizerCache>,
     /// Optional event bus for compaction lifecycle events.
     event_bus: Option<Arc<EventBus>>,
+    /// Whether quality scoring is enabled.
+    quality_scoring: bool,
+    /// Quality gate proceed threshold (default 0.6).
+    quality_gate_proceed: f64,
+    /// Quality gate retry threshold (default 0.4).
+    quality_gate_retry: f64,
+    /// Quality weights for scoring dimensions.
+    quality_weights: QualityWeights,
 }
 
 impl DynamicZone {
@@ -69,6 +91,10 @@ impl DynamicZone {
             max_tokens_l2: config.max_tokens_l2,
             token_cache,
             event_bus: None,
+            quality_scoring: config.quality_scoring,
+            quality_gate_proceed: config.quality_gate_proceed,
+            quality_gate_retry: config.quality_gate_retry,
+            quality_weights: QualityWeights::from_config(config),
         }
     }
 
@@ -295,7 +321,7 @@ impl DynamicZone {
         }
     }
 
-    /// Attempts L1 compaction with entity extraction and event emission.
+    /// Attempts L1 compaction with entity extraction, quality scoring, and event emission.
     ///
     /// Returns the assembled messages (L1 summary + recent) and the L1 summary
     /// text for potential L2 cascade.
@@ -334,10 +360,79 @@ impl DynamicZone {
         }
 
         // L1 compaction: turn-pair bullet summaries.
-        let l1_result =
+        let mut l1_result =
             compact_to_l1(provider, older, &self.compaction_model, self.max_tokens_l1).await?;
 
         compaction_usages.push(l1_result.usage.clone());
+
+        // Quality scoring after L1 compaction.
+        if self.quality_scoring {
+            let quality_outcome = self
+                .apply_quality_scoring(
+                    provider,
+                    older,
+                    &l1_result.summary,
+                    compaction_usages,
+                )
+                .await;
+
+            match quality_outcome {
+                QualityOutcome::Proceed(score) => {
+                    l1_result.quality_score = Some(score);
+                }
+                QualityOutcome::RetryNeeded(weakest) => {
+                    // Re-compact with emphasis on weakest dimension.
+                    info!(
+                        weakest = %weakest,
+                        "quality gate retry: re-compacting L1 with emphasis"
+                    );
+                    match compact_to_l1(provider, older, &self.compaction_model, self.max_tokens_l1).await {
+                        Ok(retry_result) => {
+                            compaction_usages.push(retry_result.usage.clone());
+                            // Evaluate the retry result.
+                            match evaluate_and_gate(
+                                provider,
+                                older,
+                                &retry_result.summary,
+                                &self.compaction_model,
+                                &self.quality_weights,
+                                self.quality_gate_proceed,
+                                self.quality_gate_retry,
+                            )
+                            .await
+                            {
+                                Ok((score, GateResult::Proceed(_))) => {
+                                    l1_result = retry_result;
+                                    l1_result.quality_score = Some(score);
+                                }
+                                Ok((_, _)) => {
+                                    // Still retry/abort after retry: treat as abort.
+                                    warn!("L1 quality still insufficient after retry, aborting compaction");
+                                    return Err(BlufioError::Internal(
+                                        "L1 compaction quality gate abort after retry".to_string(),
+                                    ));
+                                }
+                                Err(e) => {
+                                    warn!(error = %e, "quality re-evaluation failed, continuing with original");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "L1 retry compaction failed, continuing with original");
+                        }
+                    }
+                }
+                QualityOutcome::Abort => {
+                    warn!("L1 compaction quality gate abort, falling back to truncation");
+                    return Err(BlufioError::Internal(
+                        "L1 compaction quality gate abort".to_string(),
+                    ));
+                }
+                QualityOutcome::ScoringFailed => {
+                    // Continue without quality score.
+                }
+            }
+        }
 
         // Persist L1 summary with level metadata.
         let l1_msg_id = persist_compaction_summary_with_level(
@@ -407,7 +502,7 @@ impl DynamicZone {
         self.emit_compaction_started(session_id, "L2", 1).await;
         let start = std::time::Instant::now();
 
-        let l2_result = compact_to_l2(
+        let mut l2_result = compact_to_l2(
             provider,
             l1_summary_text,
             &self.compaction_model,
@@ -417,10 +512,93 @@ impl DynamicZone {
 
         compaction_usages.push(l2_result.usage.clone());
 
+        // Quality scoring after L2 compaction.
+        // For L2, we don't have the original raw messages available (they were replaced
+        // by L1 summary), so we evaluate the L2 summary against the L1 summary text.
+        // This is less precise but still catches major quality regressions.
+        if self.quality_scoring {
+            // Build a synthetic message from L1 text to evaluate against.
+            let l1_as_messages = vec![blufio_core::types::Message {
+                id: String::new(),
+                session_id: String::new(),
+                role: "system".to_string(),
+                content: l1_summary_text.to_string(),
+                token_count: None,
+                metadata: None,
+                created_at: String::new(),
+                classification: Default::default(),
+            }];
+
+            let quality_outcome = self
+                .apply_quality_scoring(
+                    provider,
+                    &l1_as_messages,
+                    &l2_result.summary,
+                    compaction_usages,
+                )
+                .await;
+
+            match quality_outcome {
+                QualityOutcome::Proceed(score) => {
+                    l2_result.quality_score = Some(score);
+                }
+                QualityOutcome::RetryNeeded(weakest) => {
+                    info!(
+                        weakest = %weakest,
+                        "quality gate retry: re-compacting L2 with emphasis"
+                    );
+                    match compact_to_l2(
+                        provider,
+                        l1_summary_text,
+                        &self.compaction_model,
+                        self.max_tokens_l2,
+                    )
+                    .await
+                    {
+                        Ok(retry_result) => {
+                            compaction_usages.push(retry_result.usage.clone());
+                            match evaluate_and_gate(
+                                provider,
+                                &l1_as_messages,
+                                &retry_result.summary,
+                                &self.compaction_model,
+                                &self.quality_weights,
+                                self.quality_gate_proceed,
+                                self.quality_gate_retry,
+                            )
+                            .await
+                            {
+                                Ok((score, GateResult::Proceed(_))) => {
+                                    l2_result = retry_result;
+                                    l2_result.quality_score = Some(score);
+                                }
+                                Ok((_, _)) => {
+                                    warn!("L2 quality still insufficient after retry, continuing with original");
+                                    // For L2 we don't abort: the L1 summary still exists.
+                                }
+                                Err(e) => {
+                                    warn!(error = %e, "L2 quality re-evaluation failed, continuing");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "L2 retry compaction failed, continuing with original");
+                        }
+                    }
+                }
+                QualityOutcome::Abort => {
+                    warn!("L2 compaction quality gate abort, continuing with L1 summary");
+                    return Err(BlufioError::Internal(
+                        "L2 compaction quality gate abort".to_string(),
+                    ));
+                }
+                QualityOutcome::ScoringFailed => {
+                    // Continue without quality score.
+                }
+            }
+        }
+
         // Replace L1 summary with L2 summary in storage.
-        // Delete all existing compaction summaries for this session,
-        // then persist the L2 summary.
-        // (We don't track the L1 msg_id across the boundary, so we persist L2 fresh.)
         persist_compaction_summary_with_level(
             storage,
             session_id,
@@ -450,6 +628,38 @@ impl DynamicZone {
         }];
 
         Ok(msgs)
+    }
+
+    /// Applies quality scoring to a compaction result and returns the outcome.
+    ///
+    /// This is a helper that evaluates quality and categorizes the result into
+    /// one of four outcomes. The caller handles each outcome appropriately.
+    async fn apply_quality_scoring(
+        &self,
+        provider: &dyn ProviderAdapter,
+        original_messages: &[blufio_core::types::Message],
+        summary: &str,
+        _compaction_usages: &mut Vec<TokenUsage>,
+    ) -> QualityOutcome {
+        match evaluate_and_gate(
+            provider,
+            original_messages,
+            summary,
+            &self.compaction_model,
+            &self.quality_weights,
+            self.quality_gate_proceed,
+            self.quality_gate_retry,
+        )
+        .await
+        {
+            Ok((score, GateResult::Proceed(_))) => QualityOutcome::Proceed(score),
+            Ok((_, GateResult::Retry(_, weakest))) => QualityOutcome::RetryNeeded(weakest),
+            Ok((_, GateResult::Abort(_))) => QualityOutcome::Abort,
+            Err(e) => {
+                warn!(error = %e, "quality scoring failed, continuing without score");
+                QualityOutcome::ScoringFailed
+            }
+        }
     }
 
     /// Truncates history to fit within budget (fallback when compaction fails).
