@@ -160,7 +160,6 @@ impl DynamicZone {
         let budget = dynamic_budget as usize;
         let soft_threshold = (budget as f64 * self.soft_trigger) as usize;
         let hard_threshold = (budget as f64 * self.hard_trigger) as usize;
-        let hard_threshold = (dynamic_budget as f64 * self.hard_trigger) as usize;
 
         debug!(
             estimated_tokens = estimated_tokens,

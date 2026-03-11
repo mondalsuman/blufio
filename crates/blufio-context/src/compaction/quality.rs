@@ -95,6 +95,7 @@ impl QualityScores {
 }
 
 /// Result of applying a quality gate to a weighted score.
+#[derive(Debug)]
 pub enum GateResult {
     /// Score meets or exceeds the proceed threshold.
     Proceed(f64),

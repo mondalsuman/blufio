@@ -104,6 +104,29 @@ pub async fn list_archives(
         .map_err(crate::database::map_tr_err)
 }
 
+/// List all archives across all users, ordered by most recent first.
+pub async fn list_all_archives(
+    db: &Database,
+    limit: i64,
+) -> Result<Vec<ArchiveRow>, BlufioError> {
+    db.connection()
+        .call(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, user_id, summary, quality_score, session_ids, classification, created_at, token_count
+                 FROM compaction_archives
+                 ORDER BY created_at DESC LIMIT ?1",
+            )?;
+            let rows = stmt.query_map(params![limit], |row| Ok(row_to_archive(row)))?;
+            let mut archives = Vec::new();
+            for row in rows {
+                archives.push(row?);
+            }
+            Ok(archives)
+        })
+        .await
+        .map_err(crate::database::map_tr_err)
+}
+
 /// Get a single archive by ID.
 pub async fn get_archive(
     db: &Database,

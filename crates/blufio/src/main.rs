@@ -16,6 +16,7 @@ mod backup;
 mod bench;
 mod bundle;
 mod classify;
+mod context;
 mod doctor;
 mod encrypt;
 mod healthcheck;
@@ -204,6 +205,14 @@ enum Commands {
     Memory {
         #[command(subcommand)]
         command: MemoryCommand,
+    },
+    /// Manage context engine: compaction, archives, and zone status.
+    #[command(
+        after_help = "Examples:\n  blufio context compact --dry-run --session <id>\n  blufio context archive list\n  blufio context archive view <archive_id>\n  blufio context archive prune --user <uid> --keep 5\n  blufio context status --session <id>"
+    )]
+    Context {
+        #[command(subcommand)]
+        command: context::ContextCommand,
     },
 }
 
@@ -777,6 +786,12 @@ async fn main() {
         }
         Some(Commands::Memory { command }) => {
             if let Err(e) = handle_memory_command(&config, command).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Context { command }) => {
+            if let Err(e) = context::run_context(&config, command).await {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }
