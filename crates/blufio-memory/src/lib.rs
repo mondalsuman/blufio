@@ -17,6 +17,7 @@
 //! - **MemoryProvider**: ConditionalProvider for context injection
 //! - **Types**: Memory, MemorySource, MemoryStatus, ScoredMemory
 
+pub mod background;
 pub mod embedder;
 pub mod eviction;
 pub mod extractor;
@@ -25,6 +26,7 @@ pub mod provider;
 pub mod retriever;
 pub mod store;
 pub mod types;
+pub mod validation;
 
 pub use embedder::OnnxEmbedder;
 pub use extractor::MemoryExtractor;
