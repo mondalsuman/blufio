@@ -811,6 +811,7 @@ dependencies = [
  "blufio-config",
  "blufio-core",
  "blufio-security",
+ "blufio-storage",
  "chrono",
  "serde",
  "serde_json",
