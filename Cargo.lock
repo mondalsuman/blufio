@@ -813,6 +813,7 @@ dependencies = [
  "blufio-security",
  "blufio-storage",
  "chrono",
+ "metrics",
  "serde",
  "serde_json",
  "tokio",

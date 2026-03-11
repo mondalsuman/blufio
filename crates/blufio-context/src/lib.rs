@@ -11,6 +11,7 @@
 //! The context engine orchestrates these zones to produce a [`ProviderRequest`]
 //! ready to send to the LLM, while keeping token overhead within budget.
 
+pub mod budget;
 pub mod compaction;
 pub mod conditional;
 pub mod dynamic;
@@ -24,6 +25,7 @@ use blufio_core::token_counter::TokenizerCache;
 use blufio_core::traits::{ProviderAdapter, StorageAdapter};
 use blufio_core::types::{InboundMessage, ProviderRequest, TokenUsage};
 
+pub use budget::ZoneBudget;
 pub use compaction::{generate_compaction_summary, persist_compaction_summary};
 pub use conditional::ConditionalProvider;
 pub use dynamic::{DynamicResult, DynamicZone};
@@ -44,6 +46,10 @@ pub struct AssembledContext {
     pub compaction_usages: Vec<TokenUsage>,
     /// Model used for compaction (needed by caller for cost calculation).
     pub compaction_model: Option<String>,
+    /// Names of conditional providers that were dropped during budget enforcement.
+    /// Empty when all providers fit within the conditional zone budget.
+    /// Useful for debugging context assembly decisions.
+    pub dropped_providers: Vec<String>,
 }
 
 /// The context engine orchestrates three-zone prompt assembly.
@@ -62,8 +68,9 @@ pub struct ContextEngine {
     /// Model used for compaction (from config).
     compaction_model: String,
     /// Cached tokenizer instances for accurate token counting.
-    #[allow(dead_code)]
     token_cache: Arc<TokenizerCache>,
+    /// Per-zone token budget configuration.
+    zone_budget: ZoneBudget,
 }
 
 impl ContextEngine {
@@ -78,6 +85,7 @@ impl ContextEngine {
     ) -> Result<Self, BlufioError> {
         let static_zone = StaticZone::new(agent_config).await?;
         let dynamic_zone = DynamicZone::new(context_config, token_cache.clone());
+        let zone_budget = ZoneBudget::from_config(context_config);
 
         Ok(Self {
             static_zone,
@@ -85,13 +93,12 @@ impl ContextEngine {
             dynamic_zone,
             compaction_model: context_config.compaction_model.clone(),
             token_cache,
+            zone_budget,
         })
     }
 
-    /// Assembles a complete provider request from all three zones.
-    ///
-    /// Returns an [`AssembledContext`] containing the request and any
-    /// compaction costs that must be recorded separately.
+    /// Assembles a complete provider request from all three zones with
+    /// per-zone budget enforcement.
     pub async fn assemble(
         &self,
         provider: &dyn ProviderAdapter,
@@ -101,29 +108,65 @@ impl ContextEngine {
         model: &str,
         max_tokens: u32,
     ) -> Result<AssembledContext, BlufioError> {
-        // 1. Get system blocks from static zone.
+        // --- Step 1: Static zone ---
         let system_blocks = self.static_zone.system_blocks();
+        let actual_static = self.static_zone.token_count(&self.token_cache, model).await;
+        self.static_zone
+            .check_budget(actual_static, self.zone_budget.static_budget);
+        metrics::gauge!("blufio_context_zone_tokens", "zone" => "static")
+            .set(actual_static as f64);
 
-        // 2. Get conditional context (iterate providers, extend messages).
-        let mut conditional_messages = Vec::new();
-        for cp in &self.conditional_providers {
+        // --- Step 2: Conditional zone ---
+        let mut provider_results: Vec<(String, Vec<blufio_core::types::ProviderMessage>)> =
+            Vec::new();
+        for (i, cp) in self.conditional_providers.iter().enumerate() {
             let ctx = cp.provide_context(session_id).await?;
-            conditional_messages.extend(ctx);
+            let name = format!("conditional_provider_{}", i);
+            provider_results.push((name, ctx));
         }
 
-        // 3. Get dynamic messages with compaction.
+        let effective_budget = self.zone_budget.conditional_effective();
+        let (conditional_messages, dropped) = budget::enforce_conditional_budget(
+            provider_results,
+            effective_budget,
+            &self.token_cache,
+            model,
+        )
+        .await;
+
+        let counter = self.token_cache.get_counter(model);
+        let actual_conditional =
+            budget::count_messages_tokens(&conditional_messages, counter.as_ref()).await;
+        metrics::gauge!("blufio_context_zone_tokens", "zone" => "conditional")
+            .set(actual_conditional as f64);
+
+        // --- Step 3: Dynamic zone ---
+        let dynamic_budget = self
+            .zone_budget
+            .dynamic_budget(actual_static as u32, actual_conditional as u32);
+
         let dynamic_result = self
             .dynamic_zone
-            .assemble_messages(provider, storage, session_id, inbound, model)
+            .assemble_messages(
+                provider,
+                storage,
+                session_id,
+                inbound,
+                model,
+                dynamic_budget,
+            )
             .await?;
 
-        // 4. Combine conditional + dynamic messages.
-        //    Classification filtering is applied in dynamic.rs (defense-in-depth)
-        //    and at SQL level in get_messages_for_session (primary filter).
+        let actual_dynamic =
+            budget::count_messages_tokens(&dynamic_result.messages, counter.as_ref()).await;
+        metrics::gauge!("blufio_context_zone_tokens", "zone" => "dynamic")
+            .set(actual_dynamic as f64);
+
+        // --- Step 4: Combine conditional + dynamic messages ---
         let mut all_messages = conditional_messages;
         all_messages.extend(dynamic_result.messages);
 
-        // 5. Build ProviderRequest with system_blocks.
+        // --- Step 5: Build ProviderRequest ---
         let request = ProviderRequest {
             model: model.to_string(),
             system_prompt: None,
@@ -134,7 +177,7 @@ impl ContextEngine {
             tools: None,
         };
 
-        // 6. Return AssembledContext with compaction info.
+        // --- Step 6: Return AssembledContext ---
         let compaction_model = if !dynamic_result.compaction_usages.is_empty() {
             Some(self.compaction_model.clone())
         } else {
@@ -145,14 +188,11 @@ impl ContextEngine {
             request,
             compaction_usages: dynamic_result.compaction_usages,
             compaction_model,
+            dropped_providers: dropped,
         })
     }
 
     /// Registers a conditional context provider.
-    ///
-    /// Providers are called in registration order during assembly.
-    /// Phase 5 (Memory) and Phase 7 (Skills) will use this to inject
-    /// session-specific context.
     pub fn add_conditional_provider(&mut self, provider: Box<dyn ConditionalProvider>) {
         self.conditional_providers.push(provider);
     }
@@ -204,12 +244,14 @@ mod tests {
                 cache_creation_tokens: 0,
             }],
             compaction_model: Some("claude-haiku-4-5-20250901".into()),
+            dropped_providers: vec![],
         };
 
         assert_eq!(ctx.compaction_usages.len(), 1);
         assert_eq!(ctx.compaction_usages[0].input_tokens, 100);
         assert_eq!(ctx.compaction_model.unwrap(), "claude-haiku-4-5-20250901");
         assert!(ctx.request.system_blocks.is_some());
+        assert!(ctx.dropped_providers.is_empty());
     }
 
     #[tokio::test]
@@ -226,9 +268,32 @@ mod tests {
             },
             compaction_usages: vec![],
             compaction_model: None,
+            dropped_providers: vec![],
         };
 
         assert!(ctx.compaction_usages.is_empty());
         assert!(ctx.compaction_model.is_none());
+        assert!(ctx.dropped_providers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn assembled_context_with_dropped_providers() {
+        let ctx = AssembledContext {
+            request: ProviderRequest {
+                model: "test-model".into(),
+                system_prompt: None,
+                system_blocks: None,
+                messages: vec![],
+                max_tokens: 1024,
+                stream: true,
+                tools: None,
+            },
+            compaction_usages: vec![],
+            compaction_model: None,
+            dropped_providers: vec!["archive".to_string()],
+        };
+
+        assert_eq!(ctx.dropped_providers.len(), 1);
+        assert_eq!(ctx.dropped_providers[0], "archive");
     }
 }

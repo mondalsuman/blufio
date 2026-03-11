@@ -124,6 +124,7 @@ impl DynamicZone {
         session_id: &str,
         inbound: &InboundMessage,
         model: &str,
+        dynamic_budget: u32,
     ) -> Result<DynamicResult, BlufioError> {
         // Load ALL messages from storage for this session.
         let history = storage.get_messages(session_id, None).await?;
@@ -153,10 +154,12 @@ impl DynamicZone {
             estimated_tokens += count_with_fallback(counter.as_ref(), &m.content).await;
         }
 
-        // Compute thresholds from dynamic budget.
-        // Plan 04 will compute adaptive budget; for now use context_budget directly.
-        let dynamic_budget = self.context_budget as usize;
-        let soft_threshold = (dynamic_budget as f64 * self.soft_trigger) as usize;
+        // Compute thresholds from adaptive dynamic budget.
+        // The dynamic_budget is computed by ContextEngine: total - actual_static - actual_conditional.
+        // Soft/hard triggers apply to this adaptive budget, not the total context budget.
+        let budget = dynamic_budget as usize;
+        let soft_threshold = (budget as f64 * self.soft_trigger) as usize;
+        let hard_threshold = (budget as f64 * self.hard_trigger) as usize;
         let hard_threshold = (dynamic_budget as f64 * self.hard_trigger) as usize;
 
         debug!(
