@@ -17,14 +17,14 @@ use tracing::{debug, info};
 
 use crate::compaction::{generate_compaction_summary, persist_compaction_summary};
 
-/// Result of dynamic zone assembly, carrying messages and optional compaction cost.
+/// Result of dynamic zone assembly, carrying messages and compaction costs.
 #[derive(Debug)]
 pub struct DynamicResult {
     /// Assembled messages for the provider request.
     pub messages: Vec<ProviderMessage>,
-    /// Token usage from compaction LLM call, if compaction was triggered.
-    /// Callers MUST propagate this for cost recording with FeatureType::Compaction.
-    pub compaction_usage: Option<TokenUsage>,
+    /// Token usages from compaction LLM calls (may include multiple if cascade).
+    /// Callers MUST propagate each for cost recording with FeatureType::Compaction.
+    pub compaction_usages: Vec<TokenUsage>,
 }
 
 /// The dynamic zone manages conversation history assembly with
@@ -102,59 +102,59 @@ impl DynamicZone {
             "dynamic zone token estimate"
         );
 
-        let (mut messages, compaction_usage) = if estimated_tokens > threshold && history.len() > 2
-        {
-            // Trigger compaction: split into older half and recent half.
-            let split_point = history.len() / 2;
-            let older = &history[..split_point];
-            let recent = &history[split_point..];
+        let (mut messages, compaction_usages) =
+            if estimated_tokens > threshold && history.len() > 2 {
+                // Trigger compaction: split into older half and recent half.
+                let split_point = history.len() / 2;
+                let older = &history[..split_point];
+                let recent = &history[split_point..];
 
-            info!(
-                older_count = older.len(),
-                recent_count = recent.len(),
-                estimated_tokens = estimated_tokens,
-                threshold = threshold,
-                "triggering compaction"
-            );
+                info!(
+                    older_count = older.len(),
+                    recent_count = recent.len(),
+                    estimated_tokens = estimated_tokens,
+                    threshold = threshold,
+                    "triggering compaction"
+                );
 
-            // Generate compaction summary via Haiku LLM call.
-            let (summary, usage) =
-                generate_compaction_summary(provider, older, &self.compaction_model).await?;
+                // Generate compaction summary via Haiku LLM call.
+                let (summary, usage) =
+                    generate_compaction_summary(provider, older, &self.compaction_model).await?;
 
-            // Persist the compaction summary in storage.
-            persist_compaction_summary(storage, session_id, &summary, older.len()).await?;
+                // Persist the compaction summary in storage.
+                persist_compaction_summary(storage, session_id, &summary, older.len()).await?;
 
-            // Build messages: compaction summary + recent messages.
-            let mut msgs = vec![ProviderMessage {
-                role: "system".to_string(),
-                content: vec![ContentBlock::Text { text: summary }],
-            }];
+                // Build messages: compaction summary + recent messages.
+                let mut msgs = vec![ProviderMessage {
+                    role: "system".to_string(),
+                    content: vec![ContentBlock::Text { text: summary }],
+                }];
 
-            // Add recent messages.
-            for msg in recent {
-                msgs.push(ProviderMessage {
-                    role: msg.role.clone(),
-                    content: vec![ContentBlock::Text {
-                        text: msg.content.clone(),
-                    }],
-                });
-            }
+                // Add recent messages.
+                for msg in recent {
+                    msgs.push(ProviderMessage {
+                        role: msg.role.clone(),
+                        content: vec![ContentBlock::Text {
+                            text: msg.content.clone(),
+                        }],
+                    });
+                }
 
-            (msgs, Some(usage))
-        } else {
-            // Normal path: convert all history messages to ProviderMessage format.
-            let msgs: Vec<ProviderMessage> = history
-                .iter()
-                .map(|msg| ProviderMessage {
-                    role: msg.role.clone(),
-                    content: vec![ContentBlock::Text {
-                        text: msg.content.clone(),
-                    }],
-                })
-                .collect();
+                (msgs, vec![usage])
+            } else {
+                // Normal path: convert all history messages to ProviderMessage format.
+                let msgs: Vec<ProviderMessage> = history
+                    .iter()
+                    .map(|msg| ProviderMessage {
+                        role: msg.role.clone(),
+                        content: vec![ContentBlock::Text {
+                            text: msg.content.clone(),
+                        }],
+                    })
+                    .collect();
 
-            (msgs, None)
-        };
+                (msgs, vec![])
+            };
 
         // Append the current inbound message.
         let inbound_content = message_content_to_blocks(&inbound.content);
@@ -165,7 +165,7 @@ impl DynamicZone {
 
         Ok(DynamicResult {
             messages,
-            compaction_usage,
+            compaction_usages,
         })
     }
 }
@@ -269,9 +269,9 @@ mod tests {
                     text: "Hello".into(),
                 }],
             }],
-            compaction_usage: None,
+            compaction_usages: vec![],
         };
-        assert!(result.compaction_usage.is_none());
+        assert!(result.compaction_usages.is_empty());
         assert_eq!(result.messages.len(), 1);
     }
 
@@ -279,14 +279,38 @@ mod tests {
     fn dynamic_result_with_compaction() {
         let result = DynamicResult {
             messages: vec![],
-            compaction_usage: Some(TokenUsage {
+            compaction_usages: vec![TokenUsage {
                 input_tokens: 500,
                 output_tokens: 100,
                 cache_read_tokens: 0,
                 cache_creation_tokens: 0,
-            }),
+            }],
         };
-        assert!(result.compaction_usage.is_some());
-        assert_eq!(result.compaction_usage.unwrap().input_tokens, 500);
+        assert_eq!(result.compaction_usages.len(), 1);
+        assert_eq!(result.compaction_usages[0].input_tokens, 500);
+    }
+
+    #[test]
+    fn dynamic_result_with_cascade_compaction() {
+        let result = DynamicResult {
+            messages: vec![],
+            compaction_usages: vec![
+                TokenUsage {
+                    input_tokens: 500,
+                    output_tokens: 100,
+                    cache_read_tokens: 0,
+                    cache_creation_tokens: 0,
+                },
+                TokenUsage {
+                    input_tokens: 200,
+                    output_tokens: 80,
+                    cache_read_tokens: 0,
+                    cache_creation_tokens: 0,
+                },
+            ],
+        };
+        assert_eq!(result.compaction_usages.len(), 2);
+        assert_eq!(result.compaction_usages[0].input_tokens, 500);
+        assert_eq!(result.compaction_usages[1].input_tokens, 200);
     }
 }

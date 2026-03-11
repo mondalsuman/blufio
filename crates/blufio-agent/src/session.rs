@@ -396,8 +396,8 @@ impl SessionActor {
 
         // Record compaction costs if compaction was triggered during assembly.
         // Compaction is a separate Haiku LLM call that must be recorded with
-        // FeatureType::Compaction, not Message.
-        if let Some(ref compaction_usage) = assembled.compaction_usage {
+        // FeatureType::Compaction, not Message. May have multiple from cascade.
+        for compaction_usage in &assembled.compaction_usages {
             let compaction_model = assembled
                 .compaction_model
                 .as_deref()

@@ -35,11 +35,13 @@ pub use static_zone::StaticZone;
 pub struct AssembledContext {
     /// The provider request ready to send to the LLM.
     pub request: ProviderRequest,
-    /// Token usage from compaction, if it was triggered during assembly.
-    /// The caller (SessionActor) MUST record this in the cost ledger
-    /// with FeatureType::Compaction. This is NOT included in the main
-    /// response usage -- it is a separate LLM call to Haiku.
-    pub compaction_usage: Option<TokenUsage>,
+    /// Token usages from compaction LLM calls during assembly.
+    /// May contain multiple entries if cascade compaction triggered (L1 then L2).
+    /// Each entry is a separate LLM call to the compaction model.
+    /// The caller (SessionActor) MUST record each in the cost ledger
+    /// with FeatureType::Compaction. These are NOT included in the main
+    /// response usage.
+    pub compaction_usages: Vec<TokenUsage>,
     /// Model used for compaction (needed by caller for cost calculation).
     pub compaction_model: Option<String>,
 }
@@ -133,7 +135,7 @@ impl ContextEngine {
         };
 
         // 6. Return AssembledContext with compaction info.
-        let compaction_model = if dynamic_result.compaction_usage.is_some() {
+        let compaction_model = if !dynamic_result.compaction_usages.is_empty() {
             Some(self.compaction_model.clone())
         } else {
             None
@@ -141,7 +143,7 @@ impl ContextEngine {
 
         Ok(AssembledContext {
             request,
-            compaction_usage: dynamic_result.compaction_usage,
+            compaction_usages: dynamic_result.compaction_usages,
             compaction_model,
         })
     }
@@ -195,17 +197,17 @@ mod tests {
                 stream: true,
                 tools: None,
             },
-            compaction_usage: Some(TokenUsage {
+            compaction_usages: vec![TokenUsage {
                 input_tokens: 100,
                 output_tokens: 50,
                 cache_read_tokens: 0,
                 cache_creation_tokens: 0,
-            }),
+            }],
             compaction_model: Some("claude-haiku-4-5-20250901".into()),
         };
 
-        assert!(ctx.compaction_usage.is_some());
-        assert_eq!(ctx.compaction_usage.unwrap().input_tokens, 100);
+        assert_eq!(ctx.compaction_usages.len(), 1);
+        assert_eq!(ctx.compaction_usages[0].input_tokens, 100);
         assert_eq!(ctx.compaction_model.unwrap(), "claude-haiku-4-5-20250901");
         assert!(ctx.request.system_blocks.is_some());
     }
@@ -222,11 +224,11 @@ mod tests {
                 stream: true,
                 tools: None,
             },
-            compaction_usage: None,
+            compaction_usages: vec![],
             compaction_model: None,
         };
 
-        assert!(ctx.compaction_usage.is_none());
+        assert!(ctx.compaction_usages.is_empty());
         assert!(ctx.compaction_model.is_none());
     }
 }
