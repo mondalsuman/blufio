@@ -20,7 +20,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 - [x] **CTXE-01**: Zone 1 (static) enforces configurable token budget (default 3,000 tokens) with 10% safety margin
 - [x] **CTXE-02**: Zone 2 (conditional) enforces configurable token budget (default 8,000 tokens) with 10% safety margin
-- [ ] **CTXE-03**: Token budget enforcement uses accurate provider-specific token counting (tiktoken-rs/HuggingFace)
+- [x] **CTXE-03**: Token budget enforcement uses accurate provider-specific token counting (tiktoken-rs/HuggingFace)
 
 ### Prompt Injection Defense
 
@@ -216,7 +216,7 @@ Deferred to v1.6+.
 | COMP-06 | Phase 56 | Complete |
 | CTXE-01 | Phase 56 | Complete |
 | CTXE-02 | Phase 56 | Complete |
-| CTXE-03 | Phase 56 | Pending |
+| CTXE-03 | Phase 56 | Complete |
 | INJC-01 | Phase 57 | Pending |
 | INJC-02 | Phase 57 | Pending |
 | INJC-03 | Phase 57 | Pending |

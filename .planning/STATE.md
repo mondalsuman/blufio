@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: in-progress
-stopped_at: Completed 56-03-PLAN.md
-last_updated: "2026-03-12T00:22:30.000Z"
-last_activity: 2026-03-12 -- Phase 56 Plan 03 completed (17min)
+status: completed
+stopped_at: Completed 56-04-PLAN.md
+last_updated: "2026-03-11T23:25:02.000Z"
+last_activity: 2026-03-12 -- Phase 56 Plan 04 completed (22min)
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 9
-  completed_plans: 15
-  percent: 32
+  completed_plans: 16
+  percent: 30
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 56 of 63 (Multi-Level Compaction & Context Budget) -- fourth of 11 phases in v1.5
-Plan: 3 of 5 in Phase 56 (in progress)
-Status: Phase 56 Plan 03 Complete
-Last activity: 2026-03-12 -- Phase 56 Plan 03 completed (17min)
+Plan: 4 of 5 in Phase 56 (in progress)
+Status: Phase 56 Plan 04 Complete
+Last activity: 2026-03-12 -- Phase 56 Plan 04 completed (22min)
 
 Progress: [#########-----------------------] 30%
 
@@ -59,6 +59,7 @@ Progress: [#########-----------------------] 30%
 | Phase 56 P01 | 7min | 2 tasks | 13 files |
 | Phase 56 P02 | 10min | 2 tasks | 8 files |
 | Phase 56 P03 | 17min | 2 tasks | 6 files |
+| Phase 56 P04 | 22min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,11 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 56]: Phase 56 Plan 03: L2 quality scoring uses L1 summary text as reference (raw messages already deleted)
 - [Phase 56]: Phase 56 Plan 03: blufio-storage added as dependency in blufio-context (no circular)
 - [Phase 56]: Phase 56 Plan 03: Classification escalation: restricted > confidential > internal for merged archives
+- Phase 56 Plan 04: 10% safety margin on conditional zone hardcoded as SAFETY_MARGIN constant
+- Phase 56 Plan 04: Static zone advisory-only warning (never truncates system prompt)
+- Phase 56 Plan 04: Provider-priority truncation drops lowest-priority (last-registered) first
+- Phase 56 Plan 04: DynamicZone::assemble_messages() accepts dynamic_budget parameter (adaptive)
+- Phase 56 Plan 04: Soft/hard compaction thresholds apply to adaptive dynamic budget, not total
 
 ### Pending Todos
 
@@ -133,6 +139,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T00:22:30.000Z
-Stopped at: Completed 56-03-PLAN.md
+Last session: 2026-03-11T23:25:02Z
+Stopped at: Completed 56-04-PLAN.md
 Resume file: None
