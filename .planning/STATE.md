@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: completed
-stopped_at: Phase 56 context gathered
-last_updated: "2026-03-11T22:15:38.437Z"
-last_activity: 2026-03-11 -- Phase 55 Plan 04 completed (11min)
+status: in-progress
+stopped_at: Phase 56 Plan 01 completed
+last_updated: "2026-03-11T22:47:06Z"
+last_activity: 2026-03-11 -- Phase 56 Plan 01 completed (7min)
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 4
-  completed_plans: 12
-  percent: 27
+  completed_plans: 13
+  percent: 30
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- Phase 55 Memory Enhancements
+**Current focus:** v1.5 PRD Gap Closure -- Phase 56 Multi-Level Compaction & Context Budget
 
 ## Current Position
 
-Phase: 55 of 63 (Memory Enhancements) -- third of 11 phases in v1.5
-Plan: 4 of 4 in Phase 55 (complete)
-Status: Phase 55 Complete
-Last activity: 2026-03-11 -- Phase 55 Plan 04 completed (11min)
+Phase: 56 of 63 (Multi-Level Compaction & Context Budget) -- fourth of 11 phases in v1.5
+Plan: 1 of 4 in Phase 56 (in progress)
+Status: Phase 56 Plan 01 Complete
+Last activity: 2026-03-11 -- Phase 56 Plan 01 completed (7min)
 
-Progress: [########+-----------------------] 27%
+Progress: [#########-----------------------] 30%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [########+-----------------------] 27%
 | Phase 55 P02 | 5min | 2 tasks | 1 files |
 | Phase 55 P03 | 7min | 2 tasks | 5 files |
 | Phase 55 P04 | 11min | 2 tasks | 7 files |
+| Phase 56 P01 | 7min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,10 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - Phase 55 Plan 04: File update re-indexes by hard-delete then save (FTS5 trigger consistency)
 - Phase 55 Plan 04: notify callback uses tx.blocking_send() (not async) since it runs on notify's own thread
 - Phase 55 Plan 04: conn() accessor added to MemoryStore for advanced SQL operations
+- Phase 56 Plan 01: compaction_threshold changed to Option<f64> with effective_soft_trigger() deprecation bridge
+- Phase 56 Plan 01: CompactionEvent uses String fields (no cross-crate deps) following bus event pattern
+- Phase 56 Plan 01: delete_messages_by_ids uses parameterized IN clause with dynamic placeholder generation
+- Phase 56 Plan 01: Archive session_ids stored as JSON text with LIKE-based GDPR erasure
 
 ### Pending Todos
 
@@ -119,6 +124,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-11T22:15:38.434Z
-Stopped at: Phase 56 context gathered
-Resume file: .planning/phases/56-multi-level-compaction-context-budget/56-CONTEXT.md
+Last session: 2026-03-11T22:47:06Z
+Stopped at: Completed 56-01-PLAN.md
+Resume file: .planning/phases/56-multi-level-compaction-context-budget/56-01-SUMMARY.md
