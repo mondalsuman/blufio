@@ -60,9 +60,7 @@ pub async fn run_eviction_sweep(
     if deleted > 0 {
         info!(
             deleted,
-            lowest_score,
-            highest_score,
-            "Eviction sweep complete"
+            lowest_score, highest_score, "Eviction sweep complete"
         );
 
         if let Some(bus) = event_bus {
@@ -233,7 +231,9 @@ mod tests {
         let event_bus = Some(bus);
         let config = test_config(10);
 
-        run_eviction_sweep(&store, &config, &event_bus).await.unwrap();
+        run_eviction_sweep(&store, &config, &event_bus)
+            .await
+            .unwrap();
 
         // Should have received exactly one Evicted event
         let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
@@ -275,24 +275,14 @@ mod tests {
 
         // Add superseded memories (should not be counted or evicted)
         for i in 0..5 {
-            let mut mem = make_memory(
-                &format!("mem-sup-{i}"),
-                MemorySource::Extracted,
-                0.6,
-                10,
-            );
+            let mut mem = make_memory(&format!("mem-sup-{i}"), MemorySource::Extracted, 0.6, 10);
             mem.status = MemoryStatus::Superseded;
             store.save(&mem).await.unwrap();
         }
 
         // Add forgotten memories
         for i in 0..3 {
-            let mut mem = make_memory(
-                &format!("mem-forg-{i}"),
-                MemorySource::Extracted,
-                0.6,
-                10,
-            );
+            let mut mem = make_memory(&format!("mem-forg-{i}"), MemorySource::Extracted, 0.6, 10);
             mem.status = MemoryStatus::Forgotten;
             store.save(&mem).await.unwrap();
         }

@@ -140,9 +140,6 @@ mod tests {
             result.is_ok(),
             "Background task should exit after cancellation"
         );
-        assert!(
-            result.unwrap().is_ok(),
-            "Background task should not panic"
-        );
+        assert!(result.unwrap().is_ok(), "Background task should not panic");
     }
 }

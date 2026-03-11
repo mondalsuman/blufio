@@ -1954,8 +1954,7 @@ async fn handle_memory_command(
 ) -> Result<(), blufio_core::BlufioError> {
     match command {
         MemoryCommand::Validate { dry_run, json } => {
-            let conn =
-                blufio_storage::open_connection(&config.storage.database_path).await?;
+            let conn = blufio_storage::open_connection(&config.storage.database_path).await?;
             let store = blufio_memory::MemoryStore::new(conn);
 
             if dry_run {
@@ -1980,12 +1979,9 @@ async fn handle_memory_command(
                     println!("  Stale:      {}", result.stale_found);
                 }
             } else {
-                let result = blufio_memory::validation::run_validation(
-                    &store,
-                    &config.memory,
-                    &None,
-                )
-                .await?;
+                let result =
+                    blufio_memory::validation::run_validation(&store, &config.memory, &None)
+                        .await?;
 
                 if json {
                     println!(

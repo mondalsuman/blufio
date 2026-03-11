@@ -201,19 +201,21 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]
-    let (memory_provider, memory_extractor, memory_store, memory_embedder) =
-        if config.memory.enabled {
-            match initialize_memory(&config, &mut context_engine).await {
-                Ok((mp, me, ms, emb)) => (Some(mp), Some(me), Some(ms), Some(emb)),
-                Err(e) => {
-                    warn!(error = %e, "memory system initialization failed, continuing without memory");
-                    (None, None, None, None)
-                }
+    let (memory_provider, memory_extractor, memory_store, memory_embedder) = if config
+        .memory
+        .enabled
+    {
+        match initialize_memory(&config, &mut context_engine).await {
+            Ok((mp, me, ms, emb)) => (Some(mp), Some(me), Some(ms), Some(emb)),
+            Err(e) => {
+                warn!(error = %e, "memory system initialization failed, continuing without memory");
+                (None, None, None, None)
             }
-        } else {
-            info!("memory system disabled by configuration");
-            (None, None, None, None)
-        };
+        }
+    } else {
+        info!("memory system disabled by configuration");
+        (None, None, None, None)
+    };
 
     #[cfg(not(feature = "onnx"))]
     let (memory_provider, memory_extractor, memory_store, memory_embedder): (
@@ -825,50 +827,50 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // --- Memory background task and file watcher ---
     // Spawn after cancel token is available.
-    if config.memory.enabled {
-        if let Some(ref store) = memory_store {
-            // Spawn combined eviction + validation background task.
-            let bg_store = store.clone();
-            let bg_config = config.memory.clone();
-            let bg_bus = Some(event_bus.clone());
-            let bg_cancel = cancel.child_token();
-            tokio::spawn(async move {
-                blufio_memory::background::spawn_background_task(
-                    bg_store, bg_config, bg_bus, bg_cancel,
-                )
-                .await;
-            });
-            info!(
-                "memory background task started (eviction: {}s, validation: daily)",
-                config.memory.eviction_sweep_interval_secs
-            );
+    if config.memory.enabled
+        && let Some(ref store) = memory_store
+    {
+        // Spawn combined eviction + validation background task.
+        let bg_store = store.clone();
+        let bg_config = config.memory.clone();
+        let bg_bus = Some(event_bus.clone());
+        let bg_cancel = cancel.child_token();
+        tokio::spawn(async move {
+            blufio_memory::background::spawn_background_task(
+                bg_store, bg_config, bg_bus, bg_cancel,
+            )
+            .await;
+        });
+        info!(
+            "memory background task started (eviction: {}s, validation: daily)",
+            config.memory.eviction_sweep_interval_secs
+        );
 
-            // Start file watcher (if configured paths are non-empty).
-            if !config.memory.file_watcher.paths.is_empty() {
-                if let Some(ref embedder_arc) = memory_embedder {
-                    // Initial scan of existing files.
-                    match blufio_memory::watcher::initial_scan(
-                        &config.memory.file_watcher,
-                        store,
-                        embedder_arc,
-                    )
-                    .await
-                    {
-                        Ok(count) => info!(files = count, "file watcher initial scan complete"),
-                        Err(e) => warn!(error = %e, "file watcher initial scan failed"),
-                    }
-                    // Start watching for changes.
-                    if let Err(e) = blufio_memory::watcher::start_file_watcher(
-                        &config.memory.file_watcher,
-                        store.clone(),
-                        embedder_arc.clone(),
-                        cancel.child_token(),
-                    ) {
-                        warn!(error = %e, "file watcher failed to start");
-                    } else {
-                        info!(paths = ?config.memory.file_watcher.paths, "file watcher started");
-                    }
-                }
+        // Start file watcher (if configured paths are non-empty).
+        if !config.memory.file_watcher.paths.is_empty()
+            && let Some(ref embedder_arc) = memory_embedder
+        {
+            // Initial scan of existing files.
+            match blufio_memory::watcher::initial_scan(
+                &config.memory.file_watcher,
+                store,
+                embedder_arc,
+            )
+            .await
+            {
+                Ok(count) => info!(files = count, "file watcher initial scan complete"),
+                Err(e) => warn!(error = %e, "file watcher initial scan failed"),
+            }
+            // Start watching for changes.
+            if let Err(e) = blufio_memory::watcher::start_file_watcher(
+                &config.memory.file_watcher,
+                store.clone(),
+                embedder_arc.clone(),
+                cancel.child_token(),
+            ) {
+                warn!(error = %e, "file watcher failed to start");
+            } else {
+                info!(paths = ?config.memory.file_watcher.paths, "file watcher started");
             }
         }
     }
@@ -1628,8 +1630,15 @@ async fn mark_stale_sessions(storage: &dyn StorageAdapter) -> Result<(), BlufioE
 async fn initialize_memory(
     config: &BlufioConfig,
     context_engine: &mut ContextEngine,
-) -> Result<(MemoryProvider, Arc<MemoryExtractor>, Arc<MemoryStore>, Arc<OnnxEmbedder>), BlufioError>
-{
+) -> Result<
+    (
+        MemoryProvider,
+        Arc<MemoryExtractor>,
+        Arc<MemoryStore>,
+        Arc<OnnxEmbedder>,
+    ),
+    BlufioError,
+> {
     // Determine data directory (parent of the database path).
     let db_path = PathBuf::from(&config.storage.database_path);
     let data_dir = db_path

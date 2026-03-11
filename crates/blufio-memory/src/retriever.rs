@@ -30,11 +30,7 @@ const RRF_K: f32 = 60.0;
 /// File-sourced memories skip decay entirely (always 1.0).
 /// Unparseable timestamps default to no decay (1.0) with a warning.
 /// Formula: `max(decay_factor^days, decay_floor)`.
-fn temporal_decay(
-    memory: &Memory,
-    now: chrono::DateTime<Utc>,
-    config: &MemoryConfig,
-) -> f32 {
+fn temporal_decay(memory: &Memory, now: chrono::DateTime<Utc>, config: &MemoryConfig) -> f32 {
     // FileWatcher memories skip temporal decay entirely
     if memory.source == MemorySource::FileWatcher {
         return 1.0;
@@ -437,8 +433,8 @@ mod tests {
     // --- Helper to create test memories ---
 
     fn make_memory(id: &str, source: MemorySource, created_at: &str) -> Memory {
-        use blufio_core::classification::DataClassification;
         use crate::types::MemoryStatus;
+        use blufio_core::classification::DataClassification;
         Memory {
             id: id.to_string(),
             content: format!("memory {id}"),
@@ -662,8 +658,8 @@ mod tests {
         // a and b are very similar, c is orthogonal
         let scored = vec![
             make_scored("a", 0.9, vec![1.0, 0.0, 0.0]),
-            make_scored("b", 0.8, vec![0.98, 0.2, 0.0]),  // very similar to a
-            make_scored("c", 0.7, vec![0.0, 1.0, 0.0]),    // orthogonal to a
+            make_scored("b", 0.8, vec![0.98, 0.2, 0.0]), // very similar to a
+            make_scored("c", 0.7, vec![0.0, 1.0, 0.0]),  // orthogonal to a
         ];
         let result = mmr_rerank(&scored, 0.0, 3);
         assert_eq!(result.len(), 3);
@@ -684,9 +680,9 @@ mod tests {
         // MMR should promote the dissimilar one earlier than pure relevance
         let scored = vec![
             make_scored("s1", 0.9, vec![1.0, 0.0, 0.0]),
-            make_scored("s2", 0.85, vec![0.98, 0.2, 0.0]),  // similar to s1
-            make_scored("s3", 0.8, vec![0.95, 0.31, 0.0]),  // similar to s1
-            make_scored("d1", 0.75, vec![0.0, 1.0, 0.0]),   // dissimilar (orthogonal)
+            make_scored("s2", 0.85, vec![0.98, 0.2, 0.0]), // similar to s1
+            make_scored("s3", 0.8, vec![0.95, 0.31, 0.0]), // similar to s1
+            make_scored("d1", 0.75, vec![0.0, 1.0, 0.0]),  // dissimilar (orthogonal)
         ];
         let result = mmr_rerank(&scored, 0.7, 4);
         assert_eq!(result.len(), 4);
@@ -708,7 +704,11 @@ mod tests {
             make_scored("b", 0.7, vec![0.0, 1.0, 0.0]),
         ];
         let result = mmr_rerank(&scored, 0.7, 10);
-        assert_eq!(result.len(), 2, "Should return all items when k > input len");
+        assert_eq!(
+            result.len(),
+            2,
+            "Should return all items when k > input len"
+        );
     }
 
     #[test]

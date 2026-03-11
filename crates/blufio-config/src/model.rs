@@ -655,7 +655,6 @@ pub struct MemoryConfig {
     pub max_retrieval_results: usize,
 
     // --- Scoring parameters ---
-
     /// Exponential decay factor applied per day since memory creation.
     /// `max(decay_factor^days, decay_floor)`. File-sourced memories skip decay.
     #[serde(default = "default_decay_factor")]
@@ -682,7 +681,6 @@ pub struct MemoryConfig {
     pub importance_boost_file: f64,
 
     // --- Eviction parameters ---
-
     /// Maximum number of active memories before eviction triggers.
     #[serde(default = "default_max_entries")]
     pub max_entries: usize,
@@ -692,13 +690,11 @@ pub struct MemoryConfig {
     pub eviction_sweep_interval_secs: u64,
 
     // --- Validation parameters ---
-
     /// Age in days after which a memory at decay floor is considered stale.
     #[serde(default = "default_stale_threshold_days")]
     pub stale_threshold_days: u64,
 
     // --- File watcher ---
-
     /// File watcher configuration for auto-indexing workspace files.
     #[serde(default)]
     pub file_watcher: FileWatcherConfig,

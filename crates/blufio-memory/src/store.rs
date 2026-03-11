@@ -810,8 +810,7 @@ mod tests {
 
         // Active but restricted
         let mut restricted = make_test_memory("mem-restricted", "Restricted");
-        restricted.classification =
-            blufio_core::classification::DataClassification::Restricted;
+        restricted.classification = blufio_core::classification::DataClassification::Restricted;
         store.save(&restricted).await.unwrap();
 
         let count = store.count_active().await.unwrap();
@@ -825,12 +824,8 @@ mod tests {
 
         // Insert 15 memories with varying ages (older = lower eviction score with decay)
         for i in 0..15 {
-            let created =
-                chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
-            let mut mem = make_test_memory(
-                &format!("mem-{i:02}"),
-                &format!("Memory {i}"),
-            );
+            let created = chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
+            let mut mem = make_test_memory(&format!("mem-{i:02}"), &format!("Memory {i}"));
             mem.source = crate::types::MemorySource::Extracted;
             mem.confidence = 0.6;
             mem.created_at = created.to_rfc3339();
@@ -848,10 +843,7 @@ mod tests {
 
         assert_eq!(deleted, 6);
         assert!(lowest > 0.0, "lowest score should be positive");
-        assert!(
-            highest >= lowest,
-            "highest should be >= lowest"
-        );
+        assert!(highest >= lowest, "highest should be >= lowest");
 
         let count_after = store.count_active().await.unwrap();
         assert_eq!(count_after, 9);
@@ -864,22 +856,15 @@ mod tests {
 
         // Active memories
         for i in 0..5 {
-            let created =
-                chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
-            let mut mem = make_test_memory(
-                &format!("mem-active-{i}"),
-                &format!("Active {i}"),
-            );
+            let created = chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
+            let mut mem = make_test_memory(&format!("mem-active-{i}"), &format!("Active {i}"));
             mem.created_at = created.to_rfc3339();
             store.save(&mem).await.unwrap();
         }
 
         // Superseded memories (should not be evicted)
         for i in 0..3 {
-            let mut mem = make_test_memory(
-                &format!("mem-sup-{i}"),
-                &format!("Superseded {i}"),
-            );
+            let mut mem = make_test_memory(&format!("mem-sup-{i}"), &format!("Superseded {i}"));
             mem.status = MemoryStatus::Superseded;
             store.save(&mem).await.unwrap();
         }
@@ -902,8 +887,7 @@ mod tests {
 
         // Insert memories with searchable content
         for i in 0..5 {
-            let created =
-                chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
+            let created = chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
             let mut mem = make_test_memory(
                 &format!("mem-search-{i}"),
                 &format!("golden retriever fact number {i}"),
@@ -943,8 +927,7 @@ mod tests {
             .unwrap();
 
         let mut restricted = make_test_memory("mem-restricted", "Restricted");
-        restricted.classification =
-            blufio_core::classification::DataClassification::Restricted;
+        restricted.classification = blufio_core::classification::DataClassification::Restricted;
         store.save(&restricted).await.unwrap();
 
         let memories = store.get_all_active_with_embeddings().await.unwrap();

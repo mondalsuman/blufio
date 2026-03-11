@@ -126,9 +126,7 @@ pub async fn run_validation(
         }
 
         let days_old = chrono::DateTime::parse_from_rfc3339(&mem.created_at)
-            .or_else(|_| {
-                chrono::DateTime::parse_from_str(&mem.created_at, "%Y-%m-%dT%H:%M:%S%.fZ")
-            })
+            .or_else(|_| chrono::DateTime::parse_from_str(&mem.created_at, "%Y-%m-%dT%H:%M:%S%.fZ"))
             .map(|dt| (now - dt.with_timezone(&chrono::Utc)).num_days())
             .unwrap_or(0);
 
@@ -180,7 +178,9 @@ pub fn run_validation_dry_run(memories: &[Memory], config: &MemoryConfig) -> Val
                 })
                 .map(|dt| (now - dt.with_timezone(&chrono::Utc)).num_days())
                 .unwrap_or(0);
-            if days_old >= stale_threshold_days && config.decay_factor.powf(days_old as f64) <= config.decay_floor {
+            if days_old >= stale_threshold_days
+                && config.decay_factor.powf(days_old as f64) <= config.decay_floor
+            {
                 result.stale_found += 1;
             }
         }
@@ -236,9 +236,7 @@ pub fn run_validation_dry_run(memories: &[Memory], config: &MemoryConfig) -> Val
         }
 
         let days_old = chrono::DateTime::parse_from_rfc3339(&mem.created_at)
-            .or_else(|_| {
-                chrono::DateTime::parse_from_str(&mem.created_at, "%Y-%m-%dT%H:%M:%S%.fZ")
-            })
+            .or_else(|_| chrono::DateTime::parse_from_str(&mem.created_at, "%Y-%m-%dT%H:%M:%S%.fZ"))
             .map(|dt| (now - dt.with_timezone(&chrono::Utc)).num_days())
             .unwrap_or(0);
 
@@ -366,8 +364,8 @@ mod tests {
 
         let mut emb2 = emb1.clone();
         // Perturb enough dimensions to drop similarity into 0.7-0.9 range
-        for i in 2..50 {
-            emb2[i] = -emb2[i] + 0.05;
+        for val in emb2.iter_mut().take(50).skip(2) {
+            *val = -*val + 0.05;
         }
         let norm2: f32 = emb2.iter().map(|x| x * x).sum::<f32>().sqrt();
         for x in &mut emb2 {
