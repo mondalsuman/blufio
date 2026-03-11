@@ -624,7 +624,8 @@ fn default_context_budget() -> u32 {
 
 /// Memory system configuration.
 ///
-/// Controls long-term memory extraction, storage, and retrieval.
+/// Controls long-term memory extraction, storage, retrieval, scoring,
+/// eviction, validation, and file watching.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MemoryConfig {
@@ -652,6 +653,85 @@ pub struct MemoryConfig {
     /// Maximum number of candidate results per search method (pre-RRF).
     #[serde(default = "default_max_retrieval_results")]
     pub max_retrieval_results: usize,
+
+    // --- Scoring parameters ---
+
+    /// Exponential decay factor applied per day since memory creation.
+    /// `max(decay_factor^days, decay_floor)`. File-sourced memories skip decay.
+    #[serde(default = "default_decay_factor")]
+    pub decay_factor: f64,
+
+    /// Minimum decay multiplier (floor). Prevents old memories from scoring zero.
+    #[serde(default = "default_decay_floor")]
+    pub decay_floor: f64,
+
+    /// MMR lambda for diversity reranking (0.0 = max diversity, 1.0 = relevance only).
+    #[serde(default = "default_mmr_lambda")]
+    pub mmr_lambda: f64,
+
+    /// Importance boost multiplier for explicit (user-created) memories.
+    #[serde(default = "default_importance_boost_explicit")]
+    pub importance_boost_explicit: f64,
+
+    /// Importance boost multiplier for LLM-extracted memories.
+    #[serde(default = "default_importance_boost_extracted")]
+    pub importance_boost_extracted: f64,
+
+    /// Importance boost multiplier for file-watcher-sourced memories.
+    #[serde(default = "default_importance_boost_file")]
+    pub importance_boost_file: f64,
+
+    // --- Eviction parameters ---
+
+    /// Maximum number of active memories before eviction triggers.
+    #[serde(default = "default_max_entries")]
+    pub max_entries: usize,
+
+    /// Interval in seconds between eviction sweeps.
+    #[serde(default = "default_eviction_sweep_interval_secs")]
+    pub eviction_sweep_interval_secs: u64,
+
+    // --- Validation parameters ---
+
+    /// Age in days after which a memory at decay floor is considered stale.
+    #[serde(default = "default_stale_threshold_days")]
+    pub stale_threshold_days: u64,
+
+    // --- File watcher ---
+
+    /// File watcher configuration for auto-indexing workspace files.
+    #[serde(default)]
+    pub file_watcher: FileWatcherConfig,
+}
+
+/// Configuration for the file watcher subsystem.
+///
+/// When `paths` is non-empty, the file watcher monitors those directories
+/// for changes and auto-indexes matching files as memories.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FileWatcherConfig {
+    /// Directories to watch for file changes. Empty disables the watcher.
+    #[serde(default)]
+    pub paths: Vec<String>,
+
+    /// File extensions to include (e.g., ["md", "txt"]). Empty means all files.
+    #[serde(default)]
+    pub extensions: Vec<String>,
+
+    /// Maximum file size in bytes. Files larger than this are skipped.
+    #[serde(default = "default_max_file_size")]
+    pub max_file_size: usize,
+}
+
+impl Default for FileWatcherConfig {
+    fn default() -> Self {
+        Self {
+            paths: Vec::new(),
+            extensions: Vec::new(),
+            max_file_size: default_max_file_size(),
+        }
+    }
 }
 
 impl Default for MemoryConfig {
@@ -663,6 +743,16 @@ impl Default for MemoryConfig {
             extraction_model: default_extraction_model(),
             idle_timeout_secs: default_idle_timeout_secs(),
             max_retrieval_results: default_max_retrieval_results(),
+            decay_factor: default_decay_factor(),
+            decay_floor: default_decay_floor(),
+            mmr_lambda: default_mmr_lambda(),
+            importance_boost_explicit: default_importance_boost_explicit(),
+            importance_boost_extracted: default_importance_boost_extracted(),
+            importance_boost_file: default_importance_boost_file(),
+            max_entries: default_max_entries(),
+            eviction_sweep_interval_secs: default_eviction_sweep_interval_secs(),
+            stale_threshold_days: default_stale_threshold_days(),
+            file_watcher: FileWatcherConfig::default(),
         }
     }
 }
@@ -689,6 +779,46 @@ fn default_idle_timeout_secs() -> u64 {
 
 fn default_max_retrieval_results() -> usize {
     50
+}
+
+fn default_decay_factor() -> f64 {
+    0.95
+}
+
+fn default_decay_floor() -> f64 {
+    0.1
+}
+
+fn default_mmr_lambda() -> f64 {
+    0.7
+}
+
+fn default_importance_boost_explicit() -> f64 {
+    1.0
+}
+
+fn default_importance_boost_extracted() -> f64 {
+    0.6
+}
+
+fn default_importance_boost_file() -> f64 {
+    0.8
+}
+
+fn default_max_entries() -> usize {
+    10_000
+}
+
+fn default_eviction_sweep_interval_secs() -> u64 {
+    300
+}
+
+fn default_stale_threshold_days() -> u64 {
+    180
+}
+
+fn default_max_file_size() -> usize {
+    102_400 // 100 KB
 }
 
 /// Model routing configuration.
@@ -2488,5 +2618,156 @@ enabled = false
 "#;
         let config: BlufioConfig = toml::from_str(toml_str).unwrap();
         assert!(!config.resilience.enabled);
+    }
+}
+
+#[cfg(test)]
+mod memory_config_tests {
+    use super::*;
+
+    #[test]
+    fn memory_config_default_decay_factor() {
+        let config = MemoryConfig::default();
+        assert!((config.decay_factor - 0.95).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn memory_config_default_decay_floor() {
+        let config = MemoryConfig::default();
+        assert!((config.decay_floor - 0.1).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn memory_config_default_mmr_lambda() {
+        let config = MemoryConfig::default();
+        assert!((config.mmr_lambda - 0.7).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn memory_config_default_importance_boost_explicit() {
+        let config = MemoryConfig::default();
+        assert!((config.importance_boost_explicit - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn memory_config_default_importance_boost_extracted() {
+        let config = MemoryConfig::default();
+        assert!((config.importance_boost_extracted - 0.6).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn memory_config_default_importance_boost_file() {
+        let config = MemoryConfig::default();
+        assert!((config.importance_boost_file - 0.8).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn memory_config_default_max_entries() {
+        let config = MemoryConfig::default();
+        assert_eq!(config.max_entries, 10_000);
+    }
+
+    #[test]
+    fn memory_config_default_eviction_sweep_interval_secs() {
+        let config = MemoryConfig::default();
+        assert_eq!(config.eviction_sweep_interval_secs, 300);
+    }
+
+    #[test]
+    fn memory_config_default_stale_threshold_days() {
+        let config = MemoryConfig::default();
+        assert_eq!(config.stale_threshold_days, 180);
+    }
+
+    #[test]
+    fn memory_config_file_watcher_defaults() {
+        let config = MemoryConfig::default();
+        assert!(config.file_watcher.paths.is_empty());
+        assert!(config.file_watcher.extensions.is_empty());
+        assert_eq!(config.file_watcher.max_file_size, 102_400);
+    }
+
+    #[test]
+    fn memory_config_deny_unknown_fields() {
+        let toml_str = r#"
+[memory]
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn memory_config_file_watcher_deny_unknown_fields() {
+        let toml_str = r#"
+[memory.file_watcher]
+unknown_field = "bad"
+"#;
+        let result: Result<BlufioConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn memory_config_parses_scoring_fields() {
+        let toml_str = r#"
+[memory]
+decay_factor = 0.9
+decay_floor = 0.05
+mmr_lambda = 0.5
+importance_boost_explicit = 0.8
+importance_boost_extracted = 0.4
+importance_boost_file = 0.6
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!((config.memory.decay_factor - 0.9).abs() < f64::EPSILON);
+        assert!((config.memory.decay_floor - 0.05).abs() < f64::EPSILON);
+        assert!((config.memory.mmr_lambda - 0.5).abs() < f64::EPSILON);
+        assert!((config.memory.importance_boost_explicit - 0.8).abs() < f64::EPSILON);
+        assert!((config.memory.importance_boost_extracted - 0.4).abs() < f64::EPSILON);
+        assert!((config.memory.importance_boost_file - 0.6).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn memory_config_parses_eviction_fields() {
+        let toml_str = r#"
+[memory]
+max_entries = 5000
+eviction_sweep_interval_secs = 600
+stale_threshold_days = 90
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.memory.max_entries, 5000);
+        assert_eq!(config.memory.eviction_sweep_interval_secs, 600);
+        assert_eq!(config.memory.stale_threshold_days, 90);
+    }
+
+    #[test]
+    fn memory_config_parses_file_watcher() {
+        let toml_str = r#"
+[memory.file_watcher]
+paths = ["./docs", "./notes"]
+extensions = ["md", "txt"]
+max_file_size = 51200
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.memory.file_watcher.paths, vec!["./docs", "./notes"]);
+        assert_eq!(config.memory.file_watcher.extensions, vec!["md", "txt"]);
+        assert_eq!(config.memory.file_watcher.max_file_size, 51200);
+    }
+
+    #[test]
+    fn memory_config_empty_toml_uses_all_defaults() {
+        let config: BlufioConfig = toml::from_str("").unwrap();
+        assert!(config.memory.enabled);
+        assert!((config.memory.decay_factor - 0.95).abs() < f64::EPSILON);
+        assert!((config.memory.decay_floor - 0.1).abs() < f64::EPSILON);
+        assert!((config.memory.mmr_lambda - 0.7).abs() < f64::EPSILON);
+        assert!((config.memory.importance_boost_explicit - 1.0).abs() < f64::EPSILON);
+        assert!((config.memory.importance_boost_extracted - 0.6).abs() < f64::EPSILON);
+        assert!((config.memory.importance_boost_file - 0.8).abs() < f64::EPSILON);
+        assert_eq!(config.memory.max_entries, 10_000);
+        assert_eq!(config.memory.eviction_sweep_interval_secs, 300);
+        assert_eq!(config.memory.stale_threshold_days, 180);
+        assert!(config.memory.file_watcher.paths.is_empty());
     }
 }
