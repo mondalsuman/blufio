@@ -50,6 +50,8 @@ pub enum BusEvent {
     Api(ApiEvent),
     /// Provider call events (LLM call metadata: model, tokens, cost, latency).
     Provider(ProviderEvent),
+    /// Compaction lifecycle events (started, completed).
+    Compaction(CompactionEvent),
 }
 
 impl BusEvent {
@@ -110,6 +112,8 @@ impl BusEvent {
             BusEvent::Audit(AuditMetaEvent::Erased { .. }) => "audit.erased",
             BusEvent::Api(ApiEvent::Request { .. }) => "api.request",
             BusEvent::Provider(ProviderEvent::Called { .. }) => "provider.called",
+            BusEvent::Compaction(CompactionEvent::Started { .. }) => "compaction.started",
+            BusEvent::Compaction(CompactionEvent::Completed { .. }) => "compaction.completed",
         }
     }
 }
@@ -612,12 +616,52 @@ pub enum ProviderEvent {
     },
 }
 
+// --- Compaction events ---
+
+/// Events related to context compaction lifecycle.
+///
+/// All fields are `String` (not cross-crate types) following the same pattern
+/// as other event sub-enums to avoid blufio-bus -> blufio-core dependency.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CompactionEvent {
+    /// A compaction pass was started.
+    Started {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Session identifier being compacted.
+        session_id: String,
+        /// Compaction level (e.g., "l1", "l2", "l3").
+        level: String,
+        /// Number of messages being compacted.
+        message_count: u32,
+    },
+    /// A compaction pass completed.
+    Completed {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Session identifier that was compacted.
+        session_id: String,
+        /// Compaction level (e.g., "l1", "l2", "l3").
+        level: String,
+        /// Quality score of the generated summary.
+        quality_score: f64,
+        /// Number of tokens saved by compaction.
+        tokens_saved: u32,
+        /// Duration of the compaction pass in milliseconds.
+        duration_ms: u64,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn all_thirteen_bus_event_variants_exist() {
+    fn all_fourteen_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -720,6 +764,14 @@ mod tests {
             latency_ms: 500,
             success: true,
             session_id: "sess-1".into(),
+        });
+
+        let _compaction = BusEvent::Compaction(CompactionEvent::Started {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            session_id: "sess-1".into(),
+            level: "l1".into(),
+            message_count: 10,
         });
     }
 
@@ -1098,6 +1150,29 @@ mod tests {
                     session_id: String::new(),
                 }),
                 "provider.called",
+            ),
+            // Compaction events
+            (
+                BusEvent::Compaction(CompactionEvent::Started {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    session_id: String::new(),
+                    level: String::new(),
+                    message_count: 0,
+                }),
+                "compaction.started",
+            ),
+            (
+                BusEvent::Compaction(CompactionEvent::Completed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    session_id: String::new(),
+                    level: String::new(),
+                    quality_score: 0.0,
+                    tokens_saved: 0,
+                    duration_ms: 0,
+                }),
+                "compaction.completed",
             ),
         ];
 

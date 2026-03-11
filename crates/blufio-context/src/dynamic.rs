@@ -45,7 +45,7 @@ impl DynamicZone {
     /// Creates a new dynamic zone from context configuration.
     pub fn new(config: &ContextConfig, token_cache: Arc<TokenizerCache>) -> Self {
         Self {
-            compaction_threshold: config.compaction_threshold,
+            compaction_threshold: config.effective_soft_trigger(),
             context_budget: config.context_budget,
             compaction_model: config.compaction_model.clone(),
             token_cache,
@@ -227,7 +227,7 @@ mod tests {
         let config = ContextConfig::default();
         let cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
         let zone = DynamicZone::new(&config, cache);
-        assert_eq!(zone.compaction_threshold, 0.70);
+        assert_eq!(zone.compaction_threshold, 0.50);
         assert_eq!(zone.context_budget, 180_000);
         assert_eq!(zone.compaction_model, "claude-haiku-4-5-20250901");
     }

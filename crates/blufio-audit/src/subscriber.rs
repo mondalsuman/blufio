@@ -16,8 +16,9 @@
 use std::sync::Arc;
 
 use blufio_bus::events::{
-    ApiEvent, AuditMetaEvent, BatchEvent, BusEvent, ChannelEvent, ClassificationEvent, ConfigEvent,
-    MemoryEvent, NodeEvent, ProviderEvent, ResilienceEvent, SessionEvent, SkillEvent, WebhookEvent,
+    ApiEvent, AuditMetaEvent, BatchEvent, BusEvent, ChannelEvent, ClassificationEvent,
+    CompactionEvent, ConfigEvent, MemoryEvent, NodeEvent, ProviderEvent, ResilienceEvent,
+    SessionEvent, SkillEvent, WebhookEvent,
 };
 use metrics::counter;
 use tokio::sync::mpsc;
@@ -659,6 +660,52 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
                 "cost_usd": cost_usd,
                 "latency_ms": latency_ms,
                 "success": success,
+            })
+            .to_string(),
+        },
+
+        // --- Compaction events ---
+        BusEvent::Compaction(CompactionEvent::Started {
+            timestamp,
+            session_id,
+            level,
+            message_count,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "start".to_string(),
+            resource_type: "compaction".to_string(),
+            resource_id: session_id.clone(),
+            actor: "system".to_string(),
+            session_id: session_id.clone(),
+            details_json: serde_json::json!({
+                "level": level,
+                "message_count": message_count,
+            })
+            .to_string(),
+        },
+        BusEvent::Compaction(CompactionEvent::Completed {
+            timestamp,
+            session_id,
+            level,
+            quality_score,
+            tokens_saved,
+            duration_ms,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "complete".to_string(),
+            resource_type: "compaction".to_string(),
+            resource_id: session_id.clone(),
+            actor: "system".to_string(),
+            session_id: session_id.clone(),
+            details_json: serde_json::json!({
+                "level": level,
+                "quality_score": quality_score,
+                "tokens_saved": tokens_saved,
+                "duration_ms": duration_ms,
             })
             .to_string(),
         },

@@ -582,7 +582,8 @@ fn default_kdf_parallelism() -> u32 {
 
 /// Context engine configuration.
 ///
-/// Controls context assembly behavior including compaction parameters.
+/// Controls context assembly behavior including compaction parameters,
+/// quality scoring, zone budgets, and archive settings.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContextConfig {
@@ -590,22 +591,135 @@ pub struct ContextConfig {
     #[serde(default = "default_compaction_model")]
     pub compaction_model: String,
 
-    /// Compaction threshold as fraction of context window (0.0-1.0).
-    /// When estimated tokens exceed this fraction, compaction triggers.
-    #[serde(default = "default_compaction_threshold")]
-    pub compaction_threshold: f64,
+    /// **Deprecated**: Use `soft_trigger` instead. Kept for backward compatibility.
+    /// When present, mapped to `soft_trigger` if that field is at its default.
+    #[serde(default)]
+    pub compaction_threshold: Option<f64>,
 
     /// Context window budget in tokens.
     #[serde(default = "default_context_budget")]
     pub context_budget: u32,
+
+    /// Enable compaction engine.
+    #[serde(default = "default_true")]
+    pub compaction_enabled: bool,
+
+    /// Fraction of context budget at which soft (background) compaction triggers.
+    #[serde(default = "default_soft_trigger")]
+    pub soft_trigger: f64,
+
+    /// Fraction of context budget at which hard (blocking) compaction triggers.
+    #[serde(default = "default_hard_trigger")]
+    pub hard_trigger: f64,
+
+    /// Enable quality scoring of compaction summaries.
+    #[serde(default = "default_true")]
+    pub quality_scoring: bool,
+
+    /// Quality gate: proceed threshold. Summaries scoring above this pass.
+    #[serde(default = "default_quality_gate_proceed")]
+    pub quality_gate_proceed: f64,
+
+    /// Quality gate: retry threshold. Summaries scoring below this are retried.
+    #[serde(default = "default_quality_gate_retry")]
+    pub quality_gate_retry: f64,
+
+    /// Quality weight for entity preservation.
+    #[serde(default = "default_quality_weight_entity")]
+    pub quality_weight_entity: f64,
+
+    /// Quality weight for decision preservation.
+    #[serde(default = "default_quality_weight_decision")]
+    pub quality_weight_decision: f64,
+
+    /// Quality weight for action item preservation.
+    #[serde(default = "default_quality_weight_action")]
+    pub quality_weight_action: f64,
+
+    /// Quality weight for numerical data preservation.
+    #[serde(default = "default_quality_weight_numerical")]
+    pub quality_weight_numerical: f64,
+
+    /// Maximum tokens for L1 (hot) compaction summaries.
+    #[serde(default = "default_max_tokens_l1")]
+    pub max_tokens_l1: u32,
+
+    /// Maximum tokens for L2 (warm) compaction summaries.
+    #[serde(default = "default_max_tokens_l2")]
+    pub max_tokens_l2: u32,
+
+    /// Maximum tokens for L3 (cold/archive) compaction summaries.
+    #[serde(default = "default_max_tokens_l3")]
+    pub max_tokens_l3: u32,
+
+    /// Token budget for the static zone (system prompt, pinned content).
+    #[serde(default = "default_static_zone_budget")]
+    pub static_zone_budget: u32,
+
+    /// Token budget for the conditional zone (memories, file context).
+    #[serde(default = "default_conditional_zone_budget")]
+    pub conditional_zone_budget: u32,
+
+    /// Enable archiving of compaction summaries.
+    #[serde(default = "default_true")]
+    pub archive_enabled: bool,
+
+    /// Maximum number of archives to retain per user.
+    #[serde(default = "default_max_archives")]
+    pub max_archives: u32,
 }
 
 impl Default for ContextConfig {
     fn default() -> Self {
         Self {
             compaction_model: default_compaction_model(),
-            compaction_threshold: default_compaction_threshold(),
+            compaction_threshold: None,
             context_budget: default_context_budget(),
+            compaction_enabled: true,
+            soft_trigger: default_soft_trigger(),
+            hard_trigger: default_hard_trigger(),
+            quality_scoring: true,
+            quality_gate_proceed: default_quality_gate_proceed(),
+            quality_gate_retry: default_quality_gate_retry(),
+            quality_weight_entity: default_quality_weight_entity(),
+            quality_weight_decision: default_quality_weight_decision(),
+            quality_weight_action: default_quality_weight_action(),
+            quality_weight_numerical: default_quality_weight_numerical(),
+            max_tokens_l1: default_max_tokens_l1(),
+            max_tokens_l2: default_max_tokens_l2(),
+            max_tokens_l3: default_max_tokens_l3(),
+            static_zone_budget: default_static_zone_budget(),
+            conditional_zone_budget: default_conditional_zone_budget(),
+            archive_enabled: true,
+            max_archives: default_max_archives(),
+        }
+    }
+}
+
+impl ContextConfig {
+    /// Returns the effective soft trigger threshold, honoring the deprecated
+    /// `compaction_threshold` field for backward compatibility.
+    ///
+    /// If `compaction_threshold` is set and `soft_trigger` is at its default (0.50),
+    /// the old threshold value is used with a deprecation warning. If both are
+    /// explicitly set, `soft_trigger` wins and a warning is emitted.
+    pub fn effective_soft_trigger(&self) -> f64 {
+        match self.compaction_threshold {
+            Some(old) if (self.soft_trigger - default_soft_trigger()).abs() < f64::EPSILON => {
+                tracing::warn!(
+                    "compaction_threshold is deprecated, use soft_trigger instead; \
+                     using compaction_threshold={old} as soft_trigger"
+                );
+                old
+            }
+            Some(_old) => {
+                tracing::warn!(
+                    "both compaction_threshold and soft_trigger are set; \
+                     compaction_threshold is deprecated and will be ignored"
+                );
+                self.soft_trigger
+            }
+            None => self.soft_trigger,
         }
     }
 }
@@ -614,12 +728,64 @@ fn default_compaction_model() -> String {
     "claude-haiku-4-5-20250901".to_string()
 }
 
-fn default_compaction_threshold() -> f64 {
-    0.70
-}
-
 fn default_context_budget() -> u32 {
     180_000
+}
+
+fn default_soft_trigger() -> f64 {
+    0.50
+}
+
+fn default_hard_trigger() -> f64 {
+    0.85
+}
+
+fn default_quality_gate_proceed() -> f64 {
+    0.6
+}
+
+fn default_quality_gate_retry() -> f64 {
+    0.4
+}
+
+fn default_quality_weight_entity() -> f64 {
+    0.35
+}
+
+fn default_quality_weight_decision() -> f64 {
+    0.25
+}
+
+fn default_quality_weight_action() -> f64 {
+    0.25
+}
+
+fn default_quality_weight_numerical() -> f64 {
+    0.15
+}
+
+fn default_max_tokens_l1() -> u32 {
+    256
+}
+
+fn default_max_tokens_l2() -> u32 {
+    1024
+}
+
+fn default_max_tokens_l3() -> u32 {
+    2048
+}
+
+fn default_static_zone_budget() -> u32 {
+    3000
+}
+
+fn default_conditional_zone_budget() -> u32 {
+    8000
+}
+
+fn default_max_archives() -> u32 {
+    10
 }
 
 /// Memory system configuration.

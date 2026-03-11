@@ -149,6 +149,14 @@ impl StorageAdapter for SqliteStorage {
         queries::messages::get_messages_for_session(self.db()?, session_id, limit).await
     }
 
+    async fn delete_messages_by_ids(
+        &self,
+        session_id: &str,
+        message_ids: &[String],
+    ) -> Result<usize, BlufioError> {
+        queries::messages::delete_messages_by_ids(self.db()?, session_id, message_ids).await
+    }
+
     // --- Queue operations ---
 
     async fn enqueue(&self, queue_name: &str, payload: &str) -> Result<i64, BlufioError> {

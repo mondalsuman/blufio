@@ -83,6 +83,13 @@ fn create_test_handler_with_resources() -> BlufioMcpHandler {
         ) -> Result<Vec<Message>, BlufioError> {
             Ok(vec![])
         }
+        async fn delete_messages_by_ids(
+            &self,
+            _session_id: &str,
+            _message_ids: &[String],
+        ) -> Result<usize, BlufioError> {
+            Ok(0)
+        }
         async fn enqueue(&self, _queue_name: &str, _payload: &str) -> Result<i64, BlufioError> {
             Ok(0)
         }

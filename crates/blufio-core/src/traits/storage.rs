@@ -48,6 +48,15 @@ pub trait StorageAdapter: PluginAdapter {
         limit: Option<i64>,
     ) -> Result<Vec<Message>, BlufioError>;
 
+    /// Delete specific messages by their IDs within a session.
+    ///
+    /// Returns the number of messages actually deleted.
+    async fn delete_messages_by_ids(
+        &self,
+        session_id: &str,
+        message_ids: &[String],
+    ) -> Result<usize, BlufioError>;
+
     // --- Queue operations ---
 
     /// Enqueue a new item. Returns the auto-generated queue entry ID.
