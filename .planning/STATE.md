@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: completed
-stopped_at: Completed 56-04-PLAN.md
+stopped_at: Completed 56-05-PLAN.md
 last_updated: "2026-03-11T23:25:02.000Z"
-last_activity: 2026-03-12 -- Phase 56 Plan 04 completed (22min)
+last_activity: 2026-03-12 -- Phase 56 Plan 05 completed (12min)
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 9
-  completed_plans: 16
+  completed_plans: 17
   percent: 30
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 56 of 63 (Multi-Level Compaction & Context Budget) -- fourth of 11 phases in v1.5
-Plan: 4 of 5 in Phase 56 (in progress)
-Status: Phase 56 Plan 04 Complete
-Last activity: 2026-03-12 -- Phase 56 Plan 04 completed (22min)
+Plan: 5 of 5 in Phase 56 (complete)
+Status: Phase 56 Complete
+Last activity: 2026-03-12 -- Phase 56 Plan 05 completed (12min)
 
 Progress: [#########-----------------------] 30%
 
@@ -60,6 +60,7 @@ Progress: [#########-----------------------] 30%
 | Phase 56 P02 | 10min | 2 tasks | 8 files |
 | Phase 56 P03 | 17min | 2 tasks | 6 files |
 | Phase 56 P04 | 22min | 2 tasks | 6 files |
+| Phase 56 P05 | 12min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,10 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - Phase 56 Plan 04: Provider-priority truncation drops lowest-priority (last-registered) first
 - Phase 56 Plan 04: DynamicZone::assemble_messages() accepts dynamic_budget parameter (adaptive)
 - Phase 56 Plan 04: Soft/hard compaction thresholds apply to adaptive dynamic budget, not total
+- Phase 56 Plan 05: CLI uses SqliteStorage + StorageAdapter trait for message access (not direct Database query)
+- Phase 56 Plan 05: ArchiveConditionalProvider registered last in serve.rs (lowest priority after memory, skills, trust zone)
+- Phase 56 Plan 05: Prometheus compaction metrics use facade pattern (describe_histogram!, describe_counter!)
+- Phase 56 Plan 05: Separate Database::open for ArchiveConditionalProvider (SqliteStorage doesn't expose connection)
 
 ### Pending Todos
 
@@ -139,6 +144,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-11T23:25:02Z
-Stopped at: Completed 56-04-PLAN.md
+Last session: 2026-03-11T23:40:43Z
+Stopped at: Completed 56-05-PLAN.md
 Resume file: None
