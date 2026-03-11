@@ -10,8 +10,8 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 ### Compaction
 
 - [x] **COMP-01**: Context compaction supports 4 levels (L0 raw -> L1 turn-pair summaries -> L2 session summary -> L3 cross-session archive)
-- [ ] **COMP-02**: Quality scoring evaluates compaction output with weighted dimensions (entity retention 35%, decision retention 25%, action retention 25%, numerical retention 15%)
-- [ ] **COMP-03**: Quality gates enforce thresholds (>=0.6 proceed, 0.4-0.6 retry with different prompt, <0.4 abort compaction)
+- [x] **COMP-02**: Quality scoring evaluates compaction output with weighted dimensions (entity retention 35%, decision retention 25%, action retention 25%, numerical retention 15%)
+- [x] **COMP-03**: Quality gates enforce thresholds (>=0.6 proceed, 0.4-0.6 retry with different prompt, <0.4 abort compaction)
 - [x] **COMP-04**: Soft trigger fires compaction at configurable threshold (default 50% context window), hard trigger at 85%
 - [x] **COMP-05**: Archive system stores L3 compacted summaries with cold storage retrieval for historical context
 - [x] **COMP-06**: Entity/fact extraction runs before compaction to preserve critical facts as separate Memory entries
@@ -209,8 +209,8 @@ Deferred to v1.6+.
 | MEME-05 | Phase 55 | Complete |
 | MEME-06 | Phase 55 | Complete |
 | COMP-01 | Phase 56 | Complete |
-| COMP-02 | Phase 56 | Pending |
-| COMP-03 | Phase 56 | Pending |
+| COMP-02 | Phase 56 | Complete |
+| COMP-03 | Phase 56 | Complete |
 | COMP-04 | Phase 56 | Complete |
 | COMP-05 | Phase 56 | Complete |
 | COMP-06 | Phase 56 | Complete |
