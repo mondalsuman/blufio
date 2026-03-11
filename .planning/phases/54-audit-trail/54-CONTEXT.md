@@ -1,7 +1,8 @@
 # Phase 54: Audit Trail - Context
 
 **Gathered:** 2026-03-10
-**Status:** Ready for planning
+**Updated:** 2026-03-11 (post-implementation review)
+**Status:** Complete
 
 <domain>
 ## Phase Boundary
@@ -26,7 +27,9 @@ Every security-relevant action in Blufio is recorded in a tamper-evident, hash-c
 - Hash chain format is internal implementation — no versioning, migration re-hashes if format changes
 
 ### Event Coverage
-- Per-invocation tool audit (one entry per tool call: WASM skills, MCP tools, built-in tools)
+- AuditSubscriber handles ALL 33 BusEvent variants (not just the 5 new ones added in this phase)
+- Existing variants handled: Session (Created/Closed), Channel (MessageReceived/MessageSent), Skill (Invoked/Completed), Node (Connected/Disconnected/Paired/PairingFailed/Stale), Webhook (Triggered/DeliveryAttempted), Batch (Submitted/Completed), Resilience (CircuitBreakerStateChanged/DegradationLevelChanged), Classification (Changed/PiiDetected/Enforced/BulkChanged)
+- New variants added: Config (Changed/Reloaded), Memory (Created/Updated/Deleted/Retrieved/Evicted), Audit (Enabled/Disabled/Erased), Api (Request), Provider (Called)
 - Provider calls: metadata only (model, tokens, cost, latency, success) — no prompt/response content
 - All operations audited including memory reads (configurable via TOML allowlist)
 - TOML event filter: `events = ["all"]` default, dot-prefix matching (e.g., "session.*" matches session.created/closed)
@@ -44,15 +47,15 @@ Every security-relevant action in Blufio is recorded in a tamper-evident, hash-c
   - Api(ApiEvent) — Request (mutating HTTP requests)
   - Provider(ProviderEvent) — Called (LLM call metadata)
 - All added to event_type_string() match for exhaustive coverage
-- Emission sites: Config in reload handler, Memory in blufio-memory CRUD, Api in gateway middleware, Audit in AuditWriter, Provider in agent loop after call returns
+- Emission sites: Config in reload handler, Memory in blufio-memory/src/store.rs CRUD, Api in blufio-gateway/src/audit.rs dedicated module, Audit in AuditWriter, Provider in blufio-agent/src/session.rs after provider call returns
 
 ### EventBus Subscriber Pattern
-- Single AuditSubscriber subscribes to all BusEvent variants
+- Single AuditSubscriber subscribes to all BusEvent variants via `event_bus.subscribe_reliable(256)` (buffered mpsc channel, not broadcast — ensures no event loss under load)
 - Internal filtering via TOML allowlist (filter.matches(event_type))
-- Converts BusEvent to AuditEntry and sends to AuditWriter via mpsc
+- Converts BusEvent to PendingEntry via exhaustive match on all 33 variants and sends to AuditWriter via try_send
 - blufio-memory gains blufio-bus dependency (Optional<Arc<EventBus>> pattern for tests/CLI)
 - Provider events emitted in blufio-agent SessionActor (after provider.chat() returns)
-- Gateway API events emitted via axum middleware layer on mutating routes
+- Gateway API events emitted via dedicated blufio-gateway/src/audit.rs module (not inline middleware)
 
 ### Async Write Pipeline
 - Bounded mpsc channel (capacity 1024)
@@ -93,7 +96,8 @@ Every security-relevant action in Blufio is recorded in a tamper-evident, hash-c
 - Error classification: is_retryable()=true, severity=Error, category=Security
 - Auto-create audit.db on first use if it doesn't exist (with schema migration)
 - blufio doctor includes audit health check (last 100 entries, not full chain walk)
-- Prometheus metrics: blufio_audit_entries_total, blufio_audit_batch_flush_total, blufio_audit_dropped_total, blufio_audit_flush_duration_seconds, blufio_audit_errors_total
+- Prometheus metrics (4 counters): blufio_audit_entries_total, blufio_audit_batch_flush_total, blufio_audit_dropped_total, blufio_audit_errors_total
+- Flush duration logged at debug level only (no Prometheus histogram)
 
 ### GDPR Erasure Mechanics
 - Phase 54 provides erase_audit_entries(db, user_id) function — called by Phase 60 GDPR CLI
@@ -108,25 +112,24 @@ Every security-relevant action in Blufio is recorded in a tamper-evident, hash-c
 - Init order: after EventBus, before channel adapters (so adapter startup events are captured)
 - Shared via Arc<AuditWriter> — cloned to AuditSubscriber and gateway
 - Shutdown order: flush after adapters disconnect, before DB close (reverse of startup)
+- Shutdown uses Arc::try_unwrap for clean ownership transfer; falls back to flush-only if other refs exist
 - Backup command (blufio backup) includes audit.db alongside main database
+- Restore command (blufio restore) restores audit.db if backup archive contains it
 
 ### Crate Organization
-- New blufio-audit crate: lib.rs, writer.rs (AuditWriter), subscriber.rs (AuditSubscriber), chain.rs (hash chain + verify), models.rs (AuditEntry), migrations.rs (schema)
-- Dependencies: blufio-bus, blufio-core, blufio-storage (for open_connection), sha2, tokio, rusqlite/tokio-rusqlite, serde_json, chrono
+- New blufio-audit crate: lib.rs, writer.rs (AuditWriter), subscriber.rs (AuditSubscriber), chain.rs (hash chain + verify), models.rs (AuditEntry, PendingEntry, AuditErasureReport, AuditError), filter.rs (EventFilter), migrations.rs (schema)
+- Dependencies: blufio-bus, blufio-storage (for open_connection), sha2, hex, tokio, rusqlite/tokio-rusqlite, serde/serde_json, chrono, metrics, tracing, thiserror
 - blufio-memory gains blufio-bus dependency for MemoryEvent emission
-- blufio-agent emits ProviderEvent after LLM calls
-- blufio-gateway gets audit middleware layer for ApiEvent emission
+- blufio-agent emits ProviderEvent after LLM calls (session.rs)
+- blufio-gateway gets dedicated audit.rs module for ApiEvent emission
 
 ### Testing
-- Unit tests: chain builds correctly, genesis zero hash, GDPR erase preserves chain, gap detection, tamper detection, batch insert chain maintenance
-- Property-based (proptest): arbitrary entries always produce valid chain
-- Integration: full EventBus -> AuditSubscriber -> AuditWriter -> audit.db pipeline
-- CLI integration tests: verify/tail/stats against pre-populated audit.db, --json output, filter behavior
-- Overflow test: deliberately fill mpsc, verify drop + warning + Prometheus counter
-- Dedicated GDPR test: create entries with PII, erase, verify chain intact + [ERASED] markers
-- Event filter tests: "all" matches everything, prefix matching, exact matching, non-matching
-- Criterion benchmarks: hash throughput, batch insert 1000 entries, verify chain 1000 entries
-- Uses blufio-test-utils for temp directory and database setup
+- Unit tests: chain builds correctly, genesis zero hash, GDPR erase preserves chain, gap detection, tamper detection, batch insert chain maintenance, chain head recovery after restart, flush via oneshot, shutdown flushes remaining
+- Property-based (proptest): arbitrary entries always produce valid chain (100 cases, 1-20 entries each)
+- GDPR erasure tests: erase by actor prefix, erase by details_json content match, verify chain intact after erasure
+- Event filter tests: "all" matches everything, prefix matching with dot separator, exact matching, empty patterns match nothing, prefix doesn't match without dot
+- Subscriber tests: convert all 33 BusEvent variants, verify event_type/action/resource_type mapping for each
+- Uses tempfile crate for temp directory setup in writer tests
 
 ### Documentation
 - Rustdoc on all public items in blufio-audit
@@ -152,8 +155,8 @@ Every security-relevant action in Blufio is recorded in a tamper-evident, hash-c
 
 - Hash chain format: pipe-delimited `SHA-256(prev_hash|timestamp|event_type|action|resource_type|resource_id)` — simple, deterministic, no JSON parsing
 - PII fields (actor, session_id, details_json) deliberately excluded from hash to enable GDPR erasure without chain breaks
-- EventBus subscriber pattern reuses existing infrastructure — single subscriber receives all, filters internally
-- Audit middleware in gateway: axum layer on mutating routes, transparent to handlers
+- EventBus subscriber pattern reuses existing infrastructure — single subscriber receives all via subscribe_reliable(256), filters internally
+- Gateway audit in dedicated audit.rs module, transparent to route handlers
 - Provider audit in agent loop: single emission point after provider.chat() returns, no per-provider crate changes
 - Doctor health check: last 100 entries only for speed, full verify via dedicated command
 
@@ -164,31 +167,29 @@ Every security-relevant action in Blufio is recorded in a tamper-evident, hash-c
 
 ### Reusable Assets
 - `blufio-storage::database::open_connection()`: Audit.db uses same connection factory with SQLCipher support
-- `blufio-bus::events::BusEvent`: Extend with 5 new variants (Config, Memory, Audit, Api, Provider)
+- `blufio-bus::events::BusEvent`: Extended with 5 new variants (Config, Memory, Audit, Api, Provider)
 - `blufio-bus::events::event_type_string()`: Existing pattern for dot-separated event type strings
-- `blufio-core::error::BlufioError`: Extend with Audit(AuditError) variant following typed hierarchy pattern
-- `blufio-test-utils`: Temp directory and database setup helpers for tests
+- `blufio-core::error::BlufioError`: Extended with Audit(AuditError) variant following typed hierarchy pattern
 - `blufio-prometheus`: EventBus subscriber pattern for metrics — same pattern for AuditSubscriber
-- Circuit breaker infrastructure (Phase 48): Wire audit DB as dependency for degradation
 
 ### Established Patterns
 - tokio-rusqlite single-writer thread for all SQLite writes
 - #[serde(deny_unknown_fields)] on all config structs
 - Optional<Arc<EventBus>> for components that emit events (None in tests/CLI)
-- LazyLock for compiled regex patterns (event filter can use similar)
 - Arc<T> for shared resources passed through startup chain
 - EventBus fire-and-forget for async event emission
+- subscribe_reliable() for guaranteed delivery to critical subscribers (audit, metrics)
 - CLI subcommands in main binary crate, library logic in crate libraries
 
 ### Integration Points
-- serve.rs: AuditWriter init after EventBus, before adapters; flush on shutdown
-- blufio-config: new AuditConfig struct with #[serde(default)]
-- blufio-gateway: new audit middleware layer for API request events
-- blufio-agent: ProviderEvent emission after provider.chat()
-- blufio-memory: MemoryEvent emission in CRUD methods (new blufio-bus dep)
-- blufio (binary): new `blufio audit verify|tail|stats` CLI subcommands
+- serve.rs: AuditWriter init after EventBus, before adapters; flush on shutdown with Arc::try_unwrap
+- blufio-config: AuditConfig struct with #[serde(default)]
+- blufio-gateway/src/audit.rs: dedicated module for API request event emission
+- blufio-agent/src/session.rs: ProviderEvent emission after provider call
+- blufio-memory/src/store.rs: MemoryEvent emission in CRUD methods (new blufio-bus dep)
+- blufio (binary): `blufio audit verify|tail|stats` CLI subcommands in main.rs
 - blufio doctor: audit trail health check (last 100 entries)
-- blufio backup: include audit.db in backup/restore
+- blufio backup/restore: include audit.db alongside main database
 
 </code_context>
 
@@ -199,6 +200,7 @@ Every security-relevant action in Blufio is recorded in a tamper-evident, hash-c
 - External witness integration (cloud KMS, git) for chain head snapshots — v1.6+ per REQUIREMENTS.md
 - Time-series breakdown in stats (daily/hourly bucketing) — add if operators request it
 - Configurable buffer tuning knobs (buffer_capacity, flush_interval_ms, batch_size) — expose if defaults prove insufficient
+- Criterion benchmarks: hash throughput, batch insert 1000 entries, verify chain 1000 entries — deferred to Phase 63 (Code Quality)
 
 </deferred>
 
@@ -206,3 +208,4 @@ Every security-relevant action in Blufio is recorded in a tamper-evident, hash-c
 
 *Phase: 54-audit-trail*
 *Context gathered: 2026-03-10*
+*Updated: 2026-03-11*
