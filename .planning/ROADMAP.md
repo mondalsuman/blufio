@@ -171,7 +171,13 @@ Plans:
   3. Entity and fact extraction runs before compaction, preserving critical information as separate Memory entries that survive summarization
   4. L3 archive summaries are stored in cold storage with retrieval available for historical context
   5. Zone 1 (static) and Zone 2 (conditional) enforce configurable token budgets with 10% safety margins using accurate provider-specific token counting
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 56-01-PLAN.md -- Foundation types: ContextConfig extension, CompactionEvent, delete_messages_by_ids, V13 migration, archive queries
+- [ ] 56-02-PLAN.md -- Core compaction engine: compaction/ module refactor, L0-L3 levels, dual triggers, cascade, entity extraction
+- [ ] 56-03-PLAN.md -- Quality scoring and archives: quality gates/retry, L3 archive generation, rolling window, ArchiveConditionalProvider
+- [ ] 56-04-PLAN.md -- Zone budget enforcement: ZoneBudget struct, static/conditional/dynamic budget enforcement, adaptive budget
+- [ ] 56-05-PLAN.md -- CLI and wiring: context compact/archive/status commands, serve.rs wiring, Prometheus metrics
 
 ### Phase 57: Prompt Injection Defense
 **Goal**: The agent loop is protected against prompt injection attacks at multiple layers without blocking legitimate user input
@@ -317,7 +323,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 53. Data Classification & PII Foundation | 5/5 | Complete    | 2026-03-10 | - |
 | 54. Audit Trail | 3/3 | Complete    | 2026-03-10 | - |
 | 55. Memory Enhancements | 4/4 | Complete    | 2026-03-11 | - |
-| 56. Multi-Level Compaction & Context Budget | v1.5 | 0/0 | Not started | - |
+| 56. Multi-Level Compaction & Context Budget | v1.5 | 0/5 | Planning complete | - |
 | 57. Prompt Injection Defense | v1.5 | 0/0 | Not started | - |
 | 58. Cron Scheduler & Retention Policies | v1.5 | 0/0 | Not started | - |
 | 59. Hook System & Hot Reload | v1.5 | 0/0 | Not started | - |
@@ -328,4 +334,4 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-11 after Phase 55 planning*
+*Last updated: 2026-03-11 after Phase 56 planning*
