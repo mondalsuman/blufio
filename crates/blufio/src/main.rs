@@ -197,6 +197,14 @@ enum Commands {
         #[command(subcommand)]
         action: AuditCommands,
     },
+    /// Manage long-term memories.
+    #[command(
+        after_help = "Examples:\n  blufio memory validate --dry-run\n  blufio memory validate --json"
+    )]
+    Memory {
+        #[command(subcommand)]
+        command: MemoryCommand,
+    },
 }
 
 /// Privacy subcommands.
@@ -457,6 +465,20 @@ enum AuditCommands {
     #[command(after_help = "Examples:\n  blufio audit stats\n  blufio audit stats --json")]
     Stats {
         /// Output as structured JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// Memory management subcommands.
+#[derive(Subcommand, Debug)]
+enum MemoryCommand {
+    /// Validate memory index: detect duplicates, stale entries, and conflicts.
+    Validate {
+        /// Preview only -- do not modify any memories.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output results as JSON.
         #[arg(long)]
         json: bool,
     },
@@ -751,6 +773,12 @@ async fn main() {
                 AuditCommands::Stats { json } => {
                     run_audit_stats(&audit_db_path, json);
                 }
+            }
+        }
+        Some(Commands::Memory { command }) => {
+            if let Err(e) = handle_memory_command(&config, command).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
             }
         }
         None => {
@@ -1917,6 +1945,68 @@ fn parse_sig_file(content: &str) -> Result<(String, String, String), blufio_core
             blufio_core::BlufioError::Security("signature file missing signature".to_string())
         })?,
     ))
+}
+
+/// Handle `blufio memory <command>` subcommands.
+async fn handle_memory_command(
+    config: &blufio_config::model::BlufioConfig,
+    command: MemoryCommand,
+) -> Result<(), blufio_core::BlufioError> {
+    match command {
+        MemoryCommand::Validate { dry_run, json } => {
+            let conn =
+                blufio_storage::open_connection(&config.storage.database_path).await?;
+            let store = blufio_memory::MemoryStore::new(conn);
+
+            if dry_run {
+                let memories = store.get_all_active_with_embeddings().await?;
+                let result =
+                    blufio_memory::validation::run_validation_dry_run(&memories, &config.memory);
+
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "dry_run": true,
+                            "duplicates": result.duplicates_found,
+                            "conflicts": result.conflicts_found,
+                            "stale": result.stale_found,
+                        })
+                    );
+                } else {
+                    println!("Validation (dry run):");
+                    println!("  Duplicates: {}", result.duplicates_found);
+                    println!("  Conflicts:  {}", result.conflicts_found);
+                    println!("  Stale:      {}", result.stale_found);
+                }
+            } else {
+                let result = blufio_memory::validation::run_validation(
+                    &store,
+                    &config.memory,
+                    &None,
+                )
+                .await?;
+
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "dry_run": false,
+                            "duplicates": result.duplicates_found,
+                            "conflicts": result.conflicts_found,
+                            "stale": result.stale_found,
+                        })
+                    );
+                } else {
+                    println!("Validation complete:");
+                    println!("  Duplicates resolved: {}", result.duplicates_found);
+                    println!("  Conflicts resolved:  {}", result.conflicts_found);
+                    println!("  Stale removed:       {}", result.stale_found);
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Handle `blufio plugin <action>` subcommands.
