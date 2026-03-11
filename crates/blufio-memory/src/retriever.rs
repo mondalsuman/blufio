@@ -4,8 +4,8 @@
 //! Hybrid retriever combining vector similarity and BM25 via RRF fusion.
 //!
 //! The retriever embeds the query, runs both vector search and FTS5 BM25,
-//! fuses results using Reciprocal Rank Fusion (k=60), and applies
-//! confidence-based boosting for final ranking.
+//! fuses results using Reciprocal Rank Fusion (k=60), applies source-based
+//! importance boost and temporal decay, then reranks with MMR for diversity.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -70,7 +70,8 @@ fn importance_boost_for_source(source: &MemorySource, config: &MemoryConfig) -> 
 /// Hybrid retriever combining vector similarity search and BM25 keyword search.
 ///
 /// Uses Reciprocal Rank Fusion (RRF) to merge results from both search
-/// methods, then applies confidence-based boosting (explicit > extracted).
+/// methods, applies importance boost and temporal decay, then reranks
+/// with Maximal Marginal Relevance (MMR) for result diversity.
 pub struct HybridRetriever {
     store: Arc<MemoryStore>,
     embedder: Arc<OnnxEmbedder>,
@@ -162,7 +163,14 @@ impl HybridRetriever {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        Ok(scored)
+        // Step 8: MMR diversity reranking
+        let result = mmr_rerank(
+            &scored,
+            self.config.mmr_lambda,
+            self.config.max_retrieval_results,
+        );
+
+        Ok(result)
     }
 
     /// Vector search: compute cosine similarity against all active embeddings.
@@ -229,6 +237,92 @@ pub fn reciprocal_rank_fusion(
     fused.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     fused
+}
+
+/// Maximal Marginal Relevance (MMR) diversity reranking.
+///
+/// Greedy selection per Carbonell & Goldstein (1998):
+/// - First pick: always the highest-scored item.
+/// - Each subsequent pick maximizes:
+///   `lambda * relevance - (1 - lambda) * max_similarity_to_already_selected`
+///
+/// `lambda = 1.0` preserves pure relevance ordering (no diversity penalty).
+/// `lambda = 0.0` maximizes diversity (most dissimilar selections).
+///
+/// The input `scored` slice must already be sorted by score descending.
+/// Returns up to `k` items.
+fn mmr_rerank(scored: &[ScoredMemory], lambda: f64, k: usize) -> Vec<ScoredMemory> {
+    if scored.is_empty() || k == 0 {
+        return vec![];
+    }
+
+    let n = scored.len();
+    let take = k.min(n);
+    let lambda_f = lambda as f32;
+
+    // Normalize relevance scores to [0, 1] for MMR formula balance.
+    // The highest score becomes 1.0 and lowest becomes 0.0 (or all 1.0 if identical).
+    let max_score = scored[0].score;
+    let min_score = scored[n - 1].score;
+    let score_range = max_score - min_score;
+
+    let norm_relevance: Vec<f32> = scored
+        .iter()
+        .map(|s| {
+            if score_range.abs() < f32::EPSILON {
+                1.0
+            } else {
+                (s.score - min_score) / score_range
+            }
+        })
+        .collect();
+
+    let mut selected_indices: Vec<usize> = Vec::with_capacity(take);
+    let mut remaining: Vec<usize> = (0..n).collect();
+
+    // First pick: highest score (index 0 since input is sorted descending)
+    selected_indices.push(0);
+    remaining.retain(|&i| i != 0);
+
+    // Greedy selection for remaining picks
+    while selected_indices.len() < take && !remaining.is_empty() {
+        let mut best_idx = remaining[0];
+        let mut best_mmr = f32::NEG_INFINITY;
+
+        for &candidate in &remaining {
+            let relevance = norm_relevance[candidate];
+
+            // Max similarity to any already-selected item
+            let max_sim = selected_indices
+                .iter()
+                .map(|&sel| {
+                    let cand_emb = &scored[candidate].memory.embedding;
+                    let sel_emb = &scored[sel].memory.embedding;
+                    if cand_emb.is_empty() || sel_emb.is_empty() || cand_emb.len() != sel_emb.len()
+                    {
+                        0.0
+                    } else {
+                        cosine_similarity(cand_emb, sel_emb)
+                    }
+                })
+                .fold(f32::NEG_INFINITY, f32::max);
+
+            let mmr_score = lambda_f * relevance - (1.0 - lambda_f) * max_sim;
+
+            if mmr_score > best_mmr {
+                best_mmr = mmr_score;
+                best_idx = candidate;
+            }
+        }
+
+        selected_indices.push(best_idx);
+        remaining.retain(|&i| i != best_idx);
+    }
+
+    selected_indices
+        .into_iter()
+        .map(|i| scored[i].clone())
+        .collect()
 }
 
 #[cfg(test)]
@@ -522,5 +616,122 @@ mod tests {
             score_newer > score_older,
             "Newer ({score_newer}) should rank above older ({score_older})"
         );
+    }
+
+    // --- MMR helper to create scored memories with embeddings ---
+
+    fn make_scored(id: &str, score: f32, embedding: Vec<f32>) -> ScoredMemory {
+        let mut mem = make_memory(id, MemorySource::Explicit, "2026-03-01T00:00:00Z");
+        mem.embedding = embedding;
+        ScoredMemory { memory: mem, score }
+    }
+
+    // --- mmr_rerank tests ---
+
+    #[test]
+    fn mmr_rerank_empty_input() {
+        let result = mmr_rerank(&[], 0.7, 5);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn mmr_rerank_k_zero_returns_empty() {
+        let scored = vec![make_scored("a", 1.0, vec![1.0, 0.0, 0.0])];
+        let result = mmr_rerank(&scored, 0.7, 0);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn mmr_rerank_lambda_one_preserves_relevance_order() {
+        // lambda=1.0 means no diversity penalty -- pure relevance
+        let scored = vec![
+            make_scored("a", 0.9, vec![1.0, 0.0, 0.0]),
+            make_scored("b", 0.7, vec![0.98, 0.2, 0.0]),
+            make_scored("c", 0.5, vec![0.0, 1.0, 0.0]),
+        ];
+        let result = mmr_rerank(&scored, 1.0, 3);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].memory.id, "a");
+        assert_eq!(result[1].memory.id, "b");
+        assert_eq!(result[2].memory.id, "c");
+    }
+
+    #[test]
+    fn mmr_rerank_lambda_zero_maximizes_diversity() {
+        // lambda=0.0 means pure diversity (select most dissimilar to selected set)
+        // a and b are very similar, c is orthogonal
+        let scored = vec![
+            make_scored("a", 0.9, vec![1.0, 0.0, 0.0]),
+            make_scored("b", 0.8, vec![0.98, 0.2, 0.0]),  // very similar to a
+            make_scored("c", 0.7, vec![0.0, 1.0, 0.0]),    // orthogonal to a
+        ];
+        let result = mmr_rerank(&scored, 0.0, 3);
+        assert_eq!(result.len(), 3);
+        // First is always highest score
+        assert_eq!(result[0].memory.id, "a");
+        // Second should be c (orthogonal = most dissimilar from a)
+        assert_eq!(
+            result[1].memory.id, "c",
+            "With lambda=0, most dissimilar (c) should be picked before similar (b)"
+        );
+        // Third is b (remaining)
+        assert_eq!(result[2].memory.id, "b");
+    }
+
+    #[test]
+    fn mmr_rerank_diversity_promotes_dissimilar() {
+        // 3 similar memories + 1 dissimilar, default lambda=0.7
+        // MMR should promote the dissimilar one earlier than pure relevance
+        let scored = vec![
+            make_scored("s1", 0.9, vec![1.0, 0.0, 0.0]),
+            make_scored("s2", 0.85, vec![0.98, 0.2, 0.0]),  // similar to s1
+            make_scored("s3", 0.8, vec![0.95, 0.31, 0.0]),  // similar to s1
+            make_scored("d1", 0.75, vec![0.0, 1.0, 0.0]),   // dissimilar (orthogonal)
+        ];
+        let result = mmr_rerank(&scored, 0.7, 4);
+        assert_eq!(result.len(), 4);
+        // s1 always first (highest score)
+        assert_eq!(result[0].memory.id, "s1");
+        // d1 should appear before s3 (diversity boost overcomes slight score gap)
+        let d1_pos = result.iter().position(|r| r.memory.id == "d1").unwrap();
+        let s3_pos = result.iter().position(|r| r.memory.id == "s3").unwrap();
+        assert!(
+            d1_pos < s3_pos,
+            "Dissimilar d1 (pos {d1_pos}) should be promoted before similar s3 (pos {s3_pos})"
+        );
+    }
+
+    #[test]
+    fn mmr_rerank_k_larger_than_input() {
+        let scored = vec![
+            make_scored("a", 0.9, vec![1.0, 0.0, 0.0]),
+            make_scored("b", 0.7, vec![0.0, 1.0, 0.0]),
+        ];
+        let result = mmr_rerank(&scored, 0.7, 10);
+        assert_eq!(result.len(), 2, "Should return all items when k > input len");
+    }
+
+    #[test]
+    fn mmr_rerank_first_item_is_highest_scored() {
+        let scored = vec![
+            make_scored("top", 1.0, vec![1.0, 0.0, 0.0]),
+            make_scored("mid", 0.5, vec![0.0, 1.0, 0.0]),
+            make_scored("low", 0.1, vec![0.0, 0.0, 1.0]),
+        ];
+        for lambda in [0.0, 0.3, 0.5, 0.7, 1.0] {
+            let result = mmr_rerank(&scored, lambda, 3);
+            assert_eq!(
+                result[0].memory.id, "top",
+                "First item must always be highest scored (lambda={lambda})"
+            );
+        }
+    }
+
+    #[test]
+    fn mmr_rerank_single_item() {
+        let scored = vec![make_scored("only", 0.5, vec![1.0, 0.0, 0.0])];
+        let result = mmr_rerank(&scored, 0.7, 5);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].memory.id, "only");
     }
 }
