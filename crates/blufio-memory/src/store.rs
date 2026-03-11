@@ -246,6 +246,114 @@ impl MemoryStore {
         Ok(())
     }
 
+    /// Count all active non-restricted memories.
+    pub async fn count_active(&self) -> Result<usize, BlufioError> {
+        self.conn
+            .call(move |conn| {
+                let count: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM memories WHERE status = 'active' AND classification != 'restricted'",
+                    [],
+                    |row| row.get(0),
+                )?;
+                Ok(count as usize)
+            })
+            .await
+            .map_err(storage_err)
+    }
+
+    /// Get all active memories with embeddings for validation (pairwise comparison).
+    ///
+    /// Delegates to `get_active()` which already loads full Memory structs including embeddings.
+    pub async fn get_all_active_with_embeddings(&self) -> Result<Vec<Memory>, BlufioError> {
+        self.get_active().await
+    }
+
+    /// Hard-delete the lowest-scored active memories by eviction score.
+    ///
+    /// Computes eviction score in Rust: `importance_boost * max(decay_factor^days, decay_floor)`.
+    /// Returns `(count_deleted, lowest_score_of_deleted, highest_score_of_deleted)`.
+    ///
+    /// The delete is wrapped in a single transaction so FTS5 triggers fire consistently.
+    pub async fn batch_evict(
+        &self,
+        count: usize,
+        decay_factor: f64,
+        decay_floor: f64,
+        importance_boosts: (f64, f64, f64),
+    ) -> Result<(usize, f64, f64), BlufioError> {
+        let (boost_explicit, boost_extracted, boost_file) = importance_boosts;
+
+        self.conn
+            .call(move |conn| {
+                // Step 1: Load all active non-restricted memories with metadata for scoring
+                let rows: Vec<(String, String, String)> = {
+                    let mut stmt = conn.prepare(
+                        "SELECT id, source, created_at FROM memories WHERE status = 'active' AND classification != 'restricted'",
+                    )?;
+                    stmt.query_map([], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?
+                };
+
+                // Step 2: Compute eviction score for each memory in Rust
+                let now = chrono::Utc::now();
+                let mut scored: Vec<(String, f64)> = rows
+                    .into_iter()
+                    .map(|(id, source, created_at)| {
+                        let boost = match source.as_str() {
+                            "explicit" => boost_explicit,
+                            "file_watcher" => boost_file,
+                            _ => boost_extracted,
+                        };
+                        let days = chrono::DateTime::parse_from_rfc3339(&created_at)
+                            .or_else(|_| {
+                                // Handle format like "2026-03-01T00:00:00.000Z"
+                                chrono::DateTime::parse_from_str(&created_at, "%Y-%m-%dT%H:%M:%S%.fZ")
+                            })
+                            .map(|dt| (now - dt.with_timezone(&chrono::Utc)).num_days().max(0) as f64)
+                            .unwrap_or(0.0);
+                        let decay = decay_factor.powf(days).max(decay_floor);
+                        let score = boost * decay;
+                        (id, score)
+                    })
+                    .collect();
+
+                // Step 3: Sort by score ascending (lowest first) and take `count` for eviction
+                scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                let to_evict: Vec<(String, f64)> = scored.into_iter().take(count).collect();
+
+                if to_evict.is_empty() {
+                    return Ok((0, 0.0, 0.0));
+                }
+
+                let lowest_score = to_evict.first().map(|t| t.1).unwrap_or(0.0);
+                let highest_score = to_evict.last().map(|t| t.1).unwrap_or(0.0);
+                let ids: Vec<String> = to_evict.into_iter().map(|(id, _)| id).collect();
+
+                // Step 4: Delete in a single transaction (FTS5 triggers fire per row)
+                let tx = conn.transaction()?;
+                let placeholders: Vec<String> =
+                    (1..=ids.len()).map(|i| format!("?{i}")).collect();
+                let sql = format!(
+                    "DELETE FROM memories WHERE id IN ({})",
+                    placeholders.join(", ")
+                );
+                let params: Vec<&dyn rusqlite::types::ToSql> =
+                    ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+                let deleted = tx.execute(&sql, params.as_slice())?;
+                tx.commit()?;
+
+                Ok((deleted, lowest_score, highest_score))
+            })
+            .await
+            .map_err(storage_err)
+    }
+
     /// Get memories by IDs (batch retrieval after hybrid search), excluding Restricted.
     pub async fn get_memories_by_ids(&self, ids: &[String]) -> Result<Vec<Memory>, BlufioError> {
         if ids.is_empty() {
@@ -654,6 +762,192 @@ mod tests {
             "restricted should be excluded from search"
         );
         assert_eq!(results[0].0, "mem-int");
+    }
+
+    #[tokio::test]
+    async fn count_active_returns_correct_count() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        store
+            .save(&make_test_memory("mem-1", "Active one"))
+            .await
+            .unwrap();
+        store
+            .save(&make_test_memory("mem-2", "Active two"))
+            .await
+            .unwrap();
+
+        let count = store.count_active().await.unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn count_active_excludes_non_active_and_restricted() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        // Active internal
+        store
+            .save(&make_test_memory("mem-active", "Active"))
+            .await
+            .unwrap();
+
+        // Superseded
+        let mut sup = make_test_memory("mem-sup", "Superseded");
+        sup.status = MemoryStatus::Superseded;
+        store.save(&sup).await.unwrap();
+
+        // Forgotten
+        let mut forg = make_test_memory("mem-forg", "Forgotten");
+        forg.status = MemoryStatus::Forgotten;
+        store.save(&forg).await.unwrap();
+
+        // Active but restricted
+        let mut restricted = make_test_memory("mem-restricted", "Restricted");
+        restricted.classification =
+            blufio_core::classification::DataClassification::Restricted;
+        store.save(&restricted).await.unwrap();
+
+        let count = store.count_active().await.unwrap();
+        assert_eq!(count, 1, "only active non-restricted should be counted");
+    }
+
+    #[tokio::test]
+    async fn batch_evict_deletes_lowest_scored() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        // Insert 15 memories with varying ages (older = lower eviction score with decay)
+        for i in 0..15 {
+            let created =
+                chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
+            let mut mem = make_test_memory(
+                &format!("mem-{i:02}"),
+                &format!("Memory {i}"),
+            );
+            mem.source = crate::types::MemorySource::Extracted;
+            mem.confidence = 0.6;
+            mem.created_at = created.to_rfc3339();
+            store.save(&mem).await.unwrap();
+        }
+
+        let count_before = store.count_active().await.unwrap();
+        assert_eq!(count_before, 15);
+
+        // Evict 6 (down to 9 from 15 with max_entries=10, target=9)
+        let (deleted, lowest, highest) = store
+            .batch_evict(6, 0.95, 0.1, (1.0, 0.6, 0.8))
+            .await
+            .unwrap();
+
+        assert_eq!(deleted, 6);
+        assert!(lowest > 0.0, "lowest score should be positive");
+        assert!(
+            highest >= lowest,
+            "highest should be >= lowest"
+        );
+
+        let count_after = store.count_active().await.unwrap();
+        assert_eq!(count_after, 9);
+    }
+
+    #[tokio::test]
+    async fn batch_evict_only_deletes_active() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        // Active memories
+        for i in 0..5 {
+            let created =
+                chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
+            let mut mem = make_test_memory(
+                &format!("mem-active-{i}"),
+                &format!("Active {i}"),
+            );
+            mem.created_at = created.to_rfc3339();
+            store.save(&mem).await.unwrap();
+        }
+
+        // Superseded memories (should not be evicted)
+        for i in 0..3 {
+            let mut mem = make_test_memory(
+                &format!("mem-sup-{i}"),
+                &format!("Superseded {i}"),
+            );
+            mem.status = MemoryStatus::Superseded;
+            store.save(&mem).await.unwrap();
+        }
+
+        let (deleted, _, _) = store
+            .batch_evict(3, 0.95, 0.1, (1.0, 0.6, 0.8))
+            .await
+            .unwrap();
+        assert_eq!(deleted, 3);
+
+        // Only active should have been affected
+        let remaining = store.count_active().await.unwrap();
+        assert_eq!(remaining, 2, "only 2 active memories should remain");
+    }
+
+    #[tokio::test]
+    async fn batch_evict_fts5_consistent() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        // Insert memories with searchable content
+        for i in 0..5 {
+            let created =
+                chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
+            let mut mem = make_test_memory(
+                &format!("mem-search-{i}"),
+                &format!("golden retriever fact number {i}"),
+            );
+            mem.created_at = created.to_rfc3339();
+            store.save(&mem).await.unwrap();
+        }
+
+        // Evict 3
+        let (deleted, _, _) = store
+            .batch_evict(3, 0.95, 0.1, (1.0, 0.6, 0.8))
+            .await
+            .unwrap();
+        assert_eq!(deleted, 3);
+
+        // FTS5 search should still work and only find remaining 2
+        let results = store.search_bm25("golden retriever", 10).await.unwrap();
+        assert_eq!(
+            results.len(),
+            2,
+            "FTS5 should only find 2 remaining memories after eviction"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_all_active_with_embeddings_returns_full_structs() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        store
+            .save(&make_test_memory("mem-1", "First memory"))
+            .await
+            .unwrap();
+        store
+            .save(&make_test_memory("mem-2", "Second memory"))
+            .await
+            .unwrap();
+
+        let mut restricted = make_test_memory("mem-restricted", "Restricted");
+        restricted.classification =
+            blufio_core::classification::DataClassification::Restricted;
+        store.save(&restricted).await.unwrap();
+
+        let memories = store.get_all_active_with_embeddings().await.unwrap();
+        assert_eq!(memories.len(), 2);
+        for mem in &memories {
+            assert_eq!(mem.embedding.len(), 384, "embedding should be loaded");
+            assert_ne!(mem.content, "Restricted");
+        }
     }
 
     #[tokio::test]

@@ -18,6 +18,7 @@
 //! - **Types**: Memory, MemorySource, MemoryStatus, ScoredMemory
 
 pub mod embedder;
+pub mod eviction;
 pub mod extractor;
 pub mod model_manager;
 pub mod provider;
