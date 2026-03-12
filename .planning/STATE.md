@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 57-03-PLAN.md
-last_updated: "2026-03-12T13:32:17Z"
-last_activity: 2026-03-12 -- Phase 57 Plan 03 completed (11min)
+stopped_at: Completed 57-04-PLAN.md
+last_updated: "2026-03-12T18:00:00Z"
+last_activity: 2026-03-12 -- Phase 57 Plan 04 completed (57min)
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 14
-  completed_plans: 22
-  percent: 30
+  completed_plans: 23
+  percent: 33
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 57 of 63 (Prompt Injection Defense) -- fifth of 11 phases in v1.5
-Plan: 3 of 4 in Phase 57
-Status: In Progress
-Last activity: 2026-03-12 -- Phase 57 Plan 03 completed (11min)
+Plan: 4 of 4 in Phase 57 (COMPLETE)
+Status: Phase Complete
+Last activity: 2026-03-12 -- Phase 57 Plan 04 completed (57min)
 
 Progress: [#########-----------------------] 30%
 
@@ -65,6 +65,7 @@ Progress: [#########-----------------------] 30%
 | Phase 57 P01 | 13min | 2 tasks | 11 files |
 | Phase 57 P02 | 5min | 1 tasks | 2 files |
 | Phase 57 P03 | 11min | 2 tasks | 5 files |
+| Phase 57 P04 | 57min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,12 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 57]: serde_json moved to runtime dependency (OutputScreener and HitlManager accept &serde_json::Value)
 - [Phase 57]: HitlManager.check_tool returns (HitlDecision, Vec<SecurityEvent>) tuple for event-driven architecture
 - [Phase 57]: ConfirmationChannel trait uses async-trait following workspace pattern
+- [Phase 57]: BoundaryManager per-session (not in pipeline) because HMAC tokens are session-scoped
+- [Phase 57]: InjectionPipeline wrapped in Option<Arc<Mutex<>>> for async sharing in SessionActor
+- [Phase 57]: MCP classifier shared via Arc<InjectionClassifier> (RegexSet not Clone)
+- [Phase 57]: assemble_with_boundaries() created alongside assemble() to avoid breaking API
+- [Phase 57]: 0.98 blocking threshold for tool output (higher than 0.95 for user input)
+- [Phase 57]: All open-world tool output scanned at session level for defense-in-depth
 
 ### Pending Todos
 
@@ -161,6 +168,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T13:32:17Z
-Stopped at: Completed 57-03-PLAN.md
+Last session: 2026-03-12T18:00:00Z
+Stopped at: Completed 57-04-PLAN.md
 Resume file: None

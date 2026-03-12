@@ -29,7 +29,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 - [x] **INJC-03**: L3 HMAC-SHA256 boundary tokens cryptographically separate system/user/external content zones
 - [x] **INJC-04**: L4 output validator screens LLM responses for credential leaks and injection relay before tool execution
 - [x] **INJC-05**: L5 human-in-the-loop confirmation flow for configurable high-risk operations (tool calls, data export, config changes)
-- [ ] **INJC-06**: Injection defense integrates with MCP client tool output and WASM skill results
+- [x] **INJC-06**: Injection defense integrates with MCP client tool output and WASM skill results
 
 ### PII Detection
 
@@ -222,7 +222,7 @@ Deferred to v1.6+.
 | INJC-03 | Phase 57 | Complete |
 | INJC-04 | Phase 57 | Complete |
 | INJC-05 | Phase 57 | Complete |
-| INJC-06 | Phase 57 | Pending |
+| INJC-06 | Phase 57 | Complete |
 | CRON-01 | Phase 58 | Pending |
 | CRON-02 | Phase 58 | Pending |
 | CRON-03 | Phase 58 | Pending |
