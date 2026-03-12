@@ -94,11 +94,11 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Hot Reload
 
-- [ ] **HTRL-01**: Config hot reload: file watcher on blufio.toml triggers parse -> validate -> ArcSwap swap
+- [x] **HTRL-01**: Config hot reload: file watcher on blufio.toml triggers parse -> validate -> ArcSwap swap
 - [ ] **HTRL-02**: TLS certificate hot reload via rustls ResolvesServerCert with file watcher
 - [ ] **HTRL-03**: Plugin hot reload: re-scan skill directory, reload changed WASM modules, verify signatures
-- [ ] **HTRL-04**: Config propagation via ordered EventBus events with validation-before-swap
-- [ ] **HTRL-05**: Active sessions continue on current config; new sessions use reloaded config
+- [x] **HTRL-04**: Config propagation via ordered EventBus events with validation-before-swap
+- [x] **HTRL-05**: Active sessions continue on current config; new sessions use reloaded config
 - [ ] **HTRL-06**: config_reloaded lifecycle hook fires after successful reload
 
 ### GDPR Tooling
@@ -240,11 +240,11 @@ Deferred to v1.6+.
 | HOOK-04 | Phase 59 | Pending |
 | HOOK-05 | Phase 59 | Pending |
 | HOOK-06 | Phase 59 | Pending |
-| HTRL-01 | Phase 59 | Pending |
+| HTRL-01 | Phase 59 | Complete |
 | HTRL-02 | Phase 59 | Pending |
 | HTRL-03 | Phase 59 | Pending |
-| HTRL-04 | Phase 59 | Pending |
-| HTRL-05 | Phase 59 | Pending |
+| HTRL-04 | Phase 59 | Complete |
+| HTRL-05 | Phase 59 | Complete |
 | HTRL-06 | Phase 59 | Pending |
 | GDPR-01 | Phase 60 | Pending |
 | GDPR-02 | Phase 60 | Pending |
