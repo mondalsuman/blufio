@@ -89,6 +89,8 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ Soft/hard trigger thresholds with archive system and cold storage retrieval — v1.5 Phase 56
 - ✓ Per-zone token budget enforcement (static advisory, conditional hard, dynamic adaptive) — v1.5 Phase 56
 - ✓ Prompt injection defense: L1 pattern classifier, L3 HMAC boundary tokens, L4 output screening, L5 human-in-the-loop, pipeline coordinator — v1.5 Phase 57
+- ✓ Cron scheduler with TOML config, single-instance locking, job history, 5 built-in tasks, systemd timer generation — v1.5 Phase 58
+- ✓ Retention policies with two-phase soft-delete/permanent-delete, classification-aware enforcement, configurable per-type periods — v1.5 Phase 58
 
 ### Active
 
@@ -105,10 +107,10 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - [ ] Background memory validation and file watcher auto re-indexing
 
 **Operational Automation:**
-- [ ] Cron/scheduler system with TOML config and systemd timer generation
+- ✓ Cron/scheduler system with TOML config and systemd timer generation — Phase 58
 - [ ] Hook system (11 lifecycle hooks with BTreeMap priority, shell-based, sandboxed)
 - [ ] Hot reload (TLS certs, config, plugins via ArcSwap/file watchers)
-- [ ] Retention policies with configurable per-type automatic enforcement
+- ✓ Retention policies with configurable per-type automatic enforcement — Phase 58
 
 **Compliance & Privacy:**
 - [ ] GDPR tooling (right to erasure, retention enforcement, transparency disclosures)
@@ -174,11 +176,11 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.4 Quality & Resilience and progressing through v1.5 PRD Gap Closure. 80,101 LOC Rust across 36 crates. 264 requirements verified across 5 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39, v1.5: 6 so far). v1.5 progress: Phase 53 (PII/data classification), Phase 54 (audit trail), Phase 55 (memory enhancements), Phase 56 (multi-level compaction), Phase 57 (5-layer prompt injection defense) all complete.
+Shipped v1.4 Quality & Resilience and progressing through v1.5 PRD Gap Closure. 80,101 LOC Rust across 37 crates. 264 requirements verified across 5 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39, v1.5: 6 so far). v1.5 progress: Phase 53 (PII/data classification), Phase 54 (audit trail), Phase 55 (memory enhancements), Phase 56 (multi-level compaction), Phase 57 (5-layer prompt injection defense), Phase 58 (cron scheduler & retention policies) all complete.
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc.
 
-**Architecture:** 36-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-discord, blufio-gateway, blufio-gemini, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
+**Architecture:** 37-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-cron, blufio-discord, blufio-gateway, blufio-gemini, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
 
 **Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). WasmSkillRuntime EventBus wiring deferred. Media provider trait implementations deferred (EXT-03/04/05). Claude tokenizer accuracy (~80-95% for Claude 3+, community Xenova artifact).
 
@@ -267,4 +269,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | ADR documentation in MADR 4.0.0 format | Standardized decision records with context, options, consequences | ✓ Good — ADR-001 (ORT) and ADR-002 (plugins) documented |
 
 ---
-*Last updated: 2026-03-12 after Phase 57*
+*Last updated: 2026-03-12 after Phase 58*
