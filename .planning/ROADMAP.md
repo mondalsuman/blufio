@@ -225,7 +225,12 @@ Plans:
   3. Editing blufio.toml triggers automatic config reload (parse, validate, ArcSwap swap) with ordered EventBus propagation, and active sessions continue on current config while new sessions use reloaded config
   4. TLS certificates hot-reload via rustls file watcher, and changed WASM skill modules are re-scanned with signature re-verification
   5. config_reloaded lifecycle hook fires after every successful reload
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 59-01-PLAN.md -- Foundation: blufio-hooks crate, config types (HookConfig/HotReloadConfig), HookEvent on BusEvent, shell executor, recursion guard
+- [ ] 59-02-PLAN.md -- Config hot reload: ArcSwap module, file watcher, parse/validate/swap flow, non-reloadable field detection
+- [ ] 59-03-PLAN.md -- HookManager EventBus subscriber, TLS cert hot reload, skill/plugin hot reload
+- [ ] 59-04-PLAN.md -- Integration: serve.rs wiring, lifecycle hooks (pre_start/post_start/pre_shutdown/post_shutdown), doctor health checks
 
 ### Phase 60: GDPR Tooling & Data Export
 **Goal**: Operators can fulfill GDPR data subject requests (erasure, portability, transparency) through CLI commands
@@ -338,7 +343,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 56. Multi-Level Compaction & Context Budget | 6/6 | Complete    | 2026-03-12 | - |
 | 57. Prompt Injection Defense | 5/5 | Complete    | 2026-03-12 | - |
 | 58. Cron Scheduler & Retention Policies | 4/4 | Complete    | 2026-03-12 | - |
-| 59. Hook System & Hot Reload | v1.5 | 0/0 | Not started | - |
+| 59. Hook System & Hot Reload | v1.5 | 0/4 | Planning complete | - |
 | 60. GDPR Tooling & Data Export | v1.5 | 0/0 | Not started | - |
 | 61. Channel Adapters | v1.5 | 0/0 | Not started | - |
 | 62. Observability & API Surface | v1.5 | 0/0 | Not started | - |
@@ -346,4 +351,4 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-12 after Phase 58 planning*
+*Last updated: 2026-03-12 after Phase 59 planning*
