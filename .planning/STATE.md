@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: completed
-stopped_at: Completed 59-04-PLAN.md
-last_updated: "2026-03-12T20:20:33.047Z"
-last_activity: 2026-03-12 -- Phase 59 Plan 04 complete (serve.rs integration + doctor health checks)
+stopped_at: Completed 60-03-PLAN.md
+last_updated: "2026-03-12T22:08:48.580Z"
+last_activity: "2026-03-12 -- Phase 60 Plan 03 complete (GDPR CLI integration: erase/report/export/list-users + doctor + prometheus)"
 progress:
   total_phases: 11
-  completed_phases: 5
-  total_plans: 23
-  completed_plans: 31
-  percent: 59
+  completed_phases: 6
+  total_plans: 26
+  completed_plans: 34
+  percent: 65
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- Phase 59 Hook System & Hot Reload
+**Current focus:** v1.5 PRD Gap Closure -- Phase 60 GDPR Tooling & Data Export
 
 ## Current Position
 
-Phase: 59 of 63 (Hook System & Hot Reload) -- seventh of 11 phases in v1.5
-Plan: 04 of 4 complete
+Phase: 60 of 63 (GDPR Tooling & Data Export) -- eighth of 11 phases in v1.5
+Plan: 03 of 3 complete
 Status: Phase Complete
-Last activity: 2026-03-12 -- Phase 59 Plan 04 complete (serve.rs integration + doctor health checks)
+Last activity: 2026-03-12 -- Phase 60 Plan 03 complete (GDPR CLI integration: erase/report/export/list-users + doctor + prometheus)
 
-Progress: [██████░░░░] 59%
+Progress: [██████▌░░░] 65%
 
 ## Performance Metrics
 
@@ -75,6 +75,9 @@ Progress: [██████░░░░] 59%
 | Phase 59 P03 | 5min | 2 tasks | 3 files |
 | Phase 59 P04 | 6min | 2 tasks | 3 files |
 | Phase 59 P01 | 8min | 2 tasks | 8 files |
+| Phase 60 P01 | 8min | 2 tasks | 10 files |
+| Phase 60 P02 | 8min | 2 tasks | 6 files |
+| Phase 60 P03 | 8min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -188,6 +191,13 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 59]: HookManager::run takes &self, enabling Arc<HookManager> shared between run loop and direct lifecycle calls
 - [Phase 59]: Config path for hot reload determined at runtime from XDG hierarchy (local > user > system)
 - [Phase 59]: pre_shutdown fires after agent_loop.run() returns, post_shutdown after audit trail cleanup
+- [Phase 60]: GdprConfig defined inline in blufio-config/model.rs (following ClassificationConfig pattern), re-exported from blufio-gdpr
+- [Phase 60]: BlufioError::Gdpr uses simple String variant (following Config/Vault/Security pattern)
+- [Phase 60]: GdprEvent added to BusEvent with SHA-256 hashed user_id (never plaintext in events)
+- [Phase 60]: Audit subscriber gets explicit match arms for all 4 GdprEvent variants (not wildcard)
+- [Phase 60]: UserSession lightweight struct defined locally in erasure.rs to avoid coupling to blufio-core::types::Session
+- [Phase 60]: CSV export uses single-file format with data_type discriminator column for mixed record types
+- [Phase 60]: Audit entry count uses LIKE matching on actor/session_id/details_json with pii_marker=0 filter
 
 ### Pending Todos
 
@@ -203,6 +213,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T20:11:40.000Z
-Stopped at: Completed 59-04-PLAN.md
+Last session: 2026-03-12T22:00:22Z
+Stopped at: Completed 60-03-PLAN.md
 Resume file: None

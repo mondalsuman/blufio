@@ -58,6 +58,8 @@ pub enum BusEvent {
     Cron(CronEvent),
     /// Hook execution events (triggered, completed).
     Hook(HookEvent),
+    /// GDPR data subject rights events (erasure, export, reporting).
+    Gdpr(GdprEvent),
 }
 
 impl BusEvent {
@@ -132,6 +134,10 @@ impl BusEvent {
             BusEvent::Cron(CronEvent::Failed { .. }) => "cron.failed",
             BusEvent::Hook(HookEvent::Triggered { .. }) => "hook.triggered",
             BusEvent::Hook(HookEvent::Completed { .. }) => "hook.completed",
+            BusEvent::Gdpr(GdprEvent::ErasureStarted { .. }) => "gdpr.erasure_started",
+            BusEvent::Gdpr(GdprEvent::ErasureCompleted { .. }) => "gdpr.erasure_completed",
+            BusEvent::Gdpr(GdprEvent::ExportCompleted { .. }) => "gdpr.export_completed",
+            BusEvent::Gdpr(GdprEvent::ReportGenerated { .. }) => "gdpr.report_generated",
         }
     }
 }
@@ -831,12 +837,78 @@ pub enum HookEvent {
     },
 }
 
+// --- GDPR events ---
+
+/// GDPR data subject rights events.
+///
+/// All fields are `String` (or `u64`) following the established pattern where
+/// event sub-enums avoid cross-crate type dependencies. User IDs are always
+/// SHA-256 hashed -- never plaintext -- to prevent PII leakage through the
+/// event bus.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GdprEvent {
+    /// A GDPR erasure operation was started.
+    ErasureStarted {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// SHA-256 hash of the user ID being erased (not plaintext).
+        user_id_hash: String,
+    },
+    /// A GDPR erasure operation completed.
+    ErasureCompleted {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// SHA-256 hash of the user ID that was erased (not plaintext).
+        user_id_hash: String,
+        /// Number of messages deleted.
+        messages_deleted: u64,
+        /// Number of sessions deleted.
+        sessions_deleted: u64,
+        /// Number of memories deleted.
+        memories_deleted: u64,
+        /// Number of compaction archives deleted.
+        archives_deleted: u64,
+        /// Number of cost records anonymized.
+        cost_records_anonymized: u64,
+        /// Duration of the erasure operation in milliseconds.
+        duration_ms: u64,
+    },
+    /// A GDPR data export completed.
+    ExportCompleted {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// SHA-256 hash of the user ID whose data was exported (not plaintext).
+        user_id_hash: String,
+        /// Export format (e.g., "json", "csv").
+        format: String,
+        /// Path to the export file.
+        file_path: String,
+        /// Size of the export file in bytes.
+        size_bytes: u64,
+    },
+    /// A GDPR transparency report was generated.
+    ReportGenerated {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// SHA-256 hash of the user ID for the report (not plaintext).
+        user_id_hash: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn all_seventeen_bus_event_variants_exist() {
+    fn all_eighteen_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -975,6 +1047,12 @@ mod tests {
             hook_name: "on-session-start".into(),
             trigger_event: "session.created".into(),
             priority: 10,
+        });
+
+        let _gdpr = BusEvent::Gdpr(GdprEvent::ErasureStarted {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            user_id_hash: "sha256hash".into(),
         });
     }
 
@@ -1470,6 +1548,48 @@ mod tests {
                     stdout: None,
                 }),
                 "hook.completed",
+            ),
+            // GDPR events
+            (
+                BusEvent::Gdpr(GdprEvent::ErasureStarted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                }),
+                "gdpr.erasure_started",
+            ),
+            (
+                BusEvent::Gdpr(GdprEvent::ErasureCompleted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                    messages_deleted: 0,
+                    sessions_deleted: 0,
+                    memories_deleted: 0,
+                    archives_deleted: 0,
+                    cost_records_anonymized: 0,
+                    duration_ms: 0,
+                }),
+                "gdpr.erasure_completed",
+            ),
+            (
+                BusEvent::Gdpr(GdprEvent::ExportCompleted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                    format: String::new(),
+                    file_path: String::new(),
+                    size_bytes: 0,
+                }),
+                "gdpr.export_completed",
+            ),
+            (
+                BusEvent::Gdpr(GdprEvent::ReportGenerated {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                }),
+                "gdpr.report_generated",
             ),
         ];
 

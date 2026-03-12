@@ -889,6 +889,94 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
             })
             .to_string(),
         },
+
+        // --- GDPR events ---
+        BusEvent::Gdpr(blufio_bus::events::GdprEvent::ErasureStarted {
+            timestamp,
+            user_id_hash,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "start".to_string(),
+            resource_type: "gdpr".to_string(),
+            resource_id: user_id_hash.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "user_id_hash": user_id_hash,
+            })
+            .to_string(),
+        },
+        BusEvent::Gdpr(blufio_bus::events::GdprEvent::ErasureCompleted {
+            timestamp,
+            user_id_hash,
+            messages_deleted,
+            sessions_deleted,
+            memories_deleted,
+            archives_deleted,
+            cost_records_anonymized,
+            duration_ms,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "complete".to_string(),
+            resource_type: "gdpr".to_string(),
+            resource_id: user_id_hash.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "user_id_hash": user_id_hash,
+                "messages_deleted": messages_deleted,
+                "sessions_deleted": sessions_deleted,
+                "memories_deleted": memories_deleted,
+                "archives_deleted": archives_deleted,
+                "cost_records_anonymized": cost_records_anonymized,
+                "duration_ms": duration_ms,
+            })
+            .to_string(),
+        },
+        BusEvent::Gdpr(blufio_bus::events::GdprEvent::ExportCompleted {
+            timestamp,
+            user_id_hash,
+            format,
+            file_path,
+            size_bytes,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "complete".to_string(),
+            resource_type: "gdpr".to_string(),
+            resource_id: user_id_hash.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "user_id_hash": user_id_hash,
+                "format": format,
+                "file_path": file_path,
+                "size_bytes": size_bytes,
+            })
+            .to_string(),
+        },
+        BusEvent::Gdpr(blufio_bus::events::GdprEvent::ReportGenerated {
+            timestamp,
+            user_id_hash,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "generate".to_string(),
+            resource_type: "gdpr".to_string(),
+            resource_id: user_id_hash.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "user_id_hash": user_id_hash,
+            })
+            .to_string(),
+        },
     }
 }
 
@@ -1337,6 +1425,35 @@ mod tests {
                 status: "success".into(),
                 duration_ms: 50,
                 stdout: Some("ok".into()),
+            }),
+            BusEvent::Gdpr(blufio_bus::events::GdprEvent::ErasureStarted {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                user_id_hash: "hash".into(),
+            }),
+            BusEvent::Gdpr(blufio_bus::events::GdprEvent::ErasureCompleted {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                user_id_hash: "hash".into(),
+                messages_deleted: 10,
+                sessions_deleted: 2,
+                memories_deleted: 5,
+                archives_deleted: 1,
+                cost_records_anonymized: 3,
+                duration_ms: 100,
+            }),
+            BusEvent::Gdpr(blufio_bus::events::GdprEvent::ExportCompleted {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                user_id_hash: "hash".into(),
+                format: "json".into(),
+                file_path: "/tmp/export.json".into(),
+                size_bytes: 1024,
+            }),
+            BusEvent::Gdpr(blufio_bus::events::GdprEvent::ReportGenerated {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                user_id_hash: "hash".into(),
             }),
         ];
 

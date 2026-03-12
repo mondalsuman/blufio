@@ -103,12 +103,12 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### GDPR Tooling
 
-- [ ] **GDPR-01**: CLI `blufio gdpr erase --user <id>` deletes all user data (messages, memories, session metadata, cost records)
-- [ ] **GDPR-02**: Cost record anonymization preserves aggregates but removes user association on erasure
-- [ ] **GDPR-03**: Erasure logged as audit trail entry (audit entries themselves not deleted)
-- [ ] **GDPR-04**: `blufio gdpr report --user <id>` generates transparency report of held data
-- [ ] **GDPR-05**: Export before erasure as configurable safety net
-- [ ] **GDPR-06**: Data export supports JSON and CSV formats with filtering by session, date range, and data type
+- [x] **GDPR-01**: CLI `blufio gdpr erase --user <id>` deletes all user data (messages, memories, session metadata, cost records)
+- [x] **GDPR-02**: Cost record anonymization preserves aggregates but removes user association on erasure
+- [x] **GDPR-03**: Erasure logged as audit trail entry (audit entries themselves not deleted)
+- [x] **GDPR-04**: `blufio gdpr report --user <id>` generates transparency report of held data
+- [x] **GDPR-05**: Export before erasure as configurable safety net
+- [x] **GDPR-06**: Data export supports JSON and CSV formats with filtering by session, date range, and data type
 
 ### Channel Adapters
 
@@ -246,12 +246,12 @@ Deferred to v1.6+.
 | HTRL-04 | Phase 59 | Complete |
 | HTRL-05 | Phase 59 | Complete |
 | HTRL-06 | Phase 59 | Complete |
-| GDPR-01 | Phase 60 | Pending |
-| GDPR-02 | Phase 60 | Pending |
-| GDPR-03 | Phase 60 | Pending |
-| GDPR-04 | Phase 60 | Pending |
-| GDPR-05 | Phase 60 | Pending |
-| GDPR-06 | Phase 60 | Pending |
+| GDPR-01 | Phase 60 | Complete |
+| GDPR-02 | Phase 60 | Complete |
+| GDPR-03 | Phase 60 | Complete |
+| GDPR-04 | Phase 60 | Complete |
+| GDPR-05 | Phase 60 | Complete |
+| GDPR-06 | Phase 60 | Complete |
 | CHAN-01 | Phase 61 | Pending |
 | CHAN-02 | Phase 61 | Pending |
 | CHAN-03 | Phase 61 | Pending |

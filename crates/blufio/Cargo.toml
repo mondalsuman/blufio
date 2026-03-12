@@ -48,6 +48,7 @@ blufio-router = { path = "../blufio-router" }
 blufio-skill = { path = "../blufio-skill" }
 blufio-plugin = { path = "../blufio-plugin" }
 blufio-security = { path = "../blufio-security" }
+blufio-gdpr = { path = "../blufio-gdpr" }
 blufio-hooks = { path = "../blufio-hooks" }
 blufio-injection = { path = "../blufio-injection" }
 blufio-verify = { path = "../blufio-verify" }
@@ -111,6 +112,7 @@ async-trait.workspace = true
 arc-swap.workspace = true
 notify.workspace = true
 notify-debouncer-mini.workspace = true
+metrics.workspace = true
 flate2 = "1"
 tar = "0.4"
 

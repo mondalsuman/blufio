@@ -319,6 +319,10 @@ pub enum BlufioError {
     /// Data classification errors (invalid level, downgrade rejected, entity not found).
     #[error("classification: {0}")]
     Classification(#[from] crate::classification::ClassificationError),
+
+    /// GDPR operation errors (erasure, export, report).
+    #[error("gdpr: {0}")]
+    Gdpr(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -386,6 +390,7 @@ impl BlufioError {
             // Internal maps to is_retryable()=false and trips_circuit_breaker()=false.
             Self::CircuitOpen { .. } => FailureMode::Internal,
             Self::Classification(_) => FailureMode::Validation,
+            Self::Gdpr(_) => FailureMode::Internal,
         }
     }
 
@@ -428,6 +433,9 @@ impl BlufioError {
             // Error: Classification errors are security-related
             Self::Classification(_) => Severity::Error,
 
+            // Error: GDPR errors are security-related
+            Self::Gdpr(_) => Severity::Error,
+
             // Error: everything else
             _ => Severity::Error,
         }
@@ -453,6 +461,7 @@ impl BlufioError {
             Self::AdapterNotFound { .. } => ErrorCategory::Internal,
             Self::CircuitOpen { .. } => ErrorCategory::Internal,
             Self::Classification(_) => ErrorCategory::Security,
+            Self::Gdpr(_) => ErrorCategory::Security,
         }
     }
 
@@ -608,6 +617,7 @@ impl BlufioError {
                 Cow::Borrowed("The service is temporarily unavailable. Please try again later.")
             }
             Self::Classification(e) => Cow::Owned(format!("Data classification error: {e}")),
+            Self::Gdpr(msg) => Cow::Owned(format!("GDPR operation error: {msg}")),
         }
     }
 }
