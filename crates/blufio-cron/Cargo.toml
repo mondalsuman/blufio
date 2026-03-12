@@ -1,0 +1,25 @@
+[package]
+name = "blufio-cron"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Cron scheduler and retention policy engine for the Blufio agent framework"
+
+[dependencies]
+blufio-bus = { path = "../blufio-bus" }
+blufio-config = { path = "../blufio-config" }
+blufio-core = { path = "../blufio-core" }
+blufio-storage = { path = "../blufio-storage" }
+async-trait.workspace = true
+chrono.workspace = true
+croner.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "rt"] }
+tokio-rusqlite.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
