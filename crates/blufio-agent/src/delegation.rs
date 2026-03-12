@@ -192,6 +192,8 @@ impl DelegationRouter {
             provider_registry: None,
             fallback_chain: Vec::new(),
             event_bus: None,
+            injection_pipeline: None,
+            boundary_manager: None,
         });
 
         // 5. Build inbound message from the delegation request

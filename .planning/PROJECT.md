@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 8 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with accurate token counting and prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, per-dependency circuit breakers with 6-level graceful degradation, Prometheus observability, full MCP integration (server + client), Docker deployment, and migration/CLI utilities. 80,101 LOC Rust across 35 crates, 258 requirements verified across 5 milestones.
+Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 8 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with accurate token counting and prompt cache alignment, local ONNX memory with hybrid search, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, per-dependency circuit breakers with 6-level graceful degradation, 5-layer prompt injection defense (L1 pattern classifier, L3 HMAC boundary tokens, L4 output screening, L5 human-in-the-loop), Prometheus observability, full MCP integration (server + client), Docker deployment, and migration/CLI utilities. 80,101 LOC Rust across 36 crates, 264 requirements verified across 5 milestones.
 
 ## Core Value
 
@@ -85,17 +85,16 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ ADR-002: Compiled-in plugin architecture decision record with migration roadmap — v1.4 Phase 50
 - ✓ Circuit breaker events wired to EventBus, enabling full resilience pipeline in production — v1.4 Phase 51
 - ✓ FormatPipeline wired into all 8 channel adapters with paragraph-boundary splitting — v1.4 Phase 49
+- ✓ Multi-level compaction (L0-L3) with quality scoring, quality gates, and entity extraction — v1.5 Phase 56
+- ✓ Soft/hard trigger thresholds with archive system and cold storage retrieval — v1.5 Phase 56
+- ✓ Per-zone token budget enforcement (static advisory, conditional hard, dynamic adaptive) — v1.5 Phase 56
+- ✓ Prompt injection defense: L1 pattern classifier, L3 HMAC boundary tokens, L4 output screening, L5 human-in-the-loop, pipeline coordinator — v1.5 Phase 57
 
 ### Active
 
 <!-- Current milestone: v1.5 PRD Gap Closure -->
 
-**Compaction & Context:**
-- [ ] Multi-level compaction (L0-L3) with quality scoring and quality gates
-- [ ] Soft/hard trigger thresholds with archive system and cold storage retrieval
-
 **Security Hardening:**
-- [ ] Prompt injection defense: L1 pattern classifier, L3 HMAC boundary tokens, L4 output validator, L5 human-in-the-loop
 - [ ] PII redaction expansion (email, phone, SSN, credit cards)
 - [ ] Data classification system (4 levels: Public/Internal/Confidential/Restricted)
 - [ ] Audit trail with hash-chained tamper-evident log
@@ -124,7 +123,7 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 **Infrastructure:**
 - [ ] Litestream WAL-based replication to object storage
-- [ ] Context engine token budget enforcement verification
+- ✓ Context engine token budget enforcement — v1.5 Phase 56
 
 **Code Quality:**
 - [ ] Clippy unwrap enforcement (#![deny(clippy::unwrap_used)]) across library crates
@@ -175,11 +174,11 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.4 Quality & Resilience with 80,101 LOC Rust across 35 crates. 258 requirements verified across 5 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39). All v1.4 features complete: typed error hierarchy with automated retry classification, accurate token counting (tiktoken-rs + HuggingFace tokenizers), per-dependency circuit breakers with 6-level graceful degradation ladder, FormatPipeline wired into all 8 channel adapters, and architectural decision records.
+Shipped v1.4 Quality & Resilience and progressing through v1.5 PRD Gap Closure. 80,101 LOC Rust across 36 crates. 264 requirements verified across 5 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39, v1.5: 6 so far). v1.5 progress: Phase 53 (PII/data classification), Phase 54 (audit trail), Phase 55 (memory enhancements), Phase 56 (multi-level compaction), Phase 57 (5-layer prompt injection defense) all complete.
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc.
 
-**Architecture:** 35-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-discord, blufio-gateway, blufio-gemini, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
+**Architecture:** 36-crate workspace — blufio-agent, blufio-anthropic, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-discord, blufio-gateway, blufio-gemini, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
 
 **Known tech debt:** 12 carry-forward items from v1.1 (5 deferred MCP integration items, 4 human verification items, 3 SUMMARY frontmatter gaps). WasmSkillRuntime EventBus wiring deferred. Media provider trait implementations deferred (EXT-03/04/05). Claude tokenizer accuracy (~80-95% for Claude 3+, community Xenova artifact).
 
@@ -268,4 +267,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | ADR documentation in MADR 4.0.0 format | Standardized decision records with context, options, consequences | ✓ Good — ADR-001 (ORT) and ADR-002 (plugins) documented |
 
 ---
-*Last updated: 2026-03-10 after v1.5 milestone started*
+*Last updated: 2026-03-12 after Phase 57*

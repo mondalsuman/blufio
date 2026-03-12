@@ -46,6 +46,11 @@ pub struct ExternalTool {
     session: Arc<RunningService<RoleClient, ()>>,
     /// Maximum response size in characters.
     response_size_cap: usize,
+    /// Optional L1 injection classifier for scanning tool output.
+    /// When present, tool output is scanned before returning to the LLM.
+    injection_classifier: Option<Arc<blufio_injection::classifier::InjectionClassifier>>,
+    /// Whether this server is trusted (skip injection scanning).
+    trusted: bool,
 }
 
 impl ExternalTool {
@@ -70,7 +75,22 @@ impl ExternalTool {
             schema,
             session,
             response_size_cap,
+            injection_classifier: None,
+            trusted: false,
         }
+    }
+
+    /// Set the injection classifier for output scanning.
+    pub fn set_injection_classifier(
+        &mut self,
+        classifier: Arc<blufio_injection::classifier::InjectionClassifier>,
+    ) {
+        self.injection_classifier = Some(classifier);
+    }
+
+    /// Mark this tool's server as trusted (skip injection scanning).
+    pub fn set_trusted(&mut self, trusted: bool) {
+        self.trusted = trusted;
     }
 
     /// Get the server name for cost attribution.
@@ -133,6 +153,31 @@ impl BlufioTool for ExternalTool {
 
         // CLNT-09: Truncate if over per-server cap.
         let content = truncate_response(&content, self.response_size_cap);
+
+        // INJC-06: Scan tool output with L1 classifier (if enabled and not trusted).
+        if !self.trusted
+            && let Some(ref classifier) = self.injection_classifier
+        {
+            let scan = classifier.classify(&content, "mcp");
+            if scan.score > 0.0 {
+                tracing::warn!(
+                    server = %self.server_name,
+                    tool = %self.tool_name,
+                    score = scan.score,
+                    action = %scan.action,
+                    "injection pattern detected in MCP tool output"
+                );
+                blufio_injection::metrics::record_input_detection("mcp", &scan.action);
+
+                // Block if score exceeds MCP blocking threshold (0.98).
+                if scan.score >= 0.98 {
+                    return Ok(ToolOutput {
+                        content: "[Tool output blocked by injection defense]".to_string(),
+                        is_error: true,
+                    });
+                }
+            }
+        }
 
         Ok(ToolOutput {
             content,

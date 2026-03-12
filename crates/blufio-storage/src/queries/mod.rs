@@ -3,6 +3,7 @@
 
 //! Query modules for CRUD operations on storage entities.
 
+pub mod archives;
 pub mod classification;
 pub mod messages;
 pub mod queue;

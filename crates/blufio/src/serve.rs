@@ -197,7 +197,24 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Initialize context engine.
     let mut context_engine =
-        ContextEngine::new(&config.agent, &config.context, token_cache).await?;
+        ContextEngine::new(&config.agent, &config.context, token_cache.clone()).await?;
+
+    // Static zone budget check at startup (CTXE-01).
+    // Advisory only -- logs a warning if system prompt exceeds budget but never truncates.
+    {
+        let static_tokens = context_engine
+            .static_zone()
+            .token_count(&token_cache, &config.context.compaction_model)
+            .await;
+        context_engine
+            .static_zone()
+            .check_budget(static_tokens, config.context.static_zone_budget);
+        debug!(
+            static_tokens = static_tokens,
+            budget = config.context.static_zone_budget,
+            "static zone budget check complete"
+        );
+    }
 
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]
@@ -490,6 +507,20 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         SkillProvider::new(tool_registry.clone(), config.skill.max_skills_in_prompt);
     context_engine.add_conditional_provider(Box::new(skill_provider));
 
+    // Create injection classifier for MCP description scanning (INJC-06 gap closure).
+    // This is separate from the pipeline classifier created later -- MCP init happens
+    // before the full pipeline is built, so we need an early classifier for description scanning.
+    #[cfg(feature = "mcp-client")]
+    let mcp_injection_classifier: Option<
+        Arc<blufio_injection::classifier::InjectionClassifier>,
+    > = if config.injection_defense.enabled {
+        Some(Arc::new(
+            blufio_injection::classifier::InjectionClassifier::new(&config.injection_defense),
+        ))
+    } else {
+        None
+    };
+
     // Initialize MCP client connections to external servers (if configured).
     #[cfg(feature = "mcp-client")]
     let (_mcp_client_manager, _mcp_health_sessions) = if !config.mcp.servers.is_empty() {
@@ -516,10 +547,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             }
         };
 
-        let (manager, result) = blufio_mcp_client::McpClientManager::connect_all(
+        let (manager, result) = blufio_mcp_client::McpClientManager::connect_all_with_classifier(
             &config.mcp.servers,
             &tool_registry,
             pin_store.as_ref(),
+            mcp_injection_classifier,
         )
         .await;
 
@@ -572,6 +604,21 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         debug!("no MCP servers configured");
         (None, None)
     };
+
+    // Register ArchiveConditionalProvider LAST (lowest priority, after memory, skills, trust zone).
+    if config.context.archive_enabled {
+        let archive_db =
+            Arc::new(blufio_storage::Database::open(&config.storage.database_path).await?);
+        let archive_provider = blufio_context::conditional::ArchiveConditionalProvider::new(
+            archive_db,
+            token_cache.clone(),
+            config.context.conditional_zone_budget,
+            config.context.archive_enabled,
+            config.context.compaction_model.clone(),
+        );
+        context_engine.add_conditional_provider(Box::new(archive_provider));
+        info!("archive conditional provider registered (lowest priority)");
+    }
 
     let context_engine = Arc::new(context_engine);
 
@@ -1498,6 +1545,53 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         None
     };
 
+    // --- Injection defense pipeline (INJC-06) ---
+    // Initialize before config is moved into AgentLoop.
+    let injection_pipeline: Option<
+        Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>,
+    > = if config.injection_defense.enabled {
+        let classifier =
+            blufio_injection::classifier::InjectionClassifier::new(&config.injection_defense);
+        let pipeline = blufio_injection::pipeline::InjectionPipeline::new(
+            &config.injection_defense,
+            classifier,
+            Some(event_bus.clone()),
+        );
+
+        let active_layers: Vec<&str> = [
+            Some("L1"), // L1 is always active when injection defense is enabled
+            if config.injection_defense.hmac_boundaries.enabled {
+                Some("L3")
+            } else {
+                None
+            },
+            if config.injection_defense.output_screening.enabled {
+                Some("L4")
+            } else {
+                None
+            },
+            if config.injection_defense.hitl.enabled {
+                Some("L5")
+            } else {
+                None
+            },
+        ]
+        .iter()
+        .filter_map(|l| *l)
+        .collect();
+
+        info!(
+            layers = ?active_layers,
+            dry_run = config.injection_defense.dry_run,
+            "injection defense pipeline initialized"
+        );
+
+        Some(Arc::new(tokio::sync::Mutex::new(pipeline)))
+    } else {
+        debug!("injection defense disabled by configuration");
+        None
+    };
+
     // Create and run agent loop with channel multiplexer.
     let mut agent_loop = AgentLoop::new(
         Box::new(mux),
@@ -1535,6 +1629,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             chain = ?fallback_chain,
             "fallback provider chain configured"
         );
+    }
+
+    // Wire injection defense pipeline (INJC-06) if enabled.
+    if let Some(ref pipeline) = injection_pipeline {
+        agent_loop.set_injection_pipeline(pipeline.clone());
     }
 
     // Log integration status summary.

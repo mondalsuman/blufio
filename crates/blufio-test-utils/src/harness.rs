@@ -229,6 +229,8 @@ impl TestHarness {
             provider_registry: None,
             fallback_chain: Vec::new(),
             event_bus: None,
+            injection_pipeline: None,
+            boundary_manager: None,
         });
 
         // Create inbound message

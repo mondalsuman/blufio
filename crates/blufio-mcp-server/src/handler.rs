@@ -1026,6 +1026,13 @@ mod tests {
         ) -> Result<Vec<blufio_core::types::Message>, blufio_core::BlufioError> {
             Ok(vec![])
         }
+        async fn delete_messages_by_ids(
+            &self,
+            _session_id: &str,
+            _message_ids: &[String],
+        ) -> Result<usize, blufio_core::BlufioError> {
+            Ok(0)
+        }
         async fn enqueue(
             &self,
             _queue_name: &str,

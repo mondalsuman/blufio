@@ -9,27 +9,27 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Compaction
 
-- [ ] **COMP-01**: Context compaction supports 4 levels (L0 raw -> L1 turn-pair summaries -> L2 session summary -> L3 cross-session archive)
-- [ ] **COMP-02**: Quality scoring evaluates compaction output with weighted dimensions (entity retention 35%, decision retention 25%, action retention 25%, numerical retention 15%)
-- [ ] **COMP-03**: Quality gates enforce thresholds (>=0.6 proceed, 0.4-0.6 retry with different prompt, <0.4 abort compaction)
-- [ ] **COMP-04**: Soft trigger fires compaction at configurable threshold (default 50% context window), hard trigger at 85%
-- [ ] **COMP-05**: Archive system stores L3 compacted summaries with cold storage retrieval for historical context
-- [ ] **COMP-06**: Entity/fact extraction runs before compaction to preserve critical facts as separate Memory entries
+- [x] **COMP-01**: Context compaction supports 4 levels (L0 raw -> L1 turn-pair summaries -> L2 session summary -> L3 cross-session archive)
+- [x] **COMP-02**: Quality scoring evaluates compaction output with weighted dimensions (entity retention 35%, decision retention 25%, action retention 25%, numerical retention 15%)
+- [x] **COMP-03**: Quality gates enforce thresholds (>=0.6 proceed, 0.4-0.6 retry with different prompt, <0.4 abort compaction)
+- [x] **COMP-04**: Soft trigger fires compaction at configurable threshold (default 50% context window), hard trigger at 85%
+- [x] **COMP-05**: Archive system stores L3 compacted summaries with cold storage retrieval for historical context
+- [x] **COMP-06**: Entity/fact extraction runs before compaction to preserve critical facts as separate Memory entries
 
 ### Context Engine
 
-- [ ] **CTXE-01**: Zone 1 (static) enforces configurable token budget (default 3,000 tokens) with 10% safety margin
-- [ ] **CTXE-02**: Zone 2 (conditional) enforces configurable token budget (default 8,000 tokens) with 10% safety margin
-- [ ] **CTXE-03**: Token budget enforcement uses accurate provider-specific token counting (tiktoken-rs/HuggingFace)
+- [x] **CTXE-01**: Zone 1 (static) enforces configurable token budget (default 3,000 tokens) with 10% safety margin
+- [x] **CTXE-02**: Zone 2 (conditional) enforces configurable token budget (default 8,000 tokens) with 10% safety margin
+- [x] **CTXE-03**: Token budget enforcement uses accurate provider-specific token counting (tiktoken-rs/HuggingFace)
 
 ### Prompt Injection Defense
 
-- [ ] **INJC-01**: L1 pattern classifier detects known injection signatures via regex with 0.0-1.0 confidence scoring
-- [ ] **INJC-02**: L1 operates in log-not-block mode by default, blocking only at >0.95 confidence (configurable)
-- [ ] **INJC-03**: L3 HMAC-SHA256 boundary tokens cryptographically separate system/user/external content zones
-- [ ] **INJC-04**: L4 output validator screens LLM responses for credential leaks and injection relay before tool execution
-- [ ] **INJC-05**: L5 human-in-the-loop confirmation flow for configurable high-risk operations (tool calls, data export, config changes)
-- [ ] **INJC-06**: Injection defense integrates with MCP client tool output and WASM skill results
+- [x] **INJC-01**: L1 pattern classifier detects known injection signatures via regex with 0.0-1.0 confidence scoring
+- [x] **INJC-02**: L1 operates in log-not-block mode by default, blocking only at >0.95 confidence (configurable)
+- [x] **INJC-03**: L3 HMAC-SHA256 boundary tokens cryptographically separate system/user/external content zones
+- [x] **INJC-04**: L4 output validator screens LLM responses for credential leaks and injection relay before tool execution
+- [x] **INJC-05**: L5 human-in-the-loop confirmation flow for configurable high-risk operations (tool calls, data export, config changes)
+- [x] **INJC-06**: Injection defense integrates with MCP client tool output and WASM skill results
 
 ### PII Detection
 
@@ -208,21 +208,21 @@ Deferred to v1.6+.
 | MEME-04 | Phase 55 | Complete |
 | MEME-05 | Phase 55 | Complete |
 | MEME-06 | Phase 55 | Complete |
-| COMP-01 | Phase 56 | Pending |
-| COMP-02 | Phase 56 | Pending |
-| COMP-03 | Phase 56 | Pending |
-| COMP-04 | Phase 56 | Pending |
-| COMP-05 | Phase 56 | Pending |
-| COMP-06 | Phase 56 | Pending |
-| CTXE-01 | Phase 56 | Pending |
-| CTXE-02 | Phase 56 | Pending |
-| CTXE-03 | Phase 56 | Pending |
-| INJC-01 | Phase 57 | Pending |
-| INJC-02 | Phase 57 | Pending |
-| INJC-03 | Phase 57 | Pending |
-| INJC-04 | Phase 57 | Pending |
-| INJC-05 | Phase 57 | Pending |
-| INJC-06 | Phase 57 | Pending |
+| COMP-01 | Phase 56 | Complete |
+| COMP-02 | Phase 56 | Complete |
+| COMP-03 | Phase 56 | Complete |
+| COMP-04 | Phase 56 | Complete |
+| COMP-05 | Phase 56 | Complete |
+| COMP-06 | Phase 56 | Complete |
+| CTXE-01 | Phase 56 | Complete |
+| CTXE-02 | Phase 56 | Complete |
+| CTXE-03 | Phase 56 | Complete |
+| INJC-01 | Phase 57 | Complete |
+| INJC-02 | Phase 57 | Complete |
+| INJC-03 | Phase 57 | Complete |
+| INJC-04 | Phase 57 | Complete |
+| INJC-05 | Phase 57 | Complete |
+| INJC-06 | Phase 57 | Complete |
 | CRON-01 | Phase 58 | Pending |
 | CRON-02 | Phase 58 | Pending |
 | CRON-03 | Phase 58 | Pending |

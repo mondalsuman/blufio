@@ -313,8 +313,8 @@ async fn handle_shell_message(
 
     let assembled = assembled?;
 
-    // Record compaction costs if compaction was triggered.
-    if let Some(ref compaction_usage) = assembled.compaction_usage {
+    // Record compaction costs if compaction was triggered (may have multiple from cascade).
+    for compaction_usage in &assembled.compaction_usages {
         let compaction_model = assembled
             .compaction_model
             .as_deref()

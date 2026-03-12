@@ -599,6 +599,7 @@ dependencies = [
  "blufio-discord",
  "blufio-gateway",
  "blufio-gemini",
+ "blufio-injection",
  "blufio-irc",
  "blufio-matrix",
  "blufio-mcp-client",
@@ -674,6 +675,7 @@ dependencies = [
  "blufio-context",
  "blufio-core",
  "blufio-cost",
+ "blufio-injection",
  "blufio-memory",
  "blufio-prometheus",
  "blufio-resilience",
@@ -797,6 +799,7 @@ dependencies = [
  "strsim",
  "thiserror 2.0.18",
  "toml 0.8.23",
+ "tracing",
  "uuid",
 ]
 
@@ -806,10 +809,15 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "blufio-bus",
  "blufio-config",
  "blufio-core",
+ "blufio-injection",
  "blufio-security",
+ "blufio-storage",
  "chrono",
+ "metrics",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
@@ -926,6 +934,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "blufio-injection"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blufio-bus",
+ "blufio-config",
+ "blufio-core",
+ "chrono",
+ "hex",
+ "metrics",
+ "regex",
+ "ring",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "blufio-irc"
 version = "0.1.0"
 dependencies = [
@@ -966,9 +995,11 @@ name = "blufio-mcp-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "blufio-bus",
  "blufio-config",
  "blufio-context",
  "blufio-core",
+ "blufio-injection",
  "blufio-prometheus",
  "blufio-skill",
  "blufio-storage",

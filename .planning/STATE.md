@@ -2,35 +2,35 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: completed
-stopped_at: Completed 55-04-PLAN.md (Phase 55 complete)
-last_updated: "2026-03-11T20:30:36.512Z"
-last_activity: 2026-03-11 -- Phase 55 Plan 04 completed (11min)
+status: planning
+stopped_at: Phase 58 context gathered
+last_updated: "2026-03-12T16:17:28.139Z"
+last_activity: 2026-03-12 -- Phase 57 complete, transitioning to Phase 58
 progress:
   total_phases: 11
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 12
-  percent: 27
+  completed_phases: 3
+  total_plans: 15
+  completed_plans: 23
+  percent: 45
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-10)
+See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- Phase 55 Memory Enhancements
+**Current focus:** v1.5 PRD Gap Closure -- Phase 58 Cron Scheduler & Retention Policies
 
 ## Current Position
 
-Phase: 55 of 63 (Memory Enhancements) -- third of 11 phases in v1.5
-Plan: 4 of 4 in Phase 55 (complete)
-Status: Phase 55 Complete
-Last activity: 2026-03-11 -- Phase 55 Plan 04 completed (11min)
+Phase: 58 of 63 (Cron Scheduler & Retention Policies) -- sixth of 11 phases in v1.5
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-03-12 -- Phase 57 complete, transitioning to Phase 58
 
-Progress: [########+-----------------------] 27%
+Progress: [████░░░░░░] 45%
 
 ## Performance Metrics
 
@@ -56,6 +56,17 @@ Progress: [########+-----------------------] 27%
 | Phase 55 P02 | 5min | 2 tasks | 1 files |
 | Phase 55 P03 | 7min | 2 tasks | 5 files |
 | Phase 55 P04 | 11min | 2 tasks | 7 files |
+| Phase 56 P01 | 7min | 2 tasks | 13 files |
+| Phase 56 P02 | 10min | 2 tasks | 8 files |
+| Phase 56 P03 | 17min | 2 tasks | 6 files |
+| Phase 56 P04 | 22min | 2 tasks | 6 files |
+| Phase 56 P05 | 12min | 2 tasks | 8 files |
+| Phase 56 P06 | 6min | 2 tasks | 4 files |
+| Phase 57 P01 | 13min | 2 tasks | 11 files |
+| Phase 57 P02 | 5min | 1 tasks | 2 files |
+| Phase 57 P03 | 11min | 2 tasks | 5 files |
+| Phase 57 P04 | 57min | 2 tasks | 17 files |
+| Phase 57 P05 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -104,6 +115,46 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - Phase 55 Plan 04: File update re-indexes by hard-delete then save (FTS5 trigger consistency)
 - Phase 55 Plan 04: notify callback uses tx.blocking_send() (not async) since it runs on notify's own thread
 - Phase 55 Plan 04: conn() accessor added to MemoryStore for advanced SQL operations
+- Phase 56 Plan 01: compaction_threshold changed to Option<f64> with effective_soft_trigger() deprecation bridge
+- Phase 56 Plan 01: CompactionEvent uses String fields (no cross-crate deps) following bus event pattern
+- Phase 56 Plan 01: delete_messages_by_ids uses parameterized IN clause with dynamic placeholder generation
+- Phase 56 Plan 01: Archive session_ids stored as JSON text with LIKE-based GDPR erasure
+- [Phase 56]: Phase 56 Plan 02: Entity extraction returns strings to caller to avoid circular dependency blufio-context <-> blufio-memory
+- [Phase 56]: Phase 56 Plan 02: compaction_usage changed to compaction_usages Vec<TokenUsage> for cascade compaction support
+- [Phase 56]: Phase 56 Plan 03: Quality scoring via separate LLM call with entity/decision/action/numerical dimensions
+- [Phase 56]: Phase 56 Plan 03: JSON parse failure for quality scores treats as 0.5 (retry range)
+- [Phase 56]: Phase 56 Plan 03: L2 quality scoring uses L1 summary text as reference (raw messages already deleted)
+- [Phase 56]: Phase 56 Plan 03: blufio-storage added as dependency in blufio-context (no circular)
+- [Phase 56]: Phase 56 Plan 03: Classification escalation: restricted > confidential > internal for merged archives
+- Phase 56 Plan 04: 10% safety margin on conditional zone hardcoded as SAFETY_MARGIN constant
+- Phase 56 Plan 04: Static zone advisory-only warning (never truncates system prompt)
+- Phase 56 Plan 04: Provider-priority truncation drops lowest-priority (last-registered) first
+- Phase 56 Plan 04: DynamicZone::assemble_messages() accepts dynamic_budget parameter (adaptive)
+- Phase 56 Plan 04: Soft/hard compaction thresholds apply to adaptive dynamic budget, not total
+- Phase 56 Plan 05: CLI uses SqliteStorage + StorageAdapter trait for message access (not direct Database query)
+- Phase 56 Plan 05: ArchiveConditionalProvider registered last in serve.rs (lowest priority after memory, skills, trust zone)
+- Phase 56 Plan 05: Prometheus compaction metrics use facade pattern (describe_histogram!, describe_counter!)
+- Phase 56 Plan 05: Separate Database::open for ArchiveConditionalProvider (SqliteStorage doesn't expose connection)
+- Phase 56 Plan 06: Entity persistence uses 0.6 confidence (lower than explicit 0.9) matching MemoryExtractor convention
+- Phase 56 Plan 06: Entity persistence is best-effort: embedding/save failures logged and skipped, never fatal
+- Phase 56 Plan 06: CLI quality scores confirmed working from Plan 05 -- no code changes needed
+- [Phase 57]: Config types defined inline in blufio-config/model.rs (following ClassificationConfig pattern), re-exported from blufio-injection
+- [Phase 57]: SecurityEvent defined inline in blufio-bus/events.rs (following all event sub-enums), re-exported from blufio-injection
+- [Phase 57]: Custom regex patterns assigned default severity 0.3 and InstructionOverride category
+- [Phase 57]: Regex uses non-greedy source capture (.+?) to handle colon-containing sources like mcp:server_name
+- [Phase 57]: HKDF expand uses hmac::HMAC_SHA256 (owned, not &reference) per ring 0.17 KeyType trait
+- [Phase 57]: Hex encoding (64 chars) for HMAC tags over base64, leveraging existing hex crate in workspace
+- [Phase 57]: Credential patterns ordered most-specific first (sk-ant-, sk-proj- before sk-) because Rust regex has no lookahead
+- [Phase 57]: serde_json moved to runtime dependency (OutputScreener and HitlManager accept &serde_json::Value)
+- [Phase 57]: HitlManager.check_tool returns (HitlDecision, Vec<SecurityEvent>) tuple for event-driven architecture
+- [Phase 57]: ConfirmationChannel trait uses async-trait following workspace pattern
+- [Phase 57]: BoundaryManager per-session (not in pipeline) because HMAC tokens are session-scoped
+- [Phase 57]: InjectionPipeline wrapped in Option<Arc<Mutex<>>> for async sharing in SessionActor
+- [Phase 57]: MCP classifier shared via Arc<InjectionClassifier> (RegexSet not Clone)
+- [Phase 57]: assemble_with_boundaries() created alongside assemble() to avoid breaking API
+- [Phase 57]: 0.98 blocking threshold for tool output (higher than 0.95 for user input)
+- [Phase 57]: All open-world tool output scanned at session level for defense-in-depth
+- [Phase 57]: MCP classifier created as separate instance before MCP init, intentionally separate from pipeline classifier
 
 ### Pending Todos
 
@@ -119,6 +170,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-11T20:22:41Z
-Stopped at: Completed 55-04-PLAN.md (Phase 55 complete)
-Resume file: .planning/phases/55-memory-enhancements/55-04-SUMMARY.md
+Last session: 2026-03-12T16:17:28.137Z
+Stopped at: Phase 58 context gathered
+Resume file: .planning/phases/58-cron-scheduler-retention-policies/58-CONTEXT.md

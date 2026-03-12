@@ -1,8 +1,29 @@
 // SPDX-FileCopyrightText: 2026 Blufio Contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Compaction: summarizes older conversation history via a Haiku LLM call
-//! to keep the context window within budget.
+//! Multi-level compaction engine for conversation history summarization.
+//!
+//! Progresses through four levels:
+//! - **L0**: Raw messages (no compaction)
+//! - **L1**: Turn-pair bullet summaries (soft trigger)
+//! - **L2**: Session narrative summary (hard trigger / cascade)
+//! - **L3**: Cross-session archive (session close)
+//!
+//! Re-exports backward-compatible functions from the original single-level engine.
+
+pub mod archive;
+pub mod extract;
+pub mod levels;
+pub mod quality;
+
+pub use archive::{
+    ArchiveEntry, enforce_rolling_window, generate_l3_archive, get_archives_for_context,
+    store_archive,
+};
+pub use levels::{CompactionLevel, CompactionResult, compact_to_l1, compact_to_l2};
+pub use quality::{
+    GateResult, QualityScores, QualityWeights, apply_gate, evaluate_and_gate, evaluate_quality,
+};
 
 use blufio_core::error::BlufioError;
 use blufio_core::traits::ProviderAdapter;
@@ -11,8 +32,9 @@ use blufio_core::types::{ContentBlock, Message, ProviderMessage, ProviderRequest
 use chrono::Utc;
 use uuid::Uuid;
 
-/// System prompt for the compaction summarization LLM call.
-const COMPACTION_PROMPT: &str = r#"You are a conversation summarizer. Your job is to create a concise summary of the conversation below.
+/// System prompt for the L2 compaction summarization LLM call (narrative format).
+/// Also used as the foundation for `generate_compaction_summary` (backward compat).
+pub(crate) const COMPACTION_PROMPT: &str = r#"You are a conversation summarizer. Your job is to create a concise summary of the conversation below.
 
 PRESERVE the following in your summary:
 - User preferences and settings
@@ -113,6 +135,45 @@ pub async fn persist_compaction_summary(
     );
 
     Ok(())
+}
+
+/// Persists a compaction summary with full level metadata.
+///
+/// Extended version of [`persist_compaction_summary`] that includes compaction
+/// level and quality score in the metadata. Used by the multi-level engine.
+pub async fn persist_compaction_summary_with_level(
+    storage: &dyn StorageAdapter,
+    session_id: &str,
+    summary: &str,
+    original_count: usize,
+    level: &CompactionLevel,
+    quality_score: Option<f64>,
+) -> Result<String, BlufioError> {
+    let now = Utc::now().to_rfc3339();
+    let metadata = levels::build_compaction_metadata(level, original_count, quality_score, &now);
+
+    let msg_id = Uuid::new_v4().to_string();
+    let message = Message {
+        id: msg_id.clone(),
+        session_id: session_id.to_string(),
+        role: "system".to_string(),
+        content: summary.to_string(),
+        token_count: None,
+        metadata: Some(metadata.to_string()),
+        created_at: now,
+        classification: Default::default(),
+    };
+
+    storage.insert_message(&message).await?;
+
+    tracing::info!(
+        session_id = session_id,
+        original_count = original_count,
+        level = level.as_str(),
+        "compaction summary persisted"
+    );
+
+    Ok(msg_id)
 }
 
 #[cfg(test)]

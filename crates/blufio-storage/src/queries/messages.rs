@@ -79,6 +79,46 @@ pub async fn get_messages_for_session(
         .map_err(crate::database::map_tr_err)
 }
 
+/// Delete specific messages by their IDs within a session.
+///
+/// Returns the number of rows deleted.
+pub async fn delete_messages_by_ids(
+    db: &Database,
+    session_id: &str,
+    message_ids: &[String],
+) -> Result<usize, BlufioError> {
+    if message_ids.is_empty() {
+        return Ok(0);
+    }
+    let session_id = session_id.to_string();
+    let ids = message_ids.to_vec();
+    db.connection()
+        .call(move |conn| {
+            // Build placeholders: (?2, ?3, ?4, ...)
+            let placeholders: Vec<String> = (0..ids.len()).map(|i| format!("?{}", i + 2)).collect();
+            let sql = format!(
+                "DELETE FROM messages WHERE session_id = ?1 AND id IN ({})",
+                placeholders.join(", ")
+            );
+            let mut stmt = conn.prepare(&sql)?;
+
+            // Bind session_id as param 1, then each message id
+            let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> =
+                Vec::with_capacity(1 + ids.len());
+            params_vec.push(Box::new(session_id));
+            for id in &ids {
+                params_vec.push(Box::new(id.clone()));
+            }
+            let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+                params_vec.iter().map(|p| p.as_ref()).collect();
+
+            let deleted = stmt.execute(param_refs.as_slice())?;
+            Ok(deleted)
+        })
+        .await
+        .map_err(crate::database::map_tr_err)
+}
+
 /// Convert a rusqlite Row to a Message struct.
 ///
 /// Column order: id(0), session_id(1), role(2), content(3), token_count(4),

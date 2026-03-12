@@ -113,6 +113,11 @@ pub struct SessionActorConfig {
     pub fallback_chain: Vec<String>,
     /// Optional EventBus for publishing circuit breaker state transitions.
     pub event_bus: Option<Arc<blufio_bus::EventBus>>,
+    /// Optional injection defense pipeline for L1/L4/L5 screening.
+    pub injection_pipeline:
+        Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
+    /// Optional HMAC boundary manager for L3 content zone integrity (per-session).
+    pub boundary_manager: Option<blufio_injection::boundary::BoundaryManager>,
 }
 
 /// Manages the state and message processing for a single conversation session.
@@ -171,6 +176,13 @@ pub struct SessionActor {
     fallback_chain: Vec<String>,
     /// Optional EventBus for publishing circuit breaker state transitions.
     event_bus: Option<Arc<blufio_bus::EventBus>>,
+    /// Optional injection defense pipeline for L1/L4/L5 screening.
+    injection_pipeline:
+        Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
+    /// Optional HMAC boundary manager for L3 content zone integrity (per-session).
+    boundary_manager: Option<blufio_injection::boundary::BoundaryManager>,
+    /// Whether the last L1 scan flagged the input (for cross-layer escalation).
+    flagged_input: bool,
 }
 
 impl SessionActor {
@@ -203,6 +215,9 @@ impl SessionActor {
             provider_registry: config.provider_registry,
             fallback_chain: config.fallback_chain,
             event_bus: config.event_bus,
+            injection_pipeline: config.injection_pipeline,
+            boundary_manager: config.boundary_manager,
+            flagged_input: false,
         }
     }
 
@@ -286,6 +301,47 @@ impl SessionActor {
             }
         }
 
+        // L1 injection defense: scan user input before it reaches the LLM.
+        let correlation_id = blufio_injection::pipeline::InjectionPipeline::new_correlation_id();
+        if let Some(ref pipeline) = self.injection_pipeline {
+            let pipeline_guard = pipeline.lock().await;
+            let scan_result = pipeline_guard.scan_input(&text_content, "user", &correlation_id);
+
+            // Emit security events (fire-and-forget).
+            if !scan_result.events.is_empty() {
+                pipeline_guard.emit_events(scan_result.events).await;
+            }
+
+            // Store flagged state for cross-layer escalation in execute_tools.
+            self.flagged_input = scan_result.flagged;
+
+            // Block if L1 action is "blocked" (per CONTEXT.md: generic refusal).
+            if scan_result.action == "blocked" {
+                warn!(
+                    session_id = %self.session_id,
+                    correlation_id = %correlation_id,
+                    score = scan_result.score,
+                    "L1: input blocked by injection defense"
+                );
+                self.state = SessionState::Responding;
+                let blocked_stream: Pin<
+                    Box<dyn Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>,
+                > = Box::pin(futures::stream::once(async {
+                    Ok(ProviderStreamChunk {
+                        event_type: blufio_core::types::StreamEventType::ContentBlockDelta,
+                        text: Some("I can't process this message.".to_string()),
+                        usage: None,
+                        tool_use: None,
+                        stop_reason: Some("end_turn".to_string()),
+                        error: None,
+                    })
+                }));
+                return Ok(blocked_stream);
+            }
+        } else {
+            self.flagged_input = false;
+        }
+
         // Persist the inbound user message (with override prefix stripped).
         let now = chrono::Utc::now().to_rfc3339();
         let msg = Message {
@@ -367,16 +423,18 @@ impl SessionActor {
         }
 
         // Assemble context using the three-zone context engine.
+        // When a boundary manager is available, apply L3 HMAC boundary protection.
         let assembled = self
             .context_engine
-            .assemble(
-                self.provider.as_ref(),
-                self.storage.as_ref(),
-                &self.session_id,
-                &inbound,
-                &model,
+            .assemble_with_boundaries(blufio_context::AssemblyParams {
+                provider: self.provider.as_ref(),
+                storage: self.storage.as_ref(),
+                session_id: &self.session_id,
+                inbound: &inbound,
+                model: &model,
                 max_tokens,
-            )
+                boundary_manager: self.boundary_manager.as_ref(),
+            })
             .await;
 
         // Clear current query on memory provider (regardless of assembly outcome).
@@ -396,8 +454,8 @@ impl SessionActor {
 
         // Record compaction costs if compaction was triggered during assembly.
         // Compaction is a separate Haiku LLM call that must be recorded with
-        // FeatureType::Compaction, not Message.
-        if let Some(ref compaction_usage) = assembled.compaction_usage {
+        // FeatureType::Compaction, not Message. May have multiple from cascade.
+        for compaction_usage in &assembled.compaction_usages {
             let compaction_model = assembled
                 .compaction_model
                 .as_deref()
@@ -436,6 +494,41 @@ impl SessionActor {
                 cost_usd = cost_usd,
                 "compaction cost recorded"
             );
+        }
+
+        // Persist entities extracted during compaction as Memory entries (COMP-06).
+        if !assembled.extracted_entities.is_empty()
+            && let Some(ref extractor) = self.memory_extractor
+        {
+            match extractor
+                .persist_extracted_entities(&self.session_id, &assembled.extracted_entities)
+                .await
+            {
+                Ok(count) => {
+                    if count > 0 {
+                        info!(
+                            session_id = %self.session_id,
+                            count = count,
+                            "persisted extracted entities from compaction"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        session_id = %self.session_id,
+                        error = %e,
+                        "failed to persist extracted entities (non-fatal)"
+                    );
+                }
+            }
+        }
+
+        // Emit L3 boundary validation events (if any).
+        if !assembled.boundary_events.is_empty()
+            && let Some(ref pipeline) = self.injection_pipeline
+        {
+            let pipeline_guard = pipeline.lock().await;
+            pipeline_guard.emit_events(assembled.boundary_events).await;
         }
 
         // Check degradation level for L4+ canned response.
@@ -801,9 +894,127 @@ impl SessionActor {
         let mut results = Vec::with_capacity(tool_uses.len());
 
         for tu in tool_uses {
+            let corr_id = blufio_injection::pipeline::InjectionPipeline::new_correlation_id();
+
+            // L4: Screen tool arguments before execution.
+            if let Some(ref pipeline) = self.injection_pipeline {
+                let mut pipeline_guard = pipeline.lock().await;
+                let screen_result =
+                    pipeline_guard.screen_output(&tu.name, &tu.input, &corr_id, self.flagged_input);
+
+                // Emit screening events.
+                if !screen_result.events.is_empty() {
+                    pipeline_guard.emit_events(screen_result.events).await;
+                }
+
+                match screen_result.action {
+                    blufio_injection::output_screen::ScreeningAction::Block(reason) => {
+                        warn!(
+                            session_id = %self.session_id,
+                            tool = %tu.name,
+                            reason = %reason,
+                            "L4: tool execution blocked"
+                        );
+                        results.push((
+                            tu.id.clone(),
+                            ToolOutput {
+                                content: format!("Tool {} was blocked.", tu.name),
+                                is_error: true,
+                            },
+                        ));
+                        continue;
+                    }
+                    blufio_injection::output_screen::ScreeningAction::Redact(_redacted) => {
+                        // Continue with original args (credentials redacted in the screening
+                        // result but we still execute with original args -- the redaction
+                        // is for logging purposes). Tool execution proceeds.
+                        debug!(
+                            session_id = %self.session_id,
+                            tool = %tu.name,
+                            "L4: credentials detected and logged"
+                        );
+                    }
+                    _ => {} // Allow or DryRun -- proceed normally
+                }
+
+                // L5: Check HITL for external tools.
+                let l4_escalated = pipeline_guard.l4_escalation_triggered();
+                let (decision, hitl_events) = pipeline_guard.check_hitl(
+                    &tu.name,
+                    &tu.input,
+                    &self.session_id,
+                    &self.channel,
+                    true, // assume interactive for now
+                    &corr_id,
+                    l4_escalated,
+                    self.flagged_input,
+                );
+
+                if !hitl_events.is_empty() {
+                    pipeline_guard.emit_events(hitl_events).await;
+                }
+
+                match decision {
+                    blufio_injection::hitl::HitlDecision::Denied(reason) => {
+                        warn!(
+                            session_id = %self.session_id,
+                            tool = %tu.name,
+                            reason = %reason,
+                            "L5: tool execution denied"
+                        );
+                        results.push((
+                            tu.id.clone(),
+                            ToolOutput {
+                                content: format!(
+                                    "Tool {} was blocked. I'll answer without it.",
+                                    tu.name
+                                ),
+                                is_error: true,
+                            },
+                        ));
+                        continue;
+                    }
+                    blufio_injection::hitl::HitlDecision::PendingConfirmation(_req) => {
+                        // For now, auto-deny pending confirmations (full HITL flow
+                        // requires channel adapter implementation).
+                        let (timeout_decision, timeout_event) = pipeline_guard.handle_hitl_timeout(
+                            &self.session_id,
+                            &tu.name,
+                            &corr_id,
+                        );
+                        pipeline_guard.emit_events(vec![timeout_event]).await;
+                        if matches!(
+                            timeout_decision,
+                            blufio_injection::hitl::HitlDecision::Denied(_)
+                        ) {
+                            warn!(
+                                session_id = %self.session_id,
+                                tool = %tu.name,
+                                "L5: tool execution denied (confirmation timeout)"
+                            );
+                            results.push((
+                                tu.id.clone(),
+                                ToolOutput {
+                                    content: format!(
+                                        "Tool {} was blocked. I'll answer without it.",
+                                        tu.name
+                                    ),
+                                    is_error: true,
+                                },
+                            ));
+                            continue;
+                        }
+                    }
+                    _ => {} // AutoApproved or DryRun -- proceed
+                }
+
+                drop(pipeline_guard);
+            }
+
             let registry = self.tool_registry.read().await;
-            let output = match registry.get(&tu.name) {
+            let (output, is_open_world) = match registry.get(&tu.name) {
                 Some(tool) => {
+                    let open_world = tool.is_open_world();
                     debug!(
                         session_id = %self.session_id,
                         tool = %tu.name,
@@ -813,7 +1024,7 @@ impl SessionActor {
                     // Drop the read guard before the async invoke to avoid holding
                     // the lock across an await point.
                     drop(registry);
-                    match tool.invoke(tu.input.clone()).await {
+                    let out = match tool.invoke(tu.input.clone()).await {
                         Ok(output) => output,
                         Err(e) => {
                             warn!(
@@ -827,7 +1038,8 @@ impl SessionActor {
                                 is_error: true,
                             }
                         }
-                    }
+                    };
+                    (out, open_world)
                 }
                 None => {
                     drop(registry);
@@ -836,11 +1048,49 @@ impl SessionActor {
                         tool = %tu.name,
                         "tool not found in registry"
                     );
-                    ToolOutput {
-                        content: format!("Error: tool '{}' not found", tu.name),
-                        is_error: true,
-                    }
+                    (
+                        ToolOutput {
+                            content: format!("Error: tool '{}' not found", tu.name),
+                            is_error: true,
+                        },
+                        false,
+                    )
                 }
+            };
+
+            // L1 output scanning: scan tool output from open-world tools (MCP/WASM)
+            // before feeding results back to the LLM. Uses 0.98 blocking threshold.
+            let output = if is_open_world && !output.is_error {
+                if let Some(ref pipeline) = self.injection_pipeline {
+                    let pipeline_guard = pipeline.lock().await;
+                    let scan = pipeline_guard.scan_input(&output.content, "tool_output", &corr_id);
+                    if scan.flagged && scan.score >= 0.98 {
+                        warn!(
+                            session_id = %self.session_id,
+                            tool = %tu.name,
+                            score = scan.score,
+                            "L1: tool output blocked by injection defense"
+                        );
+                        ToolOutput {
+                            content: "[Tool output blocked by injection defense]".to_string(),
+                            is_error: true,
+                        }
+                    } else {
+                        if scan.flagged {
+                            debug!(
+                                session_id = %self.session_id,
+                                tool = %tu.name,
+                                score = scan.score,
+                                "L1: suspicious patterns in tool output (below blocking threshold)"
+                            );
+                        }
+                        output
+                    }
+                } else {
+                    output
+                }
+            } else {
+                output
             };
 
             results.push((tu.id.clone(), output));
@@ -1207,6 +1457,8 @@ mod tests {
             provider_registry: None,
             fallback_chain: Vec::new(),
             event_bus,
+            injection_pipeline: None,
+            boundary_manager: None,
         });
 
         (actor, storage, temp_dir)
