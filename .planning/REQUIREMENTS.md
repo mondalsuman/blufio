@@ -77,8 +77,8 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 ### Cron/Scheduler
 
 - [x] **CRON-01**: TOML-configured cron jobs with standard cron expression syntax
-- [ ] **CRON-02**: CLI `blufio cron` subcommand for list, add, remove, run-now, history
-- [ ] **CRON-03**: systemd timer unit file generation via `blufio cron generate-timers`
+- [x] **CRON-02**: CLI `blufio cron` subcommand for list, add, remove, run-now, history
+- [x] **CRON-03**: systemd timer unit file generation via `blufio cron generate-timers`
 - [x] **CRON-04**: Job execution history tracked in SQLite with status, duration, and output
 - [x] **CRON-05**: Built-in tasks: memory cleanup, backup, cost report, health check, retention enforcement
 - [x] **CRON-06**: Persisted last-run timestamps survive process restarts
@@ -224,8 +224,8 @@ Deferred to v1.6+.
 | INJC-05 | Phase 57 | Complete |
 | INJC-06 | Phase 57 | Complete |
 | CRON-01 | Phase 58 | Complete |
-| CRON-02 | Phase 58 | Pending |
-| CRON-03 | Phase 58 | Pending |
+| CRON-02 | Phase 58 | Complete |
+| CRON-03 | Phase 58 | Complete |
 | CRON-04 | Phase 58 | Complete |
 | CRON-05 | Phase 58 | Complete |
 | CRON-06 | Phase 58 | Complete |

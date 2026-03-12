@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 58-02-PLAN.md
-last_updated: "2026-03-12T18:35:13.000Z"
-last_activity: 2026-03-12 -- Phase 58 Plan 02 complete
+stopped_at: Completed 58-03-PLAN.md
+last_updated: "2026-03-12T18:42:08Z"
+last_activity: 2026-03-12 -- Phase 58 Plan 03 complete
 progress:
   total_phases: 11
   completed_phases: 3
   total_plans: 15
-  completed_plans: 23
+  completed_plans: 24
   percent: 45
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 58 of 63 (Cron Scheduler & Retention Policies) -- sixth of 11 phases in v1.5
-Plan: 2 of 5 complete
+Plan: 3 of 5 complete
 Status: Executing
-Last activity: 2026-03-12 -- Phase 58 Plan 02 complete (scheduler core + retention engine)
+Last activity: 2026-03-12 -- Phase 58 Plan 03 complete (CLI subcommand + systemd timer generation)
 
 Progress: [████░░░░░░] 45%
 
@@ -69,6 +69,7 @@ Progress: [████░░░░░░] 45%
 | Phase 57 P05 | 4min | 2 tasks | 2 files |
 | Phase 58 P01 | 18min | 2 tasks | 19 files |
 | Phase 58 P02 | 17min | 2 tasks | 13 files |
+| Phase 58 P03 | 12min | 1 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,8 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 58]: History module uses String errors (not BlufioError) to avoid cross-crate complexity
 - [Phase 58]: Memory cleanup uses soft-delete for consistency with retention model
 - [Phase 58]: Retention soft-delete uses format!() for table/days interpolation (safe: internal values only)
+- [Phase 58]: CLI cron handler uses sync DB for list/add/remove/generate, async DB for run-now/history
+- [Phase 58]: Cron-to-OnCalendar conversion is best-effort with hourly fallback for unsupported specifiers
 
 ### Pending Todos
 
@@ -181,6 +184,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T18:35:13.000Z
-Stopped at: Completed 58-02-PLAN.md
-Resume file: .planning/phases/58-cron-scheduler-retention-policies/58-03-PLAN.md
+Last session: 2026-03-12T18:42:08Z
+Stopped at: Completed 58-03-PLAN.md
+Resume file: .planning/phases/58-cron-scheduler-retention-policies/58-04-PLAN.md
