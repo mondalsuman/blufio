@@ -17,8 +17,8 @@ pub mod patterns;
 pub mod classifier;
 pub mod events;
 pub mod metrics;
+pub mod output_screen;
+pub mod boundary;
 // Future modules:
-// pub mod boundary;
-// pub mod output_screen;
 // pub mod hitl;
 // pub mod pipeline;
