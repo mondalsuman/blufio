@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use crate::models::{ErasureManifest, GdprError};
 
 /// Create an erasure manifest from deletion counts.
+#[allow(clippy::too_many_arguments)]
 pub fn create_manifest(
     user_id: &str,
     session_ids: &[String],
@@ -46,31 +47,23 @@ pub fn write_manifest(manifest: &ErasureManifest, export_dir: &Path) -> Result<P
     use std::io::Write;
 
     // Create directory if it does not exist
-    std::fs::create_dir_all(export_dir).map_err(|e| {
-        GdprError::ExportDirNotWritable(format!("{}: {e}", export_dir.display()))
-    })?;
+    std::fs::create_dir_all(export_dir)
+        .map_err(|e| GdprError::ExportDirNotWritable(format!("{}: {e}", export_dir.display())))?;
 
     // Sanitize timestamp for filename (replace colons and plus signs)
-    let ts = manifest
-        .timestamp
-        .replace(':', "-")
-        .replace('+', "");
+    let ts = manifest.timestamp.replace(':', "-").replace('+', "");
     let filename = format!("gdpr-manifest-{}-{ts}.json", manifest.user_id);
     let path = export_dir.join(filename);
 
-    let json = serde_json::to_string_pretty(manifest).map_err(|e| {
-        GdprError::ExportFailed(format!("manifest serialization failed: {e}"))
-    })?;
+    let json = serde_json::to_string_pretty(manifest)
+        .map_err(|e| GdprError::ExportFailed(format!("manifest serialization failed: {e}")))?;
 
-    let mut file = std::fs::File::create(&path).map_err(|e| {
-        GdprError::ExportDirNotWritable(format!("{}: {e}", path.display()))
-    })?;
-    file.write_all(json.as_bytes()).map_err(|e| {
-        GdprError::ExportFailed(format!("manifest write failed: {e}"))
-    })?;
-    file.flush().map_err(|e| {
-        GdprError::ExportFailed(format!("manifest flush failed: {e}"))
-    })?;
+    let mut file = std::fs::File::create(&path)
+        .map_err(|e| GdprError::ExportDirNotWritable(format!("{}: {e}", path.display())))?;
+    file.write_all(json.as_bytes())
+        .map_err(|e| GdprError::ExportFailed(format!("manifest write failed: {e}")))?;
+    file.flush()
+        .map_err(|e| GdprError::ExportFailed(format!("manifest flush failed: {e}")))?;
 
     Ok(path)
 }

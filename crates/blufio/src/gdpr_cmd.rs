@@ -17,10 +17,9 @@ use colored::Colorize;
 use blufio_config::model::BlufioConfig;
 use blufio_core::BlufioError;
 use blufio_gdpr::{
-    apply_redaction, check_active_sessions, cleanup_memory_index, collect_user_data,
-    count_user_data, erase_audit_trail, execute_erasure, find_user_sessions,
-    resolve_export_path, write_csv_export, write_json_export, write_manifest,
-    ExportMetadata, FilterCriteria, GdprError, ReportData,
+    ExportMetadata, FilterCriteria, GdprError, ReportData, apply_redaction, check_active_sessions,
+    cleanup_memory_index, collect_user_data, count_user_data, erase_audit_trail, execute_erasure,
+    find_user_sessions, resolve_export_path, write_csv_export, write_json_export, write_manifest,
 };
 
 use crate::GdprCommands;
@@ -95,9 +94,9 @@ async fn cmd_erase(
 
     // b. Open main DB connection, find user sessions
     let conn = open_main_db(config).await?;
-    let sessions = find_user_sessions(&conn, user).await.map_err(|e| {
-        BlufioError::Gdpr(e.to_string())
-    })?;
+    let sessions = find_user_sessions(&conn, user)
+        .await
+        .map_err(|e| BlufioError::Gdpr(e.to_string()))?;
 
     // c. No data found
     if sessions.is_empty() {
@@ -112,10 +111,7 @@ async fn cmd_erase(
     if active > 0 && !force {
         eprintln!(
             "{}",
-            format!(
-                "User has {active} active session(s). Close them first or pass --force."
-            )
-            .red()
+            format!("User has {active} active session(s). Close them first or pass --force.").red()
         );
         return Err(BlufioError::Gdpr(
             GdprError::ActiveSessionsExist(active).to_string(),
@@ -124,14 +120,9 @@ async fn cmd_erase(
 
     // Get preview counts (used for dry_run and confirmation prompt)
     let audit_conn = open_audit_db(config).await?;
-    let report = count_user_data(
-        &conn,
-        audit_conn.as_ref(),
-        &session_ids,
-        user,
-    )
-    .await
-    .map_err(|e| BlufioError::Gdpr(e.to_string()))?;
+    let report = count_user_data(&conn, audit_conn.as_ref(), &session_ids, user)
+        .await
+        .map_err(|e| BlufioError::Gdpr(e.to_string()))?;
 
     // e. Dry run: show preview and return
     if dry_run {
@@ -176,9 +167,7 @@ async fn cmd_erase(
                     "{}",
                     format!("Export failed: {e}. Aborting erasure for data safety.").red()
                 );
-                return Err(BlufioError::Gdpr(format!(
-                    "pre-erasure export failed: {e}"
-                )));
+                return Err(BlufioError::Gdpr(format!("pre-erasure export failed: {e}")));
             }
         }
     }
@@ -205,7 +194,10 @@ async fn cmd_erase(
     // i. Write manifest
     let export_dir = resolve_export_dir(config);
     if let Err(e) = write_manifest(&manifest, &export_dir) {
-        eprintln!("{}", format!("Warning: manifest write failed: {e}").yellow());
+        eprintln!(
+            "{}",
+            format!("Warning: manifest write failed: {e}").yellow()
+        );
     }
 
     // j. Erase audit trail (best-effort)
@@ -223,10 +215,7 @@ async fn cmd_erase(
 
     // k. Cleanup memory index (synchronous)
     if let Err(e) = cleanup_memory_index(&conn, &session_ids).await {
-        eprintln!(
-            "{}",
-            format!("Warning: FTS5 cleanup failed: {e}").yellow()
-        );
+        eprintln!("{}", format!("Warning: FTS5 cleanup failed: {e}").yellow());
     }
 
     // l. Record Prometheus metrics
@@ -255,7 +244,10 @@ async fn cmd_erase(
     println!("  Sessions deleted:       {}", manifest.sessions_deleted);
     println!("  Memories deleted:       {}", manifest.memories_deleted);
     println!("  Archives deleted:       {}", manifest.archives_deleted);
-    println!("  Cost records anonymized: {}", manifest.cost_records_anonymized);
+    println!(
+        "  Cost records anonymized: {}",
+        manifest.cost_records_anonymized
+    );
     println!(
         "  Audit entries redacted: {}",
         manifest.audit_entries_redacted
@@ -387,9 +379,8 @@ async fn cmd_export(
     let export_path = resolve_export_path(&config.gdpr, user, format, output, &data_dir);
 
     if let Some(parent) = export_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            BlufioError::Gdpr(format!("cannot create export directory: {e}"))
-        })?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| BlufioError::Gdpr(format!("cannot create export directory: {e}")))?;
     }
 
     // h. Write export
@@ -554,10 +545,7 @@ async fn cmd_list_users(config: &BlufioConfig, json: bool) -> Result<(), BlufioE
             );
         }
         println!();
-        println!(
-            "  {} user(s) found.",
-            user_data.len()
-        );
+        println!("  {} user(s) found.", user_data.len());
         println!();
     }
 

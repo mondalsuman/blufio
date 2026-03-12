@@ -12,9 +12,7 @@ use std::path::{Path, PathBuf};
 use blufio_core::classification::DataClassification;
 use blufio_security::classification_guard::ClassificationGuard;
 
-use crate::models::{
-    ExportData, ExportEnvelope, ExportMetadata, FilterCriteria, GdprError,
-};
+use crate::models::{ExportData, ExportEnvelope, ExportMetadata, FilterCriteria, GdprError};
 
 /// Collected user data ready for export.
 #[derive(Debug, Clone)]
@@ -113,8 +111,7 @@ pub async fn collect_user_data(
             let mut result = Vec::new();
             for row in rows {
                 let (value, cls_str) = row?;
-                let cls = DataClassification::from_str_value(&cls_str)
-                    .unwrap_or_default();
+                let cls = DataClassification::from_str_value(&cls_str).unwrap_or_default();
                 if guard.can_export(cls) {
                     result.push(value);
                 } else {
@@ -164,8 +161,7 @@ pub async fn collect_user_data(
             let mut result = Vec::new();
             for row in rows {
                 let (value, cls_str) = row?;
-                let cls = DataClassification::from_str_value(&cls_str)
-                    .unwrap_or_default();
+                let cls = DataClassification::from_str_value(&cls_str).unwrap_or_default();
                 if guard.can_export(cls) {
                     result.push(value);
                 } else {
@@ -216,8 +212,7 @@ pub async fn collect_user_data(
             let mut result = Vec::new();
             for row in rows {
                 let (value, cls_str) = row?;
-                let cls = DataClassification::from_str_value(&cls_str)
-                    .unwrap_or_default();
+                let cls = DataClassification::from_str_value(&cls_str).unwrap_or_default();
                 if guard.can_export(cls) {
                     result.push(value);
                 } else {
@@ -336,9 +331,8 @@ pub fn write_json_export(
 
     // Create parent directory if needed
     if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            GdprError::ExportDirNotWritable(format!("{}: {e}", parent.display()))
-        })?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| GdprError::ExportDirNotWritable(format!("{}: {e}", parent.display())))?;
     }
 
     let envelope = ExportEnvelope {
@@ -380,9 +374,8 @@ pub fn write_csv_export(
 ) -> Result<u64, GdprError> {
     // Create parent directory if needed
     if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            GdprError::ExportDirNotWritable(format!("{}: {e}", parent.display()))
-        })?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| GdprError::ExportDirNotWritable(format!("{}: {e}", parent.display())))?;
     }
 
     let mut wtr = csv::Writer::from_path(output_path)
@@ -412,7 +405,9 @@ pub fn write_csv_export(
             msg.get("role").and_then(|v| v.as_str()).unwrap_or(""),
             msg.get("created_at").and_then(|v| v.as_str()).unwrap_or(""),
             "", // messages don't have updated_at
-            msg.get("classification").and_then(|v| v.as_str()).unwrap_or(""),
+            msg.get("classification")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
             &msg.get("metadata")
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
@@ -428,9 +423,15 @@ pub fn write_csv_export(
             "", // session_id is the id itself
             "", // no content field
             "", // no role
-            sess.get("created_at").and_then(|v| v.as_str()).unwrap_or(""),
-            sess.get("updated_at").and_then(|v| v.as_str()).unwrap_or(""),
-            sess.get("classification").and_then(|v| v.as_str()).unwrap_or(""),
+            sess.get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
+            sess.get("updated_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
+            sess.get("classification")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
             &sess
                 .get("metadata")
                 .map(|v| v.to_string())
@@ -449,7 +450,9 @@ pub fn write_csv_export(
             "", // no role
             mem.get("created_at").and_then(|v| v.as_str()).unwrap_or(""),
             mem.get("updated_at").and_then(|v| v.as_str()).unwrap_or(""),
-            mem.get("classification").and_then(|v| v.as_str()).unwrap_or(""),
+            mem.get("classification")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
             "", // no extra metadata
         ])
         .map_err(|e| GdprError::ExportFailed(format!("CSV write failed: {e}")))?;
@@ -468,10 +471,14 @@ pub fn write_csv_export(
         wtr.write_record([
             "cost_record",
             cost.get("id").and_then(|v| v.as_str()).unwrap_or(""),
-            cost.get("session_id").and_then(|v| v.as_str()).unwrap_or(""),
+            cost.get("session_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
             "", // no content
             "", // no role
-            cost.get("created_at").and_then(|v| v.as_str()).unwrap_or(""),
+            cost.get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
             "", // no updated_at
             "", // no classification on cost records
             &meta.to_string(),
@@ -482,9 +489,7 @@ pub fn write_csv_export(
     wtr.flush()
         .map_err(|e| GdprError::ExportFailed(format!("CSV flush failed: {e}")))?;
 
-    let size = std::fs::metadata(output_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let size = std::fs::metadata(output_path).map(|m| m.len()).unwrap_or(0);
 
     Ok(size)
 }
@@ -510,9 +515,7 @@ pub fn resolve_export_path(
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(data_dir).join("exports"));
 
-    let ts = chrono::Utc::now()
-        .format("%Y%m%dT%H%M%SZ")
-        .to_string();
+    let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
 
     base_dir.join(format!("gdpr-export-{user_id}-{ts}.{format}"))
 }
@@ -747,7 +750,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(data.messages.len(), 1, "restricted message should be excluded");
+        assert_eq!(
+            data.messages.len(),
+            1,
+            "restricted message should be excluded"
+        );
         assert_eq!(data.restricted_excluded, 1);
     }
 
@@ -819,7 +826,10 @@ mod tests {
 
         let contents = std::fs::read_to_string(&path).unwrap();
         assert!(contents.contains("[EMAIL]"), "PII should be redacted");
-        assert!(!contents.contains("user@example.com"), "original email should be removed");
+        assert!(
+            !contents.contains("user@example.com"),
+            "original email should be removed"
+        );
     }
 
     #[tokio::test]
@@ -920,8 +930,10 @@ mod tests {
 
     #[test]
     fn resolve_export_path_uses_config_export_dir() {
-        let mut config = crate::config::GdprConfig::default();
-        config.export_dir = Some("/custom/exports".into());
+        let config = crate::config::GdprConfig {
+            export_dir: Some("/custom/exports".into()),
+            ..Default::default()
+        };
         let path = resolve_export_path(&config, "u1", "csv", None, "/data");
         let path_str = path.to_str().unwrap();
         assert!(path_str.starts_with("/custom/exports/gdpr-export-u1-"));

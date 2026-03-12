@@ -322,9 +322,7 @@ mod tests {
     async fn count_user_data_empty_sessions() {
         let conn = setup_test_db().await;
 
-        let report = count_user_data(&conn, None, &[], "no-user")
-            .await
-            .unwrap();
+        let report = count_user_data(&conn, None, &[], "no-user").await.unwrap();
 
         assert_eq!(report.messages, 0);
         assert_eq!(report.sessions, 0);

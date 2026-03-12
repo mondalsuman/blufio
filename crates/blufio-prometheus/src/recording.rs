@@ -336,10 +336,7 @@ fn register_gdpr_metrics() {
         "blufio_gdpr_erasures_total",
         "Total GDPR erasure operations"
     );
-    describe_counter!(
-        "blufio_gdpr_exports_total",
-        "Total GDPR data exports"
-    );
+    describe_counter!("blufio_gdpr_exports_total", "Total GDPR data exports");
     describe_counter!(
         "blufio_gdpr_reports_total",
         "Total GDPR transparency reports"

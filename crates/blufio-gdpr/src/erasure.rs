@@ -182,9 +182,7 @@ pub async fn cleanup_memory_index(
             conn.query_row("SELECT COUNT(*) FROM memories_fts", [], |row| row.get(0))?;
 
         if mem_count != fts_count {
-            conn.execute_batch(
-                "INSERT INTO memories_fts(memories_fts) VALUES('rebuild')",
-            )?;
+            conn.execute_batch("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")?;
         }
         Ok(())
     })
@@ -469,9 +467,15 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(session_id.is_none(), "session_id should be NULL after anonymization");
+        assert!(
+            session_id.is_none(),
+            "session_id should be NULL after anonymization"
+        );
         assert_eq!(model, "gpt-4", "model field should be preserved");
-        assert!((cost - 0.05).abs() < f64::EPSILON, "cost should be preserved");
+        assert!(
+            (cost - 0.05).abs() < f64::EPSILON,
+            "cost should be preserved"
+        );
     }
 
     #[tokio::test]

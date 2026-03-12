@@ -35,15 +35,15 @@ pub mod report;
 // Re-export key types for ergonomic access.
 pub use config::GdprConfig;
 pub use erasure::{
-    check_active_sessions, cleanup_memory_index, erase_audit_trail, execute_erasure,
-    find_user_sessions, UserSession,
+    UserSession, check_active_sessions, cleanup_memory_index, erase_audit_trail, execute_erasure,
+    find_user_sessions,
 };
 pub use events::{
     erasure_completed, erasure_started, export_completed, hash_user_id, report_generated,
 };
 pub use export::{
-    apply_redaction, collect_user_data, resolve_export_path, write_csv_export, write_json_export,
-    CollectedData,
+    CollectedData, apply_redaction, collect_user_data, resolve_export_path, write_csv_export,
+    write_json_export,
 };
 pub use manifest::{create_manifest, write_manifest};
 pub use models::{
