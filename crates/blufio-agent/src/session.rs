@@ -438,6 +438,33 @@ impl SessionActor {
             );
         }
 
+        // Persist entities extracted during compaction as Memory entries (COMP-06).
+        if !assembled.extracted_entities.is_empty() {
+            if let Some(ref extractor) = self.memory_extractor {
+                match extractor
+                    .persist_extracted_entities(&self.session_id, &assembled.extracted_entities)
+                    .await
+                {
+                    Ok(count) => {
+                        if count > 0 {
+                            info!(
+                                session_id = %self.session_id,
+                                count = count,
+                                "persisted extracted entities from compaction"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            session_id = %self.session_id,
+                            error = %e,
+                            "failed to persist extracted entities (non-fatal)"
+                        );
+                    }
+                }
+            }
+        }
+
         // Check degradation level for L4+ canned response.
         if let Some(ref dm) = self.degradation_manager {
             let level = dm.current_level();

@@ -50,6 +50,10 @@ pub struct AssembledContext {
     /// Empty when all providers fit within the conditional zone budget.
     /// Useful for debugging context assembly decisions.
     pub dropped_providers: Vec<String>,
+    /// Entity strings extracted during compaction that the caller should persist
+    /// as Memory entries with `MemorySource::Extracted`. Forwarded from
+    /// [`DynamicResult::extracted_entities`].
+    pub extracted_entities: Vec<String>,
 }
 
 /// The context engine orchestrates three-zone prompt assembly.
@@ -189,6 +193,7 @@ impl ContextEngine {
             compaction_usages: dynamic_result.compaction_usages,
             compaction_model,
             dropped_providers: dropped,
+            extracted_entities: dynamic_result.extracted_entities,
         })
     }
 
@@ -245,6 +250,7 @@ mod tests {
             }],
             compaction_model: Some("claude-haiku-4-5-20250901".into()),
             dropped_providers: vec![],
+            extracted_entities: vec![],
         };
 
         assert_eq!(ctx.compaction_usages.len(), 1);
@@ -269,6 +275,7 @@ mod tests {
             compaction_usages: vec![],
             compaction_model: None,
             dropped_providers: vec![],
+            extracted_entities: vec![],
         };
 
         assert!(ctx.compaction_usages.is_empty());
@@ -291,6 +298,7 @@ mod tests {
             compaction_usages: vec![],
             compaction_model: None,
             dropped_providers: vec!["archive".to_string()],
+            extracted_entities: vec![],
         };
 
         assert_eq!(ctx.dropped_providers.len(), 1);

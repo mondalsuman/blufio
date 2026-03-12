@@ -74,6 +74,80 @@ impl MemoryExtractor {
         &self.extraction_model
     }
 
+    /// Persists pre-extracted entity strings as Memory entries with `MemorySource::Extracted`.
+    ///
+    /// Called by `SessionActor` after context assembly when compaction extracts entities.
+    /// Each entity string is embedded and saved to the `MemoryStore` with 0.6 confidence
+    /// (lower than explicit memories).
+    ///
+    /// Returns the count of successfully persisted entities.
+    pub async fn persist_extracted_entities(
+        &self,
+        session_id: &str,
+        entities: &[String],
+    ) -> Result<usize, BlufioError> {
+        if entities.is_empty() {
+            return Ok(0);
+        }
+
+        let mut saved = 0usize;
+        for entity in entities {
+            // Generate embedding.
+            let embed_result = self
+                .embedder
+                .embed(EmbeddingInput {
+                    texts: vec![entity.clone()],
+                })
+                .await;
+
+            let embedding = match embed_result {
+                Ok(output) => match output.embeddings.into_iter().next() {
+                    Some(v) if !v.is_empty() => v,
+                    _ => {
+                        warn!(entity = entity.as_str(), "empty embedding for extracted entity, skipping");
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    warn!(entity = entity.as_str(), error = %e, "embedding failed for extracted entity, skipping");
+                    continue;
+                }
+            };
+
+            let now = chrono::Utc::now()
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string();
+            let memory = Memory {
+                id: Uuid::new_v4().to_string(),
+                content: entity.clone(),
+                embedding,
+                source: MemorySource::Extracted,
+                confidence: 0.6,
+                status: MemoryStatus::Active,
+                superseded_by: None,
+                session_id: Some(session_id.to_string()),
+                classification: DataClassification::default(),
+                created_at: now.clone(),
+                updated_at: now,
+            };
+
+            match self.store.save(&memory).await {
+                Ok(()) => {
+                    saved += 1;
+                }
+                Err(e) => {
+                    warn!(entity = entity.as_str(), error = %e, "failed to save extracted entity (non-fatal)");
+                }
+            }
+        }
+
+        if saved > 0 {
+            tracing::info!(count = saved, "persisted extracted entities from compaction");
+        }
+
+        Ok(saved)
+    }
+
     /// Extract memories from a conversation using LLM.
     ///
     /// Calls the extraction model (Haiku) to identify factual information,
