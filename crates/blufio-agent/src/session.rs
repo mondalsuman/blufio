@@ -426,15 +426,15 @@ impl SessionActor {
         // When a boundary manager is available, apply L3 HMAC boundary protection.
         let assembled = self
             .context_engine
-            .assemble_with_boundaries(
-                self.provider.as_ref(),
-                self.storage.as_ref(),
-                &self.session_id,
-                &inbound,
-                &model,
+            .assemble_with_boundaries(blufio_context::AssemblyParams {
+                provider: self.provider.as_ref(),
+                storage: self.storage.as_ref(),
+                session_id: &self.session_id,
+                inbound: &inbound,
+                model: &model,
                 max_tokens,
-                self.boundary_manager.as_ref(),
-            )
+                boundary_manager: self.boundary_manager.as_ref(),
+            })
             .await;
 
         // Clear current query on memory provider (regardless of assembly outcome).
@@ -497,38 +497,38 @@ impl SessionActor {
         }
 
         // Persist entities extracted during compaction as Memory entries (COMP-06).
-        if !assembled.extracted_entities.is_empty() {
-            if let Some(ref extractor) = self.memory_extractor {
-                match extractor
-                    .persist_extracted_entities(&self.session_id, &assembled.extracted_entities)
-                    .await
-                {
-                    Ok(count) => {
-                        if count > 0 {
-                            info!(
-                                session_id = %self.session_id,
-                                count = count,
-                                "persisted extracted entities from compaction"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        warn!(
+        if !assembled.extracted_entities.is_empty()
+            && let Some(ref extractor) = self.memory_extractor
+        {
+            match extractor
+                .persist_extracted_entities(&self.session_id, &assembled.extracted_entities)
+                .await
+            {
+                Ok(count) => {
+                    if count > 0 {
+                        info!(
                             session_id = %self.session_id,
-                            error = %e,
-                            "failed to persist extracted entities (non-fatal)"
+                            count = count,
+                            "persisted extracted entities from compaction"
                         );
                     }
+                }
+                Err(e) => {
+                    warn!(
+                        session_id = %self.session_id,
+                        error = %e,
+                        "failed to persist extracted entities (non-fatal)"
+                    );
                 }
             }
         }
 
         // Emit L3 boundary validation events (if any).
-        if !assembled.boundary_events.is_empty() {
-            if let Some(ref pipeline) = self.injection_pipeline {
-                let pipeline_guard = pipeline.lock().await;
-                pipeline_guard.emit_events(assembled.boundary_events).await;
-            }
+        if !assembled.boundary_events.is_empty()
+            && let Some(ref pipeline) = self.injection_pipeline
+        {
+            let pipeline_guard = pipeline.lock().await;
+            pipeline_guard.emit_events(assembled.boundary_events).await;
         }
 
         // Check degradation level for L4+ canned response.

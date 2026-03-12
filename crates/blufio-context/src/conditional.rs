@@ -170,15 +170,12 @@ mod tests {
         // ArchiveConditionalProvider respects archive_enabled=false.
         // Full integration test requires a Database; unit test validates the type exists
         // and can be constructed. The provide_context early-return on disabled is trivial.
-        assert!(
-            true,
-            "ArchiveConditionalProvider type exists and archive_enabled flag validated"
-        );
+        // (Intentionally empty — type-level validation only.)
     }
 
     #[test]
     fn archive_context_format() {
-        let summaries = vec![
+        let summaries = [
             "Session 1: User discussed project timeline.".to_string(),
             "Session 2: User asked about budget.".to_string(),
         ];

@@ -224,12 +224,11 @@ fn parse_quality_scores(text: &str) -> Option<QualityScores> {
     }
 
     // Try to extract JSON object from surrounding text.
-    if let Some(start) = text.find('{') {
-        if let Some(end) = text.rfind('}') {
-            if let Ok(parsed) = serde_json::from_str::<QualityScores>(&text[start..=end]) {
-                return Some(parsed);
-            }
-        }
+    if let Some(start) = text.find('{')
+        && let Some(end) = text.rfind('}')
+        && let Ok(parsed) = serde_json::from_str::<QualityScores>(&text[start..=end])
+    {
+        return Some(parsed);
     }
 
     None

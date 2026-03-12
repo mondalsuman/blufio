@@ -22,6 +22,17 @@ use crate::compaction::levels::{CompactionLevel, compact_to_l1, compact_to_l2};
 use crate::compaction::persist_compaction_summary_with_level;
 use crate::compaction::quality::{GateResult, QualityWeights, evaluate_and_gate};
 
+/// Parameters for [`DynamicZone::try_l1_compaction`].
+struct L1CompactionParams<'a> {
+    provider: &'a dyn ProviderAdapter,
+    storage: &'a dyn StorageAdapter,
+    session_id: &'a str,
+    older: &'a [blufio_core::types::Message],
+    recent: &'a [blufio_core::types::Message],
+    compaction_usages: &'a mut Vec<TokenUsage>,
+    extracted_entities: &'a mut Vec<String>,
+}
+
 /// Result of dynamic zone assembly, carrying messages and compaction costs.
 #[derive(Debug)]
 pub struct DynamicResult {
@@ -214,16 +225,15 @@ impl DynamicZone {
 
         // Attempt L1 compaction with error fallback.
         let l1_result = self
-            .try_l1_compaction(
+            .try_l1_compaction(L1CompactionParams {
                 provider,
                 storage,
                 session_id,
                 older,
                 recent,
-                model,
-                &mut compaction_usages,
-                &mut extracted_entities,
-            )
+                compaction_usages: &mut compaction_usages,
+                extracted_entities: &mut extracted_entities,
+            })
             .await;
 
         match l1_result {
@@ -322,15 +332,18 @@ impl DynamicZone {
     /// text for potential L2 cascade.
     async fn try_l1_compaction(
         &self,
-        provider: &dyn ProviderAdapter,
-        storage: &dyn StorageAdapter,
-        session_id: &str,
-        older: &[blufio_core::types::Message],
-        recent: &[blufio_core::types::Message],
-        _model: &str,
-        compaction_usages: &mut Vec<TokenUsage>,
-        extracted_entities: &mut Vec<String>,
+        params: L1CompactionParams<'_>,
     ) -> Result<(Vec<ProviderMessage>, String), BlufioError> {
+        let L1CompactionParams {
+            provider,
+            storage,
+            session_id,
+            older,
+            recent,
+            compaction_usages,
+            extracted_entities,
+        } = params;
+
         // Emit CompactionStarted event.
         self.emit_compaction_started(session_id, "L1", older.len() as u32)
             .await;
@@ -906,8 +919,10 @@ mod tests {
     #[test]
     fn dynamic_zone_disabled_compaction() {
         use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
-        let mut config = ContextConfig::default();
-        config.compaction_enabled = false;
+        let config = ContextConfig {
+            compaction_enabled: false,
+            ..ContextConfig::default()
+        };
         let cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
         let zone = DynamicZone::new(&config, cache);
         assert!(!zone.compaction_enabled);

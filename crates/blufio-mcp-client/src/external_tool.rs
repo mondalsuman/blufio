@@ -155,26 +155,26 @@ impl BlufioTool for ExternalTool {
         let content = truncate_response(&content, self.response_size_cap);
 
         // INJC-06: Scan tool output with L1 classifier (if enabled and not trusted).
-        if !self.trusted {
-            if let Some(ref classifier) = self.injection_classifier {
-                let scan = classifier.classify(&content, "mcp");
-                if scan.score > 0.0 {
-                    tracing::warn!(
-                        server = %self.server_name,
-                        tool = %self.tool_name,
-                        score = scan.score,
-                        action = %scan.action,
-                        "injection pattern detected in MCP tool output"
-                    );
-                    blufio_injection::metrics::record_input_detection("mcp", &scan.action);
+        if !self.trusted
+            && let Some(ref classifier) = self.injection_classifier
+        {
+            let scan = classifier.classify(&content, "mcp");
+            if scan.score > 0.0 {
+                tracing::warn!(
+                    server = %self.server_name,
+                    tool = %self.tool_name,
+                    score = scan.score,
+                    action = %scan.action,
+                    "injection pattern detected in MCP tool output"
+                );
+                blufio_injection::metrics::record_input_detection("mcp", &scan.action);
 
-                    // Block if score exceeds MCP blocking threshold (0.98).
-                    if scan.score >= 0.98 {
-                        return Ok(ToolOutput {
-                            content: "[Tool output blocked by injection defense]".to_string(),
-                            is_error: true,
-                        });
-                    }
+                // Block if score exceeds MCP blocking threshold (0.98).
+                if scan.score >= 0.98 {
+                    return Ok(ToolOutput {
+                        content: "[Tool output blocked by injection defense]".to_string(),
+                        is_error: true,
+                    });
                 }
             }
         }

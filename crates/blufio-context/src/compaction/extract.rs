@@ -115,12 +115,11 @@ fn parse_json_array(text: &str) -> Vec<String> {
     }
 
     // Try to extract JSON array from surrounding text.
-    if let Some(start) = text.find('[') {
-        if let Some(end) = text.rfind(']') {
-            if let Ok(parsed) = serde_json::from_str::<Vec<String>>(&text[start..=end]) {
-                return parsed;
-            }
-        }
+    if let Some(start) = text.find('[')
+        && let Some(end) = text.rfind(']')
+        && let Ok(parsed) = serde_json::from_str::<Vec<String>>(&text[start..=end])
+    {
+        return parsed;
     }
 
     tracing::warn!("entity extraction JSON parse failed, returning empty");

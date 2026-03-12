@@ -299,6 +299,22 @@ pub async fn get_archives_for_context(
     Ok(summaries)
 }
 
+/// Parameters for [`generate_and_store_session_archive`].
+pub struct ArchiveParams<'a> {
+    /// The session being archived.
+    pub session_id: &'a str,
+    /// The user who owns the session.
+    pub user_id: &'a str,
+    /// Model to use for archive generation.
+    pub model: &'a str,
+    /// Maximum tokens for the archive summary.
+    pub max_tokens: u32,
+    /// Maximum number of archives to retain.
+    pub max_archives: u32,
+    /// Whether archiving is enabled.
+    pub archive_enabled: bool,
+}
+
 /// Generates and stores an L3 session archive on session close.
 ///
 /// This is the main entry point for archive generation. Called when a session
@@ -309,14 +325,18 @@ pub async fn get_archives_for_context(
 pub async fn generate_and_store_session_archive(
     db: &Database,
     provider: &dyn ProviderAdapter,
-    session_id: &str,
-    user_id: &str,
-    model: &str,
-    max_tokens: u32,
-    max_archives: u32,
-    archive_enabled: bool,
+    params: &ArchiveParams<'_>,
 ) -> Result<Option<String>, BlufioError> {
-    if !archive_enabled {
+    let ArchiveParams {
+        session_id,
+        user_id,
+        model,
+        max_tokens,
+        max_archives,
+        archive_enabled,
+    } = params;
+
+    if !*archive_enabled {
         return Ok(None);
     }
 
@@ -327,7 +347,7 @@ pub async fn generate_and_store_session_archive(
     // from the messages table. For now, this function receives the summary directly.
 
     // Fetch existing archives for the user to combine with this session.
-    let existing = archives::list_archives(db, user_id, max_archives as i64).await?;
+    let existing = archives::list_archives(db, user_id, *max_archives as i64).await?;
     let l2_summaries: Vec<String> = existing.iter().map(|a| a.summary.clone()).collect();
 
     // Generate archive from combined summaries.
@@ -339,7 +359,7 @@ pub async fn generate_and_store_session_archive(
 
     let session_ids = vec![session_id.to_string()];
     let l3_result =
-        generate_l3_archive(provider, &l2_summaries, &session_ids, model, max_tokens).await?;
+        generate_l3_archive(provider, &l2_summaries, &session_ids, model, *max_tokens).await?;
 
     // Determine classification: use highest from existing archives.
     let classification = existing
@@ -369,7 +389,7 @@ pub async fn generate_and_store_session_archive(
     let archive_id = store_archive(db, archive_entry).await?;
 
     // Enforce rolling window.
-    enforce_rolling_window(db, provider, user_id, max_archives, model, max_tokens).await?;
+    enforce_rolling_window(db, provider, user_id, *max_archives, model, *max_tokens).await?;
 
     Ok(Some(archive_id))
 }
@@ -459,7 +479,7 @@ mod tests {
     #[test]
     fn classification_escalation() {
         // Test highest classification logic inline.
-        let classifications = vec!["internal", "confidential", "internal"];
+        let classifications = ["internal", "confidential", "internal"];
         let highest = classifications.iter().fold("internal", |acc, &c| {
             if c == "restricted" || acc == "restricted" {
                 "restricted"
@@ -474,7 +494,7 @@ mod tests {
 
     #[test]
     fn classification_restricted_wins() {
-        let classifications = vec!["internal", "restricted", "confidential"];
+        let classifications = ["internal", "restricted", "confidential"];
         let highest = classifications.iter().fold("internal", |acc, &c| {
             if c == "restricted" || acc == "restricted" {
                 "restricted"

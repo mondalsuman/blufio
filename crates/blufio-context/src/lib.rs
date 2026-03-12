@@ -31,6 +31,24 @@ pub use conditional::ConditionalProvider;
 pub use dynamic::{DynamicResult, DynamicZone};
 pub use static_zone::StaticZone;
 
+/// Parameters for [`ContextEngine::assemble_with_boundaries`].
+pub struct AssemblyParams<'a> {
+    /// The provider adapter for LLM calls.
+    pub provider: &'a dyn ProviderAdapter,
+    /// The storage adapter for persistence.
+    pub storage: &'a dyn StorageAdapter,
+    /// The session ID.
+    pub session_id: &'a str,
+    /// The inbound user message.
+    pub inbound: &'a InboundMessage,
+    /// The model name.
+    pub model: &'a str,
+    /// Max tokens for the LLM request.
+    pub max_tokens: u32,
+    /// Optional boundary manager for L3 HMAC protection.
+    pub boundary_manager: Option<&'a blufio_injection::boundary::BoundaryManager>,
+}
+
 /// Result of context assembly, containing the provider request and any
 /// side-effect costs (e.g., compaction) that must be recorded by the caller.
 #[derive(Debug)]
@@ -115,9 +133,15 @@ impl ContextEngine {
         model: &str,
         max_tokens: u32,
     ) -> Result<AssembledContext, BlufioError> {
-        self.assemble_with_boundaries(
-            provider, storage, session_id, inbound, model, max_tokens, None,
-        )
+        self.assemble_with_boundaries(AssemblyParams {
+            provider,
+            storage,
+            session_id,
+            inbound,
+            model,
+            max_tokens,
+            boundary_manager: None,
+        })
         .await
     }
 
@@ -131,14 +155,18 @@ impl ContextEngine {
     /// returned in the result for the caller to emit.
     pub async fn assemble_with_boundaries(
         &self,
-        provider: &dyn ProviderAdapter,
-        storage: &dyn StorageAdapter,
-        session_id: &str,
-        inbound: &InboundMessage,
-        model: &str,
-        max_tokens: u32,
-        boundary_manager: Option<&blufio_injection::boundary::BoundaryManager>,
+        params: AssemblyParams<'_>,
     ) -> Result<AssembledContext, BlufioError> {
+        let AssemblyParams {
+            provider,
+            storage,
+            session_id,
+            inbound,
+            model,
+            max_tokens,
+            boundary_manager,
+        } = params;
+
         // --- Step 1: Static zone ---
         let system_blocks = self.static_zone.system_blocks();
         let actual_static = self.static_zone.token_count(&self.token_cache, model).await;

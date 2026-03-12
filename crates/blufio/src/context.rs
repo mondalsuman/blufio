@@ -104,12 +104,11 @@ async fn run_compact(
     let provider: Arc<dyn ProviderAdapter + Send + Sync> = Arc::new(
         blufio_anthropic::AnthropicProvider::new(config)
             .await
-            .map_err(|e| {
+            .inspect_err(|_e| {
                 eprintln!(
                     "error: Anthropic API key required for compaction. \
                  Set via: config, ANTHROPIC_API_KEY env var"
                 );
-                e
             })?,
     );
 
@@ -157,7 +156,7 @@ async fn run_compact(
                     weighted,
                     config.context.quality_gate_proceed,
                     config.context.quality_gate_retry,
-                    &weakest,
+                    weakest,
                 );
                 println!("Gate result:         {gate:?}");
             }
@@ -401,30 +400,28 @@ async fn run_status(config: &BlufioConfig, session_id: &str) -> Result<(), Blufi
 fn detect_compaction_level(messages: &[Message]) -> Option<String> {
     let mut highest_level: Option<String> = None;
     for msg in messages {
-        if msg.role == "system" {
-            if let Some(ref meta_str) = msg.metadata {
-                if let Ok(meta) = serde_json::from_str::<serde_json::Value>(meta_str) {
-                    if let Some(level) = meta.get("compaction_level").and_then(|v| v.as_str()) {
-                        let priority = match level {
-                            "L1" => 1,
-                            "L2" => 2,
-                            "L3" => 3,
-                            _ => 0,
-                        };
-                        let current_priority = highest_level
-                            .as_deref()
-                            .map(|l| match l {
-                                "L1" => 1,
-                                "L2" => 2,
-                                "L3" => 3,
-                                _ => 0,
-                            })
-                            .unwrap_or(0);
-                        if priority > current_priority {
-                            highest_level = Some(level.to_string());
-                        }
-                    }
-                }
+        if msg.role == "system"
+            && let Some(ref meta_str) = msg.metadata
+            && let Ok(meta) = serde_json::from_str::<serde_json::Value>(meta_str)
+            && let Some(level) = meta.get("compaction_level").and_then(|v| v.as_str())
+        {
+            let priority = match level {
+                "L1" => 1,
+                "L2" => 2,
+                "L3" => 3,
+                _ => 0,
+            };
+            let current_priority = highest_level
+                .as_deref()
+                .map(|l| match l {
+                    "L1" => 1,
+                    "L2" => 2,
+                    "L3" => 3,
+                    _ => 0,
+                })
+                .unwrap_or(0);
+            if priority > current_priority {
+                highest_level = Some(level.to_string());
             }
         }
     }
