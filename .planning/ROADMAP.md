@@ -208,7 +208,12 @@ Plans:
   3. Built-in cron tasks (memory cleanup, backup, cost report, health check, retention enforcement) work out of the box, with job execution history tracked in SQLite
   4. Retention policies with configurable per-type periods (messages, sessions, cost records, memories) automatically enforce via soft-delete with grace period, respecting data classification and exempting audit trail entries
   5. Cron job last-run timestamps persist across process restarts
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 58-01-PLAN.md -- Foundation: blufio-cron crate, CronTask trait, config types, CronEvent, V14 migration, soft-delete query filters
+- [ ] 58-02-PLAN.md -- Scheduler core: CronScheduler loop, job history, single-instance locking, 5 built-in tasks, retention engine
+- [ ] 58-03-PLAN.md -- CLI and systemd: blufio cron list/add/remove/run-now/history/generate-timers, systemd timer generation
+- [ ] 58-04-PLAN.md -- Integration: serve.rs wiring, doctor health checks, workspace test verification
 
 ### Phase 59: Hook System & Hot Reload
 **Goal**: Operators can extend Blufio behavior via shell-based lifecycle hooks, and configuration changes take effect without restart
@@ -332,7 +337,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 55. Memory Enhancements | 4/4 | Complete    | 2026-03-11 | - |
 | 56. Multi-Level Compaction & Context Budget | 6/6 | Complete    | 2026-03-12 | - |
 | 57. Prompt Injection Defense | 5/5 | Complete    | 2026-03-12 | - |
-| 58. Cron Scheduler & Retention Policies | v1.5 | 0/0 | Not started | - |
+| 58. Cron Scheduler & Retention Policies | v1.5 | 0/4 | Planning | - |
 | 59. Hook System & Hot Reload | v1.5 | 0/0 | Not started | - |
 | 60. GDPR Tooling & Data Export | v1.5 | 0/0 | Not started | - |
 | 61. Channel Adapters | v1.5 | 0/0 | Not started | - |
@@ -341,4 +346,4 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-12 after Phase 57 gap closure planning*
+*Last updated: 2026-03-12 after Phase 58 planning*
