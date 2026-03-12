@@ -85,14 +85,13 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ ADR-002: Compiled-in plugin architecture decision record with migration roadmap — v1.4 Phase 50
 - ✓ Circuit breaker events wired to EventBus, enabling full resilience pipeline in production — v1.4 Phase 51
 - ✓ FormatPipeline wired into all 8 channel adapters with paragraph-boundary splitting — v1.4 Phase 49
+- ✓ Multi-level compaction (L0-L3) with quality scoring, quality gates, and entity extraction — v1.5 Phase 56
+- ✓ Soft/hard trigger thresholds with archive system and cold storage retrieval — v1.5 Phase 56
+- ✓ Per-zone token budget enforcement (static advisory, conditional hard, dynamic adaptive) — v1.5 Phase 56
 
 ### Active
 
 <!-- Current milestone: v1.5 PRD Gap Closure -->
-
-**Compaction & Context:**
-- [ ] Multi-level compaction (L0-L3) with quality scoring and quality gates
-- [ ] Soft/hard trigger thresholds with archive system and cold storage retrieval
 
 **Security Hardening:**
 - [ ] Prompt injection defense: L1 pattern classifier, L3 HMAC boundary tokens, L4 output validator, L5 human-in-the-loop
@@ -124,7 +123,7 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 **Infrastructure:**
 - [ ] Litestream WAL-based replication to object storage
-- [ ] Context engine token budget enforcement verification
+- ✓ Context engine token budget enforcement — v1.5 Phase 56
 
 **Code Quality:**
 - [ ] Clippy unwrap enforcement (#![deny(clippy::unwrap_used)]) across library crates
@@ -268,4 +267,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | ADR documentation in MADR 4.0.0 format | Standardized decision records with context, options, consequences | ✓ Good — ADR-001 (ORT) and ADR-002 (plugins) documented |
 
 ---
-*Last updated: 2026-03-10 after v1.5 milestone started*
+*Last updated: 2026-03-12 after Phase 56*
