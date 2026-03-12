@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 59-01-PLAN.md
-last_updated: "2026-03-12T19:54:49.773Z"
-last_activity: 2026-03-12 -- Phase 59 Plan 02 complete (config hot reload with ArcSwap)
+stopped_at: Completed 59-03-PLAN.md
+last_updated: "2026-03-12T20:02:35.000Z"
+last_activity: 2026-03-12 -- Phase 59 Plan 03 complete (HookManager EventBus wiring + TLS/skill hot reload)
 progress:
   total_phases: 11
   completed_phases: 4
   total_plans: 23
-  completed_plans: 29
-  percent: 55
+  completed_plans: 30
+  percent: 57
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 59 of 63 (Hook System & Hot Reload) -- seventh of 11 phases in v1.5
-Plan: 02 of 4 complete
+Plan: 03 of 4 complete
 Status: Executing
-Last activity: 2026-03-12 -- Phase 59 Plan 02 complete (config hot reload with ArcSwap)
+Last activity: 2026-03-12 -- Phase 59 Plan 03 complete (HookManager EventBus wiring + TLS/skill hot reload)
 
-Progress: [██████░░░░] 55%
+Progress: [██████░░░░] 57%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [██████░░░░] 55%
 | Phase 58 P03 | 12min | 1 tasks | 6 files |
 | Phase 58 P04 | 4min | 1 tasks | 2 files |
 | Phase 59 P02 | 6min | 1 tasks | 3 files |
+| Phase 59 P03 | 5min | 2 tasks | 3 files |
 | Phase 59 P01 | 8min | 2 tasks | 8 files |
 
 ## Accumulated Context
@@ -180,6 +181,9 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 59]: child.wait() with manual stdout/stderr reads instead of wait_with_output() for kill-on-timeout support
 - [Phase 59]: HookEvent uses String fields (no cross-crate deps) following established bus event pattern
 - [Phase 59]: io-util tokio feature added to blufio-hooks for async stdin/stdout pipe handling
+- [Phase 59]: LIFECYCLE_EVENT_MAP resolves TOML names to EventBus type strings at dispatch time (not constructor time)
+- [Phase 59]: TLS hot reload stub (rustls only transitively available, full impl deferred to HTRL-02)
+- [Phase 59]: Skill watcher is detection+notification layer only; SkillStore update in Plan 04 serve.rs
 
 ### Pending Todos
 
@@ -195,6 +199,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T19:54:28.519Z
-Stopped at: Completed 59-01-PLAN.md
+Last session: 2026-03-12T20:02:35.000Z
+Stopped at: Completed 59-03-PLAN.md
 Resume file: None
