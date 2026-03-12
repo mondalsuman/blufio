@@ -23,14 +23,21 @@
 //! Erasure, export, and report logic modules are added in subsequent plans.
 
 pub mod config;
+pub mod erasure;
 pub mod events;
+pub mod manifest;
 pub mod models;
 
 // Re-export key types for ergonomic access.
 pub use config::GdprConfig;
+pub use erasure::{
+    check_active_sessions, cleanup_memory_index, erase_audit_trail, execute_erasure,
+    find_user_sessions, UserSession,
+};
 pub use events::{
     erasure_completed, erasure_started, export_completed, hash_user_id, report_generated,
 };
+pub use manifest::{create_manifest, write_manifest};
 pub use models::{
     ErasureManifest, ErasureResult, ExportData, ExportEnvelope, ExportMetadata, FilterCriteria,
     GdprError, ReportData,

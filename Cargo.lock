@@ -953,9 +953,11 @@ dependencies = [
 name = "blufio-gdpr"
 version = "0.1.0"
 dependencies = [
+ "blufio-audit",
  "blufio-bus",
  "blufio-config",
  "blufio-core",
+ "blufio-security",
  "chrono",
  "csv",
  "hex",
@@ -964,9 +966,11 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-rusqlite",
+ "tracing",
  "uuid",
 ]
 

@@ -9,9 +9,11 @@ publish = false
 description = "GDPR data subject rights tooling for the Blufio agent framework"
 
 [dependencies]
+blufio-audit = { path = "../blufio-audit" }
 blufio-bus = { path = "../blufio-bus" }
 blufio-config = { path = "../blufio-config" }
 blufio-core = { path = "../blufio-core" }
+blufio-security = { path = "../blufio-security" }
 serde.workspace = true
 serde_json = "1"
 chrono.workspace = true
@@ -23,6 +25,8 @@ csv.workspace = true
 tokio-rusqlite.workspace = true
 rusqlite.workspace = true
 metrics.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
+tempfile.workspace = true
