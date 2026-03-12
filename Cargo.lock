@@ -930,6 +930,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "blufio-injection"
+version = "0.1.0"
+dependencies = [
+ "blufio-bus",
+ "blufio-config",
+ "blufio-core",
+ "chrono",
+ "hex",
+ "metrics",
+ "regex",
+ "ring",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "blufio-irc"
 version = "0.1.0"
 dependencies = [

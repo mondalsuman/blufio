@@ -144,6 +144,10 @@ pub struct BlufioConfig {
     /// Audit trail settings.
     #[serde(default)]
     pub audit: AuditConfig,
+
+    /// Injection defense settings.
+    #[serde(default)]
+    pub injection_defense: InjectionDefenseConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -2177,6 +2181,196 @@ impl Default for AuditConfig {
 
 fn default_audit_events() -> Vec<String> {
     vec!["all".to_string()]
+}
+
+// ---------------------------------------------------------------------------
+// Injection defense config
+// ---------------------------------------------------------------------------
+
+/// Injection defense configuration.
+///
+/// Controls the 5-layer prompt injection defense system: L1 pattern classifier,
+/// L3 HMAC boundary tokens, L4 output screening, and L5 human-in-the-loop.
+///
+/// Env var overrides: `BLUFIO_INJECTION_ENABLED`, `BLUFIO_INJECTION_DRY_RUN`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InjectionDefenseConfig {
+    /// Whether the injection defense system is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Global dry-run mode: simulates all layers without taking action.
+    #[serde(default)]
+    pub dry_run: bool,
+
+    /// L1 input detection configuration.
+    #[serde(default)]
+    pub input_detection: InputDetectionConfig,
+
+    /// L3 HMAC boundary token configuration.
+    #[serde(default)]
+    pub hmac_boundaries: HmacBoundaryConfig,
+
+    /// L4 output screening configuration.
+    #[serde(default)]
+    pub output_screening: OutputScreeningConfig,
+
+    /// L5 human-in-the-loop configuration.
+    #[serde(default)]
+    pub hitl: HitlConfig,
+}
+
+impl Default for InjectionDefenseConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            dry_run: false,
+            input_detection: InputDetectionConfig::default(),
+            hmac_boundaries: HmacBoundaryConfig::default(),
+            output_screening: OutputScreeningConfig::default(),
+            hitl: HitlConfig::default(),
+        }
+    }
+}
+
+/// L1 input detection configuration.
+///
+/// Controls the regex-based pattern classifier that scans all user and
+/// external input for injection signatures.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputDetectionConfig {
+    /// Detection mode: `"log"` (default) logs detections without blocking,
+    /// `"block"` blocks all detections above threshold.
+    #[serde(default = "default_detection_mode")]
+    pub mode: String,
+
+    /// Score threshold above which user input is blocked (default: 0.95).
+    #[serde(default = "default_blocking_threshold")]
+    pub blocking_threshold: f64,
+
+    /// Score threshold above which MCP/WASM input is blocked (default: 0.98).
+    #[serde(default = "default_mcp_blocking_threshold")]
+    pub mcp_blocking_threshold: f64,
+
+    /// Additional regex patterns to detect (operator-configured).
+    /// Invalid patterns are logged and skipped at startup.
+    #[serde(default)]
+    pub custom_patterns: Vec<String>,
+}
+
+impl Default for InputDetectionConfig {
+    fn default() -> Self {
+        Self {
+            mode: default_detection_mode(),
+            blocking_threshold: default_blocking_threshold(),
+            mcp_blocking_threshold: default_mcp_blocking_threshold(),
+            custom_patterns: Vec::new(),
+        }
+    }
+}
+
+fn default_detection_mode() -> String {
+    "log".to_string()
+}
+
+fn default_blocking_threshold() -> f64 {
+    0.95
+}
+
+fn default_mcp_blocking_threshold() -> f64 {
+    0.98
+}
+
+/// L3 HMAC boundary token configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HmacBoundaryConfig {
+    /// Whether HMAC boundary tokens are enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for HmacBoundaryConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+/// L4 output screening configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OutputScreeningConfig {
+    /// Whether output screening is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Number of screening failures in a session before escalating to HITL.
+    #[serde(default = "default_escalation_threshold")]
+    pub escalation_threshold: u32,
+}
+
+impl Default for OutputScreeningConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            escalation_threshold: default_escalation_threshold(),
+        }
+    }
+}
+
+fn default_escalation_threshold() -> u32 {
+    3
+}
+
+/// L5 human-in-the-loop configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HitlConfig {
+    /// Whether HITL confirmation is enabled (default: false).
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Timeout in seconds before auto-denying a pending confirmation.
+    #[serde(default = "default_hitl_timeout")]
+    pub timeout_secs: u64,
+
+    /// Maximum number of pending confirmations before pausing.
+    #[serde(default = "default_max_pending")]
+    pub max_pending: u32,
+
+    /// Tools that are always auto-approved (no confirmation needed).
+    #[serde(default = "default_safe_tools")]
+    pub safe_tools: Vec<String>,
+}
+
+impl Default for HitlConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            timeout_secs: default_hitl_timeout(),
+            max_pending: default_max_pending(),
+            safe_tools: default_safe_tools(),
+        }
+    }
+}
+
+fn default_hitl_timeout() -> u64 {
+    60
+}
+
+fn default_max_pending() -> u32 {
+    3
+}
+
+fn default_safe_tools() -> Vec<String> {
+    vec![
+        "memory_search".to_string(),
+        "session_history".to_string(),
+        "cost_lookup".to_string(),
+        "skill_list".to_string(),
+    ]
 }
 
 #[cfg(test)]

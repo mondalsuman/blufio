@@ -18,7 +18,7 @@ use std::sync::Arc;
 use blufio_bus::events::{
     ApiEvent, AuditMetaEvent, BatchEvent, BusEvent, ChannelEvent, ClassificationEvent,
     CompactionEvent, ConfigEvent, MemoryEvent, NodeEvent, ProviderEvent, ResilienceEvent,
-    SessionEvent, SkillEvent, WebhookEvent,
+    SecurityEvent, SessionEvent, SkillEvent, WebhookEvent,
 };
 use metrics::counter;
 use tokio::sync::mpsc;
@@ -709,6 +709,101 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
             })
             .to_string(),
         },
+        BusEvent::Security(SecurityEvent::InputDetection {
+            timestamp,
+            correlation_id,
+            source_type,
+            source_name,
+            score,
+            action,
+            categories,
+            content,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: action.clone(),
+            resource_type: "security".to_string(),
+            resource_id: correlation_id.clone(),
+            actor: format!("{}:{}", source_type, source_name),
+            session_id: correlation_id.clone(),
+            details_json: serde_json::json!({
+                "source_type": source_type,
+                "source_name": source_name,
+                "score": score,
+                "categories": categories,
+                "content": content,
+            })
+            .to_string(),
+        },
+        BusEvent::Security(SecurityEvent::BoundaryFailure {
+            timestamp,
+            correlation_id,
+            zone,
+            source,
+            action,
+            content,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: action.clone(),
+            resource_type: "security".to_string(),
+            resource_id: correlation_id.clone(),
+            actor: "system".to_string(),
+            session_id: correlation_id.clone(),
+            details_json: serde_json::json!({
+                "zone": zone,
+                "source": source,
+                "content": content,
+            })
+            .to_string(),
+        },
+        BusEvent::Security(SecurityEvent::OutputScreening {
+            timestamp,
+            correlation_id,
+            detection_type,
+            tool_name,
+            action,
+            content,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: action.clone(),
+            resource_type: "security".to_string(),
+            resource_id: correlation_id.clone(),
+            actor: "system".to_string(),
+            session_id: correlation_id.clone(),
+            details_json: serde_json::json!({
+                "detection_type": detection_type,
+                "tool_name": tool_name,
+                "content": content,
+            })
+            .to_string(),
+        },
+        BusEvent::Security(SecurityEvent::HitlPrompt {
+            timestamp,
+            correlation_id,
+            tool_name,
+            risk_level,
+            action,
+            session_id,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: action.clone(),
+            resource_type: "security".to_string(),
+            resource_id: correlation_id.clone(),
+            actor: "system".to_string(),
+            session_id: session_id.clone(),
+            details_json: serde_json::json!({
+                "tool_name": tool_name,
+                "risk_level": risk_level,
+            })
+            .to_string(),
+        },
     }
 }
 
@@ -1073,6 +1168,60 @@ mod tests {
                 cost_usd: 0.0,
                 latency_ms: 0,
                 success: true,
+                session_id: "s".into(),
+            }),
+            BusEvent::Compaction(CompactionEvent::Started {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                session_id: "s".into(),
+                level: "l1".into(),
+                message_count: 10,
+            }),
+            BusEvent::Compaction(CompactionEvent::Completed {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                session_id: "s".into(),
+                level: "l1".into(),
+                quality_score: 0.8,
+                tokens_saved: 100,
+                duration_ms: 50,
+            }),
+            BusEvent::Security(SecurityEvent::InputDetection {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                correlation_id: "c".into(),
+                source_type: "user".into(),
+                source_name: "".into(),
+                score: 0.5,
+                action: "logged".into(),
+                categories: vec!["role_hijacking".into()],
+                content: "test".into(),
+            }),
+            BusEvent::Security(SecurityEvent::BoundaryFailure {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                correlation_id: "c".into(),
+                zone: "dynamic".into(),
+                source: "user".into(),
+                action: "stripped".into(),
+                content: "tampered".into(),
+            }),
+            BusEvent::Security(SecurityEvent::OutputScreening {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                correlation_id: "c".into(),
+                detection_type: "credential_leak".into(),
+                tool_name: "tool".into(),
+                action: "redacted".into(),
+                content: "sk-...".into(),
+            }),
+            BusEvent::Security(SecurityEvent::HitlPrompt {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                correlation_id: "c".into(),
+                tool_name: "tool".into(),
+                risk_level: "high".into(),
+                action: "denied".into(),
                 session_id: "s".into(),
             }),
         ];

@@ -52,6 +52,8 @@ pub enum BusEvent {
     Provider(ProviderEvent),
     /// Compaction lifecycle events (started, completed).
     Compaction(CompactionEvent),
+    /// Security events (injection defense: detection, boundary, screening, HITL).
+    Security(SecurityEvent),
 }
 
 impl BusEvent {
@@ -114,6 +116,16 @@ impl BusEvent {
             BusEvent::Provider(ProviderEvent::Called { .. }) => "provider.called",
             BusEvent::Compaction(CompactionEvent::Started { .. }) => "compaction.started",
             BusEvent::Compaction(CompactionEvent::Completed { .. }) => "compaction.completed",
+            BusEvent::Security(SecurityEvent::InputDetection { .. }) => {
+                "security.input_detection"
+            }
+            BusEvent::Security(SecurityEvent::BoundaryFailure { .. }) => {
+                "security.boundary_failure"
+            }
+            BusEvent::Security(SecurityEvent::OutputScreening { .. }) => {
+                "security.output_screening"
+            }
+            BusEvent::Security(SecurityEvent::HitlPrompt { .. }) => "security.hitl_prompt",
         }
     }
 }
@@ -656,12 +668,94 @@ pub enum CompactionEvent {
     },
 }
 
+// --- Security events ---
+
+/// Security events from the injection defense subsystem.
+///
+/// All fields are `String` (or `f64` / `Vec<String>`) following the established
+/// pattern where event sub-enums avoid cross-crate type dependencies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SecurityEvent {
+    /// L1: Input injection pattern detected.
+    InputDetection {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Message-level correlation ID for cross-layer tracing.
+        correlation_id: String,
+        /// Input source type (`"user"`, `"mcp"`, `"wasm"`).
+        source_type: String,
+        /// Source name (server/skill name, empty for user input).
+        source_name: String,
+        /// Confidence score (0.0 - 1.0).
+        score: f64,
+        /// Action taken (`"clean"`, `"logged"`, `"blocked"`, `"dry_run"`).
+        action: String,
+        /// Matched pattern categories.
+        categories: Vec<String>,
+        /// Full input content for forensic analysis.
+        content: String,
+    },
+    /// L3: HMAC boundary validation failure.
+    BoundaryFailure {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Message-level correlation ID.
+        correlation_id: String,
+        /// Zone that failed validation (`"static"`, `"conditional"`, `"dynamic"`).
+        zone: String,
+        /// Zone provenance source.
+        source: String,
+        /// Action taken (`"stripped"`).
+        action: String,
+        /// Corrupted content for forensic analysis.
+        content: String,
+    },
+    /// L4: Output screening detection.
+    OutputScreening {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Message-level correlation ID.
+        correlation_id: String,
+        /// Detection type (`"credential_leak"`, `"injection_relay"`).
+        detection_type: String,
+        /// Tool whose output was screened.
+        tool_name: String,
+        /// Action taken (`"redacted"`, `"blocked"`).
+        action: String,
+        /// Screened content for forensic analysis.
+        content: String,
+    },
+    /// L5: HITL confirmation prompt.
+    HitlPrompt {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Message-level correlation ID.
+        correlation_id: String,
+        /// Tool requiring confirmation.
+        tool_name: String,
+        /// Risk level (`"low"`, `"medium"`, `"high"`).
+        risk_level: String,
+        /// Action taken (`"approved"`, `"denied"`, `"timeout"`).
+        action: String,
+        /// Session identifier.
+        session_id: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn all_fourteen_bus_event_variants_exist() {
+    fn all_fifteen_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -772,6 +866,18 @@ mod tests {
             session_id: "sess-1".into(),
             level: "l1".into(),
             message_count: 10,
+        });
+
+        let _security = BusEvent::Security(SecurityEvent::InputDetection {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            correlation_id: "corr-1".into(),
+            source_type: "user".into(),
+            source_name: String::new(),
+            score: 0.75,
+            action: "logged".into(),
+            categories: vec!["role_hijacking".into()],
+            content: "ignore previous instructions".into(),
         });
     }
 
@@ -1173,6 +1279,57 @@ mod tests {
                     duration_ms: 0,
                 }),
                 "compaction.completed",
+            ),
+            // Security events
+            (
+                BusEvent::Security(SecurityEvent::InputDetection {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    correlation_id: String::new(),
+                    source_type: String::new(),
+                    source_name: String::new(),
+                    score: 0.0,
+                    action: String::new(),
+                    categories: vec![],
+                    content: String::new(),
+                }),
+                "security.input_detection",
+            ),
+            (
+                BusEvent::Security(SecurityEvent::BoundaryFailure {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    correlation_id: String::new(),
+                    zone: String::new(),
+                    source: String::new(),
+                    action: String::new(),
+                    content: String::new(),
+                }),
+                "security.boundary_failure",
+            ),
+            (
+                BusEvent::Security(SecurityEvent::OutputScreening {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    correlation_id: String::new(),
+                    detection_type: String::new(),
+                    tool_name: String::new(),
+                    action: String::new(),
+                    content: String::new(),
+                }),
+                "security.output_screening",
+            ),
+            (
+                BusEvent::Security(SecurityEvent::HitlPrompt {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    correlation_id: String::new(),
+                    tool_name: String::new(),
+                    risk_level: String::new(),
+                    action: String::new(),
+                    session_id: String::new(),
+                }),
+                "security.hitl_prompt",
             ),
         ];
 

@@ -1,0 +1,27 @@
+[package]
+name = "blufio-injection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Prompt injection defense system for the Blufio agent framework"
+
+[dependencies]
+blufio-core = { path = "../blufio-core" }
+blufio-config = { path = "../blufio-config" }
+blufio-bus = { path = "../blufio-bus" }
+regex.workspace = true
+ring.workspace = true
+hex.workspace = true
+serde.workspace = true
+tracing.workspace = true
+metrics.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+uuid.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+serde_json = "1"
+toml.workspace = true
