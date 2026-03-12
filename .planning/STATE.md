@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: completed
-stopped_at: Phase 61 context gathered
-last_updated: "2026-03-12T23:25:15.177Z"
-last_activity: "2026-03-12 -- Phase 60 Plan 03 complete (GDPR CLI integration: erase/report/export/list-users + doctor + prometheus)"
+status: executing
+stopped_at: Completed 61-01-PLAN.md
+last_updated: "2026-03-12T23:59:27.449Z"
+last_activity: "2026-03-12 -- Phase 61 Plan 01 complete (channel adapter foundation: crate scaffolds, config structs, ChannelEvent extension)"
 progress:
   total_phases: 11
   completed_phases: 6
-  total_plans: 26
-  completed_plans: 34
-  percent: 65
+  total_plans: 30
+  completed_plans: 35
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- Phase 60 GDPR Tooling & Data Export
+**Current focus:** v1.5 PRD Gap Closure -- Phase 61 Channel Adapters
 
 ## Current Position
 
-Phase: 60 of 63 (GDPR Tooling & Data Export) -- eighth of 11 phases in v1.5
-Plan: 03 of 3 complete
-Status: Phase Complete
-Last activity: 2026-03-12 -- Phase 60 Plan 03 complete (GDPR CLI integration: erase/report/export/list-users + doctor + prometheus)
+Phase: 61 of 63 (Channel Adapters) -- ninth of 11 phases in v1.5
+Plan: 01 of 3 complete
+Status: In Progress
+Last activity: 2026-03-12 -- Phase 61 Plan 01 complete (channel adapter foundation: crate scaffolds, config structs, ChannelEvent extension)
 
-Progress: [██████▌░░░] 65%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -78,6 +78,7 @@ Progress: [██████▌░░░] 65%
 | Phase 60 P01 | 8min | 2 tasks | 10 files |
 | Phase 60 P02 | 8min | 2 tasks | 6 files |
 | Phase 60 P03 | 8min | 2 tasks | 7 files |
+| Phase 61 P01 | 5min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,8 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 60]: UserSession lightweight struct defined locally in erasure.rs to avoid coupling to blufio-core::types::Session
 - [Phase 60]: CSV export uses single-file format with data_type discriminator column for mixed record types
 - [Phase 60]: Audit entry count uses LIKE matching on actor/session_id/details_json with pii_marker=0 filter
+- [Phase 61]: EmailConfig uses default_email_poll_interval (30s) with serde default helper
+- [Phase 61]: New channel config fields placed between matrix and bridge in BlufioConfig
 
 ### Pending Todos
 
@@ -213,6 +216,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T23:25:15.174Z
-Stopped at: Phase 61 context gathered
-Resume file: .planning/phases/61-channel-adapters/61-CONTEXT.md
+Last session: 2026-03-12T23:59:27.446Z
+Stopped at: Completed 61-01-PLAN.md
+Resume file: None

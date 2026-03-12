@@ -117,7 +117,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 - [ ] **CHAN-03**: iMessage adapter via BlueBubbles REST API with webhook for incoming messages
 - [ ] **CHAN-04**: iMessage adapter documented as experimental (BlueBubbles requires macOS host)
 - [ ] **CHAN-05**: SMS adapter via Twilio Programmable Messaging API (webhook inbound + REST outbound)
-- [ ] **CHAN-06**: All three adapters implement existing ChannelAdapter + PluginAdapter traits
+- [x] **CHAN-06**: All three adapters implement existing ChannelAdapter + PluginAdapter traits
 - [ ] **CHAN-07**: All three adapters support FormatPipeline integration
 
 ### OpenTelemetry
@@ -257,7 +257,7 @@ Deferred to v1.6+.
 | CHAN-03 | Phase 61 | Pending |
 | CHAN-04 | Phase 61 | Pending |
 | CHAN-05 | Phase 61 | Pending |
-| CHAN-06 | Phase 61 | Pending |
+| CHAN-06 | Phase 61 | Complete |
 | CHAN-07 | Phase 61 | Pending |
 | OTEL-01 | Phase 62 | Pending |
 | OTEL-02 | Phase 62 | Pending |
