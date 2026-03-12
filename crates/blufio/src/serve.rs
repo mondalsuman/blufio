@@ -199,6 +199,23 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     let mut context_engine =
         ContextEngine::new(&config.agent, &config.context, token_cache.clone()).await?;
 
+    // Static zone budget check at startup (CTXE-01).
+    // Advisory only -- logs a warning if system prompt exceeds budget but never truncates.
+    {
+        let static_tokens = context_engine
+            .static_zone()
+            .token_count(&token_cache, &config.context.compaction_model)
+            .await;
+        context_engine
+            .static_zone()
+            .check_budget(static_tokens, config.context.static_zone_budget);
+        debug!(
+            static_tokens = static_tokens,
+            budget = config.context.static_zone_budget,
+            "static zone budget check complete"
+        );
+    }
+
     // Initialize memory system (if enabled).
     #[cfg(feature = "onnx")]
     let (memory_provider, memory_extractor, memory_store, memory_embedder) = if config
