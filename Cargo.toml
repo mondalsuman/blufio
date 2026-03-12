@@ -11,6 +11,7 @@ repository = "https://github.com/blufio/blufio"
 authors = ["Blufio Contributors"]
 
 [workspace.dependencies]
+arc-swap = "1.8"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 figment = { version = "0.10", features = ["toml", "env"] }

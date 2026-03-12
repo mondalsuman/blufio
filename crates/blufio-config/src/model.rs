@@ -156,6 +156,14 @@ pub struct BlufioConfig {
     /// Data retention policy settings.
     #[serde(default)]
     pub retention: RetentionConfig,
+
+    /// Hook system settings.
+    #[serde(default)]
+    pub hooks: HookConfig,
+
+    /// Hot reload settings.
+    #[serde(default)]
+    pub hot_reload: HotReloadConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -2542,6 +2550,166 @@ pub struct RetentionPeriods {
     /// Days before memories are soft-deleted. None = no retention.
     #[serde(default)]
     pub memories: Option<u64>,
+}
+
+// ---------------------------------------------------------------------------
+// Hook system config
+// ---------------------------------------------------------------------------
+
+/// Hook system configuration.
+///
+/// Shell-based lifecycle hooks that execute commands in response to bus events.
+///
+/// ```toml
+/// [hooks]
+/// enabled = true
+/// max_recursion_depth = 3
+/// default_timeout_secs = 30
+/// allowed_path = "/usr/bin:/usr/local/bin"
+///
+/// [[hooks.definitions]]
+/// name = "on-session-start"
+/// event = "session.created"
+/// command = "/usr/local/bin/notify.sh"
+/// priority = 10
+/// timeout_secs = 5
+/// enabled = true
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HookConfig {
+    /// Whether the hook system is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Maximum recursion depth for hook-triggered-hook chains.
+    #[serde(default = "default_max_recursion_depth")]
+    pub max_recursion_depth: u32,
+
+    /// Default timeout in seconds for hook execution.
+    #[serde(default = "default_hook_timeout_secs")]
+    pub default_timeout_secs: u64,
+
+    /// Restricted PATH for hook command execution.
+    #[serde(default = "default_allowed_path")]
+    pub allowed_path: String,
+
+    /// Hook definitions.
+    #[serde(default)]
+    pub definitions: Vec<HookDefinition>,
+}
+
+impl Default for HookConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_recursion_depth: default_max_recursion_depth(),
+            default_timeout_secs: default_hook_timeout_secs(),
+            allowed_path: default_allowed_path(),
+            definitions: Vec::new(),
+        }
+    }
+}
+
+fn default_max_recursion_depth() -> u32 {
+    3
+}
+
+fn default_hook_timeout_secs() -> u64 {
+    30
+}
+
+fn default_allowed_path() -> String {
+    "/usr/bin:/usr/local/bin".to_string()
+}
+
+/// A single hook definition.
+///
+/// ```toml
+/// [[hooks.definitions]]
+/// name = "on-session-start"
+/// event = "session.created"
+/// command = "/usr/local/bin/notify.sh"
+/// priority = 10
+/// timeout_secs = 5
+/// enabled = true
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HookDefinition {
+    /// Unique hook name.
+    pub name: String,
+    /// Event type to trigger on (matches event_type_string format, e.g., "session.created").
+    pub event: String,
+    /// Shell command to execute.
+    pub command: String,
+    /// Execution priority (lower = higher priority, default: 100).
+    #[serde(default = "default_hook_priority")]
+    pub priority: u32,
+    /// Timeout in seconds for this hook (default: 30).
+    #[serde(default = "default_hook_timeout_secs")]
+    pub timeout_secs: u64,
+    /// Whether this hook is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_hook_priority() -> u32 {
+    100
+}
+
+// ---------------------------------------------------------------------------
+// Hot reload config
+// ---------------------------------------------------------------------------
+
+/// Hot reload configuration.
+///
+/// Controls automatic configuration reloading via file system watching.
+///
+/// ```toml
+/// [hot_reload]
+/// enabled = true
+/// debounce_ms = 500
+/// watch_skills = true
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HotReloadConfig {
+    /// Whether hot reload is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Debounce duration in milliseconds for file system events.
+    #[serde(default = "default_debounce_ms")]
+    pub debounce_ms: u64,
+
+    /// Path to TLS certificate file to watch for reload.
+    #[serde(default)]
+    pub tls_cert_path: Option<String>,
+
+    /// Path to TLS key file to watch for reload.
+    #[serde(default)]
+    pub tls_key_path: Option<String>,
+
+    /// Whether to watch skill files for hot reload.
+    #[serde(default = "default_true")]
+    pub watch_skills: bool,
+}
+
+impl Default for HotReloadConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            debounce_ms: default_debounce_ms(),
+            tls_cert_path: None,
+            tls_key_path: None,
+            watch_skills: true,
+        }
+    }
+}
+
+fn default_debounce_ms() -> u64 {
+    500
 }
 
 #[cfg(test)]
