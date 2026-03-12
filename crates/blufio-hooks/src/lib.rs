@@ -8,7 +8,9 @@
 //! prevent hook-triggered-hook infinite loops.
 
 pub mod executor;
+pub mod manager;
 pub mod recursion;
 
 pub use executor::{execute_hook, HookError, HookResult};
+pub use manager::HookManager;
 pub use recursion::RecursionGuard;
