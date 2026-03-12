@@ -62,6 +62,12 @@ pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Resul
     // Injection defense check
     results.push(check_injection_defense(config));
 
+    // Cron scheduler health check
+    results.push(check_cron(&config.storage.database_path).await);
+
+    // Retention health check
+    results.push(check_retention(config).await);
+
     // Deep checks (only with --deep)
     if deep {
         results.push(check_db_integrity(&config.storage.database_path).await);
@@ -842,6 +848,253 @@ async fn check_memory_baseline() -> CheckResult {
             message: "jemalloc not available on MSVC".to_string(),
             duration: start.elapsed(),
         }
+    }
+}
+
+/// Check cron scheduler health: active jobs, stale locks, recent failures.
+async fn check_cron(db_path: &str) -> CheckResult {
+    let start = Instant::now();
+    let path = std::path::Path::new(db_path);
+
+    if !path.exists() {
+        return CheckResult {
+            name: "Cron Scheduler".to_string(),
+            status: CheckStatus::Pass,
+            message: "no database yet".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    match blufio_storage::open_connection_sync(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) {
+        Ok(conn) => {
+            // Check if cron_jobs table exists (V14 migration may not have run yet).
+            let table_exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='cron_jobs'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+
+            if !table_exists {
+                return CheckResult {
+                    name: "Cron Scheduler".to_string(),
+                    status: CheckStatus::Pass,
+                    message: "not configured (no cron tables)".to_string(),
+                    duration: start.elapsed(),
+                };
+            }
+
+            // Count active (enabled) jobs.
+            let active_jobs: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM cron_jobs WHERE enabled = 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
+            // Count stale locks (running = 1).
+            let stale_locks: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM cron_jobs WHERE running = 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
+            // Get most recent execution.
+            let last_run: Option<String> = conn
+                .query_row(
+                    "SELECT last_run_at FROM cron_jobs WHERE enabled = 1 AND last_run_at IS NOT NULL \
+                     ORDER BY last_run_at DESC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok();
+
+            // Count recent failures (last 24h) from cron_history.
+            let history_exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='cron_history'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+
+            let recent_failures: i64 = if history_exists {
+                conn.query_row(
+                    "SELECT COUNT(*) FROM cron_history WHERE status = 'failed' \
+                     AND started_at > datetime('now', '-24 hours')",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0)
+            } else {
+                0
+            };
+
+            // Build result message.
+            if active_jobs == 0 {
+                return CheckResult {
+                    name: "Cron Scheduler".to_string(),
+                    status: CheckStatus::Pass,
+                    message: "no active jobs".to_string(),
+                    duration: start.elapsed(),
+                };
+            }
+
+            // Check for warnings.
+            let mut warnings = Vec::new();
+            if stale_locks > 0 {
+                warnings.push(format!("{stale_locks} stale lock(s)"));
+            }
+            if recent_failures > 0 {
+                warnings.push(format!("{recent_failures} failed in last 24h"));
+            }
+
+            let last_run_info = last_run
+                .map(|ts| format!(", last run: {ts}"))
+                .unwrap_or_default();
+
+            if !warnings.is_empty() {
+                CheckResult {
+                    name: "Cron Scheduler".to_string(),
+                    status: CheckStatus::Warn,
+                    message: format!(
+                        "{active_jobs} active jobs, {}{}",
+                        warnings.join(", "),
+                        last_run_info
+                    ),
+                    duration: start.elapsed(),
+                }
+            } else {
+                CheckResult {
+                    name: "Cron Scheduler".to_string(),
+                    status: CheckStatus::Pass,
+                    message: format!(
+                        "{active_jobs} active jobs, 0 stale locks{}",
+                        last_run_info
+                    ),
+                    duration: start.elapsed(),
+                }
+            }
+        }
+        Err(e) => CheckResult {
+            name: "Cron Scheduler".to_string(),
+            status: CheckStatus::Fail,
+            message: format!("open failed: {e}"),
+            duration: start.elapsed(),
+        },
+    }
+}
+
+/// Check retention policy health: configuration status and pending deletions.
+async fn check_retention(config: &BlufioConfig) -> CheckResult {
+    let start = Instant::now();
+
+    if !config.retention.enabled {
+        return CheckResult {
+            name: "Retention".to_string(),
+            status: CheckStatus::Pass,
+            message: "disabled".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    let db_path = &config.storage.database_path;
+    let path = std::path::Path::new(db_path);
+
+    if !path.exists() {
+        return CheckResult {
+            name: "Retention".to_string(),
+            status: CheckStatus::Pass,
+            message: "enabled (no database yet)".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    match blufio_storage::open_connection_sync(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) {
+        Ok(conn) => {
+            // Count soft-deleted records pending permanent deletion.
+            let mut pending_total: i64 = 0;
+
+            // Check messages table.
+            let has_deleted_at = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('messages') WHERE name='deleted_at'",
+                    [],
+                    |row| row.get::<_, bool>(0),
+                )
+                .unwrap_or(false);
+
+            if has_deleted_at {
+                let msg_count: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM messages WHERE deleted_at IS NOT NULL",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                pending_total += msg_count;
+
+                // Also check sessions.
+                let session_count: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM sessions WHERE deleted_at IS NOT NULL",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                pending_total += session_count;
+            }
+
+            // Check memories table.
+            let memories_has_deleted_at = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('memories') WHERE name='deleted_at'",
+                    [],
+                    |row| row.get::<_, bool>(0),
+                )
+                .unwrap_or(false);
+
+            if memories_has_deleted_at {
+                let mem_count: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM memories WHERE deleted_at IS NOT NULL",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                pending_total += mem_count;
+            }
+
+            let periods = &config.retention.periods;
+            let msg_days = periods.messages.map(|d| format!("{d}d")).unwrap_or_else(|| "none".to_string());
+            let ses_days = periods.sessions.map(|d| format!("{d}d")).unwrap_or_else(|| "none".to_string());
+            let mem_days = periods.memories.map(|d| format!("{d}d")).unwrap_or_else(|| "none".to_string());
+            CheckResult {
+                name: "Retention".to_string(),
+                status: CheckStatus::Pass,
+                message: format!(
+                    "enabled (messages: {msg_days}, sessions: {ses_days}, memories: {mem_days}), \
+                     {pending_total} records pending deletion",
+                ),
+                duration: start.elapsed(),
+            }
+        }
+        Err(e) => CheckResult {
+            name: "Retention".to_string(),
+            status: CheckStatus::Fail,
+            message: format!("open failed: {e}"),
+            duration: start.elapsed(),
+        },
     }
 }
 

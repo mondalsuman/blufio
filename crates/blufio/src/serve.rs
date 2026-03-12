@@ -65,6 +65,7 @@ use crate::providers::ConcreteProviderRegistry;
 #[cfg(feature = "gateway")]
 use blufio_core::ProviderRegistry;
 
+use blufio_cron::CronScheduler;
 use blufio_memory::{
     HybridRetriever, MemoryExtractor, MemoryProvider, MemoryStore, ModelManager, OnnxEmbedder,
 };
@@ -1426,6 +1427,40 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         });
 
         info!("node system started");
+    }
+
+    // --- Cron scheduler ---
+    // Spawn after EventBus and DB init, uses CancellationToken for graceful shutdown.
+    if config.cron.enabled {
+        let cron_db = Arc::new(blufio_storage::open_connection(&config.storage.database_path).await?);
+        let task_registry = Arc::new(blufio_cron::register_builtin_tasks(
+            cron_db.clone(),
+            &config,
+        ));
+        match CronScheduler::new(
+            cron_db,
+            task_registry,
+            Some(event_bus.clone()),
+            config.cron.clone(),
+        )
+        .await
+        {
+            Ok(scheduler) => {
+                let cron_cancel = cancel.child_token();
+                tokio::spawn(async move {
+                    scheduler.run(cron_cancel).await;
+                });
+                info!(
+                    jobs = config.cron.jobs.len(),
+                    "cron scheduler started"
+                );
+            }
+            Err(e) => {
+                warn!(error = %e, "cron scheduler initialization failed, continuing without cron");
+            }
+        }
+    } else {
+        debug!("cron scheduler disabled by configuration");
     }
 
     // Spawn memory monitor background task.
