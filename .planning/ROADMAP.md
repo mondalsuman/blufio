@@ -104,7 +104,7 @@
 - [x] **Phase 57: Prompt Injection Defense** - 5-layer defense (L1 pattern classifier, L3 HMAC boundaries, L4 output validator, L5 human-in-the-loop) (gap closure in progress) (completed 2026-03-12)
 - [x] **Phase 58: Cron Scheduler & Retention Policies** - TOML-configured cron with systemd timer generation, retention enforcement with soft-delete (completed 2026-03-12)
 - [x] **Phase 59: Hook System & Hot Reload** - 11 lifecycle hooks with BTreeMap priority, config/TLS/plugin hot reload via ArcSwap (completed 2026-03-12)
-- [ ] **Phase 60: GDPR Tooling & Data Export** - Right to erasure, transparency reports, JSON/CSV data export with filtering
+- [x] **Phase 60: GDPR Tooling & Data Export** - Right to erasure, transparency reports, JSON/CSV data export with filtering (completed 2026-03-12)
 - [ ] **Phase 61: Channel Adapters** - Email (IMAP/SMTP), iMessage (BlueBubbles), SMS (Twilio) with trait and pipeline integration
 - [ ] **Phase 62: Observability & API Surface** - OpenTelemetry tracing, OpenAPI spec generation, Litestream WAL replication support
 - [ ] **Phase 63: Code Quality Hardening** - Clippy unwrap enforcement, function decomposition, test coverage expansion, benchmark regression
@@ -348,7 +348,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 57. Prompt Injection Defense | 5/5 | Complete    | 2026-03-12 | - |
 | 58. Cron Scheduler & Retention Policies | 4/4 | Complete    | 2026-03-12 | - |
 | 59. Hook System & Hot Reload | 4/4 | Complete    | 2026-03-12 | - |
-| 60. GDPR Tooling & Data Export | 2/3 | In Progress|  | - |
+| 60. GDPR Tooling & Data Export | 3/3 | Complete   | 2026-03-12 | - |
 | 61. Channel Adapters | v1.5 | 0/0 | Not started | - |
 | 62. Observability & API Surface | v1.5 | 0/0 | Not started | - |
 | 63. Code Quality Hardening | v1.5 | 0/0 | Not started | - |
