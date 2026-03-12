@@ -511,14 +511,15 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // This is separate from the pipeline classifier created later -- MCP init happens
     // before the full pipeline is built, so we need an early classifier for description scanning.
     #[cfg(feature = "mcp-client")]
-    let mcp_injection_classifier: Option<Arc<blufio_injection::classifier::InjectionClassifier>> =
-        if config.injection_defense.enabled {
-            Some(Arc::new(
-                blufio_injection::classifier::InjectionClassifier::new(&config.injection_defense),
-            ))
-        } else {
-            None
-        };
+    let mcp_injection_classifier: Option<
+        Arc<blufio_injection::classifier::InjectionClassifier>,
+    > = if config.injection_defense.enabled {
+        Some(Arc::new(
+            blufio_injection::classifier::InjectionClassifier::new(&config.injection_defense),
+        ))
+    } else {
+        None
+    };
 
     // Initialize MCP client connections to external servers (if configured).
     #[cfg(feature = "mcp-client")]
@@ -606,9 +607,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Register ArchiveConditionalProvider LAST (lowest priority, after memory, skills, trust zone).
     if config.context.archive_enabled {
-        let archive_db = Arc::new(
-            blufio_storage::Database::open(&config.storage.database_path).await?,
-        );
+        let archive_db =
+            Arc::new(blufio_storage::Database::open(&config.storage.database_path).await?);
         let archive_provider = blufio_context::conditional::ArchiveConditionalProvider::new(
             archive_db,
             token_cache.clone(),

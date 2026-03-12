@@ -105,10 +105,7 @@ pub async fn list_archives(
 }
 
 /// List all archives across all users, ordered by most recent first.
-pub async fn list_all_archives(
-    db: &Database,
-    limit: i64,
-) -> Result<Vec<ArchiveRow>, BlufioError> {
+pub async fn list_all_archives(db: &Database, limit: i64) -> Result<Vec<ArchiveRow>, BlufioError> {
     db.connection()
         .call(move |conn| {
             let mut stmt = conn.prepare(
@@ -128,10 +125,7 @@ pub async fn list_all_archives(
 }
 
 /// Get a single archive by ID.
-pub async fn get_archive(
-    db: &Database,
-    id: &str,
-) -> Result<Option<ArchiveRow>, BlufioError> {
+pub async fn get_archive(db: &Database, id: &str) -> Result<Option<ArchiveRow>, BlufioError> {
     let id = id.to_string();
     db.connection()
         .call(move |conn| {
@@ -151,17 +145,12 @@ pub async fn get_archive(
 }
 
 /// Delete an archive by ID. Returns true if a row was deleted.
-pub async fn delete_archive(
-    db: &Database,
-    id: &str,
-) -> Result<bool, BlufioError> {
+pub async fn delete_archive(db: &Database, id: &str) -> Result<bool, BlufioError> {
     let id = id.to_string();
     db.connection()
         .call(move |conn| {
-            let affected = conn.execute(
-                "DELETE FROM compaction_archives WHERE id = ?1",
-                params![id],
-            )?;
+            let affected =
+                conn.execute("DELETE FROM compaction_archives WHERE id = ?1", params![id])?;
             Ok(affected > 0)
         })
         .await
@@ -169,10 +158,7 @@ pub async fn delete_archive(
 }
 
 /// Count archives for a user.
-pub async fn count_archives(
-    db: &Database,
-    user_id: &str,
-) -> Result<i64, BlufioError> {
+pub async fn count_archives(db: &Database, user_id: &str) -> Result<i64, BlufioError> {
     let user_id = user_id.to_string();
     db.connection()
         .call(move |conn| {

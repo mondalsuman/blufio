@@ -116,7 +116,15 @@ impl McpClientManager {
                 Ok((server, Ok(session))) => {
                     let session = Arc::new(session);
                     // Discover and register tools from this server.
-                    match discover_and_register(&server, &session, tool_registry, pin_store, injection_classifier.as_ref()).await {
+                    match discover_and_register(
+                        &server,
+                        &session,
+                        tool_registry,
+                        pin_store,
+                        injection_classifier.as_ref(),
+                    )
+                    .await
+                    {
                         Ok(tool_names) => {
                             let count = tool_names.len();
                             info!(
@@ -394,7 +402,10 @@ async fn discover_and_register(
                     categories = ?desc_scan.categories,
                     "injection pattern detected in MCP tool description (informational)"
                 );
-                blufio_injection::metrics::record_input_detection("mcp_description", &desc_scan.action);
+                blufio_injection::metrics::record_input_detection(
+                    "mcp_description",
+                    &desc_scan.action,
+                );
             }
         }
 
@@ -621,9 +632,9 @@ mod tests {
     #[test]
     fn description_scan_clean_description_scores_zero() {
         let config = blufio_injection::config::InjectionDefenseConfig::default();
-        let classifier = Arc::new(
-            blufio_injection::classifier::InjectionClassifier::new(&config),
-        );
+        let classifier = Arc::new(blufio_injection::classifier::InjectionClassifier::new(
+            &config,
+        ));
 
         // A benign description should score 0.0.
         let clean_result = classifier.classify("Lists files in a directory", "mcp");
@@ -636,9 +647,9 @@ mod tests {
     #[test]
     fn description_scan_malicious_description_detected() {
         let config = blufio_injection::config::InjectionDefenseConfig::default();
-        let classifier = Arc::new(
-            blufio_injection::classifier::InjectionClassifier::new(&config),
-        );
+        let classifier = Arc::new(blufio_injection::classifier::InjectionClassifier::new(
+            &config,
+        ));
 
         // A description containing injection patterns should score > 0.0.
         let malicious_result = classifier.classify(

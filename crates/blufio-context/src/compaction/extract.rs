@@ -77,7 +77,10 @@ pub async fn extract_entities(
         messages: vec![ProviderMessage {
             role: "user".to_string(),
             content: vec![ContentBlock::Text {
-                text: format!("Extract facts from this conversation:\n\n{}", conversation_text),
+                text: format!(
+                    "Extract facts from this conversation:\n\n{}",
+                    conversation_text
+                ),
             }],
         }],
         max_tokens: 1024,

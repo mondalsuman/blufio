@@ -16,7 +16,7 @@ use tracing::warn;
 
 use crate::classifier::{ClassificationResult, InjectionClassifier};
 use crate::config::InjectionDefenseConfig;
-use crate::events::{input_detection_event, SecurityEvent};
+use crate::events::{SecurityEvent, input_detection_event};
 use crate::hitl::{HitlDecision, HitlManager};
 use crate::metrics;
 use crate::output_screen::{OutputScreener, ScreeningAction, ScreeningResult};
@@ -177,7 +177,8 @@ impl InjectionPipeline {
             };
         }
 
-        self.screener.screen_tool_args(tool_name, args, correlation_id)
+        self.screener
+            .screen_tool_args(tool_name, args, correlation_id)
     }
 
     /// Check whether a tool execution requires HITL confirmation (L5).
@@ -214,10 +215,7 @@ impl InjectionPipeline {
             // but the caller should be aware the check was forced.
             warn!(
                 correlation_id,
-                tool_name,
-                l4_escalated,
-                flagged_input,
-                "L5: HITL forced by cross-layer escalation"
+                tool_name, l4_escalated, flagged_input, "L5: HITL forced by cross-layer escalation"
             );
         }
 
@@ -255,7 +253,8 @@ impl InjectionPipeline {
         tool_name: &str,
         correlation_id: &str,
     ) -> (HitlDecision, SecurityEvent) {
-        self.hitl.handle_timeout(session_id, tool_name, correlation_id)
+        self.hitl
+            .handle_timeout(session_id, tool_name, correlation_id)
     }
 
     /// Publish security events to the event bus (if available).

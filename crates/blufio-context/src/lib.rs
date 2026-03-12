@@ -115,8 +115,10 @@ impl ContextEngine {
         model: &str,
         max_tokens: u32,
     ) -> Result<AssembledContext, BlufioError> {
-        self.assemble_with_boundaries(provider, storage, session_id, inbound, model, max_tokens, None)
-            .await
+        self.assemble_with_boundaries(
+            provider, storage, session_id, inbound, model, max_tokens, None,
+        )
+        .await
     }
 
     /// Assembles a complete provider request from all three zones with
@@ -142,8 +144,7 @@ impl ContextEngine {
         let actual_static = self.static_zone.token_count(&self.token_cache, model).await;
         self.static_zone
             .check_budget(actual_static, self.zone_budget.static_budget);
-        metrics::gauge!("blufio_context_zone_tokens", "zone" => "static")
-            .set(actual_static as f64);
+        metrics::gauge!("blufio_context_zone_tokens", "zone" => "static").set(actual_static as f64);
 
         // --- Step 2: Conditional zone ---
         let mut provider_results: Vec<(String, Vec<blufio_core::types::ProviderMessage>)> =
@@ -202,12 +203,8 @@ impl ContextEngine {
             use blufio_injection::boundary::ZoneType;
 
             // Wrap system_blocks text content with static zone boundaries.
-            let wrapped_system = wrap_system_blocks(
-                system_blocks.clone(),
-                bm,
-                ZoneType::Static,
-                "system",
-            );
+            let wrapped_system =
+                wrap_system_blocks(system_blocks.clone(), bm, ZoneType::Static, "system");
 
             // Wrap message content blocks with zone boundaries.
             // Conditional provider messages = first N messages (before dynamic).
@@ -319,7 +316,11 @@ fn wrap_system_blocks(
         let wrapped: Vec<serde_json::Value> = blocks
             .into_iter()
             .map(|mut block| {
-                if let Some(text) = block.get("text").and_then(|t| t.as_str()).map(|s| s.to_string()) {
+                if let Some(text) = block
+                    .get("text")
+                    .and_then(|t| t.as_str())
+                    .map(|s| s.to_string())
+                {
                     let wrapped_text = bm.wrap_content(zone, source, &text);
                     block["text"] = serde_json::Value::String(wrapped_text);
                 }
@@ -370,14 +371,16 @@ fn wrap_messages_with_boundaries(
 }
 
 /// Strip boundary tokens from system_blocks JSON text content.
-fn strip_boundary_tokens_from_system_blocks(
-    system_blocks: serde_json::Value,
-) -> serde_json::Value {
+fn strip_boundary_tokens_from_system_blocks(system_blocks: serde_json::Value) -> serde_json::Value {
     if let serde_json::Value::Array(blocks) = system_blocks {
         let stripped: Vec<serde_json::Value> = blocks
             .into_iter()
             .map(|mut block| {
-                if let Some(text) = block.get("text").and_then(|t| t.as_str()).map(|s| s.to_string()) {
+                if let Some(text) = block
+                    .get("text")
+                    .and_then(|t| t.as_str())
+                    .map(|s| s.to_string())
+                {
                     let clean = BOUNDARY_STRIP_RE.replace_all(&text, "").to_string();
                     block["text"] = serde_json::Value::String(clean);
                 }

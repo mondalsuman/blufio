@@ -153,8 +153,13 @@ mod tests {
 
     #[test]
     fn output_screening_event_constructs_correctly() {
-        let event =
-            output_screening_event("corr-3", "credential_leak", "web_search", "redacted", "sk-...");
+        let event = output_screening_event(
+            "corr-3",
+            "credential_leak",
+            "web_search",
+            "redacted",
+            "sk-...",
+        );
         match event {
             SecurityEvent::OutputScreening {
                 detection_type,

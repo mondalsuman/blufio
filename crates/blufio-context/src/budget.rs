@@ -181,8 +181,8 @@ pub async fn count_messages_tokens(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
+    use std::sync::Arc;
 
     fn make_message(role: &str, text: &str) -> ProviderMessage {
         ProviderMessage {
@@ -260,14 +260,8 @@ mod tests {
     async fn enforce_budget_within_budget_keeps_all() {
         let cache = Arc::new(TokenizerCache::new(TokenizerMode::Fast));
         let providers = vec![
-            (
-                "memory".to_string(),
-                vec![make_message("system", "short")],
-            ),
-            (
-                "skills".to_string(),
-                vec![make_message("system", "brief")],
-            ),
+            ("memory".to_string(), vec![make_message("system", "short")]),
+            ("skills".to_string(), vec![make_message("system", "brief")]),
         ];
 
         let (kept, dropped) =
@@ -298,8 +292,7 @@ mod tests {
         ];
 
         // Budget of 60 tokens: ~29 * 3 = ~87 tokens total, need to drop at least one.
-        let (kept, dropped) =
-            enforce_conditional_budget(providers, 60, &cache, "test-model").await;
+        let (kept, dropped) = enforce_conditional_budget(providers, 60, &cache, "test-model").await;
 
         // Archive (last registered = lowest priority) should be dropped first.
         assert!(dropped.contains(&"archive".to_string()));
@@ -339,8 +332,7 @@ mod tests {
         ];
 
         // Budget of 30 tokens: only room for ~1 provider.
-        let (kept, dropped) =
-            enforce_conditional_budget(providers, 30, &cache, "test-model").await;
+        let (kept, dropped) = enforce_conditional_budget(providers, 30, &cache, "test-model").await;
 
         // Both archive and skills should be dropped.
         assert_eq!(dropped.len(), 2);

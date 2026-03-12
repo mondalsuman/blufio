@@ -104,7 +104,10 @@ impl MemoryExtractor {
                 Ok(output) => match output.embeddings.into_iter().next() {
                     Some(v) if !v.is_empty() => v,
                     _ => {
-                        warn!(entity = entity.as_str(), "empty embedding for extracted entity, skipping");
+                        warn!(
+                            entity = entity.as_str(),
+                            "empty embedding for extracted entity, skipping"
+                        );
                         continue;
                     }
                 },
@@ -142,7 +145,10 @@ impl MemoryExtractor {
         }
 
         if saved > 0 {
-            tracing::info!(count = saved, "persisted extracted entities from compaction");
+            tracing::info!(
+                count = saved,
+                "persisted extracted entities from compaction"
+            );
         }
 
         Ok(saved)

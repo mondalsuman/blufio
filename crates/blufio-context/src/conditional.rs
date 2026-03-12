@@ -71,10 +71,7 @@ impl ArchiveConditionalProvider {
 
 #[async_trait]
 impl ConditionalProvider for ArchiveConditionalProvider {
-    async fn provide_context(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<ProviderMessage>, BlufioError> {
+    async fn provide_context(&self, session_id: &str) -> Result<Vec<ProviderMessage>, BlufioError> {
         if !self.archive_enabled {
             return Ok(Vec::new());
         }
@@ -121,9 +118,7 @@ impl ConditionalProvider for ArchiveConditionalProvider {
 
         Ok(vec![ProviderMessage {
             role: "system".to_string(),
-            content: vec![ContentBlock::Text {
-                text: archive_text,
-            }],
+            content: vec![ContentBlock::Text { text: archive_text }],
         }])
     }
 }
@@ -175,7 +170,10 @@ mod tests {
         // ArchiveConditionalProvider respects archive_enabled=false.
         // Full integration test requires a Database; unit test validates the type exists
         // and can be constructed. The provide_context early-return on disabled is trivial.
-        assert!(true, "ArchiveConditionalProvider type exists and archive_enabled flag validated");
+        assert!(
+            true,
+            "ArchiveConditionalProvider type exists and archive_enabled flag validated"
+        );
     }
 
     #[test]

@@ -16,9 +16,14 @@ pub mod extract;
 pub mod levels;
 pub mod quality;
 
-pub use archive::{ArchiveEntry, generate_l3_archive, store_archive, get_archives_for_context, enforce_rolling_window};
+pub use archive::{
+    ArchiveEntry, enforce_rolling_window, generate_l3_archive, get_archives_for_context,
+    store_archive,
+};
 pub use levels::{CompactionLevel, CompactionResult, compact_to_l1, compact_to_l2};
-pub use quality::{GateResult, QualityScores, QualityWeights, apply_gate, evaluate_and_gate, evaluate_quality};
+pub use quality::{
+    GateResult, QualityScores, QualityWeights, apply_gate, evaluate_and_gate, evaluate_quality,
+};
 
 use blufio_core::error::BlufioError;
 use blufio_core::traits::ProviderAdapter;

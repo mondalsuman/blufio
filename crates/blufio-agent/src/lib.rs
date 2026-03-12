@@ -83,7 +83,8 @@ pub struct AgentLoop {
     /// Fallback chain of provider names to try when primary breaker is open.
     fallback_chain: Vec<String>,
     /// Shared injection defense pipeline for all sessions.
-    injection_pipeline: Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
+    injection_pipeline:
+        Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
 }
 
 impl AgentLoop {

@@ -114,7 +114,8 @@ pub struct SessionActorConfig {
     /// Optional EventBus for publishing circuit breaker state transitions.
     pub event_bus: Option<Arc<blufio_bus::EventBus>>,
     /// Optional injection defense pipeline for L1/L4/L5 screening.
-    pub injection_pipeline: Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
+    pub injection_pipeline:
+        Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
     /// Optional HMAC boundary manager for L3 content zone integrity (per-session).
     pub boundary_manager: Option<blufio_injection::boundary::BoundaryManager>,
 }
@@ -176,7 +177,8 @@ pub struct SessionActor {
     /// Optional EventBus for publishing circuit breaker state transitions.
     event_bus: Option<Arc<blufio_bus::EventBus>>,
     /// Optional injection defense pipeline for L1/L4/L5 screening.
-    injection_pipeline: Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
+    injection_pipeline:
+        Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
     /// Optional HMAC boundary manager for L3 content zone integrity (per-session).
     boundary_manager: Option<blufio_injection::boundary::BoundaryManager>,
     /// Whether the last L1 scan flagged the input (for cross-layer escalation).
@@ -525,9 +527,7 @@ impl SessionActor {
         if !assembled.boundary_events.is_empty() {
             if let Some(ref pipeline) = self.injection_pipeline {
                 let pipeline_guard = pipeline.lock().await;
-                pipeline_guard
-                    .emit_events(assembled.boundary_events)
-                    .await;
+                pipeline_guard.emit_events(assembled.boundary_events).await;
             }
         }
 
@@ -899,12 +899,8 @@ impl SessionActor {
             // L4: Screen tool arguments before execution.
             if let Some(ref pipeline) = self.injection_pipeline {
                 let mut pipeline_guard = pipeline.lock().await;
-                let screen_result = pipeline_guard.screen_output(
-                    &tu.name,
-                    &tu.input,
-                    &corr_id,
-                    self.flagged_input,
-                );
+                let screen_result =
+                    pipeline_guard.screen_output(&tu.name, &tu.input, &corr_id, self.flagged_input);
 
                 // Emit screening events.
                 if !screen_result.events.is_empty() {
@@ -981,10 +977,16 @@ impl SessionActor {
                     blufio_injection::hitl::HitlDecision::PendingConfirmation(_req) => {
                         // For now, auto-deny pending confirmations (full HITL flow
                         // requires channel adapter implementation).
-                        let (timeout_decision, timeout_event) = pipeline_guard
-                            .handle_hitl_timeout(&self.session_id, &tu.name, &corr_id);
+                        let (timeout_decision, timeout_event) = pipeline_guard.handle_hitl_timeout(
+                            &self.session_id,
+                            &tu.name,
+                            &corr_id,
+                        );
                         pipeline_guard.emit_events(vec![timeout_event]).await;
-                        if matches!(timeout_decision, blufio_injection::hitl::HitlDecision::Denied(_)) {
+                        if matches!(
+                            timeout_decision,
+                            blufio_injection::hitl::HitlDecision::Denied(_)
+                        ) {
                             warn!(
                                 session_id = %self.session_id,
                                 tool = %tu.name,
@@ -1046,10 +1048,13 @@ impl SessionActor {
                         tool = %tu.name,
                         "tool not found in registry"
                     );
-                    (ToolOutput {
-                        content: format!("Error: tool '{}' not found", tu.name),
-                        is_error: true,
-                    }, false)
+                    (
+                        ToolOutput {
+                            content: format!("Error: tool '{}' not found", tu.name),
+                            is_error: true,
+                        },
+                        false,
+                    )
                 }
             };
 

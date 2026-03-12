@@ -2229,14 +2229,18 @@ fn run_injection_command(config: &blufio_config::model::BlufioConfig, action: In
             let result = classifier.classify(&text, "user");
 
             if json {
-                let matches_json: Vec<serde_json::Value> = result.matches.iter().map(|m| {
-                    serde_json::json!({
-                        "category": format!("{:?}", m.category),
-                        "severity": m.severity,
-                        "matched_text": m.matched_text,
-                        "span": [m.span.start, m.span.end],
+                let matches_json: Vec<serde_json::Value> = result
+                    .matches
+                    .iter()
+                    .map(|m| {
+                        serde_json::json!({
+                            "category": format!("{:?}", m.category),
+                            "severity": m.severity,
+                            "matched_text": m.matched_text,
+                            "span": [m.span.start, m.span.end],
+                        })
                     })
-                }).collect();
+                    .collect();
                 let output = serde_json::json!({
                     "text": text,
                     "score": result.score,
@@ -2273,7 +2277,10 @@ fn run_injection_command(config: &blufio_config::model::BlufioConfig, action: In
                 if !result.matches.is_empty() {
                     println!("  Matched patterns:");
                     for mp in &result.matches {
-                        println!("    - {:?} (severity: {:.2}, text: \"{}\")", mp.category, mp.severity, mp.matched_text);
+                        println!(
+                            "    - {:?} (severity: {:.2}, text: \"{}\")",
+                            mp.category, mp.severity, mp.matched_text
+                        );
                     }
                 }
                 println!();
@@ -2378,17 +2385,14 @@ fn run_injection_command(config: &blufio_config::model::BlufioConfig, action: In
                     "    Enabled:           {}",
                     if cfg.hitl.enabled { "yes" } else { "no" }
                 );
-                println!(
-                    "    Timeout:           {}s",
-                    cfg.hitl.timeout_secs
-                );
+                println!("    Timeout:           {}s", cfg.hitl.timeout_secs);
                 println!();
             }
         }
         InjectionCommands::Config { json } => {
             if json {
-                let output =
-                    serde_json::to_value(&config.injection_defense).unwrap_or(serde_json::json!({}));
+                let output = serde_json::to_value(&config.injection_defense)
+                    .unwrap_or(serde_json::json!({}));
                 println!("{}", serde_json::to_string_pretty(&output).unwrap());
             } else {
                 let toml_str = toml::to_string_pretty(&config.injection_defense)

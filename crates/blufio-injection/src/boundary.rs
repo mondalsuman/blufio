@@ -483,7 +483,13 @@ mod tests {
         assert!(!clean.contains("TAMPERED"));
         assert_eq!(failures.len(), 1);
         match &failures[0] {
-            SecurityEvent::BoundaryFailure { zone, source, action, content, .. } => {
+            SecurityEvent::BoundaryFailure {
+                zone,
+                source,
+                action,
+                content,
+                ..
+            } => {
                 assert_eq!(zone, "dynamic");
                 assert_eq!(source, "user");
                 assert_eq!(action, "stripped");
@@ -554,7 +560,11 @@ mod tests {
             assert_eq!(bounded.token.source, source);
             // Token string contains the source
             let token_str = bounded.token.to_string();
-            assert!(token_str.contains(source), "token should contain source: {}", source);
+            assert!(
+                token_str.contains(source),
+                "token should contain source: {}",
+                source
+            );
         }
     }
 

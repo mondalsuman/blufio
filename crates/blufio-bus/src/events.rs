@@ -116,9 +116,7 @@ impl BusEvent {
             BusEvent::Provider(ProviderEvent::Called { .. }) => "provider.called",
             BusEvent::Compaction(CompactionEvent::Started { .. }) => "compaction.started",
             BusEvent::Compaction(CompactionEvent::Completed { .. }) => "compaction.completed",
-            BusEvent::Security(SecurityEvent::InputDetection { .. }) => {
-                "security.input_detection"
-            }
+            BusEvent::Security(SecurityEvent::InputDetection { .. }) => "security.input_detection",
             BusEvent::Security(SecurityEvent::BoundaryFailure { .. }) => {
                 "security.boundary_failure"
             }

@@ -7,10 +7,10 @@
 use std::sync::Arc;
 
 use blufio_config::model::BlufioConfig;
-use blufio_context::compaction::levels::{compact_to_l1, CompactionLevel};
-use blufio_context::compaction::quality::{apply_gate, evaluate_quality, QualityWeights};
+use blufio_context::compaction::levels::{CompactionLevel, compact_to_l1};
+use blufio_context::compaction::quality::{QualityWeights, apply_gate, evaluate_quality};
 use blufio_core::error::BlufioError;
-use blufio_core::token_counter::{count_with_fallback, TokenizerCache, TokenizerMode};
+use blufio_core::token_counter::{TokenizerCache, TokenizerMode, count_with_fallback};
 use blufio_core::types::Message;
 use blufio_core::{ProviderAdapter, StorageAdapter};
 use blufio_storage::queries::archives;
@@ -101,14 +101,17 @@ async fn run_compact(
     println!("Session {session_id}: {} messages loaded", messages.len());
 
     // Initialize provider for compaction.
-    let provider: Arc<dyn ProviderAdapter + Send + Sync> =
-        Arc::new(blufio_anthropic::AnthropicProvider::new(config).await.map_err(|e| {
-            eprintln!(
-                "error: Anthropic API key required for compaction. \
+    let provider: Arc<dyn ProviderAdapter + Send + Sync> = Arc::new(
+        blufio_anthropic::AnthropicProvider::new(config)
+            .await
+            .map_err(|e| {
+                eprintln!(
+                    "error: Anthropic API key required for compaction. \
                  Set via: config, ANTHROPIC_API_KEY env var"
-            );
-            e
-        })?);
+                );
+                e
+            })?,
+    );
 
     let compaction_model = &config.context.compaction_model;
 
@@ -235,10 +238,9 @@ async fn run_archive(config: &BlufioConfig, command: ArchiveCommand) -> Result<(
                     .quality_score
                     .map(|s| format!("{:.2}", s))
                     .unwrap_or_else(|| "-".to_string());
-                let session_count: usize =
-                    serde_json::from_str::<Vec<String>>(&arc.session_ids)
-                        .map(|v| v.len())
-                        .unwrap_or(0);
+                let session_count: usize = serde_json::from_str::<Vec<String>>(&arc.session_ids)
+                    .map(|v| v.len())
+                    .unwrap_or(0);
                 let token_str = arc
                     .token_count
                     .map(|t| t.to_string())

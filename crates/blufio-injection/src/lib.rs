@@ -12,12 +12,12 @@
 //! The pipeline coordinator (`pipeline`) ties all layers together with
 //! correlation IDs and cross-layer escalation.
 
-pub mod config;
-pub mod patterns;
+pub mod boundary;
 pub mod classifier;
+pub mod config;
 pub mod events;
+pub mod hitl;
 pub mod metrics;
 pub mod output_screen;
-pub mod boundary;
-pub mod hitl;
+pub mod patterns;
 pub mod pipeline;

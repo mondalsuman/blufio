@@ -130,12 +130,9 @@ pub async fn generate_l3_archive(
 /// Stores an archive entry in the database.
 ///
 /// Returns the archive ID.
-pub async fn store_archive(
-    db: &Database,
-    archive: ArchiveEntry,
-) -> Result<String, BlufioError> {
-    let session_ids_json = serde_json::to_string(&archive.session_ids)
-        .unwrap_or_else(|_| "[]".to_string());
+pub async fn store_archive(db: &Database, archive: ArchiveEntry) -> Result<String, BlufioError> {
+    let session_ids_json =
+        serde_json::to_string(&archive.session_ids).unwrap_or_else(|_| "[]".to_string());
     let now = Utc::now().to_rfc3339();
 
     archives::insert_archive(
@@ -234,8 +231,8 @@ pub async fn enforce_rolling_window(
 
         // Insert merged archive with earliest created_at.
         let merged_id = Uuid::new_v4().to_string();
-        let session_ids_json = serde_json::to_string(&merged_session_ids)
-            .unwrap_or_else(|_| "[]".to_string());
+        let session_ids_json =
+            serde_json::to_string(&merged_session_ids).unwrap_or_else(|_| "[]".to_string());
 
         archives::insert_archive(
             db,
@@ -341,14 +338,8 @@ pub async fn generate_and_store_session_archive(
     }
 
     let session_ids = vec![session_id.to_string()];
-    let l3_result = generate_l3_archive(
-        provider,
-        &l2_summaries,
-        &session_ids,
-        model,
-        max_tokens,
-    )
-    .await?;
+    let l3_result =
+        generate_l3_archive(provider, &l2_summaries, &session_ids, model, max_tokens).await?;
 
     // Determine classification: use highest from existing archives.
     let classification = existing

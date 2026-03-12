@@ -36,14 +36,8 @@ pub fn register_injection_metrics() {
         "hitl_confirmations_total",
         "Total HITL tool execution confirmations"
     );
-    describe_counter!(
-        "hitl_denials_total",
-        "Total HITL tool execution denials"
-    );
-    describe_counter!(
-        "hitl_timeouts_total",
-        "Total HITL confirmation timeouts"
-    );
+    describe_counter!("hitl_denials_total", "Total HITL tool execution denials");
+    describe_counter!("hitl_timeouts_total", "Total HITL confirmation timeouts");
 }
 
 /// Record an L1 input detection event.

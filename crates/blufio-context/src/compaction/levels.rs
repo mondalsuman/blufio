@@ -86,7 +86,10 @@ pub async fn compact_to_l1(
     let mut turn_pairs = Vec::new();
     let mut i = 0;
     while i < messages.len() {
-        if messages[i].role == "user" && i + 1 < messages.len() && messages[i + 1].role == "assistant" {
+        if messages[i].role == "user"
+            && i + 1 < messages.len()
+            && messages[i + 1].role == "assistant"
+        {
             turn_pairs.push(format!(
                 "Turn {}:\nUser: {}\nAssistant: {}",
                 turn_pairs.len() + 1,
@@ -248,12 +251,8 @@ mod tests {
 
     #[test]
     fn build_metadata_format() {
-        let meta = build_compaction_metadata(
-            &CompactionLevel::L1,
-            42,
-            Some(0.82),
-            "2026-01-01T00:00:00Z",
-        );
+        let meta =
+            build_compaction_metadata(&CompactionLevel::L1, 42, Some(0.82), "2026-01-01T00:00:00Z");
         assert_eq!(meta["type"], "compaction_summary");
         assert_eq!(meta["compaction_level"], "L1");
         assert_eq!(meta["original_count"], 42);
@@ -263,12 +262,8 @@ mod tests {
 
     #[test]
     fn build_metadata_without_quality_score() {
-        let meta = build_compaction_metadata(
-            &CompactionLevel::L2,
-            10,
-            None,
-            "2026-03-11T00:00:00Z",
-        );
+        let meta =
+            build_compaction_metadata(&CompactionLevel::L2, 10, None, "2026-03-11T00:00:00Z");
         assert_eq!(meta["type"], "compaction_summary");
         assert_eq!(meta["compaction_level"], "L2");
         assert!(meta["quality_score"].is_null());

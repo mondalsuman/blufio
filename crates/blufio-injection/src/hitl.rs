@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::config::HitlConfig;
-use crate::events::{hitl_prompt_event, SecurityEvent};
+use crate::events::{SecurityEvent, hitl_prompt_event};
 use crate::metrics;
 
 // ---------------------------------------------------------------------------
@@ -148,39 +148,28 @@ impl HitlManager {
 
         // 3. API/gateway bypass: programmatic trust
         if source_type == "api" || source_type == "gateway" {
-            return (
-                HitlDecision::AutoApproved("api_bypass".to_string()),
-                vec![],
-            );
+            return (HitlDecision::AutoApproved("api_bypass".to_string()), vec![]);
         }
 
         // 4. Safe tool: auto-approve
         if self.config.safe_tools.iter().any(|s| s == tool_name) {
+            return (HitlDecision::AutoApproved("safe_tool".to_string()), vec![]);
+        }
+
+        // 5. Session trust: already approved this tool type
+        if let Some(approved) = self.session_approvals.get(session_id)
+            && approved.contains(tool_name)
+        {
             return (
-                HitlDecision::AutoApproved("safe_tool".to_string()),
+                HitlDecision::AutoApproved("session_trust".to_string()),
                 vec![],
             );
         }
 
-        // 5. Session trust: already approved this tool type
-        if let Some(approved) = self.session_approvals.get(session_id) {
-            if approved.contains(tool_name) {
-                return (
-                    HitlDecision::AutoApproved("session_trust".to_string()),
-                    vec![],
-                );
-            }
-        }
-
         // 6. Non-interactive channel: auto-deny
         if !channel_interactive {
-            let event = hitl_prompt_event(
-                correlation_id,
-                tool_name,
-                risk_level,
-                "denied",
-                session_id,
-            );
+            let event =
+                hitl_prompt_event(correlation_id, tool_name, risk_level, "denied", session_id);
             metrics::record_hitl_denial();
             return (
                 HitlDecision::Denied("non_interactive".to_string()),
@@ -190,18 +179,10 @@ impl HitlManager {
 
         // 7. Max pending limit reached: auto-deny
         if self.pending_count >= self.config.max_pending {
-            let event = hitl_prompt_event(
-                correlation_id,
-                tool_name,
-                risk_level,
-                "denied",
-                session_id,
-            );
+            let event =
+                hitl_prompt_event(correlation_id, tool_name, risk_level, "denied", session_id);
             metrics::record_hitl_denial();
-            return (
-                HitlDecision::Denied("max_pending".to_string()),
-                vec![event],
-            );
+            return (HitlDecision::Denied("max_pending".to_string()), vec![event]);
         }
 
         // 8. Require confirmation
@@ -265,10 +246,7 @@ impl HitlManager {
             );
             metrics::record_hitl_denial();
 
-            (
-                HitlDecision::Denied("user_denied".to_string()),
-                vec![event],
-            )
+            (HitlDecision::Denied("user_denied".to_string()), vec![event])
         }
     }
 
@@ -399,7 +377,10 @@ mod tests {
             true,
             "corr-1",
         );
-        assert_eq!(decision, HitlDecision::AutoApproved("safe_tool".to_string()));
+        assert_eq!(
+            decision,
+            HitlDecision::AutoApproved("safe_tool".to_string())
+        );
         assert!(events.is_empty());
     }
 
@@ -414,7 +395,10 @@ mod tests {
             true,
             "corr-2",
         );
-        assert_eq!(decision, HitlDecision::AutoApproved("safe_tool".to_string()));
+        assert_eq!(
+            decision,
+            HitlDecision::AutoApproved("safe_tool".to_string())
+        );
     }
 
     // ── HITL disabled ──────────────────────────────────────────────
@@ -503,8 +487,7 @@ mod tests {
         assert!(matches!(decision, HitlDecision::PendingConfirmation(_)));
 
         // Resolve: user approves
-        let (decision, events) =
-            m.resolve_confirmation("sess-1", "mcp:weather", true, "corr-6");
+        let (decision, events) = m.resolve_confirmation("sess-1", "mcp:weather", true, "corr-6");
         assert_eq!(
             decision,
             HitlDecision::AutoApproved("user_approved".to_string())
@@ -587,8 +570,7 @@ mod tests {
         m.check_tool("tool_b", &json!({}), "s1", "telegram", true, "c2");
 
         // Third should be denied
-        let (decision, events) =
-            m.check_tool("tool_c", &json!({}), "s1", "telegram", true, "c3");
+        let (decision, events) = m.check_tool("tool_c", &json!({}), "s1", "telegram", true, "c3");
         assert_eq!(decision, HitlDecision::Denied("max_pending".to_string()));
         assert_eq!(events.len(), 1);
     }
@@ -671,8 +653,7 @@ mod tests {
         let mut m = default_manager();
         // Deny via resolve
         m.check_tool("mcp:tool", &json!({}), "s1", "telegram", true, "c-deny");
-        let (decision, events) =
-            m.resolve_confirmation("s1", "mcp:tool", false, "c-deny");
+        let (decision, events) = m.resolve_confirmation("s1", "mcp:tool", false, "c-deny");
         assert_eq!(decision, HitlDecision::Denied("user_denied".to_string()));
         assert_eq!(events.len(), 1);
         match &events[0] {
@@ -695,21 +676,11 @@ mod tests {
     #[test]
     fn dry_run_returns_dry_run() {
         let mut m = dry_run_manager();
-        let (decision, _) = m.check_tool(
-            "mcp:weather",
-            &json!({}),
-            "s1",
-            "telegram",
-            true,
-            "c-dry",
-        );
+        let (decision, _) =
+            m.check_tool("mcp:weather", &json!({}), "s1", "telegram", true, "c-dry");
         match decision {
             HitlDecision::DryRun(msg) => {
-                assert!(
-                    msg.contains("would request confirmation"),
-                    "msg: {}",
-                    msg
-                );
+                assert!(msg.contains("would request confirmation"), "msg: {}", msg);
             }
             other => panic!("expected DryRun, got {:?}", other),
         }
@@ -719,10 +690,8 @@ mod tests {
 
     #[test]
     fn format_confirmation_message_correct() {
-        let msg = HitlManager::format_confirmation_message(
-            "mcp:weather",
-            &json!({"location": "London"}),
-        );
+        let msg =
+            HitlManager::format_confirmation_message("mcp:weather", &json!({"location": "London"}));
         assert!(msg.starts_with("Approve [mcp:weather]"));
         assert!(msg.contains("YES/NO"));
         assert!(msg.contains("London"));
@@ -753,14 +722,7 @@ mod tests {
     #[test]
     fn gateway_source_bypasses_hitl() {
         let mut m = default_manager();
-        let (decision, _) = m.check_tool(
-            "mcp:tool",
-            &json!({}),
-            "s1",
-            "gateway",
-            false,
-            "c-gw",
-        );
+        let (decision, _) = m.check_tool("mcp:tool", &json!({}), "s1", "gateway", false, "c-gw");
         assert_eq!(
             decision,
             HitlDecision::AutoApproved("api_bypass".to_string())
@@ -772,10 +734,7 @@ mod tests {
     #[test]
     fn long_args_truncated_in_summary() {
         let long_value = "x".repeat(300);
-        let msg = HitlManager::format_confirmation_message(
-            "tool",
-            &json!({"data": long_value}),
-        );
+        let msg = HitlManager::format_confirmation_message("tool", &json!({"data": long_value}));
         // The message should contain "..." indicating truncation
         assert!(msg.contains("..."), "should truncate long args: {}", msg);
     }

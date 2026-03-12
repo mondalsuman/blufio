@@ -19,8 +19,8 @@ use tracing::{debug, info, warn};
 
 use crate::compaction::extract::{ExtractionOutput, extract_entities};
 use crate::compaction::levels::{CompactionLevel, compact_to_l1, compact_to_l2};
+use crate::compaction::persist_compaction_summary_with_level;
 use crate::compaction::quality::{GateResult, QualityWeights, evaluate_and_gate};
-use crate::compaction::{persist_compaction_summary_with_level};
 
 /// Result of dynamic zone assembly, carrying messages and compaction costs.
 #[derive(Debug)]
@@ -170,10 +170,7 @@ impl DynamicZone {
         );
 
         // Decision: no compaction needed, compaction disabled, or too few messages.
-        if !self.compaction_enabled
-            || estimated_tokens <= soft_threshold
-            || history.len() <= 2
-        {
+        if !self.compaction_enabled || estimated_tokens <= soft_threshold || history.len() <= 2 {
             let msgs: Vec<ProviderMessage> = history
                 .iter()
                 .map(|msg| ProviderMessage {
@@ -236,8 +233,7 @@ impl DynamicZone {
                 for m in &msgs {
                     for block in &m.content {
                         if let ContentBlock::Text { text } = block {
-                            new_estimate +=
-                                count_with_fallback(counter.as_ref(), text).await;
+                            new_estimate += count_with_fallback(counter.as_ref(), text).await;
                         }
                     }
                 }
@@ -307,12 +303,9 @@ impl DynamicZone {
                     error = %e,
                     "compaction failed, falling back to truncation"
                 );
-                let msgs = self.truncate_to_budget(
-                    &history,
-                    soft_threshold,
-                    counter.as_ref(),
-                    inbound,
-                ).await;
+                let msgs = self
+                    .truncate_to_budget(&history, soft_threshold, counter.as_ref(), inbound)
+                    .await;
 
                 Ok(DynamicResult {
                     messages: msgs,
@@ -370,12 +363,7 @@ impl DynamicZone {
         // Quality scoring after L1 compaction.
         if self.quality_scoring {
             let quality_outcome = self
-                .apply_quality_scoring(
-                    provider,
-                    older,
-                    &l1_result.summary,
-                    compaction_usages,
-                )
+                .apply_quality_scoring(provider, older, &l1_result.summary, compaction_usages)
                 .await;
 
             match quality_outcome {
@@ -388,7 +376,9 @@ impl DynamicZone {
                         weakest = %weakest,
                         "quality gate retry: re-compacting L1 with emphasis"
                     );
-                    match compact_to_l1(provider, older, &self.compaction_model, self.max_tokens_l1).await {
+                    match compact_to_l1(provider, older, &self.compaction_model, self.max_tokens_l1)
+                        .await
+                    {
                         Ok(retry_result) => {
                             compaction_usages.push(retry_result.usage.clone());
                             // Evaluate the retry result.
@@ -409,7 +399,9 @@ impl DynamicZone {
                                 }
                                 Ok((_, _)) => {
                                     // Still retry/abort after retry: treat as abort.
-                                    warn!("L1 quality still insufficient after retry, aborting compaction");
+                                    warn!(
+                                        "L1 quality still insufficient after retry, aborting compaction"
+                                    );
                                     return Err(BlufioError::Internal(
                                         "L1 compaction quality gate abort after retry".to_string(),
                                     ));
@@ -449,10 +441,7 @@ impl DynamicZone {
 
         // Delete original compacted messages.
         let older_ids: Vec<String> = older.iter().map(|m| m.id.clone()).collect();
-        if let Err(e) = storage
-            .delete_messages_by_ids(session_id, &older_ids)
-            .await
-        {
+        if let Err(e) = storage.delete_messages_by_ids(session_id, &older_ids).await {
             warn!(error = %e, "failed to delete compacted messages, continuing");
         }
 
@@ -575,7 +564,9 @@ impl DynamicZone {
                                     l2_result.quality_score = Some(score);
                                 }
                                 Ok((_, _)) => {
-                                    warn!("L2 quality still insufficient after retry, continuing with original");
+                                    warn!(
+                                        "L2 quality still insufficient after retry, continuing with original"
+                                    );
                                     // For L2 we don't abort: the L1 summary still exists.
                                 }
                                 Err(e) => {
@@ -710,12 +701,7 @@ impl DynamicZone {
     }
 
     /// Emits a CompactionStarted event via the EventBus (if present).
-    async fn emit_compaction_started(
-        &self,
-        session_id: &str,
-        level: &str,
-        message_count: u32,
-    ) {
+    async fn emit_compaction_started(&self, session_id: &str, level: &str, message_count: u32) {
         if let Some(ref bus) = self.event_bus {
             bus.publish(BusEvent::Compaction(CompactionEvent::Started {
                 event_id: new_event_id(),

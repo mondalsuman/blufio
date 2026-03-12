@@ -199,7 +199,10 @@ mod tests {
 
     #[test]
     fn injection_category_display() {
-        assert_eq!(InjectionCategory::RoleHijacking.to_string(), "role_hijacking");
+        assert_eq!(
+            InjectionCategory::RoleHijacking.to_string(),
+            "role_hijacking"
+        );
         assert_eq!(
             InjectionCategory::InstructionOverride.to_string(),
             "instruction_override"

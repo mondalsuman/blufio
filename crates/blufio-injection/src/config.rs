@@ -53,7 +53,12 @@ mod tests {
         assert_eq!(config.max_pending, 3);
         assert_eq!(
             config.safe_tools,
-            vec!["memory_search", "session_history", "cost_lookup", "skill_list"]
+            vec![
+                "memory_search",
+                "session_history",
+                "cost_lookup",
+                "skill_list"
+            ]
         );
     }
 

@@ -678,7 +678,11 @@ fn check_injection_defense(config: &BlufioConfig) -> CheckResult {
             "no ".to_string()
         },
         if cfg.hmac_boundaries.enabled {
-            if hmac_ok { "self-test OK" } else { "self-test FAILED" }
+            if hmac_ok {
+                "self-test OK"
+            } else {
+                "self-test FAILED"
+            }
         } else {
             "disabled"
         }
