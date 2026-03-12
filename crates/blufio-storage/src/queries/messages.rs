@@ -49,7 +49,7 @@ pub async fn get_messages_for_session(
                 Some(lim) => {
                     let mut stmt = conn.prepare(
                         "SELECT id, session_id, role, content, token_count, metadata, created_at, classification
-                         FROM messages WHERE session_id = ?1 AND classification != 'restricted'
+                         FROM messages WHERE session_id = ?1 AND classification != 'restricted' AND deleted_at IS NULL
                          ORDER BY created_at ASC LIMIT ?2",
                     )?;
                     let rows = stmt.query_map(params![session_id, lim], |row| {
@@ -62,7 +62,7 @@ pub async fn get_messages_for_session(
                 None => {
                     let mut stmt = conn.prepare(
                         "SELECT id, session_id, role, content, token_count, metadata, created_at, classification
-                         FROM messages WHERE session_id = ?1 AND classification != 'restricted'
+                         FROM messages WHERE session_id = ?1 AND classification != 'restricted' AND deleted_at IS NULL
                          ORDER BY created_at ASC",
                     )?;
                     let rows = stmt.query_map(params![session_id], |row| {

@@ -42,7 +42,7 @@ pub async fn get_session(db: &Database, id: &str) -> Result<Option<Session>, Blu
         .call(move |conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, channel, user_id, state, metadata, created_at, updated_at, classification
-                 FROM sessions WHERE id = ?1",
+                 FROM sessions WHERE id = ?1 AND deleted_at IS NULL",
             )?;
             let result = stmt.query_row(params![id], |row| {
                 Ok(row_to_session(row))
@@ -70,7 +70,7 @@ pub async fn list_sessions(
                 Some(state_filter) => {
                     let mut stmt = conn.prepare(
                         "SELECT id, channel, user_id, state, metadata, created_at, updated_at, classification
-                         FROM sessions WHERE state = ?1 ORDER BY created_at DESC",
+                         FROM sessions WHERE state = ?1 AND deleted_at IS NULL ORDER BY created_at DESC",
                     )?;
                     let rows = stmt.query_map(params![state_filter], |row| {
                         Ok(row_to_session(row))
@@ -82,7 +82,7 @@ pub async fn list_sessions(
                 None => {
                     let mut stmt = conn.prepare(
                         "SELECT id, channel, user_id, state, metadata, created_at, updated_at, classification
-                         FROM sessions ORDER BY created_at DESC",
+                         FROM sessions WHERE deleted_at IS NULL ORDER BY created_at DESC",
                     )?;
                     let rows = stmt.query_map([], |row| {
                         Ok(row_to_session(row))

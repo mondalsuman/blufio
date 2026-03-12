@@ -103,7 +103,7 @@ impl MemoryStore {
             .conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE id = ?1",
+                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE id = ?1 AND deleted_at IS NULL",
                 )?;
                 let memory = stmt
                     .query_row(rusqlite::params![id], |row| {
@@ -136,7 +136,7 @@ impl MemoryStore {
         self.conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE status = 'active' AND classification != 'restricted' ORDER BY created_at DESC",
+                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE status = 'active' AND classification != 'restricted' AND deleted_at IS NULL ORDER BY created_at DESC",
                 )?;
                 let memories = stmt
                     .query_map([], |row| Ok(row_to_memory(row)))?
@@ -154,7 +154,7 @@ impl MemoryStore {
         self.conn
             .call(move |conn| {
                 let mut stmt =
-                    conn.prepare("SELECT id, embedding FROM memories WHERE status = 'active' AND classification != 'restricted'")?;
+                    conn.prepare("SELECT id, embedding FROM memories WHERE status = 'active' AND classification != 'restricted' AND deleted_at IS NULL")?;
                 let results = stmt
                     .query_map([], |row| {
                         let id: String = row.get(0)?;
@@ -181,7 +181,7 @@ impl MemoryStore {
         self.conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT m.id, bm25(memories_fts) as score FROM memories_fts JOIN memories m ON m.rowid = memories_fts.rowid WHERE memories_fts MATCH ?1 AND m.status = 'active' AND m.classification != 'restricted' ORDER BY bm25(memories_fts) LIMIT ?2",
+                    "SELECT m.id, bm25(memories_fts) as score FROM memories_fts JOIN memories m ON m.rowid = memories_fts.rowid WHERE memories_fts MATCH ?1 AND m.status = 'active' AND m.classification != 'restricted' AND m.deleted_at IS NULL ORDER BY bm25(memories_fts) LIMIT ?2",
                 )?;
                 let results = stmt
                     .query_map(rusqlite::params![query, limit as i64], |row| {
@@ -256,7 +256,7 @@ impl MemoryStore {
         self.conn
             .call(move |conn| {
                 let count: i64 = conn.query_row(
-                    "SELECT COUNT(*) FROM memories WHERE status = 'active' AND classification != 'restricted'",
+                    "SELECT COUNT(*) FROM memories WHERE status = 'active' AND classification != 'restricted' AND deleted_at IS NULL",
                     [],
                     |row| row.get(0),
                 )?;
@@ -293,7 +293,7 @@ impl MemoryStore {
                 // Step 1: Load all active non-restricted memories with metadata for scoring
                 let rows: Vec<(String, String, String)> = {
                     let mut stmt = conn.prepare(
-                        "SELECT id, source, created_at FROM memories WHERE status = 'active' AND classification != 'restricted'",
+                        "SELECT id, source, created_at FROM memories WHERE status = 'active' AND classification != 'restricted' AND deleted_at IS NULL",
                     )?;
                     stmt.query_map([], |row| {
                         Ok((
@@ -372,7 +372,7 @@ impl MemoryStore {
                 let placeholders: Vec<String> =
                     (1..=ids.len()).map(|i| format!("?{i}")).collect();
                 let sql = format!(
-                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE id IN ({}) AND status = 'active' AND classification != 'restricted'",
+                    "SELECT id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at FROM memories WHERE id IN ({}) AND status = 'active' AND classification != 'restricted' AND deleted_at IS NULL",
                     placeholders.join(", ")
                 );
                 let mut stmt = conn.prepare(&sql)?;
@@ -462,7 +462,8 @@ mod tests {
                     session_id TEXT,
                     classification TEXT NOT NULL DEFAULT 'internal',
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    deleted_at TEXT
                 );
 
                 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
