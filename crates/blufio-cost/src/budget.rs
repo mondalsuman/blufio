@@ -316,7 +316,8 @@ mod tests {
                     cost_usd REAL NOT NULL DEFAULT 0.0,
                     created_at TEXT NOT NULL,
                     intended_model TEXT,
-                    server_name TEXT
+                    server_name TEXT,
+                    deleted_at TEXT
                 );",
             )?;
             Ok(())

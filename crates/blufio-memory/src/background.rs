@@ -84,7 +84,8 @@ mod tests {
                     session_id TEXT,
                     classification TEXT NOT NULL DEFAULT 'internal',
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    deleted_at TEXT
                 );
 
                 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(

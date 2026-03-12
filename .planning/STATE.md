@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: planning
-stopped_at: Phase 58 context gathered
-last_updated: "2026-03-12T16:17:28.139Z"
-last_activity: 2026-03-12 -- Phase 57 complete, transitioning to Phase 58
+stopped_at: Phase 59 context gathered
+last_updated: "2026-03-12T19:07:07.969Z"
+last_activity: 2026-03-12 -- Phase 58 complete (cron scheduler & retention policies)
 progress:
   total_phases: 11
-  completed_phases: 3
-  total_plans: 15
-  completed_plans: 23
-  percent: 45
+  completed_phases: 4
+  total_plans: 19
+  completed_plans: 27
+  percent: 55
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- Phase 58 Cron Scheduler & Retention Policies
+**Current focus:** v1.5 PRD Gap Closure -- Phase 59 Hook System & Hot Reload
 
 ## Current Position
 
-Phase: 58 of 63 (Cron Scheduler & Retention Policies) -- sixth of 11 phases in v1.5
+Phase: 59 of 63 (Hook System & Hot Reload) -- seventh of 11 phases in v1.5
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-03-12 -- Phase 57 complete, transitioning to Phase 58
+Last activity: 2026-03-12 -- Phase 58 complete (cron scheduler & retention policies)
 
-Progress: [████░░░░░░] 45%
+Progress: [██████░░░░] 55%
 
 ## Performance Metrics
 
@@ -67,6 +67,10 @@ Progress: [████░░░░░░] 45%
 | Phase 57 P03 | 11min | 2 tasks | 5 files |
 | Phase 57 P04 | 57min | 2 tasks | 17 files |
 | Phase 57 P05 | 4min | 2 tasks | 2 files |
+| Phase 58 P01 | 18min | 2 tasks | 19 files |
+| Phase 58 P02 | 17min | 2 tasks | 13 files |
+| Phase 58 P03 | 12min | 1 tasks | 6 files |
+| Phase 58 P04 | 4min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -155,6 +159,18 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 57]: 0.98 blocking threshold for tool output (higher than 0.95 for user input)
 - [Phase 57]: All open-world tool output scanned at session level for defense-in-depth
 - [Phase 57]: MCP classifier created as separate instance before MCP init, intentionally separate from pipeline classifier
+- [Phase 58]: CronConfig/RetentionConfig use serde(default) on BlufioConfig following existing pattern
+- [Phase 58]: CronEvent uses String fields to avoid cross-crate deps (following established bus event pattern)
+- [Phase 58]: Soft-delete filtering added to classification queries in addition to CRUD queries
+- [Phase 58]: Test DB schemas updated with deleted_at column across 6 files for consistency
+- [Phase 58]: CronScheduler dispatches tasks inline (not tokio::spawn) since CronTask is not Clone
+- [Phase 58]: croner v3 find_next_occurrence returns Result (not Option), handled with Ok/Err
+- [Phase 58]: History module uses String errors (not BlufioError) to avoid cross-crate complexity
+- [Phase 58]: Memory cleanup uses soft-delete for consistency with retention model
+- [Phase 58]: Retention soft-delete uses format!() for table/days interpolation (safe: internal values only)
+- [Phase 58]: CLI cron handler uses sync DB for list/add/remove/generate, async DB for run-now/history
+- [Phase 58]: Cron-to-OnCalendar conversion is best-effort with hourly fallback for unsupported specifiers
+- [Phase 58]: CronScheduler opens own DB connection (isolation), init failure non-fatal (warn + continue)
 
 ### Pending Todos
 
@@ -170,6 +186,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T16:17:28.137Z
-Stopped at: Phase 58 context gathered
-Resume file: .planning/phases/58-cron-scheduler-retention-policies/58-CONTEXT.md
+Last session: 2026-03-12T19:07:07.966Z
+Stopped at: Phase 59 context gathered
+Resume file: .planning/phases/59-hook-system-hot-reload/59-CONTEXT.md

@@ -209,7 +209,7 @@ impl CostLedger {
             .call(move |conn| {
                 let total: f64 = conn.query_row(
                     "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
-                         WHERE created_at >= ?1 AND created_at < date(?1, '+1 day')",
+                         WHERE created_at >= ?1 AND created_at < date(?1, '+1 day') AND deleted_at IS NULL",
                     rusqlite::params![date],
                     |row| row.get(0),
                 )?;
@@ -226,7 +226,7 @@ impl CostLedger {
             .call(move |conn| {
                 let total: f64 = conn.query_row(
                     "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
-                         WHERE created_at LIKE ?1",
+                         WHERE created_at LIKE ?1 AND deleted_at IS NULL",
                     rusqlite::params![prefix],
                     |row| row.get(0),
                 )?;
@@ -246,7 +246,7 @@ impl CostLedger {
                 let mut stmt = conn.prepare(
                     "SELECT server_name, SUM(cost_usd) \
                      FROM cost_ledger \
-                     WHERE server_name IS NOT NULL \
+                     WHERE server_name IS NOT NULL AND deleted_at IS NULL \
                      GROUP BY server_name \
                      ORDER BY SUM(cost_usd) DESC",
                 )?;
@@ -268,7 +268,7 @@ impl CostLedger {
             .call(move |conn| {
                 let total: f64 = conn.query_row(
                     "SELECT COALESCE(SUM(cost_usd), 0.0) FROM cost_ledger \
-                         WHERE session_id = ?1",
+                         WHERE session_id = ?1 AND deleted_at IS NULL",
                     rusqlite::params![session_id],
                     |row| row.get(0),
                 )?;
@@ -300,7 +300,8 @@ mod tests {
                     cost_usd REAL NOT NULL DEFAULT 0.0,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                     intended_model TEXT,
-                    server_name TEXT
+                    server_name TEXT,
+                    deleted_at TEXT
                 );
                 CREATE INDEX idx_cost_ledger_session ON cost_ledger(session_id);
                 CREATE INDEX idx_cost_ledger_created ON cost_ledger(created_at);

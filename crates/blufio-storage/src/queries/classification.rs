@@ -48,7 +48,8 @@ pub async fn get_entity_classification(
 
     db.connection()
         .call(move |conn| {
-            let sql = format!("SELECT classification FROM {table} WHERE id = ?1");
+            let sql =
+                format!("SELECT classification FROM {table} WHERE id = ?1 AND deleted_at IS NULL");
             let mut stmt = conn.prepare(&sql)?;
             let result = stmt.query_row(params![entity_id], |row| row.get::<_, String>(0));
             match result {
@@ -77,7 +78,9 @@ pub async fn set_entity_classification(
 
     db.connection()
         .call(move |conn| {
-            let sql = format!("UPDATE {table} SET classification = ?1 WHERE id = ?2");
+            let sql = format!(
+                "UPDATE {table} SET classification = ?1 WHERE id = ?2 AND deleted_at IS NULL"
+            );
             let rows_affected = conn.execute(&sql, params![level, entity_id])?;
             Ok(rows_affected > 0)
         })
@@ -103,7 +106,7 @@ pub async fn list_entities_by_classification(
             match &level {
                 Some(level_filter) => {
                     let sql = format!(
-                        "SELECT id, classification FROM {table} WHERE classification = ?1 ORDER BY id"
+                        "SELECT id, classification FROM {table} WHERE classification = ?1 AND deleted_at IS NULL ORDER BY id"
                     );
                     let mut stmt = conn.prepare(&sql)?;
                     let rows = stmt.query_map(params![level_filter], |row| {
@@ -115,7 +118,7 @@ pub async fn list_entities_by_classification(
                 }
                 None => {
                     let sql = format!(
-                        "SELECT id, classification FROM {table} ORDER BY classification, id"
+                        "SELECT id, classification FROM {table} WHERE deleted_at IS NULL ORDER BY classification, id"
                     );
                     let mut stmt = conn.prepare(&sql)?;
                     let rows = stmt.query_map([], |row| {
@@ -167,6 +170,9 @@ pub async fn bulk_update_classification(
                     let mut conds: Vec<String> = Vec::new();
                     let mut vals: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
                     let mut idx = start_idx;
+
+                    // Always exclude soft-deleted records.
+                    conds.push("deleted_at IS NULL".to_string());
 
                     if let Some(ref cl) = current_level {
                         conds.push(format!("classification = ?{idx}"));

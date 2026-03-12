@@ -148,6 +148,14 @@ pub struct BlufioConfig {
     /// Injection defense settings.
     #[serde(default)]
     pub injection_defense: InjectionDefenseConfig,
+
+    /// Cron scheduler settings.
+    #[serde(default)]
+    pub cron: CronConfig,
+
+    /// Data retention policy settings.
+    #[serde(default)]
+    pub retention: RetentionConfig,
 }
 
 /// Agent identity and behavior configuration.
@@ -2371,6 +2379,169 @@ fn default_safe_tools() -> Vec<String> {
         "cost_lookup".to_string(),
         "skill_list".to_string(),
     ]
+}
+
+// ---------------------------------------------------------------------------
+// Cron scheduler config
+// ---------------------------------------------------------------------------
+
+/// Cron scheduler configuration.
+///
+/// Controls the in-process cron scheduler that runs inside `blufio serve`.
+///
+/// ```toml
+/// [cron]
+/// enabled = true
+/// job_timeout_secs = 300
+///
+/// [[cron.jobs]]
+/// name = "nightly-backup"
+/// schedule = "0 2 * * *"
+/// task = "backup"
+/// enabled = true
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CronConfig {
+    /// Whether the cron scheduler is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Job timeout in seconds (default: 300 = 5 minutes).
+    #[serde(default = "default_job_timeout_secs")]
+    pub job_timeout_secs: u64,
+
+    /// Maximum history entries to keep per job (default: 1000).
+    #[serde(default = "default_max_history")]
+    pub max_history: usize,
+
+    /// Configured cron jobs.
+    #[serde(default)]
+    pub jobs: Vec<CronJobConfig>,
+}
+
+impl Default for CronConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            job_timeout_secs: default_job_timeout_secs(),
+            max_history: default_max_history(),
+            jobs: Vec::new(),
+        }
+    }
+}
+
+fn default_job_timeout_secs() -> u64 {
+    300
+}
+
+fn default_max_history() -> usize {
+    1000
+}
+
+/// A single cron job definition.
+///
+/// ```toml
+/// [[cron.jobs]]
+/// name = "retention-sweep"
+/// schedule = "0 3 * * *"
+/// task = "retention_enforcement"
+/// enabled = true
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CronJobConfig {
+    /// Unique job name.
+    pub name: String,
+    /// Cron expression (5-field POSIX format).
+    pub schedule: String,
+    /// Task to execute (must match a registered CronTask name).
+    pub task: String,
+    /// Whether this job is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Retention policy config
+// ---------------------------------------------------------------------------
+
+/// Retention policy configuration.
+///
+/// Controls per-type data retention with soft-delete and grace-period
+/// permanent deletion.
+///
+/// ```toml
+/// [retention]
+/// enabled = true
+/// grace_period_days = 7
+///
+/// [retention.periods]
+/// messages = 90
+/// sessions = 90
+/// cost_records = 365
+/// memories = 180
+///
+/// [retention.restricted]
+/// messages = 30
+/// sessions = 30
+/// cost_records = 90
+/// memories = 60
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RetentionConfig {
+    /// Whether retention enforcement is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Grace period in days after soft-delete before permanent removal.
+    #[serde(default = "default_grace_period_days")]
+    pub grace_period_days: u64,
+
+    /// Retention periods in days per data type (default classification).
+    #[serde(default)]
+    pub periods: RetentionPeriods,
+
+    /// Separate retention periods for Restricted-classified data.
+    #[serde(default)]
+    pub restricted: RetentionPeriods,
+}
+
+impl Default for RetentionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            grace_period_days: default_grace_period_days(),
+            periods: RetentionPeriods::default(),
+            restricted: RetentionPeriods::default(),
+        }
+    }
+}
+
+fn default_grace_period_days() -> u64 {
+    7
+}
+
+/// Per-type retention periods in days.
+///
+/// Each field specifies the number of days before records of that type
+/// are soft-deleted. `None` means no retention (records kept indefinitely).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RetentionPeriods {
+    /// Days before messages are soft-deleted. None = no retention.
+    #[serde(default)]
+    pub messages: Option<u64>,
+    /// Days before sessions are soft-deleted. None = no retention.
+    #[serde(default)]
+    pub sessions: Option<u64>,
+    /// Days before cost records are soft-deleted. None = no retention.
+    #[serde(default)]
+    pub cost_records: Option<u64>,
+    /// Days before memories are soft-deleted. None = no retention.
+    #[serde(default)]
+    pub memories: Option<u64>,
 }
 
 #[cfg(test)]

@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use blufio_bus::events::{
     ApiEvent, AuditMetaEvent, BatchEvent, BusEvent, ChannelEvent, ClassificationEvent,
-    CompactionEvent, ConfigEvent, MemoryEvent, NodeEvent, ProviderEvent, ResilienceEvent,
-    SecurityEvent, SessionEvent, SkillEvent, WebhookEvent,
+    CompactionEvent, ConfigEvent, CronEvent, MemoryEvent, NodeEvent, ProviderEvent,
+    ResilienceEvent, SecurityEvent, SessionEvent, SkillEvent, WebhookEvent,
 };
 use metrics::counter;
 use tokio::sync::mpsc;
@@ -804,6 +804,46 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
             })
             .to_string(),
         },
+
+        // --- Cron events ---
+        BusEvent::Cron(CronEvent::Completed {
+            timestamp,
+            job_name,
+            status,
+            duration_ms,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "complete".to_string(),
+            resource_type: "cron".to_string(),
+            resource_id: job_name.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "status": status,
+                "duration_ms": duration_ms,
+            })
+            .to_string(),
+        },
+        BusEvent::Cron(CronEvent::Failed {
+            timestamp,
+            job_name,
+            error,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "fail".to_string(),
+            resource_type: "cron".to_string(),
+            resource_id: job_name.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "error": error,
+            })
+            .to_string(),
+        },
     }
 }
 
@@ -1223,6 +1263,19 @@ mod tests {
                 risk_level: "high".into(),
                 action: "denied".into(),
                 session_id: "s".into(),
+            }),
+            BusEvent::Cron(CronEvent::Completed {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                job_name: "backup".into(),
+                status: "success".into(),
+                duration_ms: 100,
+            }),
+            BusEvent::Cron(CronEvent::Failed {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                job_name: "retention".into(),
+                error: "timeout".into(),
             }),
         ];
 

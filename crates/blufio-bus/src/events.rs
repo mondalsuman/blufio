@@ -54,6 +54,8 @@ pub enum BusEvent {
     Compaction(CompactionEvent),
     /// Security events (injection defense: detection, boundary, screening, HITL).
     Security(SecurityEvent),
+    /// Cron scheduler events (job completed, job failed).
+    Cron(CronEvent),
 }
 
 impl BusEvent {
@@ -124,6 +126,8 @@ impl BusEvent {
                 "security.output_screening"
             }
             BusEvent::Security(SecurityEvent::HitlPrompt { .. }) => "security.hitl_prompt",
+            BusEvent::Cron(CronEvent::Completed { .. }) => "cron.completed",
+            BusEvent::Cron(CronEvent::Failed { .. }) => "cron.failed",
         }
     }
 }
@@ -748,12 +752,46 @@ pub enum SecurityEvent {
     },
 }
 
+// --- Cron events ---
+
+/// Cron scheduler events.
+///
+/// All fields are `String` (or `u64`) following the established pattern where
+/// event sub-enums avoid cross-crate type dependencies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CronEvent {
+    /// A cron job completed execution.
+    Completed {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Name of the cron job.
+        job_name: String,
+        /// Execution status (`"success"`, `"failed"`, `"timeout"`).
+        status: String,
+        /// Execution duration in milliseconds.
+        duration_ms: u64,
+    },
+    /// A cron job failed.
+    Failed {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Name of the cron job.
+        job_name: String,
+        /// Error description.
+        error: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn all_fifteen_bus_event_variants_exist() {
+    fn all_sixteen_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -876,6 +914,14 @@ mod tests {
             action: "logged".into(),
             categories: vec!["role_hijacking".into()],
             content: "ignore previous instructions".into(),
+        });
+
+        let _cron = BusEvent::Cron(CronEvent::Completed {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            job_name: "backup".into(),
+            status: "success".into(),
+            duration_ms: 1234,
         });
     }
 
@@ -1328,6 +1374,26 @@ mod tests {
                     session_id: String::new(),
                 }),
                 "security.hitl_prompt",
+            ),
+            // Cron events
+            (
+                BusEvent::Cron(CronEvent::Completed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    job_name: String::new(),
+                    status: String::new(),
+                    duration_ms: 0,
+                }),
+                "cron.completed",
+            ),
+            (
+                BusEvent::Cron(CronEvent::Failed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    job_name: String::new(),
+                    error: String::new(),
+                }),
+                "cron.failed",
             ),
         ];
 

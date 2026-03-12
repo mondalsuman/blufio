@@ -76,6 +76,7 @@ proptest = "1"
 tracing-test = "0.2"
 notify = "8.2"
 notify-debouncer-mini = "0.7"
+croner = "3"
 
 [profile.release]
 lto = "thin"

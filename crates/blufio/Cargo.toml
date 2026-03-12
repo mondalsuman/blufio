@@ -39,6 +39,7 @@ node = ["dep:blufio-node"]
 [dependencies]
 blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
+blufio-cron = { path = "../blufio-cron" }
 blufio-vault = { path = "../blufio-vault" }
 blufio-agent = { path = "../blufio-agent" }
 blufio-context = { path = "../blufio-context" }
@@ -96,6 +97,7 @@ toml = { workspace = true }
 indicatif = { workspace = true }
 reqwest = { workspace = true }
 rusqlite = { workspace = true, features = ["backup"] }
+croner.workspace = true
 ring.workspace = true
 hex.workspace = true
 ed25519-dalek.workspace = true
