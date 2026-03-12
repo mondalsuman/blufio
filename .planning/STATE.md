@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 59-02-PLAN.md
-last_updated: "2026-03-12T19:51:39Z"
+stopped_at: Completed 59-01-PLAN.md
+last_updated: "2026-03-12T19:54:49.773Z"
 last_activity: 2026-03-12 -- Phase 59 Plan 02 complete (config hot reload with ArcSwap)
 progress:
   total_phases: 11
   completed_phases: 4
-  total_plans: 19
-  completed_plans: 27
+  total_plans: 23
+  completed_plans: 29
   percent: 55
 ---
 
@@ -72,6 +72,7 @@ Progress: [██████░░░░] 55%
 | Phase 58 P03 | 12min | 1 tasks | 6 files |
 | Phase 58 P04 | 4min | 1 tasks | 2 files |
 | Phase 59 P02 | 6min | 1 tasks | 3 files |
+| Phase 59 P01 | 8min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -176,6 +177,9 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 59]: Non-reloadable fields compared via explicit match arms for compile-time safety
 - [Phase 59]: load_config returns Arc<BlufioConfig> snapshot for session isolation (HTRL-05)
 - [Phase 59]: Configurable debounce from hot_reload.debounce_ms (default 500ms)
+- [Phase 59]: child.wait() with manual stdout/stderr reads instead of wait_with_output() for kill-on-timeout support
+- [Phase 59]: HookEvent uses String fields (no cross-crate deps) following established bus event pattern
+- [Phase 59]: io-util tokio feature added to blufio-hooks for async stdin/stdout pipe handling
 
 ### Pending Todos
 
@@ -191,6 +195,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T19:51:39Z
-Stopped at: Completed 59-02-PLAN.md
-Resume file: .planning/phases/59-hook-system-hot-reload/59-02-SUMMARY.md
+Last session: 2026-03-12T19:54:28.519Z
+Stopped at: Completed 59-01-PLAN.md
+Resume file: None
