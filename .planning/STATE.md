@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 59-03-PLAN.md
-last_updated: "2026-03-12T20:02:35.000Z"
-last_activity: 2026-03-12 -- Phase 59 Plan 03 complete (HookManager EventBus wiring + TLS/skill hot reload)
+stopped_at: Completed 59-04-PLAN.md
+last_updated: "2026-03-12T20:11:40.000Z"
+last_activity: 2026-03-12 -- Phase 59 Plan 04 complete (serve.rs integration + doctor health checks)
 progress:
   total_phases: 11
   completed_phases: 4
   total_plans: 23
-  completed_plans: 30
-  percent: 57
+  completed_plans: 31
+  percent: 59
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 59 of 63 (Hook System & Hot Reload) -- seventh of 11 phases in v1.5
-Plan: 03 of 4 complete
-Status: Executing
-Last activity: 2026-03-12 -- Phase 59 Plan 03 complete (HookManager EventBus wiring + TLS/skill hot reload)
+Plan: 04 of 4 complete
+Status: Phase Complete
+Last activity: 2026-03-12 -- Phase 59 Plan 04 complete (serve.rs integration + doctor health checks)
 
-Progress: [██████░░░░] 57%
+Progress: [██████░░░░] 59%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [██████░░░░] 57%
 | Phase 58 P04 | 4min | 1 tasks | 2 files |
 | Phase 59 P02 | 6min | 1 tasks | 3 files |
 | Phase 59 P03 | 5min | 2 tasks | 3 files |
+| Phase 59 P04 | 6min | 2 tasks | 3 files |
 | Phase 59 P01 | 8min | 2 tasks | 8 files |
 
 ## Accumulated Context
@@ -184,6 +185,9 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 59]: LIFECYCLE_EVENT_MAP resolves TOML names to EventBus type strings at dispatch time (not constructor time)
 - [Phase 59]: TLS hot reload stub (rustls only transitively available, full impl deferred to HTRL-02)
 - [Phase 59]: Skill watcher is detection+notification layer only; SkillStore update in Plan 04 serve.rs
+- [Phase 59]: HookManager::run takes &self, enabling Arc<HookManager> shared between run loop and direct lifecycle calls
+- [Phase 59]: Config path for hot reload determined at runtime from XDG hierarchy (local > user > system)
+- [Phase 59]: pre_shutdown fires after agent_loop.run() returns, post_shutdown after audit trail cleanup
 
 ### Pending Todos
 
@@ -199,6 +203,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T20:02:35.000Z
-Stopped at: Completed 59-03-PLAN.md
+Last session: 2026-03-12T20:11:40.000Z
+Stopped at: Completed 59-04-PLAN.md
 Resume file: None
