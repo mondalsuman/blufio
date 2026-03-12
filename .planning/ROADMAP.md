@@ -190,7 +190,12 @@ Plans:
   3. LLM output is screened for credential leaks and injection relay before tool execution
   4. High-risk operations (tool calls, data export, config changes) trigger configurable human-in-the-loop confirmation
   5. Injection defense applies to MCP client tool output and WASM skill results, not just direct user input
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 57-01-PLAN.md -- Crate foundation: blufio-injection crate, L1 pattern classifier, config types, SecurityEvent on EventBus, Prometheus metrics
+- [ ] 57-02-PLAN.md -- L3 HMAC boundary tokens: per-session key derivation, sign/verify/strip, zone wrapping
+- [ ] 57-03-PLAN.md -- L4 output screening (credential leak + relay detection) and L5 HITL confirmation manager
+- [ ] 57-04-PLAN.md -- Integration wiring: pipeline coordinator, agent loop, context engine, MCP/WASM scanning, CLI commands, doctor check
 
 ### Phase 58: Cron Scheduler & Retention Policies
 **Goal**: Blufio runs background tasks on configurable schedules, and data is automatically pruned according to retention rules
@@ -325,7 +330,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 54. Audit Trail | 3/3 | Complete    | 2026-03-10 | - |
 | 55. Memory Enhancements | 4/4 | Complete    | 2026-03-11 | - |
 | 56. Multi-Level Compaction & Context Budget | 6/6 | Complete    | 2026-03-12 | - |
-| 57. Prompt Injection Defense | v1.5 | 0/0 | Not started | - |
+| 57. Prompt Injection Defense | v1.5 | 0/4 | Planned | - |
 | 58. Cron Scheduler & Retention Policies | v1.5 | 0/0 | Not started | - |
 | 59. Hook System & Hot Reload | v1.5 | 0/0 | Not started | - |
 | 60. GDPR Tooling & Data Export | v1.5 | 0/0 | Not started | - |
@@ -335,4 +340,4 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-12 after Phase 56 gap closure planning*
+*Last updated: 2026-03-12 after Phase 57 planning*
