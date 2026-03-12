@@ -65,6 +65,12 @@ pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Resul
     // Cron scheduler health check
     results.push(check_cron(&config.storage.database_path).await);
 
+    // Hook system health check
+    results.push(check_hooks(config));
+
+    // Hot reload health check
+    results.push(check_hot_reload(config));
+
     // Retention health check
     results.push(check_retention(config).await);
 
@@ -1104,6 +1110,136 @@ async fn check_retention(config: &BlufioConfig) -> CheckResult {
     }
 }
 
+/// Check hook system health: enabled status, hook count, event validation, command paths.
+fn check_hooks(config: &BlufioConfig) -> CheckResult {
+    let start = Instant::now();
+
+    if !config.hooks.enabled {
+        return CheckResult {
+            name: "Hook System".to_string(),
+            status: CheckStatus::Warn,
+            message: "disabled (enable with [hooks] enabled = true)".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    let enabled_hooks: Vec<_> = config
+        .hooks
+        .definitions
+        .iter()
+        .filter(|d| d.enabled)
+        .collect();
+
+    if enabled_hooks.is_empty() {
+        return CheckResult {
+            name: "Hook System".to_string(),
+            status: CheckStatus::Warn,
+            message: "enabled but no hooks defined".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    // Validate hook event names
+    let warnings = blufio_hooks::manager::validate_hook_events(&config.hooks);
+    if !warnings.is_empty() {
+        return CheckResult {
+            name: "Hook System".to_string(),
+            status: CheckStatus::Fail,
+            message: format!(
+                "{} hook(s) reference unknown events: {}",
+                warnings.len(),
+                warnings.join("; ")
+            ),
+            duration: start.elapsed(),
+        };
+    }
+
+    // Check hook commands exist (absolute paths only)
+    let mut missing_commands = Vec::new();
+    for hook in &enabled_hooks {
+        let executable = hook.command.split_whitespace().next().unwrap_or(&hook.command);
+        let exec_path = std::path::Path::new(executable);
+        if exec_path.is_absolute() && !exec_path.exists() {
+            missing_commands.push(format!("{}: {}", hook.name, executable));
+        }
+    }
+
+    if !missing_commands.is_empty() {
+        return CheckResult {
+            name: "Hook System".to_string(),
+            status: CheckStatus::Warn,
+            message: format!(
+                "{} hook(s) configured, {} command(s) not found: {}",
+                enabled_hooks.len(),
+                missing_commands.len(),
+                missing_commands.join("; ")
+            ),
+            duration: start.elapsed(),
+        };
+    }
+
+    CheckResult {
+        name: "Hook System".to_string(),
+        status: CheckStatus::Pass,
+        message: format!("{} hook(s) configured", enabled_hooks.len()),
+        duration: start.elapsed(),
+    }
+}
+
+/// Check hot reload health: enabled features and file existence.
+fn check_hot_reload(config: &BlufioConfig) -> CheckResult {
+    let start = Instant::now();
+
+    if !config.hot_reload.enabled {
+        return CheckResult {
+            name: "Hot Reload".to_string(),
+            status: CheckStatus::Warn,
+            message: "disabled (enable with [hot_reload] enabled = true)".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    let mut features = Vec::new();
+    features.push(format!("config ({}ms debounce)", config.hot_reload.debounce_ms));
+
+    if config.hot_reload.tls_cert_path.is_some() && config.hot_reload.tls_key_path.is_some() {
+        let cert_path = config.hot_reload.tls_cert_path.as_deref().unwrap_or("");
+        let key_path = config.hot_reload.tls_key_path.as_deref().unwrap_or("");
+        if std::path::Path::new(cert_path).exists() && std::path::Path::new(key_path).exists() {
+            features.push("TLS cert reload".into());
+        } else {
+            return CheckResult {
+                name: "Hot Reload".to_string(),
+                status: CheckStatus::Fail,
+                message: format!(
+                    "TLS cert/key paths configured but files not found (cert: {}, key: {})",
+                    cert_path, key_path
+                ),
+                duration: start.elapsed(),
+            };
+        }
+    }
+
+    if config.hot_reload.watch_skills {
+        let skills_dir = std::path::Path::new(&config.skill.skills_dir);
+        if skills_dir.exists() {
+            features.push("skill watching".into());
+        } else {
+            features.push(format!(
+                "skill watching (dir missing: {})",
+                config.skill.skills_dir
+            ));
+        }
+    }
+
+    CheckResult {
+        name: "Hot Reload".to_string(),
+        status: CheckStatus::Pass,
+        message: format!("enabled: {}", features.join(", ")),
+        duration: start.elapsed(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1194,5 +1330,92 @@ mod tests {
         let result = check_memory_baseline().await;
         // On non-MSVC it should pass; on MSVC it warns.
         assert!(result.status == CheckStatus::Pass || result.status == CheckStatus::Warn);
+    }
+
+    #[test]
+    fn check_hooks_disabled_warns() {
+        let config = BlufioConfig::default();
+        // Default config has hooks.enabled = false
+        let result = check_hooks(&config);
+        assert_eq!(result.status, CheckStatus::Warn);
+        assert!(result.message.contains("disabled"));
+    }
+
+    #[test]
+    fn check_hooks_enabled_no_definitions_warns() {
+        let mut config = BlufioConfig::default();
+        config.hooks.enabled = true;
+        // No definitions added
+        let result = check_hooks(&config);
+        assert_eq!(result.status, CheckStatus::Warn);
+        assert!(result.message.contains("no hooks defined"));
+    }
+
+    #[test]
+    fn check_hooks_valid_definitions_passes() {
+        use blufio_config::model::HookDefinition;
+
+        let mut config = BlufioConfig::default();
+        config.hooks.enabled = true;
+        config.hooks.definitions.push(HookDefinition {
+            name: "test-hook".to_string(),
+            event: "session_created".to_string(),
+            command: "echo test".to_string(),
+            priority: 10,
+            timeout_secs: 5,
+            enabled: true,
+        });
+        let result = check_hooks(&config);
+        assert_eq!(result.status, CheckStatus::Pass);
+        assert!(result.message.contains("1 hook(s) configured"));
+    }
+
+    #[test]
+    fn check_hooks_unknown_event_fails() {
+        use blufio_config::model::HookDefinition;
+
+        let mut config = BlufioConfig::default();
+        config.hooks.enabled = true;
+        config.hooks.definitions.push(HookDefinition {
+            name: "bad-hook".to_string(),
+            event: "nonexistent_event".to_string(),
+            command: "echo test".to_string(),
+            priority: 10,
+            timeout_secs: 5,
+            enabled: true,
+        });
+        let result = check_hooks(&config);
+        assert_eq!(result.status, CheckStatus::Fail);
+        assert!(result.message.contains("unknown events"));
+    }
+
+    #[test]
+    fn check_hot_reload_disabled_warns() {
+        let config = BlufioConfig::default();
+        // Default config has hot_reload.enabled = false
+        let result = check_hot_reload(&config);
+        assert_eq!(result.status, CheckStatus::Warn);
+        assert!(result.message.contains("disabled"));
+    }
+
+    #[test]
+    fn check_hot_reload_enabled_passes() {
+        let mut config = BlufioConfig::default();
+        config.hot_reload.enabled = true;
+        let result = check_hot_reload(&config);
+        assert_eq!(result.status, CheckStatus::Pass);
+        assert!(result.message.contains("config"));
+        assert!(result.message.contains("500ms"));
+    }
+
+    #[test]
+    fn check_hot_reload_missing_tls_files_fails() {
+        let mut config = BlufioConfig::default();
+        config.hot_reload.enabled = true;
+        config.hot_reload.tls_cert_path = Some("/nonexistent/cert.pem".to_string());
+        config.hot_reload.tls_key_path = Some("/nonexistent/key.pem".to_string());
+        let result = check_hot_reload(&config);
+        assert_eq!(result.status, CheckStatus::Fail);
+        assert!(result.message.contains("not found"));
     }
 }
