@@ -48,6 +48,7 @@ blufio-router = { path = "../blufio-router" }
 blufio-skill = { path = "../blufio-skill" }
 blufio-plugin = { path = "../blufio-plugin" }
 blufio-security = { path = "../blufio-security" }
+blufio-hooks = { path = "../blufio-hooks" }
 blufio-injection = { path = "../blufio-injection" }
 blufio-verify = { path = "../blufio-verify" }
 

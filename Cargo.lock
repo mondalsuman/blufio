@@ -610,6 +610,7 @@ dependencies = [
  "blufio-discord",
  "blufio-gateway",
  "blufio-gemini",
+ "blufio-hooks",
  "blufio-injection",
  "blufio-irc",
  "blufio-matrix",
