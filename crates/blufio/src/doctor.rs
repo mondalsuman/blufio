@@ -975,10 +975,7 @@ async fn check_cron(db_path: &str) -> CheckResult {
                 CheckResult {
                     name: "Cron Scheduler".to_string(),
                     status: CheckStatus::Pass,
-                    message: format!(
-                        "{active_jobs} active jobs, 0 stale locks{}",
-                        last_run_info
-                    ),
+                    message: format!("{active_jobs} active jobs, 0 stale locks{}", last_run_info),
                     duration: start.elapsed(),
                 }
             }
@@ -1076,9 +1073,18 @@ async fn check_retention(config: &BlufioConfig) -> CheckResult {
             }
 
             let periods = &config.retention.periods;
-            let msg_days = periods.messages.map(|d| format!("{d}d")).unwrap_or_else(|| "none".to_string());
-            let ses_days = periods.sessions.map(|d| format!("{d}d")).unwrap_or_else(|| "none".to_string());
-            let mem_days = periods.memories.map(|d| format!("{d}d")).unwrap_or_else(|| "none".to_string());
+            let msg_days = periods
+                .messages
+                .map(|d| format!("{d}d"))
+                .unwrap_or_else(|| "none".to_string());
+            let ses_days = periods
+                .sessions
+                .map(|d| format!("{d}d"))
+                .unwrap_or_else(|| "none".to_string());
+            let mem_days = periods
+                .memories
+                .map(|d| format!("{d}d"))
+                .unwrap_or_else(|| "none".to_string());
             CheckResult {
                 name: "Retention".to_string(),
                 status: CheckStatus::Pass,

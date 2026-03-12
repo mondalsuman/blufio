@@ -1432,7 +1432,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     // --- Cron scheduler ---
     // Spawn after EventBus and DB init, uses CancellationToken for graceful shutdown.
     if config.cron.enabled {
-        let cron_db = Arc::new(blufio_storage::open_connection(&config.storage.database_path).await?);
+        let cron_db =
+            Arc::new(blufio_storage::open_connection(&config.storage.database_path).await?);
         let task_registry = Arc::new(blufio_cron::register_builtin_tasks(
             cron_db.clone(),
             &config,
@@ -1450,10 +1451,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 tokio::spawn(async move {
                     scheduler.run(cron_cancel).await;
                 });
-                info!(
-                    jobs = config.cron.jobs.len(),
-                    "cron scheduler started"
-                );
+                info!(jobs = config.cron.jobs.len(), "cron scheduler started");
             }
             Err(e) => {
                 warn!(error = %e, "cron scheduler initialization failed, continuing without cron");

@@ -43,18 +43,26 @@ pub fn generate_timers(
             }
         };
 
-        let safe_name = job.name.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "-");
+        let safe_name = job
+            .name
+            .replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "-");
 
-        let timer_content = TIMER_TEMPLATE.replace("{job_name}", &job.name).replace("{on_calendar}", &on_calendar);
+        let timer_content = TIMER_TEMPLATE
+            .replace("{job_name}", &job.name)
+            .replace("{on_calendar}", &on_calendar);
         let timer_path = output_dir.join(format!("blufio-cron-{safe_name}.timer"));
-        std::fs::write(&timer_path, &timer_content)
-            .map_err(|e| BlufioError::Internal(format!("Failed to write {}: {e}", timer_path.display())))?;
+        std::fs::write(&timer_path, &timer_content).map_err(|e| {
+            BlufioError::Internal(format!("Failed to write {}: {e}", timer_path.display()))
+        })?;
         created_files.push(timer_path);
 
-        let service_content = SERVICE_TEMPLATE.replace("{job_name}", &job.name).replace("{blufio_path}", blufio_path);
+        let service_content = SERVICE_TEMPLATE
+            .replace("{job_name}", &job.name)
+            .replace("{blufio_path}", blufio_path);
         let service_path = output_dir.join(format!("blufio-cron-{safe_name}.service"));
-        std::fs::write(&service_path, &service_content)
-            .map_err(|e| BlufioError::Internal(format!("Failed to write {}: {e}", service_path.display())))?;
+        std::fs::write(&service_path, &service_content).map_err(|e| {
+            BlufioError::Internal(format!("Failed to write {}: {e}", service_path.display()))
+        })?;
         created_files.push(service_path);
     }
 
@@ -62,7 +70,7 @@ pub fn generate_timers(
 }
 
 fn cron_to_on_calendar(schedule: &str) -> Result<String, String> {
-    let fields: Vec<&str> = schedule.trim().split_whitespace().collect();
+    let fields: Vec<&str> = schedule.split_whitespace().collect();
     if fields.len() != 5 {
         return Err(format!("expected 5 fields, got {}", fields.len()));
     }
@@ -86,20 +94,34 @@ fn cron_to_on_calendar(schedule: &str) -> Result<String, String> {
 }
 
 fn convert_dow(dow: &str) -> Result<Option<String>, String> {
-    if dow == "*" { return Ok(None); }
+    if dow == "*" {
+        return Ok(None);
+    }
     let dow_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     let mut names = Vec::new();
     for part in dow.split(',') {
         if let Ok(n) = part.parse::<u8>() {
-            if n > 6 { return Err(format!("invalid dow: {n}")); }
+            if n > 6 {
+                return Err(format!("invalid dow: {n}"));
+            }
             names.push(dow_names[n as usize].to_string());
         } else if part.contains('-') {
             let rp: Vec<&str> = part.split('-').collect();
-            if rp.len() != 2 { return Err(format!("invalid dow range: {part}")); }
-            let s: u8 = rp[0].parse().map_err(|_| format!("invalid dow: {}", rp[0]))?;
-            let e: u8 = rp[1].parse().map_err(|_| format!("invalid dow: {}", rp[1]))?;
-            if s > 6 || e > 6 { return Err(format!("invalid dow range: {part}")); }
-            for i in s..=e { names.push(dow_names[i as usize].to_string()); }
+            if rp.len() != 2 {
+                return Err(format!("invalid dow range: {part}"));
+            }
+            let s: u8 = rp[0]
+                .parse()
+                .map_err(|_| format!("invalid dow: {}", rp[0]))?;
+            let e: u8 = rp[1]
+                .parse()
+                .map_err(|_| format!("invalid dow: {}", rp[1]))?;
+            if s > 6 || e > 6 {
+                return Err(format!("invalid dow range: {part}"));
+            }
+            for i in s..=e {
+                names.push(dow_names[i as usize].to_string());
+            }
         } else {
             return Err(format!("unsupported dow: {part}"));
         }
@@ -108,34 +130,54 @@ fn convert_dow(dow: &str) -> Result<Option<String>, String> {
 }
 
 fn convert_field(field: &str) -> Result<String, String> {
-    if field == "*" { return Ok("*".to_string()); }
+    if field == "*" {
+        return Ok("*".to_string());
+    }
     if let Some(step) = field.strip_prefix("*/") {
         let _: u32 = step.parse().map_err(|_| format!("invalid step: {step}"))?;
         return Err(format!("step '{field}' in date fields not supported"));
     }
-    let parts: Vec<String> = field.split(',').map(|p| {
-        if let Ok(n) = p.parse::<u32>() { Ok(format!("{n:02}")) }
-        else if p.contains('-') { Ok(p.to_string()) }
-        else { Err(format!("unsupported value: {p}")) }
-    }).collect::<Result<Vec<_>, _>>()?;
+    let parts: Vec<String> = field
+        .split(',')
+        .map(|p| {
+            if let Ok(n) = p.parse::<u32>() {
+                Ok(format!("{n:02}"))
+            } else if p.contains('-') {
+                Ok(p.to_string())
+            } else {
+                Err(format!("unsupported value: {p}"))
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(parts.join(","))
 }
 
 fn convert_time_field(field: &str) -> Result<String, String> {
-    if field == "*" { return Ok("*".to_string()); }
+    if field == "*" {
+        return Ok("*".to_string());
+    }
     if let Some(step) = field.strip_prefix("*/") {
         let n: u32 = step.parse().map_err(|_| format!("invalid step: {step}"))?;
         return Ok(format!("00/{n}"));
     }
     if field.contains('/') {
         let parts: Vec<&str> = field.split('/').collect();
-        if parts.len() == 2 { return Ok(format!("{}/{}", parts[0], parts[1])); }
+        if parts.len() == 2 {
+            return Ok(format!("{}/{}", parts[0], parts[1]));
+        }
     }
-    let parts: Vec<String> = field.split(',').map(|p| {
-        if let Ok(n) = p.parse::<u32>() { Ok(format!("{n:02}")) }
-        else if p.contains('-') { Ok(p.to_string()) }
-        else { Err(format!("unsupported value: {p}")) }
-    }).collect::<Result<Vec<_>, _>>()?;
+    let parts: Vec<String> = field
+        .split(',')
+        .map(|p| {
+            if let Ok(n) = p.parse::<u32>() {
+                Ok(format!("{n:02}"))
+            } else if p.contains('-') {
+                Ok(p.to_string())
+            } else {
+                Err(format!("unsupported value: {p}"))
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(parts.join(","))
 }
 
@@ -151,17 +193,26 @@ mod tests {
 
     #[test]
     fn test_cron_to_on_calendar_every_15_min() {
-        assert_eq!(cron_to_on_calendar("*/15 * * * *").unwrap(), "*-*-* *:00/15:00");
+        assert_eq!(
+            cron_to_on_calendar("*/15 * * * *").unwrap(),
+            "*-*-* *:00/15:00"
+        );
     }
 
     #[test]
     fn test_cron_to_on_calendar_every_6_hours() {
-        assert_eq!(cron_to_on_calendar("0 */6 * * *").unwrap(), "*-*-* 00/6:00:00");
+        assert_eq!(
+            cron_to_on_calendar("0 */6 * * *").unwrap(),
+            "*-*-* 00/6:00:00"
+        );
     }
 
     #[test]
     fn test_cron_to_on_calendar_weekly_sunday() {
-        assert_eq!(cron_to_on_calendar("0 0 * * 0").unwrap(), "Sun *-*-* 00:00:00");
+        assert_eq!(
+            cron_to_on_calendar("0 0 * * 0").unwrap(),
+            "Sun *-*-* 00:00:00"
+        );
     }
 
     #[test]
@@ -179,8 +230,18 @@ mod tests {
     fn test_generate_timers() {
         let dir = TempDir::new().unwrap();
         let jobs = vec![
-            CronJobRow { name: "backup".into(), schedule: "0 2 * * *".into(), task: "backup".into(), enabled: true },
-            CronJobRow { name: "disabled".into(), schedule: "0 0 * * *".into(), task: "health_check".into(), enabled: false },
+            CronJobRow {
+                name: "backup".into(),
+                schedule: "0 2 * * *".into(),
+                task: "backup".into(),
+                enabled: true,
+            },
+            CronJobRow {
+                name: "disabled".into(),
+                schedule: "0 0 * * *".into(),
+                task: "health_check".into(),
+                enabled: false,
+            },
         ];
         let paths = generate_timers(&jobs, "/usr/local/bin/blufio", dir.path()).unwrap();
         assert_eq!(paths.len(), 2);

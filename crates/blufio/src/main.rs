@@ -894,7 +894,9 @@ async fn main() {
             run_injection_command(&config, action);
         }
         Some(Commands::Cron { action }) => {
-            if let Err(e) = cron_cmd::handle_cron_command(action, &config.storage.database_path).await {
+            if let Err(e) =
+                cron_cmd::handle_cron_command(action, &config.storage.database_path).await
+            {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }

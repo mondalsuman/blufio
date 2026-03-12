@@ -81,8 +81,8 @@ fn cmd_list(db_path: &str, json: bool) -> Result<(), BlufioError> {
             return Ok(());
         }
         println!(
-            "{:<20} {:<20} {:<20} {:<8} {:<24} {}",
-            "NAME", "SCHEDULE", "TASK", "ENABLED", "NEXT RUN", "LAST STATUS"
+            "{:<20} {:<20} {:<20} {:<8} {:<24} LAST STATUS",
+            "NAME", "SCHEDULE", "TASK", "ENABLED", "NEXT RUN"
         );
         println!("{}", "-".repeat(116));
         for (name, schedule, task, enabled, last_run) in &rows {
@@ -174,9 +174,8 @@ async fn cmd_run_now(db_path: &str, name: &str) -> Result<(), BlufioError> {
     println!("Running job '{name}' (task: {task_name})...");
 
     // Create task registry with built-in tasks.
-    let config = blufio_config::load_and_validate().map_err(|errors| {
-        BlufioError::Config(format!("Config validation failed: {:?}", errors))
-    })?;
+    let config = blufio_config::load_and_validate()
+        .map_err(|errors| BlufioError::Config(format!("Config validation failed: {:?}", errors)))?;
     let registry = blufio_cron::register_builtin_tasks(Arc::clone(&conn), &config);
 
     // Look up the task in the registry.
@@ -279,8 +278,8 @@ async fn cmd_history(
             return Ok(());
         }
         println!(
-            "{:<20} {:<24} {:<10} {:<12} {}",
-            "JOB", "STARTED", "STATUS", "DURATION", "OUTPUT"
+            "{:<20} {:<24} {:<10} {:<12} OUTPUT",
+            "JOB", "STARTED", "STATUS", "DURATION"
         );
         println!("{}", "-".repeat(90));
         for entry in &entries {
@@ -347,10 +346,8 @@ fn cmd_generate_timers(db_path: &str, output_dir: &str) -> Result<(), BlufioErro
         })?;
     }
 
-    let created =
-        blufio_cron::generate_timers(&jobs, &blufio_path, output_path).map_err(|e| {
-            BlufioError::Internal(format!("Failed to generate timer files: {e}"))
-        })?;
+    let created = blufio_cron::generate_timers(&jobs, &blufio_path, output_path)
+        .map_err(|e| BlufioError::Internal(format!("Failed to generate timer files: {e}")))?;
 
     if created.is_empty() {
         println!("No enabled cron jobs. Nothing generated.");

@@ -36,10 +36,7 @@ pub struct CronHistoryEntry {
 ///
 /// Inserts a new row into `cron_history` with status `"running"` and returns
 /// the row ID for later `record_finish`.
-pub async fn record_start(
-    conn: &Arc<Connection>,
-    job_name: &str,
-) -> Result<i64, String> {
+pub async fn record_start(conn: &Arc<Connection>, job_name: &str) -> Result<i64, String> {
     let name = job_name.to_string();
     conn.call(move |conn| -> Result<i64, rusqlite::Error> {
         conn.execute(
@@ -102,47 +99,49 @@ pub async fn query_history(
     let name = job_name.map(|s| s.to_string());
     let lim = limit as i64;
 
-    conn.call(move |conn| -> Result<Vec<CronHistoryEntry>, rusqlite::Error> {
-        let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match name {
-            Some(ref n) => (
-                "SELECT id, job_name, started_at, finished_at, status, duration_ms, output \
+    conn.call(
+        move |conn| -> Result<Vec<CronHistoryEntry>, rusqlite::Error> {
+            let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match name {
+                Some(ref n) => (
+                    "SELECT id, job_name, started_at, finished_at, status, duration_ms, output \
                  FROM cron_history WHERE job_name = ?1 \
                  ORDER BY started_at DESC LIMIT ?2"
-                    .to_string(),
-                vec![
-                    Box::new(n.clone()) as Box<dyn rusqlite::types::ToSql>,
-                    Box::new(lim),
-                ],
-            ),
-            None => (
-                "SELECT id, job_name, started_at, finished_at, status, duration_ms, output \
+                        .to_string(),
+                    vec![
+                        Box::new(n.clone()) as Box<dyn rusqlite::types::ToSql>,
+                        Box::new(lim),
+                    ],
+                ),
+                None => (
+                    "SELECT id, job_name, started_at, finished_at, status, duration_ms, output \
                  FROM cron_history \
                  ORDER BY started_at DESC LIMIT ?1"
-                    .to_string(),
-                vec![Box::new(lim) as Box<dyn rusqlite::types::ToSql>],
-            ),
-        };
+                        .to_string(),
+                    vec![Box::new(lim) as Box<dyn rusqlite::types::ToSql>],
+                ),
+            };
 
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
+            let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+                params.iter().map(|p| p.as_ref()).collect();
 
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt
-            .query_map(param_refs.as_slice(), |row| {
-                Ok(CronHistoryEntry {
-                    id: row.get(0)?,
-                    job_name: row.get(1)?,
-                    started_at: row.get(2)?,
-                    finished_at: row.get(3)?,
-                    status: row.get(4)?,
-                    duration_ms: row.get(5)?,
-                    output: row.get(6)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt
+                .query_map(param_refs.as_slice(), |row| {
+                    Ok(CronHistoryEntry {
+                        id: row.get(0)?,
+                        job_name: row.get(1)?,
+                        started_at: row.get(2)?,
+                        finished_at: row.get(3)?,
+                        status: row.get(4)?,
+                        duration_ms: row.get(5)?,
+                        output: row.get(6)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(rows)
-    })
+            Ok(rows)
+        },
+    )
     .await
     .map_err(|e| format!("Failed to query history: {e}"))
 }
