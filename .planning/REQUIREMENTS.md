@@ -26,7 +26,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 - [x] **INJC-01**: L1 pattern classifier detects known injection signatures via regex with 0.0-1.0 confidence scoring
 - [x] **INJC-02**: L1 operates in log-not-block mode by default, blocking only at >0.95 confidence (configurable)
-- [ ] **INJC-03**: L3 HMAC-SHA256 boundary tokens cryptographically separate system/user/external content zones
+- [x] **INJC-03**: L3 HMAC-SHA256 boundary tokens cryptographically separate system/user/external content zones
 - [ ] **INJC-04**: L4 output validator screens LLM responses for credential leaks and injection relay before tool execution
 - [ ] **INJC-05**: L5 human-in-the-loop confirmation flow for configurable high-risk operations (tool calls, data export, config changes)
 - [ ] **INJC-06**: Injection defense integrates with MCP client tool output and WASM skill results
@@ -219,7 +219,7 @@ Deferred to v1.6+.
 | CTXE-03 | Phase 56 | Complete |
 | INJC-01 | Phase 57 | Complete |
 | INJC-02 | Phase 57 | Complete |
-| INJC-03 | Phase 57 | Pending |
+| INJC-03 | Phase 57 | Complete |
 | INJC-04 | Phase 57 | Pending |
 | INJC-05 | Phase 57 | Pending |
 | INJC-06 | Phase 57 | Pending |

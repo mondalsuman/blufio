@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 57-01-PLAN.md
-last_updated: "2026-03-12T13:19:05.597Z"
-last_activity: 2026-03-12 -- Phase 57 Plan 01 completed (13min)
+stopped_at: Completed 57-02-PLAN.md
+last_updated: "2026-03-12T13:29:25.947Z"
+last_activity: 2026-03-12 -- Phase 57 Plan 02 completed (5min)
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 14
-  completed_plans: 19
+  completed_plans: 21
   percent: 30
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 57 of 63 (Prompt Injection Defense) -- fifth of 11 phases in v1.5
-Plan: 1 of 4 in Phase 57
+Plan: 2 of 4 in Phase 57
 Status: In Progress
-Last activity: 2026-03-12 -- Phase 57 Plan 01 completed (13min)
+Last activity: 2026-03-12 -- Phase 57 Plan 02 completed (5min)
 
 Progress: [#########-----------------------] 30%
 
@@ -63,6 +63,7 @@ Progress: [#########-----------------------] 30%
 | Phase 56 P05 | 12min | 2 tasks | 8 files |
 | Phase 56 P06 | 6min | 2 tasks | 4 files |
 | Phase 57 P01 | 13min | 2 tasks | 11 files |
+| Phase 57 P02 | 5min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,9 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 57]: Config types defined inline in blufio-config/model.rs (following ClassificationConfig pattern), re-exported from blufio-injection
 - [Phase 57]: SecurityEvent defined inline in blufio-bus/events.rs (following all event sub-enums), re-exported from blufio-injection
 - [Phase 57]: Custom regex patterns assigned default severity 0.3 and InstructionOverride category
+- [Phase 57]: Regex uses non-greedy source capture (.+?) to handle colon-containing sources like mcp:server_name
+- [Phase 57]: HKDF expand uses hmac::HMAC_SHA256 (owned, not &reference) per ring 0.17 KeyType trait
+- [Phase 57]: Hex encoding (64 chars) for HMAC tags over base64, leveraging existing hex crate in workspace
 
 ### Pending Todos
 
@@ -152,6 +156,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T13:19:05.594Z
-Stopped at: Completed 57-01-PLAN.md
+Last session: 2026-03-12T13:29:25.945Z
+Stopped at: Completed 57-02-PLAN.md
 Resume file: None
