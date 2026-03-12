@@ -257,7 +257,12 @@ Plans:
   2. iMessage adapter communicates via BlueBubbles REST API with webhook-based incoming message handling, documented as experimental (requires macOS host)
   3. SMS adapter sends and receives messages via Twilio Programmable Messaging API (webhook inbound, REST outbound)
   4. All three adapters implement ChannelAdapter + PluginAdapter traits and integrate with FormatPipeline
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 61-01-PLAN.md -- Foundation: workspace deps, config structs (EmailConfig/IMessageConfig/SmsConfig), ChannelEvent extension, crate scaffolds, feature flags
+- [ ] 61-02-PLAN.md -- Email adapter: MIME parsing (mail-parser), quoted-text stripping, IMAP polling loop, SMTP multipart/alternative (lettre), thread-to-session mapping
+- [ ] 61-03-PLAN.md -- iMessage + SMS adapters: BlueBubbles webhook+REST, Twilio webhook+REST, HMAC-SHA1 validation, E.164 format, STOP keywords
+- [ ] 61-04-PLAN.md -- Integration: serve.rs conditional wiring, webhook route composition (merge WhatsApp+iMessage+SMS), gateway mount
 
 ### Phase 62: Observability & API Surface
 **Goal**: Operators can trace requests through the system with OpenTelemetry, browse the API with OpenAPI docs, and replicate data with Litestream
@@ -349,10 +354,10 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 58. Cron Scheduler & Retention Policies | 4/4 | Complete    | 2026-03-12 | - |
 | 59. Hook System & Hot Reload | 4/4 | Complete    | 2026-03-12 | - |
 | 60. GDPR Tooling & Data Export | 3/3 | Complete    | 2026-03-12 | - |
-| 61. Channel Adapters | v1.5 | 0/0 | Not started | - |
+| 61. Channel Adapters | v1.5 | 0/4 | Not started | - |
 | 62. Observability & API Surface | v1.5 | 0/0 | Not started | - |
 | 63. Code Quality Hardening | v1.5 | 0/0 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-12 after Phase 60 planning*
+*Last updated: 2026-03-13 after Phase 61 planning*
