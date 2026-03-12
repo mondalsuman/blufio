@@ -68,20 +68,20 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Retention Policies
 
-- [ ] **RETN-01**: TOML-configurable retention periods per data type (messages, sessions, cost records, memories)
+- [x] **RETN-01**: TOML-configurable retention periods per data type (messages, sessions, cost records, memories)
 - [ ] **RETN-02**: Background retention enforcement runs on configurable schedule (default: daily)
-- [ ] **RETN-03**: Soft-delete support with configurable grace period before permanent removal
+- [x] **RETN-03**: Soft-delete support with configurable grace period before permanent removal
 - [ ] **RETN-04**: Audit trail entries exempt from retention deletion
 - [ ] **RETN-05**: Retention enforcement respects data classification (Restricted data has separate retention rules)
 
 ### Cron/Scheduler
 
-- [ ] **CRON-01**: TOML-configured cron jobs with standard cron expression syntax
+- [x] **CRON-01**: TOML-configured cron jobs with standard cron expression syntax
 - [ ] **CRON-02**: CLI `blufio cron` subcommand for list, add, remove, run-now, history
 - [ ] **CRON-03**: systemd timer unit file generation via `blufio cron generate-timers`
 - [ ] **CRON-04**: Job execution history tracked in SQLite with status, duration, and output
 - [ ] **CRON-05**: Built-in tasks: memory cleanup, backup, cost report, health check, retention enforcement
-- [ ] **CRON-06**: Persisted last-run timestamps survive process restarts
+- [x] **CRON-06**: Persisted last-run timestamps survive process restarts
 
 ### Hook System
 
@@ -223,15 +223,15 @@ Deferred to v1.6+.
 | INJC-04 | Phase 57 | Complete |
 | INJC-05 | Phase 57 | Complete |
 | INJC-06 | Phase 57 | Complete |
-| CRON-01 | Phase 58 | Pending |
+| CRON-01 | Phase 58 | Complete |
 | CRON-02 | Phase 58 | Pending |
 | CRON-03 | Phase 58 | Pending |
 | CRON-04 | Phase 58 | Pending |
 | CRON-05 | Phase 58 | Pending |
-| CRON-06 | Phase 58 | Pending |
-| RETN-01 | Phase 58 | Pending |
+| CRON-06 | Phase 58 | Complete |
+| RETN-01 | Phase 58 | Complete |
 | RETN-02 | Phase 58 | Pending |
-| RETN-03 | Phase 58 | Pending |
+| RETN-03 | Phase 58 | Complete |
 | RETN-04 | Phase 58 | Pending |
 | RETN-05 | Phase 58 | Pending |
 | HOOK-01 | Phase 59 | Pending |

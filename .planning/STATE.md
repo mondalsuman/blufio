@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: planning
-stopped_at: Phase 58 context gathered
-last_updated: "2026-03-12T16:17:28.139Z"
-last_activity: 2026-03-12 -- Phase 57 complete, transitioning to Phase 58
+status: executing
+stopped_at: Completed 58-01-PLAN.md
+last_updated: "2026-03-12T18:12:48.000Z"
+last_activity: 2026-03-12 -- Phase 58 Plan 01 complete
 progress:
   total_phases: 11
   completed_phases: 3
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 58 of 63 (Cron Scheduler & Retention Policies) -- sixth of 11 phases in v1.5
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-12 -- Phase 57 complete, transitioning to Phase 58
+Plan: 1 of 5 complete
+Status: Executing
+Last activity: 2026-03-12 -- Phase 58 Plan 01 complete (cron foundation + soft-delete filtering)
 
 Progress: [████░░░░░░] 45%
 
@@ -67,6 +67,7 @@ Progress: [████░░░░░░] 45%
 | Phase 57 P03 | 11min | 2 tasks | 5 files |
 | Phase 57 P04 | 57min | 2 tasks | 17 files |
 | Phase 57 P05 | 4min | 2 tasks | 2 files |
+| Phase 58 P01 | 18min | 2 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -155,6 +156,10 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 57]: 0.98 blocking threshold for tool output (higher than 0.95 for user input)
 - [Phase 57]: All open-world tool output scanned at session level for defense-in-depth
 - [Phase 57]: MCP classifier created as separate instance before MCP init, intentionally separate from pipeline classifier
+- [Phase 58]: CronConfig/RetentionConfig use serde(default) on BlufioConfig following existing pattern
+- [Phase 58]: CronEvent uses String fields to avoid cross-crate deps (following established bus event pattern)
+- [Phase 58]: Soft-delete filtering added to classification queries in addition to CRUD queries
+- [Phase 58]: Test DB schemas updated with deleted_at column across 6 files for consistency
 
 ### Pending Todos
 
@@ -170,6 +175,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T16:17:28.137Z
-Stopped at: Phase 58 context gathered
-Resume file: .planning/phases/58-cron-scheduler-retention-policies/58-CONTEXT.md
+Last session: 2026-03-12T18:12:48.000Z
+Stopped at: Completed 58-01-PLAN.md
+Resume file: .planning/phases/58-cron-scheduler-retention-policies/58-02-PLAN.md
