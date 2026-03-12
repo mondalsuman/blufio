@@ -135,7 +135,7 @@ impl HookManager {
         };
 
         // Iterate BTreeMap in priority order (ascending = lower number first).
-        for (_priority, hooks) in &self.hooks {
+        for hooks in self.hooks.values() {
             for hook in hooks {
                 // Check if this hook matches the event: resolve the hook's
                 // TOML event name to EventBus type string for comparison.
@@ -164,7 +164,7 @@ impl HookManager {
         })
         .to_string();
 
-        for (_priority, hooks) in &self.hooks {
+        for hooks in self.hooks.values() {
             for hook in hooks {
                 if hook.event == lifecycle_event {
                     self.dispatch_hook(hook, &stdin_json, lifecycle_event, event_bus)
