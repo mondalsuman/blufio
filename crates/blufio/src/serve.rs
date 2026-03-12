@@ -1504,11 +1504,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
         // TLS hot reload (if cert/key paths configured)
         if config.hot_reload.tls_cert_path.is_some() && config.hot_reload.tls_key_path.is_some() {
-            let _tls_result = crate::hot_reload::spawn_tls_watcher(
-                &config.hot_reload,
-                cancel.child_token(),
-            )
-            .await;
+            let _tls_result =
+                crate::hot_reload::spawn_tls_watcher(&config.hot_reload, cancel.child_token())
+                    .await;
             if _tls_result.is_some() {
                 info!("TLS certificate hot reload enabled");
             }
@@ -1520,12 +1518,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             if skills_dir.exists() {
                 let skill_bus = event_bus.clone();
                 let skill_cancel = cancel.child_token();
-                match crate::hot_reload::spawn_skill_watcher(
-                    skills_dir,
-                    skill_bus,
-                    skill_cancel,
-                )
-                .await
+                match crate::hot_reload::spawn_skill_watcher(skills_dir, skill_bus, skill_cancel)
+                    .await
                 {
                     Ok(()) => {
                         info!("skill hot reload watcher enabled");
@@ -1556,7 +1550,9 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         let hook_cancel = cancel.child_token();
 
         // Execute pre_start hooks synchronously before main loop
-        manager.execute_lifecycle_hooks("pre_start", &event_bus).await;
+        manager
+            .execute_lifecycle_hooks("pre_start", &event_bus)
+            .await;
 
         // Spawn EventBus-driven hook run loop (shared via Arc since run takes &self)
         let run_manager = manager.clone();
@@ -1564,7 +1560,12 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             run_manager.run(hook_rx, hook_bus, hook_cancel).await;
         });
         info!(
-            hooks = config.hooks.definitions.iter().filter(|d| d.enabled).count(),
+            hooks = config
+                .hooks
+                .definitions
+                .iter()
+                .filter(|d| d.enabled)
+                .count(),
             "hook system started"
         );
         Some(manager)
@@ -1853,7 +1854,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     // Fire post_shutdown hooks after all cleanup is complete.
     if let Some(ref hm) = hook_manager {
-        hm.execute_lifecycle_hooks("post_shutdown", &event_bus).await;
+        hm.execute_lifecycle_hooks("post_shutdown", &event_bus)
+            .await;
     }
 
     info!("blufio serve shutdown complete");

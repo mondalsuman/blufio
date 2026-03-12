@@ -9,12 +9,12 @@
 //! deterministic dispatch ordering.
 
 use std::collections::{BTreeMap, HashSet};
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::time::Duration;
 
-use blufio_bus::events::{BusEvent, HookEvent, new_event_id, now_timestamp};
 use blufio_bus::EventBus;
+use blufio_bus::events::{BusEvent, HookEvent, new_event_id, now_timestamp};
 use blufio_config::model::{HookConfig, HookDefinition};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -33,7 +33,10 @@ pub const LIFECYCLE_EVENT_MAP: &[(&str, &str)] = &[
     ("session_closed", "session.closed"),
     ("pre_compaction", "compaction.started"),
     ("post_compaction", "compaction.completed"),
-    ("degradation_changed", "resilience.degradation_level_changed"),
+    (
+        "degradation_changed",
+        "resilience.degradation_level_changed",
+    ),
     ("config_reloaded", "config.reloaded"),
     ("memory_extracted", "memory.created"),
 ];
@@ -42,12 +45,8 @@ pub const LIFECYCLE_EVENT_MAP: &[(&str, &str)] = &[
 ///
 /// These are called directly by serve.rs at specific lifecycle points
 /// (before/after startup and shutdown) via [`HookManager::execute_lifecycle_hooks`].
-const DIRECT_LIFECYCLE_EVENTS: &[&str] = &[
-    "pre_start",
-    "post_start",
-    "pre_shutdown",
-    "post_shutdown",
-];
+const DIRECT_LIFECYCLE_EVENTS: &[&str] =
+    &["pre_start", "post_start", "pre_shutdown", "post_shutdown"];
 
 /// EventBus subscriber that dispatches hooks in priority order.
 ///
@@ -153,11 +152,7 @@ impl HookManager {
     /// Called directly by serve.rs for `pre_start`, `post_start`,
     /// `pre_shutdown`, and `post_shutdown` events. Creates a synthetic
     /// JSON payload for the hook's stdin.
-    pub async fn execute_lifecycle_hooks(
-        &self,
-        lifecycle_event: &str,
-        event_bus: &EventBus,
-    ) {
+    pub async fn execute_lifecycle_hooks(&self, lifecycle_event: &str, event_bus: &EventBus) {
         let stdin_json = serde_json::json!({
             "lifecycle_event": lifecycle_event,
             "timestamp": now_timestamp(),
@@ -183,10 +178,8 @@ impl HookManager {
         event_bus: &EventBus,
     ) {
         // Recursion guard
-        let _guard = match RecursionGuard::try_enter(
-            self.recursion_counter.clone(),
-            self.max_depth,
-        ) {
+        let _guard = match RecursionGuard::try_enter(self.recursion_counter.clone(), self.max_depth)
+        {
             Some(g) => g,
             None => {
                 warn!(
@@ -382,7 +375,7 @@ mod tests {
         assert_eq!(total, 2);
 
         // No priority 20 entry (disabled hook)
-        assert!(mgr.hooks.get(&20).is_none());
+        assert!(!mgr.hooks.contains_key(&20));
     }
 
     #[test]
@@ -460,7 +453,10 @@ mod tests {
         assert_eq!(resolve_event_name("session_created"), "session.created");
         assert_eq!(resolve_event_name("session_closed"), "session.closed");
         assert_eq!(resolve_event_name("pre_compaction"), "compaction.started");
-        assert_eq!(resolve_event_name("post_compaction"), "compaction.completed");
+        assert_eq!(
+            resolve_event_name("post_compaction"),
+            "compaction.completed"
+        );
         assert_eq!(
             resolve_event_name("degradation_changed"),
             "resilience.degradation_level_changed"

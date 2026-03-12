@@ -28,8 +28,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
-use blufio_bus::events::{BusEvent, ConfigEvent, new_event_id, now_timestamp};
 use blufio_bus::EventBus;
+use blufio_bus::events::{BusEvent, ConfigEvent, new_event_id, now_timestamp};
 use blufio_config::model::{BlufioConfig, HotReloadConfig};
 use blufio_config::{load_config_from_path, validation};
 use blufio_core::error::BlufioError;
@@ -73,10 +73,7 @@ pub async fn spawn_config_watcher(
     // Create debouncer with configurable debounce window
     let mut debouncer = notify_debouncer_mini::new_debouncer(
         Duration::from_millis(debounce_ms),
-        move |res: Result<
-            Vec<notify_debouncer_mini::DebouncedEvent>,
-            notify::Error,
-        >| {
+        move |res: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
             if let Ok(events) = res {
                 let paths: Vec<PathBuf> = events.into_iter().map(|e| e.path).collect();
                 if !paths.is_empty() {
@@ -98,10 +95,7 @@ pub async fn spawn_config_watcher(
         .watcher()
         .watch(&watch_path, notify::RecursiveMode::NonRecursive)
         .map_err(|e| {
-            BlufioError::Internal(format!(
-                "failed to watch {}: {e}",
-                watch_path.display()
-            ))
+            BlufioError::Internal(format!("failed to watch {}: {e}", watch_path.display()))
         })?;
 
     info!(
@@ -255,10 +249,7 @@ pub fn load_config(config: &ArcSwap<BlufioConfig>) -> Arc<BlufioConfig> {
 ///
 /// Replace this stub with full implementation when direct `rustls` dependency
 /// is added to the workspace (tracked by HTRL-02).
-pub async fn spawn_tls_watcher(
-    config: &HotReloadConfig,
-    _cancel: CancellationToken,
-) -> Option<()> {
+pub async fn spawn_tls_watcher(config: &HotReloadConfig, _cancel: CancellationToken) -> Option<()> {
     let cert_path = config.tls_cert_path.as_deref().filter(|s| !s.is_empty());
     let key_path = config.tls_key_path.as_deref().filter(|s| !s.is_empty());
 
@@ -328,10 +319,7 @@ pub async fn spawn_skill_watcher(
 
     let mut debouncer = notify_debouncer_mini::new_debouncer(
         Duration::from_millis(debounce_ms),
-        move |res: Result<
-            Vec<notify_debouncer_mini::DebouncedEvent>,
-            notify::Error,
-        >| {
+        move |res: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
             if let Ok(events) = res {
                 let paths: Vec<PathBuf> = events.into_iter().map(|e| e.path).collect();
                 if !paths.is_empty() {
@@ -346,10 +334,7 @@ pub async fn spawn_skill_watcher(
         .watcher()
         .watch(&skills_dir, notify::RecursiveMode::NonRecursive)
         .map_err(|e| {
-            BlufioError::Internal(format!(
-                "failed to watch {}: {e}",
-                skills_dir.display()
-            ))
+            BlufioError::Internal(format!("failed to watch {}: {e}", skills_dir.display()))
         })?;
 
     info!(
@@ -620,12 +605,8 @@ mod tests {
     async fn skill_watcher_skips_nonexistent_dir() {
         let event_bus = Arc::new(EventBus::new(16));
         let cancel = CancellationToken::new();
-        let result = spawn_skill_watcher(
-            PathBuf::from("/nonexistent/skill/dir"),
-            event_bus,
-            cancel,
-        )
-        .await;
+        let result =
+            spawn_skill_watcher(PathBuf::from("/nonexistent/skill/dir"), event_bus, cancel).await;
         // Should succeed (just skips) rather than error
         assert!(result.is_ok());
     }

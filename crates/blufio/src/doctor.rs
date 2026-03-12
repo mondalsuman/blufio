@@ -1157,7 +1157,11 @@ fn check_hooks(config: &BlufioConfig) -> CheckResult {
     // Check hook commands exist (absolute paths only)
     let mut missing_commands = Vec::new();
     for hook in &enabled_hooks {
-        let executable = hook.command.split_whitespace().next().unwrap_or(&hook.command);
+        let executable = hook
+            .command
+            .split_whitespace()
+            .next()
+            .unwrap_or(&hook.command);
         let exec_path = std::path::Path::new(executable);
         if exec_path.is_absolute() && !exec_path.exists() {
             missing_commands.push(format!("{}: {}", hook.name, executable));
@@ -1200,7 +1204,10 @@ fn check_hot_reload(config: &BlufioConfig) -> CheckResult {
     }
 
     let mut features = Vec::new();
-    features.push(format!("config ({}ms debounce)", config.hot_reload.debounce_ms));
+    features.push(format!(
+        "config ({}ms debounce)",
+        config.hot_reload.debounce_ms
+    ));
 
     if config.hot_reload.tls_cert_path.is_some() && config.hot_reload.tls_key_path.is_some() {
         let cert_path = config.hot_reload.tls_cert_path.as_deref().unwrap_or("");

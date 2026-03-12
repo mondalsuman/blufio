@@ -7,8 +7,8 @@
 //! Each [`RecursionGuard`] increments on creation and decrements on drop,
 //! ensuring the counter stays accurate even if execution panics.
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 /// RAII guard that tracks recursion depth using an atomic counter.
 ///
