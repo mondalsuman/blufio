@@ -57,6 +57,7 @@ pub fn register_metrics() {
     register_classification_metrics();
     register_memory_validation_metrics();
     register_compaction_metrics();
+    register_gdpr_metrics();
 }
 
 /// Record a processed message.
@@ -323,4 +324,36 @@ pub fn record_compaction_total(level: &str) {
         "level" => level.to_string()
     )
     .increment(1);
+}
+
+// ---- GDPR metrics (GDPR-01 through GDPR-06) ----
+
+/// Register GDPR metric descriptions.
+///
+/// Called from [`register_metrics()`] at startup.
+fn register_gdpr_metrics() {
+    describe_counter!(
+        "blufio_gdpr_erasures_total",
+        "Total GDPR erasure operations"
+    );
+    describe_counter!(
+        "blufio_gdpr_exports_total",
+        "Total GDPR data exports"
+    );
+    describe_counter!(
+        "blufio_gdpr_reports_total",
+        "Total GDPR transparency reports"
+    );
+    describe_histogram!(
+        "blufio_gdpr_erasure_duration_seconds",
+        "GDPR erasure duration in seconds"
+    );
+    describe_histogram!(
+        "blufio_gdpr_export_size_bytes",
+        "GDPR export file size in bytes"
+    );
+    describe_counter!(
+        "blufio_gdpr_records_erased_total",
+        "Records erased by type (messages, sessions, memories, archives, cost_records)"
+    );
 }

@@ -15,3 +15,14 @@
 # events = ["all"]
 # # Selective auditing example:
 # # events = ["session.*", "memory.*", "config.*", "audit.*"]
+
+# GDPR Data Subject Rights (Art. 15, 17, 20)
+# Configures the `blufio gdpr` CLI tooling for erasure, export, and reporting.
+# All fields are optional -- defaults apply if this section is omitted.
+# [gdpr]
+# Custom export directory. Default: {data_dir}/exports/
+# export_dir = "/path/to/exports"
+# Automatically export user data before erasure as a safety net. Default: true
+# export_before_erasure = true
+# Default export format: "json" or "csv". Default: "json"
+# default_format = "json"

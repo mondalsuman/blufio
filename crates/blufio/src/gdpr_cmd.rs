@@ -84,12 +84,13 @@ async fn cmd_erase(
     // a. Fail early if DB encrypted and key not set
     let db_path = &config.storage.database_path;
     let path = std::path::Path::new(db_path);
-    if path.exists() && !blufio_storage::is_plaintext_sqlite(path).unwrap_or(true) {
-        if std::env::var("BLUFIO_DB_KEY").is_err() {
-            return Err(BlufioError::Gdpr(
-                "database is encrypted but BLUFIO_DB_KEY is not set".to_string(),
-            ));
-        }
+    if path.exists()
+        && !blufio_storage::is_plaintext_sqlite(path).unwrap_or(true)
+        && std::env::var("BLUFIO_DB_KEY").is_err()
+    {
+        return Err(BlufioError::Gdpr(
+            "database is encrypted but BLUFIO_DB_KEY is not set".to_string(),
+        ));
     }
 
     // b. Open main DB connection, find user sessions

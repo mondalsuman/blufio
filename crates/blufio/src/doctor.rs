@@ -71,6 +71,9 @@ pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Resul
     // Hot reload health check
     results.push(check_hot_reload(config));
 
+    // GDPR readiness check
+    results.push(check_gdpr(config));
+
     // Retention health check
     results.push(check_retention(config).await);
 
@@ -1244,6 +1247,79 @@ fn check_hot_reload(config: &BlufioConfig) -> CheckResult {
         status: CheckStatus::Pass,
         message: format!("enabled: {}", features.join(", ")),
         duration: start.elapsed(),
+    }
+}
+
+/// Check GDPR readiness: export directory, audit trail, PII detection.
+fn check_gdpr(config: &BlufioConfig) -> CheckResult {
+    let start = Instant::now();
+    let mut issues = Vec::new();
+
+    // 1. Check export directory is writable
+    let export_dir = config
+        .gdpr
+        .export_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            let db = std::path::Path::new(&config.storage.database_path);
+            db.parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("exports")
+        });
+
+    if export_dir.exists() {
+        // Test write access by creating and removing a temp file
+        let test_path = export_dir.join(".gdpr-doctor-check");
+        match std::fs::File::create(&test_path) {
+            Ok(_) => {
+                let _ = std::fs::remove_file(&test_path);
+            }
+            Err(_) => {
+                issues.push("export dir not writable".to_string());
+            }
+        }
+    }
+    // If the directory does not exist yet, that is fine -- it will be created on first export.
+
+    // 2. Check audit trail is enabled
+    if !config.audit.enabled {
+        issues.push("audit trail disabled (recommended for GDPR compliance)".to_string());
+    }
+
+    // 3. Check PII detection is available
+    let test_result = blufio_security::pii::detect_pii("test@example.com");
+    if test_result.is_empty() {
+        issues.push("PII detection not working".to_string());
+    }
+
+    // Build result
+    let dir_label = if export_dir.exists() {
+        "dir ok"
+    } else {
+        "dir will be created"
+    };
+    let audit_label = if config.audit.enabled {
+        "audit on"
+    } else {
+        "audit OFF"
+    };
+    let pii_label = "PII detection ok";
+
+    if issues.is_empty() {
+        CheckResult {
+            name: "GDPR Readiness".to_string(),
+            status: CheckStatus::Pass,
+            message: format!("{dir_label}, {audit_label}, {pii_label}"),
+            duration: start.elapsed(),
+        }
+    } else {
+        CheckResult {
+            name: "GDPR Readiness".to_string(),
+            status: CheckStatus::Warn,
+            message: issues.join("; "),
+            duration: start.elapsed(),
+        }
     }
 }
 
