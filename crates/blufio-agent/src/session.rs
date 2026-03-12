@@ -1010,8 +1010,9 @@ impl SessionActor {
             }
 
             let registry = self.tool_registry.read().await;
-            let output = match registry.get(&tu.name) {
+            let (output, is_open_world) = match registry.get(&tu.name) {
                 Some(tool) => {
+                    let open_world = tool.is_open_world();
                     debug!(
                         session_id = %self.session_id,
                         tool = %tu.name,
@@ -1021,7 +1022,7 @@ impl SessionActor {
                     // Drop the read guard before the async invoke to avoid holding
                     // the lock across an await point.
                     drop(registry);
-                    match tool.invoke(tu.input.clone()).await {
+                    let out = match tool.invoke(tu.input.clone()).await {
                         Ok(output) => output,
                         Err(e) => {
                             warn!(
@@ -1035,7 +1036,8 @@ impl SessionActor {
                                 is_error: true,
                             }
                         }
-                    }
+                    };
+                    (out, open_world)
                 }
                 None => {
                     drop(registry);
@@ -1044,11 +1046,46 @@ impl SessionActor {
                         tool = %tu.name,
                         "tool not found in registry"
                     );
-                    ToolOutput {
+                    (ToolOutput {
                         content: format!("Error: tool '{}' not found", tu.name),
                         is_error: true,
-                    }
+                    }, false)
                 }
+            };
+
+            // L1 output scanning: scan tool output from open-world tools (MCP/WASM)
+            // before feeding results back to the LLM. Uses 0.98 blocking threshold.
+            let output = if is_open_world && !output.is_error {
+                if let Some(ref pipeline) = self.injection_pipeline {
+                    let pipeline_guard = pipeline.lock().await;
+                    let scan = pipeline_guard.scan_input(&output.content, "tool_output", &corr_id);
+                    if scan.flagged && scan.score >= 0.98 {
+                        warn!(
+                            session_id = %self.session_id,
+                            tool = %tu.name,
+                            score = scan.score,
+                            "L1: tool output blocked by injection defense"
+                        );
+                        ToolOutput {
+                            content: "[Tool output blocked by injection defense]".to_string(),
+                            is_error: true,
+                        }
+                    } else {
+                        if scan.flagged {
+                            debug!(
+                                session_id = %self.session_id,
+                                tool = %tu.name,
+                                score = scan.score,
+                                "L1: suspicious patterns in tool output (below blocking threshold)"
+                            );
+                        }
+                        output
+                    }
+                } else {
+                    output
+                }
+            } else {
+                output
             };
 
             results.push((tu.id.clone(), output));

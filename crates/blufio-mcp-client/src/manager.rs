@@ -87,6 +87,16 @@ impl McpClientManager {
         tool_registry: &Arc<RwLock<ToolRegistry>>,
         pin_store: Option<&PinStore>,
     ) -> (Self, ConnectResult) {
+        Self::connect_all_with_classifier(servers, tool_registry, pin_store, None).await
+    }
+
+    /// Connect to all servers with an optional injection classifier.
+    pub async fn connect_all_with_classifier(
+        servers: &[McpServerEntry],
+        tool_registry: &Arc<RwLock<ToolRegistry>>,
+        pin_store: Option<&PinStore>,
+        injection_classifier: Option<Arc<blufio_injection::classifier::InjectionClassifier>>,
+    ) -> (Self, ConnectResult) {
         let mut server_states = HashMap::new();
         let mut connected = 0;
         let mut failed = 0;
@@ -106,7 +116,7 @@ impl McpClientManager {
                 Ok((server, Ok(session))) => {
                     let session = Arc::new(session);
                     // Discover and register tools from this server.
-                    match discover_and_register(&server, &session, tool_registry, pin_store).await {
+                    match discover_and_register(&server, &session, tool_registry, pin_store, injection_classifier.as_ref()).await {
                         Ok(tool_names) => {
                             let count = tool_names.len();
                             info!(
@@ -308,11 +318,15 @@ async fn connect_streamable_http(
 ///
 /// When `pin_store` is provided, each tool's schema hash is verified against stored pins.
 /// On mismatch (rug pull detected), the entire server is blocked (CLNT-07).
+///
+/// When `classifier` is provided, tool descriptions are scanned at discovery time
+/// and tool output will be scanned during invocation (INJC-06).
 async fn discover_and_register(
     server: &McpServerEntry,
     session: &Arc<RunningService<RoleClient, ()>>,
     tool_registry: &Arc<RwLock<ToolRegistry>>,
     pin_store: Option<&PinStore>,
+    classifier: Option<&Arc<blufio_injection::classifier::InjectionClassifier>>,
 ) -> Result<Vec<String>, BlufioError> {
     let tools_result = session
         .list_all_tools()
@@ -369,7 +383,22 @@ async fn discover_and_register(
             }
         }
 
-        let external_tool = ExternalTool::new(
+        // INJC-06: Scan tool description at discovery time for injection patterns.
+        if let Some(cls) = classifier {
+            let desc_scan = cls.classify(&description, "mcp");
+            if desc_scan.score > 0.0 {
+                warn!(
+                    server = %server.name,
+                    tool = %tool_name,
+                    score = desc_scan.score,
+                    categories = ?desc_scan.categories,
+                    "injection pattern detected in MCP tool description (informational)"
+                );
+                blufio_injection::metrics::record_input_detection("mcp_description", &desc_scan.action);
+            }
+        }
+
+        let mut external_tool = ExternalTool::new(
             &server.name,
             tool_name.clone(),
             description,
@@ -377,6 +406,15 @@ async fn discover_and_register(
             session.clone(),
             server.response_size_cap,
         );
+
+        // Wire injection classifier and trust flag into each tool (INJC-06).
+        if let Some(cls) = classifier {
+            if !server.trusted {
+                external_tool.set_injection_classifier(Arc::clone(cls));
+            } else {
+                external_tool.set_trusted(true);
+            }
+        }
 
         let namespaced = format!("{}__{tool_name}", server.name);
         match registry.register_namespaced(&server.name, Arc::new(external_tool)) {

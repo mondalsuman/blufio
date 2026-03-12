@@ -995,9 +995,11 @@ name = "blufio-mcp-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "blufio-bus",
  "blufio-config",
  "blufio-context",
  "blufio-core",
+ "blufio-injection",
  "blufio-prometheus",
  "blufio-skill",
  "blufio-storage",
