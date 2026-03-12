@@ -20,6 +20,7 @@ mod context;
 mod cron_cmd;
 mod doctor;
 mod encrypt;
+mod gdpr_cmd;
 mod healthcheck;
 #[allow(dead_code)]
 mod hot_reload;
@@ -233,6 +234,20 @@ enum Commands {
         #[command(subcommand)]
         action: CronCommands,
     },
+    /// GDPR data subject rights tooling.
+    #[command(
+        after_help = "GDPR data subject rights tooling. Supports right to erasure (Art. 17), \
+        data portability (Art. 20), and transparency (Art. 15).\n\n\
+        Workflow:\n  \
+        1. blufio gdpr list-users\n  \
+        2. blufio gdpr report --user <id>\n  \
+        3. blufio gdpr export --user <id>\n  \
+        4. blufio gdpr erase --user <id>"
+    )]
+    Gdpr {
+        #[command(subcommand)]
+        action: GdprCommands,
+    },
 }
 
 /// Cron subcommands.
@@ -281,6 +296,74 @@ pub enum CronCommands {
     GenerateTimers {
         /// Output directory for generated files.
         output_dir: String,
+    },
+}
+
+/// GDPR subcommands.
+#[derive(Subcommand, Debug)]
+pub enum GdprCommands {
+    /// Delete all data for a specific user (GDPR Art. 17 Right to Erasure).
+    Erase {
+        /// User ID to erase data for.
+        #[arg(long)]
+        user: String,
+        /// Skip interactive confirmation.
+        #[arg(long)]
+        yes: bool,
+        /// Preview deletion counts without actually deleting.
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip automatic export before erasure.
+        #[arg(long)]
+        skip_export: bool,
+        /// Force erasure even if user has active sessions.
+        #[arg(long)]
+        force: bool,
+        /// Timeout in seconds (default: 300).
+        #[arg(long, default_value = "300")]
+        timeout: u64,
+    },
+    /// Generate a transparency report of held data (GDPR Art. 15).
+    Report {
+        /// User ID to report on.
+        #[arg(long)]
+        user: String,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Export user data in JSON or CSV format (GDPR Art. 20 Data Portability).
+    Export {
+        /// User ID to export data for.
+        #[arg(long)]
+        user: String,
+        /// Export format: json or csv.
+        #[arg(long, default_value = "json")]
+        format: String,
+        /// Filter to specific session ID.
+        #[arg(long)]
+        session: Option<String>,
+        /// Include data from this timestamp (ISO 8601).
+        #[arg(long)]
+        since: Option<String>,
+        /// Include data until this timestamp (ISO 8601).
+        #[arg(long)]
+        until: Option<String>,
+        /// Filter to specific data types (comma-separated: messages,memories,sessions,cost_records).
+        #[arg(long, value_delimiter = ',')]
+        r#type: Option<Vec<String>>,
+        /// Apply PII redaction to exported data.
+        #[arg(long)]
+        redact: bool,
+        /// Custom output file path.
+        #[arg(long)]
+        output: Option<String>,
+    },
+    /// List all users with data in the system.
+    ListUsers {
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -899,6 +982,12 @@ async fn main() {
             if let Err(e) =
                 cron_cmd::handle_cron_command(action, &config.storage.database_path).await
             {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Gdpr { action }) => {
+            if let Err(e) = gdpr_cmd::handle_gdpr_command(action, &config).await {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }
