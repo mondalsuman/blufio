@@ -17,6 +17,7 @@ mod bench;
 mod bundle;
 mod classify;
 mod context;
+mod cron_cmd;
 mod doctor;
 mod encrypt;
 mod healthcheck;
@@ -221,6 +222,63 @@ enum Commands {
     Injection {
         #[command(subcommand)]
         action: InjectionCommands,
+    },
+    /// Manage cron jobs: list, add, remove, run, view history, and generate systemd timers.
+    #[command(
+        after_help = "Examples:\n  blufio cron list\n  blufio cron add nightly-backup '0 2 * * *' backup\n  blufio cron run-now nightly-backup\n  blufio cron history --job nightly-backup --limit 5\n  blufio cron generate-timers /etc/systemd/system"
+    )]
+    Cron {
+        #[command(subcommand)]
+        action: CronCommands,
+    },
+}
+
+/// Cron subcommands.
+#[derive(Subcommand, Debug)]
+pub enum CronCommands {
+    /// List all configured cron jobs.
+    List {
+        /// Output as structured JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add a new cron job.
+    Add {
+        /// Unique job name.
+        name: String,
+        /// Cron expression (5-field).
+        schedule: String,
+        /// Task to execute (must be a registered task name).
+        task: String,
+    },
+    /// Remove a cron job.
+    Remove {
+        /// Job name to remove.
+        name: String,
+    },
+    /// Run a cron job immediately.
+    #[command(name = "run-now")]
+    RunNow {
+        /// Job name to run.
+        name: String,
+    },
+    /// Show job execution history.
+    History {
+        /// Filter by job name.
+        #[arg(long)]
+        job: Option<String>,
+        /// Maximum number of entries to show.
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Output as structured JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Generate systemd timer and service unit files for all enabled cron jobs.
+    #[command(name = "generate-timers")]
+    GenerateTimers {
+        /// Output directory for generated files.
+        output_dir: String,
     },
 }
 
@@ -834,6 +892,12 @@ async fn main() {
         }
         Some(Commands::Injection { action }) => {
             run_injection_command(&config, action);
+        }
+        Some(Commands::Cron { action }) => {
+            if let Err(e) = cron_cmd::handle_cron_command(action, &config.storage.database_path).await {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
         }
         None => {
             println!("blufio: use --help for available commands");

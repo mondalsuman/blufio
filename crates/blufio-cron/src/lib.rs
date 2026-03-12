@@ -18,9 +18,11 @@
 pub mod history;
 pub mod retention;
 pub mod scheduler;
+pub mod systemd;
 pub mod tasks;
 
 pub use history::{CronHistoryEntry, query_history};
 pub use retention::RetentionEnforcer;
 pub use scheduler::{CronError, CronScheduler};
+pub use systemd::{CronJobRow, generate_timers};
 pub use tasks::{CronTask, CronTaskError, register_builtin_tasks};
