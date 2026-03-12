@@ -85,21 +85,21 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Hook System
 
-- [ ] **HOOK-01**: 11 lifecycle hooks: pre_start, post_start, pre_shutdown, post_shutdown, session_created, session_closed, pre_compaction, post_compaction, degradation_changed, config_reloaded, memory_extracted
-- [ ] **HOOK-02**: TOML-defined hooks with BTreeMap priority ordering (lower number = higher priority)
-- [ ] **HOOK-03**: Shell-based hook execution with JSON stdin (event context) and stdout (optional response)
-- [ ] **HOOK-04**: Hook sandboxing with configurable timeout, restricted PATH, and optional network isolation
-- [ ] **HOOK-05**: Hooks subscribe to EventBus events for asynchronous trigger
-- [ ] **HOOK-06**: Recursion depth counter prevents hook-triggered-hook infinite loops
+- [x] **HOOK-01**: 11 lifecycle hooks: pre_start, post_start, pre_shutdown, post_shutdown, session_created, session_closed, pre_compaction, post_compaction, degradation_changed, config_reloaded, memory_extracted
+- [x] **HOOK-02**: TOML-defined hooks with BTreeMap priority ordering (lower number = higher priority)
+- [x] **HOOK-03**: Shell-based hook execution with JSON stdin (event context) and stdout (optional response)
+- [x] **HOOK-04**: Hook sandboxing with configurable timeout, restricted PATH, and optional network isolation
+- [x] **HOOK-05**: Hooks subscribe to EventBus events for asynchronous trigger
+- [x] **HOOK-06**: Recursion depth counter prevents hook-triggered-hook infinite loops
 
 ### Hot Reload
 
-- [ ] **HTRL-01**: Config hot reload: file watcher on blufio.toml triggers parse -> validate -> ArcSwap swap
-- [ ] **HTRL-02**: TLS certificate hot reload via rustls ResolvesServerCert with file watcher
-- [ ] **HTRL-03**: Plugin hot reload: re-scan skill directory, reload changed WASM modules, verify signatures
-- [ ] **HTRL-04**: Config propagation via ordered EventBus events with validation-before-swap
-- [ ] **HTRL-05**: Active sessions continue on current config; new sessions use reloaded config
-- [ ] **HTRL-06**: config_reloaded lifecycle hook fires after successful reload
+- [x] **HTRL-01**: Config hot reload: file watcher on blufio.toml triggers parse -> validate -> ArcSwap swap
+- [x] **HTRL-02**: TLS certificate hot reload via rustls ResolvesServerCert with file watcher
+- [x] **HTRL-03**: Plugin hot reload: re-scan skill directory, reload changed WASM modules, verify signatures
+- [x] **HTRL-04**: Config propagation via ordered EventBus events with validation-before-swap
+- [x] **HTRL-05**: Active sessions continue on current config; new sessions use reloaded config
+- [x] **HTRL-06**: config_reloaded lifecycle hook fires after successful reload
 
 ### GDPR Tooling
 
@@ -234,18 +234,18 @@ Deferred to v1.6+.
 | RETN-03 | Phase 58 | Complete |
 | RETN-04 | Phase 58 | Complete |
 | RETN-05 | Phase 58 | Complete |
-| HOOK-01 | Phase 59 | Pending |
-| HOOK-02 | Phase 59 | Pending |
-| HOOK-03 | Phase 59 | Pending |
-| HOOK-04 | Phase 59 | Pending |
-| HOOK-05 | Phase 59 | Pending |
-| HOOK-06 | Phase 59 | Pending |
-| HTRL-01 | Phase 59 | Pending |
-| HTRL-02 | Phase 59 | Pending |
-| HTRL-03 | Phase 59 | Pending |
-| HTRL-04 | Phase 59 | Pending |
-| HTRL-05 | Phase 59 | Pending |
-| HTRL-06 | Phase 59 | Pending |
+| HOOK-01 | Phase 59 | Complete |
+| HOOK-02 | Phase 59 | Complete |
+| HOOK-03 | Phase 59 | Complete |
+| HOOK-04 | Phase 59 | Complete |
+| HOOK-05 | Phase 59 | Complete |
+| HOOK-06 | Phase 59 | Complete |
+| HTRL-01 | Phase 59 | Complete |
+| HTRL-02 | Phase 59 | Complete |
+| HTRL-03 | Phase 59 | Complete |
+| HTRL-04 | Phase 59 | Complete |
+| HTRL-05 | Phase 59 | Complete |
+| HTRL-06 | Phase 59 | Complete |
 | GDPR-01 | Phase 60 | Pending |
 | GDPR-02 | Phase 60 | Pending |
 | GDPR-03 | Phase 60 | Pending |

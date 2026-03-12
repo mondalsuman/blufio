@@ -8,12 +8,9 @@
 //!
 //! This module is only compiled when the `whatsapp-web` feature flag is enabled.
 
-#![cfg(feature = "whatsapp-web")]
-
 use async_trait::async_trait;
 use blufio_config::model::WhatsAppConfig;
-use blufio_core::error::{BlufioError, ChannelErrorKind, ErrorContext};
-use blufio_core::format::{FormatPipeline, split_at_paragraphs};
+use blufio_core::error::BlufioError;
 use blufio_core::traits::{ChannelAdapter, PluginAdapter};
 use blufio_core::types::{
     AdapterType, ChannelCapabilities, FormattingSupport, HealthStatus, InboundMessage, MessageId,

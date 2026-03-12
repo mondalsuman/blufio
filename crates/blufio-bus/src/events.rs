@@ -56,6 +56,8 @@ pub enum BusEvent {
     Security(SecurityEvent),
     /// Cron scheduler events (job completed, job failed).
     Cron(CronEvent),
+    /// Hook execution events (triggered, completed).
+    Hook(HookEvent),
 }
 
 impl BusEvent {
@@ -128,6 +130,8 @@ impl BusEvent {
             BusEvent::Security(SecurityEvent::HitlPrompt { .. }) => "security.hitl_prompt",
             BusEvent::Cron(CronEvent::Completed { .. }) => "cron.completed",
             BusEvent::Cron(CronEvent::Failed { .. }) => "cron.failed",
+            BusEvent::Hook(HookEvent::Triggered { .. }) => "hook.triggered",
+            BusEvent::Hook(HookEvent::Completed { .. }) => "hook.completed",
         }
     }
 }
@@ -786,12 +790,53 @@ pub enum CronEvent {
     },
 }
 
+// --- Hook events ---
+
+/// Hook execution events.
+///
+/// All fields are `String` (or `u32` / `u64` / `Option<String>`) following
+/// the established pattern where event sub-enums avoid cross-crate type
+/// dependencies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HookEvent {
+    /// A hook was triggered for execution.
+    Triggered {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Name of the hook.
+        hook_name: String,
+        /// Event type that triggered this hook.
+        trigger_event: String,
+        /// Execution priority.
+        priority: u32,
+    },
+    /// A hook completed execution.
+    Completed {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Name of the hook.
+        hook_name: String,
+        /// Event type that triggered this hook.
+        trigger_event: String,
+        /// Execution status ("success", "failed", "timeout", "skipped").
+        status: String,
+        /// Execution duration in milliseconds.
+        duration_ms: u64,
+        /// Captured stdout (None if empty).
+        stdout: Option<String>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn all_sixteen_bus_event_variants_exist() {
+    fn all_seventeen_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -922,6 +967,14 @@ mod tests {
             job_name: "backup".into(),
             status: "success".into(),
             duration_ms: 1234,
+        });
+
+        let _hook = BusEvent::Hook(HookEvent::Triggered {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            hook_name: "on-session-start".into(),
+            trigger_event: "session.created".into(),
+            priority: 10,
         });
     }
 
@@ -1394,6 +1447,29 @@ mod tests {
                     error: String::new(),
                 }),
                 "cron.failed",
+            ),
+            // Hook events
+            (
+                BusEvent::Hook(HookEvent::Triggered {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    hook_name: String::new(),
+                    trigger_event: String::new(),
+                    priority: 0,
+                }),
+                "hook.triggered",
+            ),
+            (
+                BusEvent::Hook(HookEvent::Completed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    hook_name: String::new(),
+                    trigger_event: String::new(),
+                    status: String::new(),
+                    duration_ms: 0,
+                    stdout: None,
+                }),
+                "hook.completed",
             ),
         ];
 

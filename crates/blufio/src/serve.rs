@@ -66,6 +66,7 @@ use crate::providers::ConcreteProviderRegistry;
 use blufio_core::ProviderRegistry;
 
 use blufio_cron::CronScheduler;
+use blufio_hooks::HookManager;
 use blufio_memory::{
     HybridRetriever, MemoryExtractor, MemoryProvider, MemoryStore, ModelManager, OnnxEmbedder,
 };
@@ -1461,6 +1462,118 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         debug!("cron scheduler disabled by configuration");
     }
 
+    // --- Config hot reload ---
+    // Spawn after EventBus, before hook system init.
+    if config.hot_reload.enabled {
+        // Determine config file path from XDG hierarchy (same precedence as loader).
+        let config_path = {
+            let local = PathBuf::from("blufio.toml");
+            let xdg = dirs::config_dir().map(|d| d.join("blufio/blufio.toml"));
+            let system = PathBuf::from("/etc/blufio/blufio.toml");
+
+            if local.exists() {
+                local
+            } else if xdg.as_ref().is_some_and(|p| p.exists()) {
+                xdg.unwrap()
+            } else if system.exists() {
+                system
+            } else {
+                // Fallback to local path (watcher will still work if file appears)
+                local
+            }
+        };
+
+        match crate::hot_reload::spawn_config_watcher(
+            config.clone(),
+            config_path,
+            event_bus.clone(),
+            cancel.child_token(),
+        )
+        .await
+        {
+            Ok(_config_swap) => {
+                info!("config hot reload enabled");
+                // config_swap holds Arc<ArcSwap<BlufioConfig>> for session creation.
+                // Sessions that want hot-reloaded config should receive this handle
+                // and call hot_reload::load_config() once at creation (HTRL-05).
+            }
+            Err(e) => {
+                warn!(error = %e, "config hot reload initialization failed, continuing with static config");
+            }
+        }
+
+        // TLS hot reload (if cert/key paths configured)
+        if config.hot_reload.tls_cert_path.is_some() && config.hot_reload.tls_key_path.is_some() {
+            let _tls_result =
+                crate::hot_reload::spawn_tls_watcher(&config.hot_reload, cancel.child_token())
+                    .await;
+            if _tls_result.is_some() {
+                info!("TLS certificate hot reload enabled");
+            }
+        }
+
+        // Skill/plugin hot reload (if configured)
+        if config.hot_reload.watch_skills {
+            let skills_dir = PathBuf::from(&config.skill.skills_dir);
+            if skills_dir.exists() {
+                let skill_bus = event_bus.clone();
+                let skill_cancel = cancel.child_token();
+                match crate::hot_reload::spawn_skill_watcher(skills_dir, skill_bus, skill_cancel)
+                    .await
+                {
+                    Ok(()) => {
+                        info!("skill hot reload watcher enabled");
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "skill hot reload watcher failed, continuing without skill watching");
+                    }
+                }
+            }
+        }
+    } else {
+        debug!("config hot reload disabled by configuration");
+    }
+
+    // --- Hook system ---
+    // Spawn after EventBus, uses CancellationToken for graceful shutdown.
+    // Follows CronScheduler non-fatal init pattern.
+    let hook_manager: Option<Arc<HookManager>> = if config.hooks.enabled {
+        // Validate hook event names
+        let warnings = blufio_hooks::manager::validate_hook_events(&config.hooks);
+        for w in &warnings {
+            warn!("{}", w);
+        }
+
+        let manager = Arc::new(HookManager::new(&config.hooks));
+        let hook_rx = event_bus.subscribe_reliable(256).await;
+        let hook_bus = event_bus.clone();
+        let hook_cancel = cancel.child_token();
+
+        // Execute pre_start hooks synchronously before main loop
+        manager
+            .execute_lifecycle_hooks("pre_start", &event_bus)
+            .await;
+
+        // Spawn EventBus-driven hook run loop (shared via Arc since run takes &self)
+        let run_manager = manager.clone();
+        tokio::spawn(async move {
+            run_manager.run(hook_rx, hook_bus, hook_cancel).await;
+        });
+        info!(
+            hooks = config
+                .hooks
+                .definitions
+                .iter()
+                .filter(|d| d.enabled)
+                .count(),
+            "hook system started"
+        );
+        Some(manager)
+    } else {
+        debug!("hook system disabled by configuration");
+        None
+    };
+
     // Spawn memory monitor background task.
     {
         let daemon_config = config.daemon.clone();
@@ -1690,6 +1803,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         );
     }
 
+    // Fire post_start hooks after all subsystems are initialized.
+    if let Some(ref hm) = hook_manager {
+        hm.execute_lifecycle_hooks("post_start", &event_bus).await;
+    }
+
     // If resilience L5 shutdown is wired, propagate it to the main cancel token.
     if let Some(ref l5_token) = resilience_cancel_token {
         let l5 = l5_token.clone();
@@ -1711,6 +1829,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     agent_loop.run(cancel).await?;
 
+    // Fire pre_shutdown hooks before cleanup begins.
+    if let Some(ref hm) = hook_manager {
+        hm.execute_lifecycle_hooks("pre_shutdown", &event_bus).await;
+    }
+
     // Flush and shut down audit trail (after adapters disconnect, before DB close).
     if let Some(writer) = audit_writer {
         if let Err(e) = writer.flush().await {
@@ -1727,6 +1850,12 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 info!("audit trail flushed (shutdown deferred to last reference drop)");
             }
         }
+    }
+
+    // Fire post_shutdown hooks after all cleanup is complete.
+    if let Some(ref hm) = hook_manager {
+        hm.execute_lifecycle_hooks("post_shutdown", &event_bus)
+            .await;
     }
 
     info!("blufio serve shutdown complete");

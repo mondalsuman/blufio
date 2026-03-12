@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: planning
-stopped_at: Phase 59 context gathered
-last_updated: "2026-03-12T19:07:07.969Z"
-last_activity: 2026-03-12 -- Phase 58 complete (cron scheduler & retention policies)
+status: completed
+stopped_at: Completed 59-04-PLAN.md
+last_updated: "2026-03-12T20:20:33.047Z"
+last_activity: 2026-03-12 -- Phase 59 Plan 04 complete (serve.rs integration + doctor health checks)
 progress:
   total_phases: 11
-  completed_phases: 4
-  total_plans: 19
-  completed_plans: 27
-  percent: 55
+  completed_phases: 5
+  total_plans: 23
+  completed_plans: 31
+  percent: 59
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 59 of 63 (Hook System & Hot Reload) -- seventh of 11 phases in v1.5
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-12 -- Phase 58 complete (cron scheduler & retention policies)
+Plan: 04 of 4 complete
+Status: Phase Complete
+Last activity: 2026-03-12 -- Phase 59 Plan 04 complete (serve.rs integration + doctor health checks)
 
-Progress: [██████░░░░] 55%
+Progress: [██████░░░░] 59%
 
 ## Performance Metrics
 
@@ -71,6 +71,10 @@ Progress: [██████░░░░] 55%
 | Phase 58 P02 | 17min | 2 tasks | 13 files |
 | Phase 58 P03 | 12min | 1 tasks | 6 files |
 | Phase 58 P04 | 4min | 1 tasks | 2 files |
+| Phase 59 P02 | 6min | 1 tasks | 3 files |
+| Phase 59 P03 | 5min | 2 tasks | 3 files |
+| Phase 59 P04 | 6min | 2 tasks | 3 files |
+| Phase 59 P01 | 8min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -171,6 +175,19 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 58]: CLI cron handler uses sync DB for list/add/remove/generate, async DB for run-now/history
 - [Phase 58]: Cron-to-OnCalendar conversion is best-effort with hourly fallback for unsupported specifiers
 - [Phase 58]: CronScheduler opens own DB connection (isolation), init failure non-fatal (warn + continue)
+- [Phase 59]: Watch parent directory (not file directly) for editor compatibility (atomic save creates temp file)
+- [Phase 59]: Non-reloadable fields compared via explicit match arms for compile-time safety
+- [Phase 59]: load_config returns Arc<BlufioConfig> snapshot for session isolation (HTRL-05)
+- [Phase 59]: Configurable debounce from hot_reload.debounce_ms (default 500ms)
+- [Phase 59]: child.wait() with manual stdout/stderr reads instead of wait_with_output() for kill-on-timeout support
+- [Phase 59]: HookEvent uses String fields (no cross-crate deps) following established bus event pattern
+- [Phase 59]: io-util tokio feature added to blufio-hooks for async stdin/stdout pipe handling
+- [Phase 59]: LIFECYCLE_EVENT_MAP resolves TOML names to EventBus type strings at dispatch time (not constructor time)
+- [Phase 59]: TLS hot reload stub (rustls only transitively available, full impl deferred to HTRL-02)
+- [Phase 59]: Skill watcher is detection+notification layer only; SkillStore update in Plan 04 serve.rs
+- [Phase 59]: HookManager::run takes &self, enabling Arc<HookManager> shared between run loop and direct lifecycle calls
+- [Phase 59]: Config path for hot reload determined at runtime from XDG hierarchy (local > user > system)
+- [Phase 59]: pre_shutdown fires after agent_loop.run() returns, post_shutdown after audit trail cleanup
 
 ### Pending Todos
 
@@ -186,6 +203,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T19:07:07.966Z
-Stopped at: Phase 59 context gathered
-Resume file: .planning/phases/59-hook-system-hot-reload/59-CONTEXT.md
+Last session: 2026-03-12T20:11:40.000Z
+Stopped at: Completed 59-04-PLAN.md
+Resume file: None

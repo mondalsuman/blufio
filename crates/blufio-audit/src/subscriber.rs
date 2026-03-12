@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use blufio_bus::events::{
     ApiEvent, AuditMetaEvent, BatchEvent, BusEvent, ChannelEvent, ClassificationEvent,
-    CompactionEvent, ConfigEvent, CronEvent, MemoryEvent, NodeEvent, ProviderEvent,
+    CompactionEvent, ConfigEvent, CronEvent, HookEvent, MemoryEvent, NodeEvent, ProviderEvent,
     ResilienceEvent, SecurityEvent, SessionEvent, SkillEvent, WebhookEvent,
 };
 use metrics::counter;
@@ -844,6 +844,51 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
             })
             .to_string(),
         },
+        // --- Hook events ---
+        BusEvent::Hook(HookEvent::Triggered {
+            timestamp,
+            hook_name,
+            trigger_event,
+            priority,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "trigger".to_string(),
+            resource_type: "hook".to_string(),
+            resource_id: hook_name.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "trigger_event": trigger_event,
+                "priority": priority,
+            })
+            .to_string(),
+        },
+        BusEvent::Hook(HookEvent::Completed {
+            timestamp,
+            hook_name,
+            trigger_event,
+            status,
+            duration_ms,
+            stdout,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "complete".to_string(),
+            resource_type: "hook".to_string(),
+            resource_id: hook_name.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "trigger_event": trigger_event,
+                "status": status,
+                "duration_ms": duration_ms,
+                "stdout": stdout,
+            })
+            .to_string(),
+        },
     }
 }
 
@@ -1276,6 +1321,22 @@ mod tests {
                 timestamp: now_timestamp(),
                 job_name: "retention".into(),
                 error: "timeout".into(),
+            }),
+            BusEvent::Hook(HookEvent::Triggered {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                hook_name: "on-session-start".into(),
+                trigger_event: "session.created".into(),
+                priority: 10,
+            }),
+            BusEvent::Hook(HookEvent::Completed {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                hook_name: "on-session-start".into(),
+                trigger_event: "session.created".into(),
+                status: "success".into(),
+                duration_ms: 50,
+                stdout: Some("ok".into()),
             }),
         ];
 
