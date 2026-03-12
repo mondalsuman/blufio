@@ -954,6 +954,7 @@ name = "blufio-gdpr"
 version = "0.1.0"
 dependencies = [
  "blufio-bus",
+ "blufio-config",
  "blufio-core",
  "chrono",
  "csv",

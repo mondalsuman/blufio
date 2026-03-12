@@ -40,7 +40,7 @@ pub enum GdprError {
 
 impl From<GdprError> for BlufioError {
     fn from(e: GdprError) -> Self {
-        BlufioError::Internal(format!("gdpr: {e}"))
+        BlufioError::Gdpr(e.to_string())
     }
 }
 

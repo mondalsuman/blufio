@@ -908,7 +908,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_seventeen_bus_event_variants_exist() {
+    fn all_eighteen_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -1047,6 +1047,12 @@ mod tests {
             hook_name: "on-session-start".into(),
             trigger_event: "session.created".into(),
             priority: 10,
+        });
+
+        let _gdpr = BusEvent::Gdpr(GdprEvent::ErasureStarted {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            user_id_hash: "sha256hash".into(),
         });
     }
 
@@ -1542,6 +1548,48 @@ mod tests {
                     stdout: None,
                 }),
                 "hook.completed",
+            ),
+            // GDPR events
+            (
+                BusEvent::Gdpr(GdprEvent::ErasureStarted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                }),
+                "gdpr.erasure_started",
+            ),
+            (
+                BusEvent::Gdpr(GdprEvent::ErasureCompleted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                    messages_deleted: 0,
+                    sessions_deleted: 0,
+                    memories_deleted: 0,
+                    archives_deleted: 0,
+                    cost_records_anonymized: 0,
+                    duration_ms: 0,
+                }),
+                "gdpr.erasure_completed",
+            ),
+            (
+                BusEvent::Gdpr(GdprEvent::ExportCompleted {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                    format: String::new(),
+                    file_path: String::new(),
+                    size_bytes: 0,
+                }),
+                "gdpr.export_completed",
+            ),
+            (
+                BusEvent::Gdpr(GdprEvent::ReportGenerated {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    user_id_hash: String::new(),
+                }),
+                "gdpr.report_generated",
             ),
         ];
 

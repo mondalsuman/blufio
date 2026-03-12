@@ -10,6 +10,7 @@ description = "GDPR data subject rights tooling for the Blufio agent framework"
 
 [dependencies]
 blufio-bus = { path = "../blufio-bus" }
+blufio-config = { path = "../blufio-config" }
 blufio-core = { path = "../blufio-core" }
 serde.workspace = true
 serde_json = "1"
