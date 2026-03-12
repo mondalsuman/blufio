@@ -933,6 +933,7 @@ dependencies = [
 name = "blufio-injection"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "blufio-bus",
  "blufio-config",
  "blufio-core",

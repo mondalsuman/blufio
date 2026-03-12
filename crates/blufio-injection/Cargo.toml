@@ -12,6 +12,7 @@ description = "Prompt injection defense system for the Blufio agent framework"
 blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
 blufio-bus = { path = "../blufio-bus" }
+async-trait.workspace = true
 regex.workspace = true
 ring.workspace = true
 hex.workspace = true
