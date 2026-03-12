@@ -13,6 +13,7 @@ blufio-core = { path = "../blufio-core" }
 blufio-config = { path = "../blufio-config" }
 blufio-security = { path = "../blufio-security" }
 blufio-bus = { path = "../blufio-bus" }
+blufio-injection = { path = "../blufio-injection" }
 blufio-storage = { path = "../blufio-storage" }
 async-trait.workspace = true
 tracing.workspace = true
@@ -22,6 +23,7 @@ serde.workspace = true
 serde_json = "1"
 tokio = { workspace = true, features = ["fs"] }
 base64 = "0.22"
+regex.workspace = true
 metrics.workspace = true
 
 [dev-dependencies]

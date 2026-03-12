@@ -78,3 +78,13 @@ pub fn record_hitl_denial() {
 pub fn record_hitl_timeout() {
     counter!("hitl_timeouts_total").increment(1);
 }
+
+/// Record L3 boundary validation successes.
+pub fn record_boundary_validations(count: u64) {
+    counter!("hmac_validations_total", "result" => "success").increment(count);
+}
+
+/// Record L3 boundary validation failures.
+pub fn record_boundary_failures(count: u64) {
+    counter!("hmac_validations_total", "result" => "failure").increment(count);
+}

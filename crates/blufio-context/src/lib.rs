@@ -54,6 +54,9 @@ pub struct AssembledContext {
     /// as Memory entries with `MemorySource::Extracted`. Forwarded from
     /// [`DynamicResult::extracted_entities`].
     pub extracted_entities: Vec<String>,
+    /// L3 boundary validation failure events (if boundary protection was active).
+    /// The caller should emit these via the EventBus for audit logging.
+    pub boundary_events: Vec<blufio_bus::events::SecurityEvent>,
 }
 
 /// The context engine orchestrates three-zone prompt assembly.
@@ -111,6 +114,28 @@ impl ContextEngine {
         inbound: &InboundMessage,
         model: &str,
         max_tokens: u32,
+    ) -> Result<AssembledContext, BlufioError> {
+        self.assemble_with_boundaries(provider, storage, session_id, inbound, model, max_tokens, None)
+            .await
+    }
+
+    /// Assembles a complete provider request from all three zones with
+    /// per-zone budget enforcement and optional L3 HMAC boundary protection.
+    ///
+    /// When `boundary_manager` is `Some`, each zone's text content is wrapped
+    /// with HMAC boundary tokens during assembly, then validated and stripped
+    /// before the LLM sees the content. Any tampered or spoofed zones are
+    /// detected and removed, with [`SecurityEvent::BoundaryFailure`] events
+    /// returned in the result for the caller to emit.
+    pub async fn assemble_with_boundaries(
+        &self,
+        provider: &dyn ProviderAdapter,
+        storage: &dyn StorageAdapter,
+        session_id: &str,
+        inbound: &InboundMessage,
+        model: &str,
+        max_tokens: u32,
+        boundary_manager: Option<&blufio_injection::boundary::BoundaryManager>,
     ) -> Result<AssembledContext, BlufioError> {
         // --- Step 1: Static zone ---
         let system_blocks = self.static_zone.system_blocks();
@@ -170,6 +195,70 @@ impl ContextEngine {
         let mut all_messages = conditional_messages;
         all_messages.extend(dynamic_result.messages);
 
+        // --- Step 4b: L3 HMAC boundary protection ---
+        // Wrap system blocks and messages with HMAC boundaries, then validate
+        // and strip before the LLM sees the content.
+        let (system_blocks, all_messages, boundary_events) = if let Some(bm) = boundary_manager {
+            use blufio_injection::boundary::ZoneType;
+
+            // Wrap system_blocks text content with static zone boundaries.
+            let wrapped_system = wrap_system_blocks(
+                system_blocks.clone(),
+                bm,
+                ZoneType::Static,
+                "system",
+            );
+
+            // Wrap message content blocks with zone boundaries.
+            // Conditional provider messages = first N messages (before dynamic).
+            // Dynamic messages = remaining messages.
+            let wrapped_messages = wrap_messages_with_boundaries(&all_messages, bm);
+
+            // Concatenate all wrapped text for boundary validation.
+            let mut all_wrapped_text = String::new();
+            if let serde_json::Value::Array(ref blocks) = wrapped_system {
+                for block in blocks {
+                    if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                        all_wrapped_text.push_str(text);
+                        all_wrapped_text.push('\n');
+                    }
+                }
+            }
+            for msg in &wrapped_messages {
+                for block in &msg.content {
+                    if let blufio_core::types::ContentBlock::Text { text } = block {
+                        all_wrapped_text.push_str(text);
+                        all_wrapped_text.push('\n');
+                    }
+                }
+            }
+
+            // Validate boundaries and collect failure events.
+            let boundary_corr_id = uuid::Uuid::new_v4().to_string();
+            let (_stripped, events) = bm.validate_and_strip(&all_wrapped_text, &boundary_corr_id);
+
+            // Log any boundary failures.
+            if !events.is_empty() {
+                tracing::warn!(
+                    session_id = session_id,
+                    failure_count = events.len(),
+                    "L3: boundary validation detected {} failure(s)",
+                    events.len()
+                );
+                blufio_injection::metrics::record_boundary_failures(events.len() as u64);
+            } else {
+                blufio_injection::metrics::record_boundary_validations(1);
+            }
+
+            // Strip boundary tokens from the actual content before sending to LLM.
+            let clean_system = strip_boundary_tokens_from_system_blocks(wrapped_system);
+            let clean_messages = strip_boundary_tokens_from_messages(wrapped_messages);
+
+            (clean_system, clean_messages, events)
+        } else {
+            (system_blocks, all_messages, vec![])
+        };
+
         // --- Step 5: Build ProviderRequest ---
         let request = ProviderRequest {
             model: model.to_string(),
@@ -194,6 +283,7 @@ impl ContextEngine {
             compaction_model,
             dropped_providers: dropped,
             extracted_entities: dynamic_result.extracted_entities,
+            boundary_events,
         })
     }
 
@@ -206,6 +296,126 @@ impl ContextEngine {
     pub fn static_zone(&self) -> &StaticZone {
         &self.static_zone
     }
+}
+
+// ---------------------------------------------------------------------------
+// L3 boundary helper functions
+// ---------------------------------------------------------------------------
+
+/// Regex for stripping boundary tokens from text content.
+static BOUNDARY_STRIP_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(r"<<BLUF-ZONE-v1:\w+:.+?:[0-9a-f]{64}>>")
+        .expect("boundary strip regex must compile")
+});
+
+/// Wrap text blocks within system_blocks JSON with HMAC boundary tokens.
+fn wrap_system_blocks(
+    system_blocks: serde_json::Value,
+    bm: &blufio_injection::boundary::BoundaryManager,
+    zone: blufio_injection::boundary::ZoneType,
+    source: &str,
+) -> serde_json::Value {
+    if let serde_json::Value::Array(blocks) = system_blocks {
+        let wrapped: Vec<serde_json::Value> = blocks
+            .into_iter()
+            .map(|mut block| {
+                if let Some(text) = block.get("text").and_then(|t| t.as_str()).map(|s| s.to_string()) {
+                    let wrapped_text = bm.wrap_content(zone, source, &text);
+                    block["text"] = serde_json::Value::String(wrapped_text);
+                }
+                block
+            })
+            .collect();
+        serde_json::Value::Array(wrapped)
+    } else {
+        system_blocks
+    }
+}
+
+/// Wrap text content blocks within messages with HMAC boundary tokens.
+fn wrap_messages_with_boundaries(
+    messages: &[blufio_core::types::ProviderMessage],
+    bm: &blufio_injection::boundary::BoundaryManager,
+) -> Vec<blufio_core::types::ProviderMessage> {
+    messages
+        .iter()
+        .map(|msg| {
+            // Determine zone type based on role.
+            let zone = if msg.role == "system" {
+                blufio_injection::boundary::ZoneType::Static
+            } else {
+                blufio_injection::boundary::ZoneType::Dynamic
+            };
+            let source = &msg.role;
+
+            let content = msg
+                .content
+                .iter()
+                .map(|block| match block {
+                    blufio_core::types::ContentBlock::Text { text } => {
+                        blufio_core::types::ContentBlock::Text {
+                            text: bm.wrap_content(zone, source, text),
+                        }
+                    }
+                    other => other.clone(),
+                })
+                .collect();
+
+            blufio_core::types::ProviderMessage {
+                role: msg.role.clone(),
+                content,
+            }
+        })
+        .collect()
+}
+
+/// Strip boundary tokens from system_blocks JSON text content.
+fn strip_boundary_tokens_from_system_blocks(
+    system_blocks: serde_json::Value,
+) -> serde_json::Value {
+    if let serde_json::Value::Array(blocks) = system_blocks {
+        let stripped: Vec<serde_json::Value> = blocks
+            .into_iter()
+            .map(|mut block| {
+                if let Some(text) = block.get("text").and_then(|t| t.as_str()).map(|s| s.to_string()) {
+                    let clean = BOUNDARY_STRIP_RE.replace_all(&text, "").to_string();
+                    block["text"] = serde_json::Value::String(clean);
+                }
+                block
+            })
+            .collect();
+        serde_json::Value::Array(stripped)
+    } else {
+        system_blocks
+    }
+}
+
+/// Strip boundary tokens from message text content blocks.
+fn strip_boundary_tokens_from_messages(
+    messages: Vec<blufio_core::types::ProviderMessage>,
+) -> Vec<blufio_core::types::ProviderMessage> {
+    messages
+        .into_iter()
+        .map(|msg| {
+            let content = msg
+                .content
+                .into_iter()
+                .map(|block| match block {
+                    blufio_core::types::ContentBlock::Text { text } => {
+                        blufio_core::types::ContentBlock::Text {
+                            text: BOUNDARY_STRIP_RE.replace_all(&text, "").to_string(),
+                        }
+                    }
+                    other => other,
+                })
+                .collect();
+
+            blufio_core::types::ProviderMessage {
+                role: msg.role,
+                content,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -251,6 +461,7 @@ mod tests {
             compaction_model: Some("claude-haiku-4-5-20250901".into()),
             dropped_providers: vec![],
             extracted_entities: vec![],
+            boundary_events: vec![],
         };
 
         assert_eq!(ctx.compaction_usages.len(), 1);
@@ -276,6 +487,7 @@ mod tests {
             compaction_model: None,
             dropped_providers: vec![],
             extracted_entities: vec![],
+            boundary_events: vec![],
         };
 
         assert!(ctx.compaction_usages.is_empty());
@@ -299,6 +511,7 @@ mod tests {
             compaction_model: None,
             dropped_providers: vec!["archive".to_string()],
             extracted_entities: vec![],
+            boundary_events: vec![],
         };
 
         assert_eq!(ctx.dropped_providers.len(), 1);

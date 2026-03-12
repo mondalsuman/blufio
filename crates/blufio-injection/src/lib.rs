@@ -20,5 +20,4 @@ pub mod metrics;
 pub mod output_screen;
 pub mod boundary;
 pub mod hitl;
-// Future modules:
-// pub mod pipeline;
+pub mod pipeline;

@@ -1531,6 +1531,53 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         None
     };
 
+    // --- Injection defense pipeline (INJC-06) ---
+    // Initialize before config is moved into AgentLoop.
+    let injection_pipeline: Option<
+        Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>,
+    > = if config.injection_defense.enabled {
+        let classifier =
+            blufio_injection::classifier::InjectionClassifier::new(&config.injection_defense);
+        let pipeline = blufio_injection::pipeline::InjectionPipeline::new(
+            &config.injection_defense,
+            classifier,
+            Some(event_bus.clone()),
+        );
+
+        let active_layers: Vec<&str> = [
+            Some("L1"), // L1 is always active when injection defense is enabled
+            if config.injection_defense.hmac_boundaries.enabled {
+                Some("L3")
+            } else {
+                None
+            },
+            if config.injection_defense.output_screening.enabled {
+                Some("L4")
+            } else {
+                None
+            },
+            if config.injection_defense.hitl.enabled {
+                Some("L5")
+            } else {
+                None
+            },
+        ]
+        .iter()
+        .filter_map(|l| *l)
+        .collect();
+
+        info!(
+            layers = ?active_layers,
+            dry_run = config.injection_defense.dry_run,
+            "injection defense pipeline initialized"
+        );
+
+        Some(Arc::new(tokio::sync::Mutex::new(pipeline)))
+    } else {
+        debug!("injection defense disabled by configuration");
+        None
+    };
+
     // Create and run agent loop with channel multiplexer.
     let mut agent_loop = AgentLoop::new(
         Box::new(mux),
@@ -1568,6 +1615,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             chain = ?fallback_chain,
             "fallback provider chain configured"
         );
+    }
+
+    // Wire injection defense pipeline (INJC-06) if enabled.
+    if let Some(ref pipeline) = injection_pipeline {
+        agent_loop.set_injection_pipeline(pipeline.clone());
     }
 
     // Log integration status summary.

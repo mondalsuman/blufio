@@ -82,6 +82,8 @@ pub struct AgentLoop {
     provider_registry: Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>,
     /// Fallback chain of provider names to try when primary breaker is open.
     fallback_chain: Vec<String>,
+    /// Shared injection defense pipeline for all sessions.
+    injection_pipeline: Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
 }
 
 impl AgentLoop {
@@ -127,6 +129,7 @@ impl AgentLoop {
             provider_name: "anthropic".to_string(),
             provider_registry: None,
             fallback_chain: Vec::new(),
+            injection_pipeline: None,
         })
     }
 
@@ -164,6 +167,14 @@ impl AgentLoop {
     /// Sets the fallback chain of provider names.
     pub fn set_fallback_chain(&mut self, chain: Vec<String>) {
         self.fallback_chain = chain;
+    }
+
+    /// Sets the injection defense pipeline for all sessions.
+    pub fn set_injection_pipeline(
+        &mut self,
+        pipeline: Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>,
+    ) {
+        self.injection_pipeline = Some(pipeline);
     }
 
     /// Runs the main agent loop until the cancellation token is triggered.
@@ -676,6 +687,8 @@ impl AgentLoop {
                     provider_registry: self.provider_registry.clone(),
                     fallback_chain: self.fallback_chain.clone(),
                     event_bus: self.event_bus.clone(),
+                    injection_pipeline: self.injection_pipeline.clone(),
+                    boundary_manager: None,
                 });
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
@@ -731,6 +744,8 @@ impl AgentLoop {
             provider_registry: self.provider_registry.clone(),
             fallback_chain: self.fallback_chain.clone(),
             event_bus: self.event_bus.clone(),
+            injection_pipeline: None,
+            boundary_manager: None,
         });
         self.sessions.insert(session_key, actor);
         #[cfg(feature = "prometheus")]
