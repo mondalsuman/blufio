@@ -13,11 +13,14 @@
 //! - [`CronTaskError`] -- errors from task execution
 //! - [`CronScheduler`] -- main scheduler with dispatch loop
 //! - [`CronHistoryEntry`] -- job execution history entry
+//! - [`RetentionEnforcer`] -- two-phase retention enforcement engine
 
 pub mod history;
+pub mod retention;
 pub mod scheduler;
 pub mod tasks;
 
 pub use history::{CronHistoryEntry, query_history};
+pub use retention::RetentionEnforcer;
 pub use scheduler::{CronError, CronScheduler};
-pub use tasks::{CronTask, CronTaskError};
+pub use tasks::{CronTask, CronTaskError, register_builtin_tasks};

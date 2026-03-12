@@ -380,7 +380,7 @@ impl CronScheduler {
     }
 
     /// Check if a job is due based on its cron expression and last run time.
-    fn is_due(cron: &Cron, last_run_at: Option<&str>) -> bool {
+    fn is_due(cron: &croner::Cron, last_run_at: Option<&str>) -> bool {
         let now = Utc::now();
 
         match last_run_at {
@@ -411,6 +411,7 @@ impl CronScheduler {
     }
 
     /// Load all enabled jobs from the database.
+    #[allow(clippy::type_complexity)]
     async fn load_enabled_jobs(
         &self,
     ) -> Result<Vec<(String, String, String, Option<String>)>, CronError> {
