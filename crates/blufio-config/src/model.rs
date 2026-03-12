@@ -49,6 +49,18 @@ pub struct BlufioConfig {
     #[serde(default)]
     pub matrix: MatrixConfig,
 
+    /// Email channel integration settings.
+    #[serde(default)]
+    pub email: EmailConfig,
+
+    /// iMessage channel integration settings (experimental, requires macOS + BlueBubbles).
+    #[serde(default)]
+    pub imessage: IMessageConfig,
+
+    /// SMS channel integration settings (Twilio).
+    #[serde(default)]
+    pub sms: SmsConfig,
+
     /// Cross-channel bridge configuration.
     #[serde(default)]
     pub bridge: std::collections::HashMap<String, BridgeGroupConfig>,
@@ -400,6 +412,124 @@ pub struct MatrixConfig {
     /// List of allowed Matrix user IDs (@user:server).
     #[serde(default)]
     pub allowed_users: Vec<String>,
+}
+
+/// Email channel integration configuration.
+///
+/// IMAP for incoming messages, SMTP (lettre) for outgoing.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EmailConfig {
+    /// IMAP server hostname. `None` disables email integration.
+    #[serde(default)]
+    pub imap_host: Option<String>,
+    /// IMAP server port (default: 993 for IMAPS).
+    #[serde(default)]
+    pub imap_port: Option<u16>,
+    /// SMTP server hostname. Defaults to imap_host if not set.
+    #[serde(default)]
+    pub smtp_host: Option<String>,
+    /// SMTP server port (default: 587 for STARTTLS).
+    #[serde(default)]
+    pub smtp_port: Option<u16>,
+    /// Email username (used for both IMAP and SMTP by default).
+    #[serde(default)]
+    pub username: Option<String>,
+    /// Email password (used for both IMAP and SMTP by default).
+    #[serde(default)]
+    pub password: Option<String>,
+    /// Separate SMTP username (overrides username for SMTP if set).
+    #[serde(default)]
+    pub smtp_username: Option<String>,
+    /// Separate SMTP password (overrides password for SMTP if set).
+    #[serde(default)]
+    pub smtp_password: Option<String>,
+    /// From address for outgoing emails.
+    #[serde(default)]
+    pub from_address: Option<String>,
+    /// Display name for outgoing emails (default: "Blufio").
+    #[serde(default)]
+    pub from_name: Option<String>,
+    /// IMAP polling interval in seconds (default: 30).
+    #[serde(default = "default_email_poll_interval")]
+    pub poll_interval_secs: u64,
+    /// IMAP folders to monitor (default: ["INBOX"]).
+    #[serde(default)]
+    pub folders: Vec<String>,
+    /// Allow insecure (non-TLS) connections (default: false).
+    #[serde(default)]
+    pub allow_insecure: bool,
+    /// List of allowed sender email addresses. Empty = accept all.
+    #[serde(default)]
+    pub allowed_senders: Vec<String>,
+    /// Optional footer appended to outgoing emails.
+    #[serde(default)]
+    pub email_footer: Option<String>,
+}
+
+fn default_email_poll_interval() -> u64 {
+    30
+}
+
+/// iMessage channel integration configuration (experimental).
+///
+/// Requires a BlueBubbles server running on macOS.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IMessageConfig {
+    /// BlueBubbles server URL. `None` disables iMessage integration.
+    #[serde(default)]
+    pub bluebubbles_url: Option<String>,
+    /// BlueBubbles API password.
+    #[serde(default)]
+    pub api_password: Option<String>,
+    /// Webhook callback URL for BlueBubbles to POST incoming messages.
+    #[serde(default)]
+    pub webhook_callback_url: Option<String>,
+    /// Shared secret for webhook endpoint validation.
+    #[serde(default)]
+    pub webhook_secret: Option<String>,
+    /// Trigger prefix for group chats (default: "Blufio").
+    #[serde(default)]
+    pub group_trigger: Option<String>,
+    /// List of allowed contact phone numbers or identifiers. Empty = accept all.
+    #[serde(default)]
+    pub allowed_contacts: Vec<String>,
+}
+
+/// SMS channel integration configuration (Twilio).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SmsConfig {
+    /// Twilio Account SID. `None` disables SMS integration.
+    #[serde(default)]
+    pub account_sid: Option<String>,
+    /// Twilio Auth Token.
+    #[serde(default)]
+    pub auth_token: Option<String>,
+    /// Twilio phone number in E.164 format (+1234567890).
+    #[serde(default)]
+    pub twilio_phone_number: Option<String>,
+    /// Webhook URL for Twilio to POST incoming messages.
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+    /// Maximum outbound message length in characters (default: 1600).
+    #[serde(default = "default_sms_max_length")]
+    pub max_response_length: usize,
+    /// Outbound rate limit in messages per second (default: 1).
+    #[serde(default = "default_sms_rate_limit")]
+    pub rate_limit_per_second: f32,
+    /// List of allowed phone numbers. Empty = accept all.
+    #[serde(default)]
+    pub allowed_numbers: Vec<String>,
+}
+
+fn default_sms_max_length() -> usize {
+    1600
+}
+
+fn default_sms_rate_limit() -> f32 {
+    1.0
 }
 
 /// Cross-channel bridge group configuration.
