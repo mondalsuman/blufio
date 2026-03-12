@@ -11,7 +11,13 @@
 //!
 //! - [`CronTask`] -- trait that all cron job implementations satisfy
 //! - [`CronTaskError`] -- errors from task execution
+//! - [`CronScheduler`] -- main scheduler with dispatch loop
+//! - [`CronHistoryEntry`] -- job execution history entry
 
+pub mod history;
+pub mod scheduler;
 pub mod tasks;
 
+pub use history::{CronHistoryEntry, query_history};
+pub use scheduler::{CronError, CronScheduler};
 pub use tasks::{CronTask, CronTaskError};
