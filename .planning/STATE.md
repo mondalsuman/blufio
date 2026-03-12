@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 58-01-PLAN.md
-last_updated: "2026-03-12T18:12:48.000Z"
-last_activity: 2026-03-12 -- Phase 58 Plan 01 complete
+stopped_at: Completed 58-02-PLAN.md
+last_updated: "2026-03-12T18:35:13.000Z"
+last_activity: 2026-03-12 -- Phase 58 Plan 02 complete
 progress:
   total_phases: 11
   completed_phases: 3
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 58 of 63 (Cron Scheduler & Retention Policies) -- sixth of 11 phases in v1.5
-Plan: 1 of 5 complete
+Plan: 2 of 5 complete
 Status: Executing
-Last activity: 2026-03-12 -- Phase 58 Plan 01 complete (cron foundation + soft-delete filtering)
+Last activity: 2026-03-12 -- Phase 58 Plan 02 complete (scheduler core + retention engine)
 
 Progress: [████░░░░░░] 45%
 
@@ -68,6 +68,7 @@ Progress: [████░░░░░░] 45%
 | Phase 57 P04 | 57min | 2 tasks | 17 files |
 | Phase 57 P05 | 4min | 2 tasks | 2 files |
 | Phase 58 P01 | 18min | 2 tasks | 19 files |
+| Phase 58 P02 | 17min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,11 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 58]: CronEvent uses String fields to avoid cross-crate deps (following established bus event pattern)
 - [Phase 58]: Soft-delete filtering added to classification queries in addition to CRUD queries
 - [Phase 58]: Test DB schemas updated with deleted_at column across 6 files for consistency
+- [Phase 58]: CronScheduler dispatches tasks inline (not tokio::spawn) since CronTask is not Clone
+- [Phase 58]: croner v3 find_next_occurrence returns Result (not Option), handled with Ok/Err
+- [Phase 58]: History module uses String errors (not BlufioError) to avoid cross-crate complexity
+- [Phase 58]: Memory cleanup uses soft-delete for consistency with retention model
+- [Phase 58]: Retention soft-delete uses format!() for table/days interpolation (safe: internal values only)
 
 ### Pending Todos
 
@@ -175,6 +181,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T18:12:48.000Z
-Stopped at: Completed 58-01-PLAN.md
-Resume file: .planning/phases/58-cron-scheduler-retention-policies/58-02-PLAN.md
+Last session: 2026-03-12T18:35:13.000Z
+Stopped at: Completed 58-02-PLAN.md
+Resume file: .planning/phases/58-cron-scheduler-retention-policies/58-03-PLAN.md
