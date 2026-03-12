@@ -107,6 +107,9 @@ semver.workspace = true
 sysinfo.workspace = true
 wasmtime.workspace = true
 async-trait.workspace = true
+arc-swap.workspace = true
+notify.workspace = true
+notify-debouncer-mini.workspace = true
 flate2 = "1"
 tar = "0.4"
 

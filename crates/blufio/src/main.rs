@@ -21,6 +21,8 @@ mod cron_cmd;
 mod doctor;
 mod encrypt;
 mod healthcheck;
+#[allow(dead_code)]
+mod hot_reload;
 #[cfg(feature = "mcp-server")]
 mod mcp_server;
 mod migrate;
