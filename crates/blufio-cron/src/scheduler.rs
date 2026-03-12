@@ -89,12 +89,7 @@ impl CronScheduler {
                        task = excluded.task, \
                        enabled = excluded.enabled, \
                        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-                    rusqlite::params![
-                        job.name,
-                        job.schedule,
-                        job.task,
-                        job.enabled as i32,
-                    ],
+                    rusqlite::params![job.name, job.schedule, job.task, job.enabled as i32,],
                 )?;
             }
 
@@ -119,10 +114,7 @@ impl CronScheduler {
             }
 
             // Reset any stale running locks (from previous crashes)
-            conn.execute(
-                "UPDATE cron_jobs SET running = 0 WHERE running = 1",
-                [],
-            )?;
+            conn.execute("UPDATE cron_jobs SET running = 0 WHERE running = 1", [])?;
 
             Ok(())
         })
@@ -298,8 +290,7 @@ impl CronScheduler {
             };
 
             // Execute with timeout
-            let result =
-                tokio::time::timeout(effective_timeout, task.execute()).await;
+            let result = tokio::time::timeout(effective_timeout, task.execute()).await;
 
             let duration_ms = started.elapsed().as_millis() as u64;
 
@@ -416,23 +407,25 @@ impl CronScheduler {
         &self,
     ) -> Result<Vec<(String, String, String, Option<String>)>, CronError> {
         self.db
-            .call(|conn| -> Result<Vec<(String, String, String, Option<String>)>, rusqlite::Error> {
-                let mut stmt = conn.prepare(
-                    "SELECT name, schedule, task, last_run_at \
+            .call(
+                |conn| -> Result<Vec<(String, String, String, Option<String>)>, rusqlite::Error> {
+                    let mut stmt = conn.prepare(
+                        "SELECT name, schedule, task, last_run_at \
                      FROM cron_jobs WHERE enabled = 1",
-                )?;
-                let rows = stmt
-                    .query_map([], |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, String>(2)?,
-                            row.get::<_, Option<String>>(3)?,
-                        ))
-                    })?
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(rows)
-            })
+                    )?;
+                    let rows = stmt
+                        .query_map([], |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, String>(1)?,
+                                row.get::<_, String>(2)?,
+                                row.get::<_, Option<String>>(3)?,
+                            ))
+                        })?
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(rows)
+                },
+            )
             .await
             .map_err(|e| CronError::DatabaseError(e.to_string()))
     }
@@ -495,9 +488,7 @@ impl CronScheduler {
         // Record start
         let history_id = history::record_start(&self.db, job_name)
             .await
-            .map_err(|e| {
-                CronError::DatabaseError(format!("Failed to record start: {e}"))
-            })?;
+            .map_err(|e| CronError::DatabaseError(format!("Failed to record start: {e}")))?;
 
         // Execute with timeout
         let result = tokio::time::timeout(timeout, task.execute()).await;

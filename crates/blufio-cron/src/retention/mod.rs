@@ -79,12 +79,9 @@ impl RetentionEnforcer {
         let mut report = RetentionReport::default();
 
         // Phase 1: Soft-delete expired records
-        let soft_breakdown = soft_delete::run_soft_delete(
-            &self.db,
-            &self.config.periods,
-            &self.config.restricted,
-        )
-        .await?;
+        let soft_breakdown =
+            soft_delete::run_soft_delete(&self.db, &self.config.periods, &self.config.restricted)
+                .await?;
 
         report.soft_delete_breakdown = soft_breakdown;
         report.soft_deleted_count = report.soft_delete_breakdown.messages
@@ -93,11 +90,8 @@ impl RetentionEnforcer {
             + report.soft_delete_breakdown.memories;
 
         // Phase 2: Permanently delete past-grace records
-        let perm_breakdown = permanent::run_permanent_delete(
-            &self.db,
-            self.config.grace_period_days,
-        )
-        .await?;
+        let perm_breakdown =
+            permanent::run_permanent_delete(&self.db, self.config.grace_period_days).await?;
 
         report.permanent_delete_breakdown = perm_breakdown;
         report.permanently_deleted_count = report.permanent_delete_breakdown.messages

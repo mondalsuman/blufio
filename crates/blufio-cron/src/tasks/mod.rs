@@ -77,10 +77,8 @@ pub fn register_builtin_tasks(
     let mut registry: HashMap<String, Box<dyn CronTask>> = HashMap::new();
 
     // 1. Memory cleanup
-    let mem_task = memory_cleanup::MemoryCleanupTask::new(
-        Arc::clone(&db),
-        config.memory.max_entries,
-    );
+    let mem_task =
+        memory_cleanup::MemoryCleanupTask::new(Arc::clone(&db), config.memory.max_entries);
     registry.insert(mem_task.name().to_string(), Box::new(mem_task));
 
     // 2. Backup
@@ -103,8 +101,7 @@ pub fn register_builtin_tasks(
     } else {
         RetentionConfig::default()
     };
-    let retention_task =
-        retention::RetentionTask::new(Arc::clone(&db), retention_config);
+    let retention_task = retention::RetentionTask::new(Arc::clone(&db), retention_config);
     registry.insert(retention_task.name().to_string(), Box::new(retention_task));
 
     registry

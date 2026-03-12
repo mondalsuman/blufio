@@ -49,9 +49,7 @@ impl CronTask for BackupTask {
             .map_err(|e| CronTaskError::DatabaseError(e.to_string()))
             .map(|path| {
                 // Get backup file size
-                let size = std::fs::metadata(&path)
-                    .map(|m| m.len())
-                    .unwrap_or(0);
+                let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
                 format!("Backup written to {path} ({size} bytes)")
             })
     }

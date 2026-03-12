@@ -48,7 +48,8 @@ pub async fn get_entity_classification(
 
     db.connection()
         .call(move |conn| {
-            let sql = format!("SELECT classification FROM {table} WHERE id = ?1 AND deleted_at IS NULL");
+            let sql =
+                format!("SELECT classification FROM {table} WHERE id = ?1 AND deleted_at IS NULL");
             let mut stmt = conn.prepare(&sql)?;
             let result = stmt.query_row(params![entity_id], |row| row.get::<_, String>(0));
             match result {
@@ -77,7 +78,9 @@ pub async fn set_entity_classification(
 
     db.connection()
         .call(move |conn| {
-            let sql = format!("UPDATE {table} SET classification = ?1 WHERE id = ?2 AND deleted_at IS NULL");
+            let sql = format!(
+                "UPDATE {table} SET classification = ?1 WHERE id = ?2 AND deleted_at IS NULL"
+            );
             let rows_affected = conn.execute(&sql, params![level, entity_id])?;
             Ok(rows_affected > 0)
         })
