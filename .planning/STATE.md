@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: in-progress
-stopped_at: Phase 60 Plan 01 complete
-last_updated: "2026-03-12T21:37:30Z"
+status: executing
+stopped_at: Completed 60-02-PLAN.md
+last_updated: "2026-03-12T21:50:56.615Z"
 last_activity: 2026-03-12 -- Phase 60 Plan 01 complete (GDPR crate foundation + bus/config/error integration)
 progress:
   total_phases: 11
   completed_phases: 5
-  total_plans: 23
-  completed_plans: 32
+  total_plans: 26
+  completed_plans: 33
   percent: 61
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 60 of 63 (GDPR Tooling & Data Export) -- eighth of 11 phases in v1.5
-Plan: 01 of 3 complete
+Plan: 02 of 3 complete
 Status: In Progress
-Last activity: 2026-03-12 -- Phase 60 Plan 01 complete (GDPR crate foundation + bus/config/error integration)
+Last activity: 2026-03-12 -- Phase 60 Plan 02 complete (GDPR core logic: erasure, export, report, manifest)
 
 Progress: [██████░░░░] 61%
 
@@ -76,6 +76,7 @@ Progress: [██████░░░░] 61%
 | Phase 59 P04 | 6min | 2 tasks | 3 files |
 | Phase 59 P01 | 8min | 2 tasks | 8 files |
 | Phase 60 P01 | 8min | 2 tasks | 10 files |
+| Phase 60 P02 | 8min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,9 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 60]: BlufioError::Gdpr uses simple String variant (following Config/Vault/Security pattern)
 - [Phase 60]: GdprEvent added to BusEvent with SHA-256 hashed user_id (never plaintext in events)
 - [Phase 60]: Audit subscriber gets explicit match arms for all 4 GdprEvent variants (not wildcard)
+- [Phase 60]: UserSession lightweight struct defined locally in erasure.rs to avoid coupling to blufio-core::types::Session
+- [Phase 60]: CSV export uses single-file format with data_type discriminator column for mixed record types
+- [Phase 60]: Audit entry count uses LIKE matching on actor/session_id/details_json with pii_marker=0 filter
 
 ### Pending Todos
 
@@ -208,6 +212,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T21:37:30Z
-Stopped at: Completed 60-01-PLAN.md
-Resume file: .planning/phases/60-gdpr-tooling-data-export/60-02-PLAN.md
+Last session: 2026-03-12T21:50:56.612Z
+Stopped at: Completed 60-02-PLAN.md
+Resume file: None
