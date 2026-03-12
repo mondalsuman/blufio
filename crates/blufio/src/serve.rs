@@ -507,6 +507,19 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         SkillProvider::new(tool_registry.clone(), config.skill.max_skills_in_prompt);
     context_engine.add_conditional_provider(Box::new(skill_provider));
 
+    // Create injection classifier for MCP description scanning (INJC-06 gap closure).
+    // This is separate from the pipeline classifier created later -- MCP init happens
+    // before the full pipeline is built, so we need an early classifier for description scanning.
+    #[cfg(feature = "mcp-client")]
+    let mcp_injection_classifier: Option<Arc<blufio_injection::classifier::InjectionClassifier>> =
+        if config.injection_defense.enabled {
+            Some(Arc::new(
+                blufio_injection::classifier::InjectionClassifier::new(&config.injection_defense),
+            ))
+        } else {
+            None
+        };
+
     // Initialize MCP client connections to external servers (if configured).
     #[cfg(feature = "mcp-client")]
     let (_mcp_client_manager, _mcp_health_sessions) = if !config.mcp.servers.is_empty() {
@@ -533,10 +546,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             }
         };
 
-        let (manager, result) = blufio_mcp_client::McpClientManager::connect_all(
+        let (manager, result) = blufio_mcp_client::McpClientManager::connect_all_with_classifier(
             &config.mcp.servers,
             &tool_registry,
             pin_store.as_ref(),
+            mcp_injection_classifier,
         )
         .await;
 
