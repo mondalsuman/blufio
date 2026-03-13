@@ -103,7 +103,14 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Active
 
-<!-- No active requirements — planning next milestone -->
+## Current Milestone: v1.6 Performance & Scalability Validation
+
+**Goal:** Migrate vector search to sqlite-vec for production-scale memory, validate performance claims with benchmarks, and harden injection pattern detection.
+
+**Target features:**
+- sqlite-vec integration replacing in-memory cosine similarity for scalable vector search
+- Performance benchmarking suite (binary size, memory usage, token reduction validation)
+- Injection defense pattern expansion and classifier tuning
 
 ## Shipped Milestones
 
@@ -236,4 +243,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Direct SQL INSERT for CLI audit events | CLI operates outside EventBus lifecycle, uses tokio-rusqlite directly | ✓ Good — GDPR erasure audit works without serve.rs |
 
 ---
-*Last updated: 2026-03-13 after v1.5 milestone*
+*Last updated: 2026-03-13 after v1.6 milestone start*

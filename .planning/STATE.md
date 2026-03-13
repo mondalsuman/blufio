@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5
-milestone_name: PRD Gap Closure
-status: completed
-stopped_at: "Phase 64 complete, v1.5 milestone complete — ready for /gsd:complete-milestone v1.5"
-last_updated: "2026-03-13T17:46:07.392Z"
-last_activity: "2026-03-13 -- Phase 64 Plan 01 complete (integration wiring: channel_interactive, PII sharing, GDPR audit)"
+milestone: v1.6
+milestone_name: Performance & Scalability Validation
+status: active
+stopped_at: ""
+last_updated: "2026-03-13"
+last_activity: "2026-03-13 -- Milestone v1.6 started"
 progress:
-  total_phases: 12
-  completed_phases: 10
-  total_plans: 41
-  completed_plans: 49
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-13)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- COMPLETE (all 12 phases verified, milestone ready for archive)
+**Current focus:** v1.6 Performance & Scalability Validation -- Defining requirements
 
 ## Current Position
 
-Phase: 64 of 64 (Integration Wiring Fixes) -- post-milestone integration fixes
-Plan: 1 of 1
-Status: Complete
-Last activity: 2026-03-13 -- Phase 64 Plan 01 complete (integration wiring: channel_interactive, PII sharing, GDPR audit)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-13 -- Milestone v1.6 started
 
 Progress: [██████████] 100%
 
