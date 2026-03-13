@@ -123,6 +123,7 @@ impl ChannelAdapter for IrcChannel {
                 daily_limit: None,
             }),
             supports_code_blocks: false,
+            supports_interactive: true,
         }
     }
 

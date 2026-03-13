@@ -194,6 +194,7 @@ impl DelegationRouter {
             event_bus: None,
             injection_pipeline: None,
             boundary_manager: None,
+            channel_interactive: true,
         });
 
         // 5. Build inbound message from the delegation request

@@ -138,6 +138,7 @@ impl ChannelAdapter for EmailChannel {
             formatting_support: FormattingSupport::FullMarkdown,
             rate_limit: None,
             supports_code_blocks: true,
+            supports_interactive: false,
         }
     }
 

@@ -1136,6 +1136,7 @@ dependencies = [
  "blufio-bus",
  "blufio-config",
  "blufio-core",
+ "blufio-security",
  "chrono",
  "hex",
  "metrics",

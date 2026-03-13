@@ -129,6 +129,7 @@ impl ChannelAdapter for IMessageChannel {
             formatting_support: FormattingSupport::PlainText,
             rate_limit: None,
             supports_code_blocks: false,
+            supports_interactive: true,
         }
     }
 

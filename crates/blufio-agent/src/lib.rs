@@ -691,6 +691,7 @@ impl AgentLoop {
                     event_bus: self.event_bus.clone(),
                     injection_pipeline: self.injection_pipeline.clone(),
                     boundary_manager: None,
+                    channel_interactive: self.channel.capabilities().supports_interactive,
                 });
                 let session_id = session.id.clone();
                 self.sessions.insert(session_key, actor);
@@ -748,6 +749,7 @@ impl AgentLoop {
             event_bus: self.event_bus.clone(),
             injection_pipeline: None,
             boundary_manager: None,
+            channel_interactive: self.channel.capabilities().supports_interactive,
         });
         self.sessions.insert(session_key, actor);
         #[cfg(feature = "prometheus")]
