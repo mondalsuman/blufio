@@ -11,9 +11,11 @@
 //! not by this pipeline coordinator.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use tracing::warn;
 
+use crate::canary::CanaryTokenManager;
 use crate::classifier::{ClassificationResult, InjectionClassifier};
 use crate::config::InjectionDefenseConfig;
 use crate::events::{SecurityEvent, input_detection_event};
@@ -64,6 +66,8 @@ pub struct InjectionPipeline {
     hitl: HitlManager,
     /// Optional event bus for publishing security events.
     event_bus: Option<Arc<blufio_bus::EventBus>>,
+    /// Canary token manager for prompt leak detection.
+    canary: CanaryTokenManager,
 }
 
 impl InjectionPipeline {
@@ -76,12 +80,13 @@ impl InjectionPipeline {
         classifier: InjectionClassifier,
         event_bus: Option<Arc<blufio_bus::EventBus>>,
     ) -> Self {
+        let canary = CanaryTokenManager::new();
+        // The pipeline owns the canary and delegates screen_llm_response() itself.
+        // The OutputScreener gets None -- canary detection goes through the pipeline.
         let screener = OutputScreener::new(
             &config.output_screening,
             config.dry_run,
-            // Create a separate classifier for L4 relay detection.
             InjectionClassifier::new(config),
-            // Canary token manager will be wired in Plan 03 (pipeline integration).
             None,
         );
         let hitl = HitlManager::new(&config.hitl, config.dry_run);
@@ -92,6 +97,7 @@ impl InjectionPipeline {
             screener,
             hitl,
             event_bus,
+            canary,
         }
     }
 
@@ -117,18 +123,16 @@ impl InjectionPipeline {
             };
         }
 
+        let scan_start = Instant::now();
         let result: ClassificationResult = self.classifier.classify(input, source_type);
+        let scan_duration = scan_start.elapsed();
+        metrics::record_scan_duration(scan_duration.as_secs_f64());
 
-        // Record metrics for all detections.
-        // NOTE: Category label passed as first matched category; Plan 03 will
-        // expand this to record once per category.
+        // Record metrics per category (expanded from single-category in Plan 02).
         if result.score > 0.0 {
-            let category = result
-                .categories
-                .first()
-                .map(|c| c.as_str())
-                .unwrap_or("unknown");
-            metrics::record_input_detection(source_type, &result.action, category);
+            for category in &result.categories {
+                metrics::record_input_detection(source_type, &result.action, category);
+            }
         }
 
         // Generate SecurityEvent for any detection (score > 0).
@@ -279,6 +283,60 @@ impl InjectionPipeline {
     /// Generate a new correlation ID for message-level tracing.
     pub fn new_correlation_id() -> String {
         uuid::Uuid::new_v4().to_string()
+    }
+
+    /// Generate a new per-session canary token.
+    pub fn new_session(&mut self) -> String {
+        self.canary.new_session()
+    }
+
+    /// Returns the canary line to embed in the system prompt.
+    pub fn canary_line(&self) -> String {
+        self.canary.canary_line()
+    }
+
+    /// Screen a complete LLM response for canary token leaks.
+    ///
+    /// Delegates to the pipeline's own canary token manager for detection,
+    /// then records metrics and generates events as appropriate.
+    pub fn screen_llm_response(
+        &mut self,
+        response: &str,
+        correlation_id: &str,
+    ) -> ScreeningResult {
+        if !self.enabled {
+            return ScreeningResult {
+                action: ScreeningAction::Allow,
+                detection_type: None,
+                events: vec![],
+            };
+        }
+
+        // Check canary leak
+        if !self.canary.detect_leak(response) {
+            return ScreeningResult {
+                action: ScreeningAction::Allow,
+                detection_type: None,
+                events: vec![],
+            };
+        }
+
+        let token_type = self.canary.detected_token_type(response).unwrap_or("unknown");
+        metrics::record_canary_detection(token_type);
+
+        let event = crate::events::canary_detection_event(correlation_id, token_type, "blocked", response);
+
+        warn!(
+            correlation_id,
+            token_type,
+            "L4: canary token leak detected in LLM response, blocking"
+        );
+
+        ScreeningResult {
+            action: ScreeningAction::Block("canary token leak detected".to_string()),
+            detection_type: Some("canary_leak".to_string()),
+            events: vec![event],
+        }
     }
 
     /// Reset session state in the output screener and HITL manager.
