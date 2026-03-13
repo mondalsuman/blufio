@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: executing
-stopped_at: Phase 64 context gathered
-last_updated: "2026-03-13T16:59:26.362Z"
-last_activity: "2026-03-13 -- Phase 63 Plan 02 complete (unwrap sweep batch 1: 6 crates hardened)"
+status: completed
+stopped_at: Completed 64-01-PLAN.md
+last_updated: "2026-03-13T17:24:06.759Z"
+last_activity: "2026-03-13 -- Phase 64 Plan 01 complete (integration wiring: channel_interactive, PII sharing, GDPR audit)"
 progress:
   total_phases: 12
-  completed_phases: 9
-  total_plans: 40
-  completed_plans: 48
+  completed_phases: 10
+  total_plans: 41
+  completed_plans: 49
   percent: 100
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 ## Current Position
 
-Phase: 63 of 63 (Code Quality & Hardening) -- eleventh of 11 phases in v1.5
-Plan: 5 of 5
-Status: In Progress
-Last activity: 2026-03-13 -- Phase 63 Plan 02 complete (unwrap sweep batch 1: 6 crates hardened)
+Phase: 64 of 64 (Integration Wiring Fixes) -- post-milestone integration fixes
+Plan: 1 of 1
+Status: Complete
+Last activity: 2026-03-13 -- Phase 64 Plan 01 complete (integration wiring: channel_interactive, PII sharing, GDPR audit)
 
 Progress: [██████████] 100%
 
@@ -92,6 +92,7 @@ Progress: [██████████] 100%
 | Phase 63 P01 | 45min | 2 tasks | 18 files |
 | Phase 63 P02 | 10min | 2 tasks | 9 files |
 | Phase 63 P03 | 23min | 2 tasks | 56 files |
+| Phase 64 P01 | 13min | 2 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -245,6 +246,9 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 63]: init_gateway() takes individual webhook state params to avoid borrow checker conflicts with ChannelInitResult
 - [Phase 63]: Most crates had zero non-test unwrap() -- deny directive serves as compile-time guard for future code
 - [Phase 63]: cfg_attr(not(test), deny(clippy::unwrap_used)) wrapping for CI compatibility with --all-targets
+- [Phase 64]: Manual Default impl for ChannelCapabilities (supports_interactive defaults true)
+- [Phase 64]: detect_pii supplements CREDENTIAL_PATTERNS (PiiType covers email/phone/SSN/credit_card, not API keys)
+- [Phase 64]: GDPR audit uses direct SQL INSERT via tokio-rusqlite (no EventBus/AuditWriter in CLI context)
 
 ### Pending Todos
 
@@ -260,6 +264,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T16:59:26.358Z
-Stopped at: Phase 64 context gathered
-Resume file: .planning/phases/64-integration-wiring-fixes/64-CONTEXT.md
+Last session: 2026-03-13T17:24:06.755Z
+Stopped at: Completed 64-01-PLAN.md
+Resume file: None
