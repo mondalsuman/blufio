@@ -979,7 +979,15 @@ async fn main() {
                     actor,
                     json,
                 } => {
-                    cli::audit_cmd::run_audit_tail(&audit_db_path, n, event_type, since, until, actor, json);
+                    cli::audit_cmd::run_audit_tail(
+                        &audit_db_path,
+                        n,
+                        event_type,
+                        since,
+                        until,
+                        actor,
+                        json,
+                    );
                 }
                 AuditCommands::Stats { json } => {
                     cli::audit_cmd::run_audit_stats(&audit_db_path, json);

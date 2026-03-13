@@ -9,20 +9,20 @@ use std::sync::Arc;
 
 use blufio_config::model::BlufioConfig;
 use blufio_context::ContextEngine;
+use blufio_core::StorageAdapter;
 use blufio_core::error::BlufioError;
 use blufio_core::token_counter::{TokenizerCache, TokenizerMode};
-use blufio_core::StorageAdapter;
 use blufio_cost::{BudgetTracker, CostLedger};
-use blufio_memory::{HybridRetriever, MemoryExtractor, MemoryProvider, MemoryStore, ModelManager, OnnxEmbedder};
+use blufio_memory::{
+    HybridRetriever, MemoryExtractor, MemoryProvider, MemoryStore, ModelManager, OnnxEmbedder,
+};
 use tracing::{debug, info, warn};
 
 #[cfg(feature = "sqlite")]
 use blufio_storage::SqliteStorage;
 
 /// Initialize SQLite storage (migrations included).
-pub(crate) async fn init_storage(
-    config: &BlufioConfig,
-) -> Result<Arc<SqliteStorage>, BlufioError> {
+pub(crate) async fn init_storage(config: &BlufioConfig) -> Result<Arc<SqliteStorage>, BlufioError> {
     #[cfg(feature = "sqlite")]
     {
         let storage = SqliteStorage::new(config.storage.clone());

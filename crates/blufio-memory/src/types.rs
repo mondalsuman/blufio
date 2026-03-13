@@ -143,7 +143,13 @@ pub fn vec_to_blob(vec: &[f32]) -> Vec<u8> {
 /// Convert SQLite BLOB back to f32 vector.
 pub fn blob_to_vec(blob: &[u8]) -> Vec<f32> {
     blob.chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("chunks_exact(4) guarantees 4 bytes")))
+        .map(|chunk| {
+            f32::from_le_bytes(
+                chunk
+                    .try_into()
+                    .expect("chunks_exact(4) guarantees 4 bytes"),
+            )
+        })
         .collect()
 }
 

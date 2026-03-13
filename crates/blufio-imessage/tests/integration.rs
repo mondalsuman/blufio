@@ -32,7 +32,10 @@ async fn server_info_returns_valid_response() {
         .await;
 
     let client = BlueBubblesClient::new(&mock_server.uri(), "test-pass");
-    let info = client.server_info().await.expect("server_info should succeed");
+    let info = client
+        .server_info()
+        .await
+        .expect("server_info should succeed");
     assert_eq!(info.os_version.as_deref(), Some("15.0"));
     assert_eq!(info.server_version.as_deref(), Some("1.5.0"));
     assert_eq!(info.private_api, Some(true));
@@ -98,10 +101,7 @@ fn webhook_payload_deserializes_new_message() {
     assert_eq!(message.guid, "msg-guid-456");
     assert_eq!(message.text.as_deref(), Some("Hello from user"));
     assert!(!message.is_from_me);
-    assert_eq!(
-        message.chat_guid.as_deref(),
-        Some("iMessage;-;+1234567890")
-    );
+    assert_eq!(message.chat_guid.as_deref(), Some("iMessage;-;+1234567890"));
     assert_eq!(message.associated_message_type, Some(0));
 }
 
@@ -177,7 +177,10 @@ async fn server_info_500_retries_once() {
         .await;
 
     let client = BlueBubblesClient::new(&mock_server.uri(), "test-pass");
-    let info = client.server_info().await.expect("should succeed after retry");
+    let info = client
+        .server_info()
+        .await
+        .expect("should succeed after retry");
     assert_eq!(info.os_version.as_deref(), Some("15.0"));
 }
 

@@ -35,8 +35,7 @@ pub fn markdown_to_mrkdwn(text: &str) -> String {
     // Phase 1: Protect code blocks and inline code with placeholders.
 
     // Protect fenced code blocks (```...```)
-    let code_block_re =
-        Regex::new(r"(?s)```[^\n]*\n.*?```").expect("valid regex: code_block");
+    let code_block_re = Regex::new(r"(?s)```[^\n]*\n.*?```").expect("valid regex: code_block");
     loop {
         let current = result.clone();
         if let Some(m) = code_block_re.find(&current) {

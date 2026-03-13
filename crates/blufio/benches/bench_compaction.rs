@@ -84,18 +84,11 @@ fn bench_weakest_dimension(c: &mut Criterion) {
         let scores = make_score_batch(count);
         let label = format!("{count}_scores");
 
-        group.bench_with_input(
-            BenchmarkId::new("weakest", &label),
-            &scores,
-            |b, scores| {
-                b.iter(|| {
-                    let _results: Vec<&str> = scores
-                        .iter()
-                        .map(|s| s.weakest_dimension())
-                        .collect();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("weakest", &label), &scores, |b, scores| {
+            b.iter(|| {
+                let _results: Vec<&str> = scores.iter().map(|s| s.weakest_dimension()).collect();
+            });
+        });
     }
 
     group.finish();
@@ -110,24 +103,20 @@ fn bench_apply_gate(c: &mut Criterion) {
         let scores = make_score_batch(count);
         let label = format!("{count}_scores");
 
-        group.bench_with_input(
-            BenchmarkId::new("gate", &label),
-            &scores,
-            |b, scores| {
-                b.iter(|| {
-                    for s in scores {
-                        let weighted = s.weighted_score(&weights);
-                        let weakest = s.weakest_dimension();
-                        let _gate = apply_gate(
-                            black_box(weighted),
-                            black_box(0.6),
-                            black_box(0.4),
-                            black_box(weakest),
-                        );
-                    }
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("gate", &label), &scores, |b, scores| {
+            b.iter(|| {
+                for s in scores {
+                    let weighted = s.weighted_score(&weights);
+                    let weakest = s.weakest_dimension();
+                    let _gate = apply_gate(
+                        black_box(weighted),
+                        black_box(0.6),
+                        black_box(0.4),
+                        black_box(weakest),
+                    );
+                }
+            });
+        });
     }
 
     group.finish();

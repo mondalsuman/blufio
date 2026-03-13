@@ -23,16 +23,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blufio_agent::shutdown;
-use blufio_agent::{
-    AgentLoop, DelegationRouter, DelegationTool, HeartbeatRunner,
-};
+use blufio_agent::{AgentLoop, DelegationRouter, DelegationTool, HeartbeatRunner};
 use blufio_config::model::BlufioConfig;
 use blufio_core::error::BlufioError;
 use blufio_core::{ChannelAdapter, StorageAdapter};
 use blufio_router::ModelRouter;
 use tracing::{debug, error, info, warn};
-
-
 
 /// A `MakeWriter` implementation that creates `RedactingWriter` instances.
 ///
@@ -368,7 +364,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         let ready_status = format!(
             "Ready: {} channel{}{}",
             channel_result.mux.channel_count(),
-            if channel_result.mux.channel_count() == 1 { "" } else { "s" },
+            if channel_result.mux.channel_count() == 1 {
+                ""
+            } else {
+                "s"
+            },
             if memory_provider.is_some() {
                 ", memory enabled"
             } else {
@@ -724,12 +724,8 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     .await;
 
     #[cfg(not(feature = "gateway"))]
-    let fallback_provider_registry = gateway::build_fallback_provider_registry(
-        &config,
-        &None,
-        &resilience.registry,
-    )
-    .await;
+    let fallback_provider_registry =
+        gateway::build_fallback_provider_registry(&config, &None, &resilience.registry).await;
 
     // Initialize injection defense pipeline (INJC-06).
     let injection_pipeline = subsystems::init_injection_pipeline(&config, &event_bus);

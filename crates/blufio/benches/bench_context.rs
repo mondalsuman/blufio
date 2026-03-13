@@ -15,8 +15,8 @@ use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
-use blufio_context::ZoneBudget;
 use blufio_config::model::ContextConfig;
+use blufio_context::ZoneBudget;
 use blufio_core::token_counter::{HeuristicCounter, TokenCounter, TokenizerCache, TokenizerMode};
 
 // ---------------------------------------------------------------------------
@@ -136,15 +136,9 @@ fn bench_heuristic_token_counting(c: &mut Criterion) {
         let text = generate_system_prompt(size);
         let label = format!("{}KB", size / 1024);
 
-        group.bench_with_input(
-            BenchmarkId::new("heuristic", &label),
-            &text,
-            |b, text| {
-                b.iter(|| {
-                    rt.block_on(async { counter.count_tokens(black_box(text)).await.unwrap() })
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("heuristic", &label), &text, |b, text| {
+            b.iter(|| rt.block_on(async { counter.count_tokens(black_box(text)).await.unwrap() }));
+        });
     }
 
     group.finish();

@@ -39,16 +39,10 @@ use blufio_matrix::MatrixChannel;
 use blufio_email::EmailChannel;
 
 #[cfg(feature = "imessage")]
-use blufio_imessage::{
-    IMessageChannel,
-    webhook::IMessageWebhookState,
-};
+use blufio_imessage::{IMessageChannel, webhook::IMessageWebhookState};
 
 #[cfg(feature = "sms")]
-use blufio_sms::{
-    SmsChannel,
-    webhook::SmsWebhookState,
-};
+use blufio_sms::{SmsChannel, webhook::SmsWebhookState};
 
 /// Result of channel initialization, carrying webhook states needed by
 /// the gateway for mounting webhook routes.

@@ -35,9 +35,7 @@ pub(crate) fn init_prometheus(
                 Ok(adapter) => {
                     info!("prometheus metrics enabled");
                     let handle = adapter.handle().clone();
-                    Some(
-                        Arc::new(move || handle.render()) as Arc<dyn Fn() -> String + Send + Sync>
-                    )
+                    Some(Arc::new(move || handle.render()) as Arc<dyn Fn() -> String + Send + Sync>)
                 }
                 Err(e) => {
                     warn!(error = %e, "prometheus initialization failed, continuing without metrics");
@@ -89,16 +87,15 @@ compile_error!("blufio requires the 'anthropic' feature for the LLM provider");
 pub(crate) async fn init_gateway(
     config: &BlufioConfig,
     mux: &mut ChannelMultiplexer,
-    #[cfg(feature = "whatsapp")]
-    whatsapp_webhook_state: &Option<blufio_whatsapp::webhook::WhatsAppWebhookState>,
-    #[cfg(feature = "imessage")]
-    imessage_webhook_state: &Option<blufio_imessage::webhook::IMessageWebhookState>,
-    #[cfg(not(feature = "imessage"))]
-    _imessage_webhook_state: &Option<()>,
-    #[cfg(feature = "sms")]
-    sms_webhook_state: &Option<blufio_sms::webhook::SmsWebhookState>,
-    #[cfg(not(feature = "sms"))]
-    _sms_webhook_state: &Option<()>,
+    #[cfg(feature = "whatsapp")] whatsapp_webhook_state: &Option<
+        blufio_whatsapp::webhook::WhatsAppWebhookState,
+    >,
+    #[cfg(feature = "imessage")] imessage_webhook_state: &Option<
+        blufio_imessage::webhook::IMessageWebhookState,
+    >,
+    #[cfg(not(feature = "imessage"))] _imessage_webhook_state: &Option<()>,
+    #[cfg(feature = "sms")] sms_webhook_state: &Option<blufio_sms::webhook::SmsWebhookState>,
+    #[cfg(not(feature = "sms"))] _sms_webhook_state: &Option<()>,
     event_bus: &Arc<blufio_bus::EventBus>,
     storage: &Arc<blufio_storage::SqliteStorage>,
     tool_registry: &Arc<tokio::sync::RwLock<ToolRegistry>>,
@@ -108,12 +105,10 @@ pub(crate) async fn init_gateway(
     prometheus_render: &Option<Arc<dyn Fn() -> String + Send + Sync>>,
     vault_values: &std::sync::Arc<std::sync::RwLock<Vec<String>>>,
     cancel: &tokio_util::sync::CancellationToken,
-    #[cfg(feature = "mcp-server")]
-    tools_changed_tx_holder: &mut Option<blufio_mcp_server::notifications::ToolsChangedSender>,
-) -> Result<
-    Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>,
-    BlufioError,
-> {
+    #[cfg(feature = "mcp-server")] tools_changed_tx_holder: &mut Option<
+        blufio_mcp_server::notifications::ToolsChangedSender,
+    >,
+) -> Result<Option<Arc<dyn blufio_core::ProviderRegistry + Send + Sync>>, BlufioError> {
     if !config.gateway.enabled {
         debug!("gateway channel disabled by configuration");
 
@@ -267,8 +262,7 @@ pub(crate) async fn init_gateway(
             blufio_mcp_server::BlufioMcpHandler::new(tool_registry.clone(), &config.mcp)
                 .with_resources(
                     memory_store.clone(),
-                    Some(storage.clone()
-                        as Arc<dyn blufio_core::StorageAdapter + Send + Sync>),
+                    Some(storage.clone() as Arc<dyn blufio_core::StorageAdapter + Send + Sync>),
                 )
                 .with_notifications(tools_changed_rx);
         let mcp_router = blufio_mcp_server::transport::build_mcp_router(
@@ -359,7 +353,9 @@ pub(crate) async fn build_fallback_provider_registry(
             Ok(reg) => {
                 info!("fallback provider registry initialized (non-gateway)");
                 Some(Arc::new(reg)
-                    as Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>)
+                    as Arc<
+                        dyn blufio_core::traits::ProviderRegistry + Send + Sync,
+                    >)
             }
             Err(e) => {
                 warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");
@@ -384,7 +380,9 @@ pub(crate) async fn build_fallback_provider_registry(
         Ok(reg) => {
             info!("fallback provider registry initialized");
             Some(Arc::new(reg)
-                as Arc<dyn blufio_core::traits::ProviderRegistry + Send + Sync>)
+                as Arc<
+                    dyn blufio_core::traits::ProviderRegistry + Send + Sync,
+                >)
         }
         Err(e) => {
             warn!(error = %e, "failed to initialize fallback provider registry, fallback disabled");

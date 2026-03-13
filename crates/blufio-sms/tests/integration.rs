@@ -156,7 +156,10 @@ fn validate_signature_wrong_token() {
     let signature = base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
 
     assert!(!validate_twilio_signature(
-        "wrong_token", url, &params, &signature
+        "wrong_token",
+        url,
+        &params,
+        &signature
     ));
 }
 
@@ -238,7 +241,9 @@ fn stop_keyword_variations() {
     mac.update(url.as_bytes());
     let signature = base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
 
-    assert!(validate_twilio_signature(auth_token, url, &params, &signature));
+    assert!(validate_twilio_signature(
+        auth_token, url, &params, &signature
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -255,8 +260,7 @@ async fn send_message_api_timeout_produces_error() {
             "/2010-04-01/Accounts/{account_sid}/Messages.json"
         )))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_delay(std::time::Duration::from_secs(30)), // 30 second delay
+            ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(30)), // 30 second delay
         )
         .mount(&mock_server)
         .await;
@@ -289,9 +293,7 @@ async fn send_message_429_rate_limit_retries() {
         .and(path(format!(
             "/2010-04-01/Accounts/{account_sid}/Messages.json"
         )))
-        .respond_with(
-            ResponseTemplate::new(429).insert_header("Retry-After", "1"),
-        )
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "1"))
         .up_to_n_times(1)
         .expect(1)
         .mount(&mock_server)

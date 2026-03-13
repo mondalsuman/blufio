@@ -27,10 +27,7 @@ fn parse_multipart_plain_text_body() {
     assert!(parsed.body.contains("Hello, this is a plain text body."));
     assert_eq!(parsed.subject, "Test Message");
     assert_eq!(parsed.from, "sender@example.com");
-    assert_eq!(
-        parsed.message_id.as_deref(),
-        Some("msg-001@example.com")
-    );
+    assert_eq!(parsed.message_id.as_deref(), Some("msg-001@example.com"));
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +67,8 @@ fn strip_quoted_lines() {
 
 #[test]
 fn strip_gmail_on_wrote_pattern() {
-    let input = "Thanks for the update!\n\nOn Mon, Jan 1, 2026 at 12:00 PM User wrote:\n> Previous message";
+    let input =
+        "Thanks for the update!\n\nOn Mon, Jan 1, 2026 at 12:00 PM User wrote:\n> Previous message";
     let result = strip_quoted_text(input);
     assert_eq!(result, "Thanks for the update!");
 }

@@ -46,10 +46,14 @@ static CREDENTIAL_PATTERNS: LazyLock<Vec<(&'static str, Regex)>> = LazyLock::new
             // Runs after sk-ant- and sk-proj- are already redacted
             Regex::new(r"sk-[a-zA-Z0-9]{20,}").expect("valid regex: openai_api_key"),
         ),
-        ("aws_access_key", Regex::new(r"AKIA[0-9A-Z]{16}").expect("valid regex: aws_access_key")),
+        (
+            "aws_access_key",
+            Regex::new(r"AKIA[0-9A-Z]{16}").expect("valid regex: aws_access_key"),
+        ),
         (
             "database_connection_string",
-            Regex::new(r"(postgres|mysql|mongodb|redis)://[^\s]+").expect("valid regex: database_connection_string"),
+            Regex::new(r"(postgres|mysql|mongodb|redis)://[^\s]+")
+                .expect("valid regex: database_connection_string"),
         ),
         (
             "bearer_token",

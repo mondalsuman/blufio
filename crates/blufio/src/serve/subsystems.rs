@@ -78,13 +78,22 @@ pub(crate) async fn vault_and_secret_redaction(
     // Register known config secrets for log redaction (SEC-08).
     {
         if let Some(ref key) = config.anthropic.api_key {
-            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(vault_values, key.clone());
+            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                vault_values,
+                key.clone(),
+            );
         }
         if let Some(ref token) = config.telegram.bot_token {
-            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(vault_values, token.clone());
+            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                vault_values,
+                token.clone(),
+            );
         }
         if let Some(ref token) = config.gateway.bearer_token {
-            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(vault_values, token.clone());
+            blufio_security::RedactingWriter::<std::io::Stderr>::add_vault_value(
+                vault_values,
+                token.clone(),
+            );
         }
         let secret_count = vault_values.read().map(|v| v.len()).unwrap_or(0);
         if secret_count > 0 {
@@ -492,18 +501,14 @@ pub(crate) async fn init_cron(
         return;
     }
 
-    let cron_db =
-        match blufio_storage::open_connection(&config.storage.database_path).await {
-            Ok(conn) => Arc::new(conn),
-            Err(e) => {
-                warn!(error = %e, "cron scheduler DB connection failed, skipping");
-                return;
-            }
-        };
-    let task_registry = Arc::new(blufio_cron::register_builtin_tasks(
-        cron_db.clone(),
-        config,
-    ));
+    let cron_db = match blufio_storage::open_connection(&config.storage.database_path).await {
+        Ok(conn) => Arc::new(conn),
+        Err(e) => {
+            warn!(error = %e, "cron scheduler DB connection failed, skipping");
+            return;
+        }
+    };
+    let task_registry = Arc::new(blufio_cron::register_builtin_tasks(cron_db.clone(), config));
     match CronScheduler::new(
         cron_db,
         task_registry,
@@ -572,8 +577,7 @@ pub(crate) async fn init_hot_reload(
     // TLS hot reload (if cert/key paths configured)
     if config.hot_reload.tls_cert_path.is_some() && config.hot_reload.tls_key_path.is_some() {
         let _tls_result =
-            crate::hot_reload::spawn_tls_watcher(&config.hot_reload, cancel.child_token())
-                .await;
+            crate::hot_reload::spawn_tls_watcher(&config.hot_reload, cancel.child_token()).await;
         if _tls_result.is_some() {
             info!("TLS certificate hot reload enabled");
         }
@@ -585,8 +589,7 @@ pub(crate) async fn init_hot_reload(
         if skills_dir.exists() {
             let skill_bus = event_bus.clone();
             let skill_cancel = cancel.child_token();
-            match crate::hot_reload::spawn_skill_watcher(skills_dir, skill_bus, skill_cancel)
-                .await
+            match crate::hot_reload::spawn_skill_watcher(skills_dir, skill_bus, skill_cancel).await
             {
                 Ok(()) => {
                     info!("skill hot reload watcher enabled");

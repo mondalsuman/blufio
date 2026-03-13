@@ -11,9 +11,7 @@ use blufio_audit::chain::{GENESIS_HASH, compute_entry_hash, verify_chain};
 use proptest::prelude::*;
 
 /// Helper: build a chain of entries in an in-memory database and return the connection.
-fn build_chain_db(
-    entries: &[(String, String, String, String, String)],
-) -> rusqlite::Connection {
+fn build_chain_db(entries: &[(String, String, String, String, String)]) -> rusqlite::Connection {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     conn.execute_batch(
         "CREATE TABLE audit_entries (

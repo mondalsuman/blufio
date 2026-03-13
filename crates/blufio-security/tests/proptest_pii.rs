@@ -12,8 +12,8 @@ use proptest::prelude::*;
 /// Strategy to generate valid email addresses (user@domain.tld).
 fn email_strategy() -> impl Strategy<Value = String> {
     (
-        "[a-z][a-z0-9._%+-]{1,15}",   // local part
-        "[a-z][a-z0-9-]{1,10}",        // domain
+        "[a-z][a-z0-9._%+-]{1,15}", // local part
+        "[a-z][a-z0-9-]{1,10}",     // domain
         prop::sample::select(vec!["com", "org", "net", "io", "co.uk"]),
     )
         .prop_map(|(user, domain, tld)| format!("{user}@{domain}.{tld}"))
@@ -23,30 +23,22 @@ fn email_strategy() -> impl Strategy<Value = String> {
 fn us_phone_strategy() -> impl Strategy<Value = String> {
     (
         prop::sample::select(vec!["", "+1 ", "+1-", "1-"]),
-        "[2-9][0-9]{2}",  // area code (cannot start with 0 or 1)
-        "[2-9][0-9]{2}",  // exchange
-        "[0-9]{4}",       // subscriber
+        "[2-9][0-9]{2}", // area code (cannot start with 0 or 1)
+        "[2-9][0-9]{2}", // exchange
+        "[0-9]{4}",      // subscriber
     )
-        .prop_map(|(prefix, area, exchange, sub)| {
-            format!("{prefix}{area}-{exchange}-{sub}")
-        })
+        .prop_map(|(prefix, area, exchange, sub)| format!("{prefix}{area}-{exchange}-{sub}"))
 }
 
 /// Strategy to generate valid SSN patterns (NNN-NN-NNNN).
 fn ssn_strategy() -> impl Strategy<Value = String> {
     (
         // Area: 001-665, 667-899 (valid range excluding 000, 666, 900+)
-        prop::sample::select(
-            (1u16..=665)
-                .chain(667..=899)
-                .collect::<Vec<_>>()
-        ),
-        10u8..=99,  // group
+        prop::sample::select((1u16..=665).chain(667..=899).collect::<Vec<_>>()),
+        10u8..=99,      // group
         1000u16..=9999, // serial
     )
-        .prop_map(|(area, group, serial)| {
-            format!("{area:03}-{group:02}-{serial:04}")
-        })
+        .prop_map(|(area, group, serial)| format!("{area:03}-{group:02}-{serial:04}"))
 }
 
 /// Strategy to generate Luhn-valid credit card numbers.
@@ -63,7 +55,10 @@ fn credit_card_strategy() -> impl Strategy<Value = String> {
             // Compute Luhn check digit
             let check = compute_luhn_check_digit(&digits);
             digits.push(check);
-            digits.iter().map(|d| char::from_digit(*d, 10).unwrap()).collect::<String>()
+            digits
+                .iter()
+                .map(|d| char::from_digit(*d, 10).unwrap())
+                .collect::<String>()
         })
 }
 

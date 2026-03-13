@@ -108,7 +108,9 @@ fn bench_cosine_similarity_batch(c: &mut Criterion) {
     let query = make_embedding(dim, 1);
 
     for n in [50, 200, 500] {
-        let embeddings: Vec<Vec<f32>> = (0..n).map(|i| make_embedding(dim, i as u32 + 100)).collect();
+        let embeddings: Vec<Vec<f32>> = (0..n)
+            .map(|i| make_embedding(dim, i as u32 + 100))
+            .collect();
 
         group.bench_with_input(
             BenchmarkId::new("batch_sim", format!("{n}_vectors")),
@@ -141,9 +143,8 @@ fn bench_rrf_with_sorting(c: &mut Criterion) {
             |b, (vec_r, bm25_r)| {
                 b.iter(|| {
                     let mut fused = reciprocal_rank_fusion(black_box(vec_r), black_box(bm25_r));
-                    fused.sort_by(|a, b| {
-                        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-                    });
+                    fused
+                        .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                     fused
                 });
             },
