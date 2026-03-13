@@ -20,12 +20,12 @@ Requirements for v1.6 Performance & Scalability Validation. Each maps to roadmap
 
 ### Injection Defense Hardening
 
-- [ ] **INJ-01**: Sanitization pre-pass normalizes Unicode (NFKC), strips zero-width characters, and maps homoglyphs before pattern matching
-- [ ] **INJ-02**: Injection classifier detects base64-encoded payloads, decodes them, and re-scans decoded content
-- [ ] **INJ-03**: Pattern set expanded from 11 to ~25 covering prompt leaking, jailbreak keywords, delimiter manipulation, and encoding obfuscation
-- [ ] **INJ-04**: Indirect injection patterns detect instructions hidden in HTML comments, markdown, and JSON content from tool outputs
-- [ ] **INJ-05**: Multi-language injection patterns cover French, German, Spanish, Chinese, and Japanese attack vectors
-- [ ] **INJ-06**: Configurable severity weights via TOML config allow operators to tune per-category detection thresholds
+- [x] **INJ-01**: Sanitization pre-pass normalizes Unicode (NFKC), strips zero-width characters, and maps homoglyphs before pattern matching
+- [x] **INJ-02**: Injection classifier detects base64-encoded payloads, decodes them, and re-scans decoded content
+- [x] **INJ-03**: Pattern set expanded from 11 to ~25 covering prompt leaking, jailbreak keywords, delimiter manipulation, and encoding obfuscation
+- [x] **INJ-04**: Indirect injection patterns detect instructions hidden in HTML comments, markdown, and JSON content from tool outputs
+- [x] **INJ-05**: Multi-language injection patterns cover French, German, Spanish, Chinese, and Japanese attack vectors
+- [x] **INJ-06**: Configurable severity weights via TOML config allow operators to tune per-category detection thresholds
 - [ ] **INJ-07**: Canary token planted in system prompt detected if echoed in LLM output, indicating prompt leaking attack
 - [ ] **INJ-08**: Benign message corpus (100+ messages) validates all patterns have acceptable false positive rate before production promotion
 
@@ -84,12 +84,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VEC-06 | Phase 67 | Pending |
 | VEC-07 | Phase 67 | Pending |
 | VEC-08 | Phase 67 | Pending |
-| INJ-01 | Phase 66 | Pending |
-| INJ-02 | Phase 66 | Pending |
-| INJ-03 | Phase 66 | Pending |
-| INJ-04 | Phase 66 | Pending |
-| INJ-05 | Phase 66 | Pending |
-| INJ-06 | Phase 66 | Pending |
+| INJ-01 | Phase 66 | Complete |
+| INJ-02 | Phase 66 | Complete |
+| INJ-03 | Phase 66 | Complete |
+| INJ-04 | Phase 66 | Complete |
+| INJ-05 | Phase 66 | Complete |
+| INJ-06 | Phase 66 | Complete |
 | INJ-07 | Phase 66 | Pending |
 | INJ-08 | Phase 66 | Pending |
 | PERF-01 | Phase 68 | Pending |

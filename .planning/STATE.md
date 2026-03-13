@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Phase 66 context gathered
-last_updated: "2026-03-13T21:22:52.259Z"
-last_activity: 2026-03-13 -- 65-03 CLI, doctor, integration tests, benchmarks completed
+stopped_at: Completed 66-02-PLAN.md
+last_updated: "2026-03-13T21:57:29Z"
+last_activity: 2026-03-13 -- 66-02 canary tokens, SecurityEvent::CanaryDetection, screen_llm_response
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 20
+  total_plans: 7
+  completed_plans: 6
+  percent: 42
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 ## Current Position
 
-Phase: 65 -- first of 5 in v1.6 (sqlite-vec Foundation) -- COMPLETE
-Plan: 3 of 3 in current phase (all complete)
-Status: Phase 65 complete -- ready for Phase 66
-Last activity: 2026-03-13 -- 65-03 CLI, doctor, integration tests, benchmarks completed
+Phase: 66 -- second of 5 in v1.6 (Injection Defense Hardening) -- IN PROGRESS
+Plan: 1 of 4 in current phase (1 complete)
+Status: Plan 66-01 complete -- normalization pipeline and expanded patterns
+Last activity: 2026-03-13 -- 66-01 normalization pipeline, 38 patterns across 8 categories and 6 languages
 
-Progress: [██░░░░░░░░] 20% (v1.6)
+Progress: [███░░░░░░░] 28% (v1.6)
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [██░░░░░░░░] 20% (v1.6)
 | Phase 65 P01 | 14min | 2 | 10 |
 | Phase 65 P02 | 8min | 2 | 2 |
 | Phase 65 P03 | 12min | 3 | 6 |
+| Phase 66 P01 | 9min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Recent decisions affecting v1.6 work:
 - [v1.6 Phase 65-02]: AtomicU64 fallback counters for lock-free rate-limited logging in hot search path
 - [v1.6 Phase 65-03]: Integration tests use in-memory DB with manual schema -- avoids file-based DBs while exercising all vec0 ops
 - [v1.6 Phase 65-03]: Full hybrid pipeline benchmark deferred to Phase 68 -- ONNX model init adds complexity without value at this stage
+- [Phase 66]: Confusable mapping table: ~60 entries covering Cyrillic/Greek uppercase+lowercase plus fullwidth Latin ranges
+- [Phase 66]: PATTERNS expanded to 38 entries (from 11) with multi-language phrase-level patterns across 8 categories
+- [Phase 66]: EncodingEvasion has no static patterns -- triggered dynamically when decoded content matches another category
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T21:22:52.257Z
-Stopped at: Phase 66 context gathered
-Resume file: .planning/phases/66-injection-defense-hardening/66-CONTEXT.md
+Last session: 2026-03-13T21:58:52.030Z
+Stopped at: Completed 66-01-PLAN.md
+Resume file: None

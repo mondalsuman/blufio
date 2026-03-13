@@ -149,7 +149,7 @@ Plans:
   3. Pattern set covers prompt leaking, jailbreak keywords, delimiter manipulation, indirect injection via tool outputs, and multi-language attacks (French, German, Spanish, Chinese, Japanese)
   4. Operators can tune per-category severity weights via TOML config and canary token is planted in system prompt with output echo detection
   5. All patterns validated against benign corpus (100+ messages) with acceptable false positive rate — no legitimate messages blocked
-**Plans:** 4 plans
+**Plans:** 2/4 plans executed
 Plans:
 - [ ] 66-01-PLAN.md — Normalization pipeline (normalize.rs) + pattern expansion (8 categories, multi-language) + severity weights config
 - [ ] 66-02-PLAN.md — Canary token system (canary.rs) + output screening integration + SecurityEvent + metrics
@@ -203,7 +203,7 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 46-52 | v1.4 | 16/16 | Complete | 2026-03-09 |
 | 53-64 | v1.5 | 49/49 | Complete | 2026-03-13 |
 | 65. sqlite-vec Foundation | 3/3 | Complete    | 2026-03-13 | - |
-| 66. Injection Defense Hardening | v1.6 | 0/4 | Planned | - |
+| 66. Injection Defense Hardening | 2/4 | In Progress|  | - |
 | 67. Vector Search Migration & Hybrid Pipeline | v1.6 | 0/? | Not started | - |
 | 68. Performance Benchmarking Suite | v1.6 | 0/? | Not started | - |
 | 69. Cross-Phase Integration Validation | v1.6 | 0/? | Not started | - |
