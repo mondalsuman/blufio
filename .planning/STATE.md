@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 ## Current Position
 
 Phase: 66 -- second of 5 in v1.6 (Injection Defense Hardening) -- IN PROGRESS
-Plan: 1 of 4 in current phase (1 complete)
-Status: Plan 66-01 complete -- normalization pipeline and expanded patterns
-Last activity: 2026-03-13 -- 66-01 normalization pipeline, 38 patterns across 8 categories and 6 languages
+Plan: 2 of 4 in current phase (2 complete)
+Status: Plan 66-02 complete -- canary token system with output screening integration
+Last activity: 2026-03-13 -- 66-02 canary tokens, SecurityEvent::CanaryDetection, screen_llm_response
 
-Progress: [███░░░░░░░] 28% (v1.6)
+Progress: [████░░░░░░] 42% (v1.6)
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [███░░░░░░░] 28% (v1.6)
 | Phase 65 P02 | 8min | 2 | 2 |
 | Phase 65 P03 | 12min | 3 | 6 |
 | Phase 66 P01 | 9min | 2 tasks | 11 files |
+| Phase 66 P02 | 10min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Recent decisions affecting v1.6 work:
 - [Phase 66]: Confusable mapping table: ~60 entries covering Cyrillic/Greek uppercase+lowercase plus fullwidth Latin ranges
 - [Phase 66]: PATTERNS expanded to 38 entries (from 11) with multi-language phrase-level patterns across 8 categories
 - [Phase 66]: EncodingEvasion has no static patterns -- triggered dynamically when decoded content matches another category
+- [Phase 66-02]: Canary detection via screen_llm_response() separate from screen_content() tool path
+- [Phase 66-02]: record_input_detection now takes category label -- external callers need Plan 03 update
 
 ### Pending Todos
 
@@ -97,6 +100,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T21:58:52.030Z
-Stopped at: Completed 66-01-PLAN.md
+Last session: 2026-03-13T21:57:29Z
+Stopped at: Completed 66-02-PLAN.md
 Resume file: None
