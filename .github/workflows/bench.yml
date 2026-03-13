@@ -1,0 +1,85 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  benchmark:
+    name: Criterion Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: bench
+
+      # Restore cached baseline from previous run.
+      - name: Restore benchmark baseline
+        id: bench-cache
+        uses: actions/cache@v4
+        with:
+          path: target/criterion
+          key: bench-baseline-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('crates/blufio/benches/**') }}
+          restore-keys: |
+            bench-baseline-${{ hashFiles('Cargo.lock') }}-
+            bench-baseline-
+
+      # Run benchmarks and save results.
+      - name: Run benchmarks
+        run: cargo bench -p blufio 2>&1 | tee bench-output.txt
+
+      # Check for >20% regressions in criterion output.
+      # Criterion prints "regressed" for benchmarks that got slower.
+      # We parse the output for regression percentages and fail if any exceed 20%.
+      # Note: This workflow only triggers on push to main (no untrusted input).
+      - name: Check for regressions
+        run: |
+          echo "=== Checking for performance regressions ==="
+
+          # Extract regression lines from criterion output.
+          REGRESSIONS=$(grep -i "regressed" bench-output.txt || true)
+
+          if [ -z "$REGRESSIONS" ]; then
+            echo "No regressions detected."
+            exit 0
+          fi
+
+          echo "Detected regression markers:"
+          echo "$REGRESSIONS"
+
+          # Parse percentage changes from criterion output.
+          # Look for change lines with positive percentages > 20%.
+          SEVERE=$(grep -oP 'change:.*?\+(\d+\.?\d*)%' bench-output.txt | \
+            awk -F'+' '{print $2}' | awk -F'%' '{if ($1 > 20.0) print $1}' || true)
+
+          if [ -n "$SEVERE" ]; then
+            echo ""
+            echo "FATAL: Benchmark regression >20% detected:"
+            echo "$SEVERE"
+            echo ""
+            echo "Review the benchmark results above for details."
+            exit 1
+          fi
+
+          echo "Regressions detected but all within 20% tolerance."
+
+      # Upload HTML reports as artifact for manual investigation.
+      - name: Upload benchmark reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-reports
+          path: target/criterion/
+          retention-days: 30
