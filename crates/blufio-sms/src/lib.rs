@@ -136,6 +136,7 @@ impl ChannelAdapter for SmsChannel {
                 daily_limit: None,
             }),
             supports_code_blocks: false,
+            supports_interactive: false,
         }
     }
 

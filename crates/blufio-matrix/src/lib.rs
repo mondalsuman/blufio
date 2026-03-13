@@ -123,6 +123,7 @@ impl ChannelAdapter for MatrixChannel {
             formatting_support: FormattingSupport::HTML,
             rate_limit: None,
             supports_code_blocks: true,
+            supports_interactive: true,
         }
     }
 

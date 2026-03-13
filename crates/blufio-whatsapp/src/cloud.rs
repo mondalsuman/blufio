@@ -119,6 +119,7 @@ impl ChannelAdapter for WhatsAppCloudChannel {
                 daily_limit: Some(1000),
             }),
             supports_code_blocks: false,
+            supports_interactive: true,
         }
     }
 

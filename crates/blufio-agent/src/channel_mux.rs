@@ -161,6 +161,7 @@ impl ChannelAdapter for ChannelMultiplexer {
             formatting_support: FormattingSupport::PlainText,
             rate_limit: None,
             supports_code_blocks: false,
+            supports_interactive: false,
         };
 
         for (_, channel) in self.connected_channels.iter() {
@@ -175,6 +176,8 @@ impl ChannelAdapter for ChannelMultiplexer {
             caps.supports_threads = caps.supports_threads || child_caps.supports_threads;
             caps.supports_code_blocks =
                 caps.supports_code_blocks || child_caps.supports_code_blocks;
+            caps.supports_interactive =
+                caps.supports_interactive || child_caps.supports_interactive;
             // Use the minimum max_message_length across all channels.
             caps.max_message_length = match (caps.max_message_length, child_caps.max_message_length)
             {

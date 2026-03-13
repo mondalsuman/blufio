@@ -144,7 +144,7 @@ pub struct RateLimit {
 }
 
 /// Capabilities reported by a channel adapter.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ChannelCapabilities {
     /// Whether the channel supports editing sent messages.
     pub supports_edit: bool,
@@ -172,6 +172,31 @@ pub struct ChannelCapabilities {
     pub rate_limit: Option<RateLimit>,
     /// Whether the channel supports code blocks (fenced with backticks).
     pub supports_code_blocks: bool,
+    /// Whether the channel supports interactive user confirmation (HITL prompts).
+    /// Default true for messaging channels (Telegram, Discord, Slack, IRC, Matrix, Signal, WhatsApp, iMessage).
+    /// False for non-interactive channels (Email IMAP polling, SMS webhooks).
+    pub supports_interactive: bool,
+}
+
+impl Default for ChannelCapabilities {
+    fn default() -> Self {
+        Self {
+            supports_edit: false,
+            supports_typing: false,
+            supports_images: false,
+            supports_documents: false,
+            supports_voice: false,
+            max_message_length: None,
+            supports_embeds: false,
+            supports_reactions: false,
+            supports_threads: false,
+            streaming_type: StreamingType::default(),
+            formatting_support: FormattingSupport::default(),
+            rate_limit: None,
+            supports_code_blocks: false,
+            supports_interactive: true,
+        }
+    }
 }
 
 // --- Provider types ---

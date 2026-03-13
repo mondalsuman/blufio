@@ -231,6 +231,7 @@ impl TestHarness {
             event_bus: None,
             injection_pipeline: None,
             boundary_manager: None,
+            channel_interactive: true,
         });
 
         // Create inbound message

@@ -112,6 +112,7 @@ impl ChannelAdapter for SignalChannel {
             formatting_support: FormattingSupport::PlainText,
             rate_limit: None,
             supports_code_blocks: false,
+            supports_interactive: true,
         }
     }
 

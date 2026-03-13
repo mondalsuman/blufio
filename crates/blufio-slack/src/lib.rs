@@ -146,6 +146,7 @@ impl ChannelAdapter for SlackChannel {
                 daily_limit: None,
             }),
             supports_code_blocks: true,
+            supports_interactive: true,
         }
     }
 

@@ -118,6 +118,8 @@ pub struct SessionActorConfig {
         Option<Arc<tokio::sync::Mutex<blufio_injection::pipeline::InjectionPipeline>>>,
     /// Optional HMAC boundary manager for L3 content zone integrity (per-session).
     pub boundary_manager: Option<blufio_injection::boundary::BoundaryManager>,
+    /// Whether the channel supports interactive confirmation (from adapter capabilities).
+    pub channel_interactive: bool,
 }
 
 /// Manages the state and message processing for a single conversation session.
@@ -183,6 +185,8 @@ pub struct SessionActor {
     boundary_manager: Option<blufio_injection::boundary::BoundaryManager>,
     /// Whether the last L1 scan flagged the input (for cross-layer escalation).
     flagged_input: bool,
+    /// Whether the channel supports interactive confirmation (HITL prompts).
+    channel_interactive: bool,
 }
 
 impl SessionActor {
@@ -218,6 +222,7 @@ impl SessionActor {
             injection_pipeline: config.injection_pipeline,
             boundary_manager: config.boundary_manager,
             flagged_input: false,
+            channel_interactive: config.channel_interactive,
         }
     }
 
@@ -981,7 +986,7 @@ impl SessionActor {
                     &tu.input,
                     &self.session_id,
                     &self.channel,
-                    true, // assume interactive for now
+                    self.channel_interactive,
                     &corr_id,
                     l4_escalated,
                     self.flagged_input,
@@ -1504,6 +1509,7 @@ mod tests {
             event_bus,
             injection_pipeline: None,
             boundary_manager: None,
+            channel_interactive: true,
         });
 
         (actor, storage, temp_dir)

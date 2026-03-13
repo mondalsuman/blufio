@@ -322,6 +322,7 @@ impl ChannelAdapter for GatewayChannel {
             formatting_support: FormattingSupport::FullMarkdown,
             rate_limit: None,
             supports_code_blocks: true,
+            supports_interactive: true,
         }
     }
 

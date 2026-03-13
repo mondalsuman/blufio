@@ -203,6 +203,7 @@ impl ChannelAdapter for DiscordChannel {
                 daily_limit: None,
             }),
             supports_code_blocks: true,
+            supports_interactive: true,
         }
     }
 

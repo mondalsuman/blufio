@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Blufio Contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! L4 output screening for credential leaks and injection relay detection.
+//! L4 output screening for credential leaks, PII detection, and injection relay detection.
 //!
 //! Screens tool call arguments (buffered before execution) for:
-//! - **Credential leaks:** Known provider API key formats (Anthropic, OpenAI, AWS, database URIs, Bearer tokens)
+//! - **PII leaks:** Delegates to `blufio_security::detect_pii` for emails, phone numbers, SSNs, credit cards
+//! - **Credential leaks:** Provider API key formats (Anthropic, OpenAI, AWS, database URIs, Bearer tokens)
 //! - **Injection relay:** LLM output containing injection patterns relayed through tool calls
 //!
-//! Credentials are redacted with `[REDACTED]`. Injection relays block tool execution entirely.
+//! PII and credentials are redacted with type-specific placeholders or `[REDACTED]`.
+//! Injection relays block tool execution entirely.
 //! After a configurable escalation threshold (default 3), subsequent tool calls escalate to HITL.
 
 use std::sync::LazyLock;
@@ -15,21 +17,22 @@ use std::sync::LazyLock;
 use regex::Regex;
 use tracing::warn;
 
+use blufio_security::pii::{PiiType, detect_pii};
+
 use crate::classifier::InjectionClassifier;
 use crate::config::OutputScreeningConfig;
 use crate::events::{SecurityEvent, output_screening_event};
 use crate::metrics;
 
 // ---------------------------------------------------------------------------
-// Credential detection patterns
+// Credential detection patterns (supplement to blufio-security PII detection)
 // ---------------------------------------------------------------------------
 
 /// Provider-specific credential patterns for L4 output screening.
 ///
-/// Patterns are ordered most-specific first: `sk-ant-` and `sk-proj-` before
-/// generic `sk-`. Since `check_credentials` replaces matches sequentially,
-/// the specific patterns redact their keys before the generic `sk-` runs,
-/// preventing double matches (the already-redacted text won't match `sk-`).
+/// These patterns cover API keys, tokens, and connection strings that are NOT
+/// detected by `blufio_security::detect_pii` (which covers email, phone, SSN,
+/// credit card). Ordered most-specific first to prevent double-matching.
 static CREDENTIAL_PATTERNS: LazyLock<Vec<(&'static str, Regex)>> = LazyLock::new(|| {
     vec![
         // Most specific first to prevent double-matching
@@ -285,11 +288,37 @@ impl OutputScreener {
         }
     }
 
-    /// Check content for credential patterns and return (found, redacted_content).
+    /// Check content for PII (via `blufio-security`) and credential patterns.
+    ///
+    /// PII detection is delegated to `blufio_security::detect_pii` which covers
+    /// emails, phone numbers, SSNs, and credit cards. Credential patterns
+    /// (API keys, tokens, connection strings) are checked via local regex patterns.
+    /// Returns (found, redacted_content).
     fn check_credentials(&self, content: &str) -> (bool, String) {
         let mut result = content.to_string();
         let mut found = false;
 
+        // Phase 1: Detect PII via blufio-security shared patterns.
+        let pii_matches = detect_pii(content);
+        if !pii_matches.is_empty() {
+            found = true;
+            // Redact PII matches in reverse order (by span start) to preserve byte offsets.
+            let mut sorted_matches = pii_matches;
+            sorted_matches.sort_by(|a, b| b.span.start.cmp(&a.span.start));
+            for m in &sorted_matches {
+                let placeholder = match m.pii_type {
+                    PiiType::Email => "[REDACTED:email]",
+                    PiiType::Phone => "[REDACTED:phone]",
+                    PiiType::Ssn => "[REDACTED:ssn]",
+                    PiiType::CreditCard => "[REDACTED:credit_card]",
+                    _ => "[REDACTED]",
+                };
+                result.replace_range(m.span.clone(), placeholder);
+                tracing::debug!(pii_type = %m.pii_type, "L4: PII detected via blufio-security");
+            }
+        }
+
+        // Phase 2: Detect credential patterns (API keys, tokens, connection strings).
         for (name, regex) in CREDENTIAL_PATTERNS.iter() {
             if regex.is_match(&result) {
                 found = true;

@@ -85,6 +85,7 @@ impl ChannelAdapter for WhatsAppWebChannel {
                 daily_limit: Some(1000),
             }),
             supports_code_blocks: false,
+            supports_interactive: true,
         }
     }
 

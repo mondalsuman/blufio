@@ -99,6 +99,7 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ OpenAPI spec auto-generated from route definitions with Swagger UI — v1.5 Phase 62
 - ✓ Clippy unwrap enforcement (#![deny(clippy::unwrap_used)]) across 43 library crates — v1.5 Phase 63
 - ✓ Module decomposition (serve.rs, main.rs), integration tests, property-based tests, benchmark regression CI — v1.5 Phase 63
+- ✓ Cross-phase integration wiring: channel_interactive from adapter capabilities, PII pattern sharing with OutputScreener, GDPR erasure audit trail — v1.5 Phase 64
 
 ### Active
 
@@ -151,7 +152,7 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.4 Quality & Resilience and completed v1.5 PRD Gap Closure — all 11 phases (53-63) verified. LOC Rust across 37 crates. 264+ requirements verified across 5 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39, v1.5: 93). v1.5 delivered: PII/data classification (53), audit trail (54), memory enhancements (55), multi-level compaction (56), prompt injection defense (57), cron/retention (58), hooks/hot-reload (59), GDPR (60), email/iMessage/SMS channels (61), OpenTelemetry/OpenAPI (62), code quality hardening (63).
+Shipped v1.4 Quality & Resilience and completed v1.5 PRD Gap Closure — all 12 phases (53-64) verified. 80,101 LOC Rust across 36 crates. 264+ requirements verified across 5 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39, v1.5: 93). v1.5 delivered: PII/data classification (53), audit trail (54), memory enhancements (55), multi-level compaction (56), prompt injection defense (57), cron/retention (58), hooks/hot-reload (59), GDPR (60), email/iMessage/SMS channels (61), OpenTelemetry/OpenAPI (62), code quality hardening (63), cross-phase integration wiring (64).
 
 **Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc.
 
@@ -244,4 +245,4 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | ADR documentation in MADR 4.0.0 format | Standardized decision records with context, options, consequences | ✓ Good — ADR-001 (ORT) and ADR-002 (plugins) documented |
 
 ---
-*Last updated: 2026-03-13 after Phase 63 (v1.5 milestone complete)*
+*Last updated: 2026-03-13 after Phase 64 (v1.5 milestone complete)*
