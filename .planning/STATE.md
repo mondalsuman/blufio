@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
-status: completed
-stopped_at: Completed 60-03-PLAN.md
-last_updated: "2026-03-12T22:08:48.580Z"
-last_activity: "2026-03-12 -- Phase 60 Plan 03 complete (GDPR CLI integration: erase/report/export/list-users + doctor + prometheus)"
+status: executing
+stopped_at: Completed 61-04-PLAN.md
+last_updated: "2026-03-13T00:23:04.251Z"
+last_activity: 2026-03-13 -- Phase 61 Plan 04 complete (all three channel adapters wired in serve.rs with webhook route composition)
 progress:
   total_phases: 11
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 34
-  percent: 65
+  completed_phases: 7
+  total_plans: 30
+  completed_plans: 38
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- Phase 60 GDPR Tooling & Data Export
+**Current focus:** v1.5 PRD Gap Closure -- Phase 61 Channel Adapters
 
 ## Current Position
 
-Phase: 60 of 63 (GDPR Tooling & Data Export) -- eighth of 11 phases in v1.5
-Plan: 03 of 3 complete
-Status: Phase Complete
-Last activity: 2026-03-12 -- Phase 60 Plan 03 complete (GDPR CLI integration: erase/report/export/list-users + doctor + prometheus)
+Phase: 61 of 63 (Channel Adapters) -- ninth of 11 phases in v1.5
+Plan: 04 of 4 complete
+Status: In Progress
+Last activity: 2026-03-13 -- Phase 61 Plan 04 complete (all three channel adapters wired in serve.rs with webhook route composition)
 
-Progress: [██████▌░░░] 65%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -78,6 +78,10 @@ Progress: [██████▌░░░] 65%
 | Phase 60 P01 | 8min | 2 tasks | 10 files |
 | Phase 60 P02 | 8min | 2 tasks | 6 files |
 | Phase 60 P03 | 8min | 2 tasks | 7 files |
+| Phase 61 P01 | 5min | 2 tasks | 17 files |
+| Phase 61 P02 | 8min | 2 tasks | 6 files |
+| Phase 61 P03 | 7min | 2 tasks | 10 files |
+| Phase 61 P04 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -198,6 +202,15 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 60]: UserSession lightweight struct defined locally in erasure.rs to avoid coupling to blufio-core::types::Session
 - [Phase 60]: CSV export uses single-file format with data_type discriminator column for mixed record types
 - [Phase 60]: Audit entry count uses LIKE matching on actor/session_id/details_json with pii_marker=0 filter
+- [Phase 61]: EmailConfig uses default_email_poll_interval (30s) with serde default helper
+- [Phase 61]: New channel config fields placed between matrix and bridge in BlufioConfig
+- [Phase 61]: BlueBubblesClient uses query-param auth (?password=) per BlueBubbles API convention
+- [Phase 61]: TwilioClient builds form-urlencoded body manually (serde_urlencoded) since workspace reqwest lacks form feature
+- [Phase 61]: HMAC-SHA1 with Base64 encoding for Twilio (distinct from WhatsApp HMAC-SHA256 hex)
+- [Phase 61]: async-imap switched to runtime-tokio feature (default async-std incompatible with project)
+- [Phase 61]: mail-parser DateTime manual ISO 8601 conversion (no built-in method)
+- [Phase 61]: IMAP connect-per-cycle pattern for simplicity over persistent connections
+- [Phase 61]: axum added as runtime dependency to blufio crate for Router::merge() in webhook composition
 
 ### Pending Todos
 
@@ -213,6 +226,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T22:00:22Z
-Stopped at: Completed 60-03-PLAN.md
+Last session: 2026-03-13T00:18:32.171Z
+Stopped at: Completed 61-04-PLAN.md
 Resume file: None

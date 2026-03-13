@@ -141,6 +141,39 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
             session_id: String::new(),
             details_json: serde_json::json!({ "channel": channel }).to_string(),
         },
+        BusEvent::Channel(ChannelEvent::ConnectionLost {
+            timestamp,
+            channel,
+            error,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "connection_lost".to_string(),
+            resource_type: "channel".to_string(),
+            resource_id: channel.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({ "channel": channel, "error": error }).to_string(),
+        },
+        BusEvent::Channel(ChannelEvent::DeliveryFailed {
+            timestamp,
+            channel,
+            recipient,
+            error,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "delivery_failed".to_string(),
+            resource_type: "channel".to_string(),
+            resource_id: channel.clone(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json:
+                serde_json::json!({ "channel": channel, "recipient": recipient, "error": error })
+                    .to_string(),
+        },
 
         // --- Skill events ---
         BusEvent::Skill(SkillEvent::Invoked {
@@ -1152,6 +1185,19 @@ mod tests {
                 event_id: new_event_id(),
                 timestamp: now_timestamp(),
                 channel: "c".into(),
+            }),
+            BusEvent::Channel(ChannelEvent::ConnectionLost {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                channel: "email".into(),
+                error: "timeout".into(),
+            }),
+            BusEvent::Channel(ChannelEvent::DeliveryFailed {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                channel: "sms".into(),
+                recipient: "+1234567890".into(),
+                error: "rate limited".into(),
             }),
             BusEvent::Skill(SkillEvent::Invoked {
                 event_id: new_event_id(),

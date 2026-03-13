@@ -112,13 +112,13 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Channel Adapters
 
-- [ ] **CHAN-01**: Email adapter with IMAP polling for incoming messages and SMTP (lettre) for outgoing
-- [ ] **CHAN-02**: Email thread-to-session mapping via In-Reply-To/References headers
-- [ ] **CHAN-03**: iMessage adapter via BlueBubbles REST API with webhook for incoming messages
-- [ ] **CHAN-04**: iMessage adapter documented as experimental (BlueBubbles requires macOS host)
-- [ ] **CHAN-05**: SMS adapter via Twilio Programmable Messaging API (webhook inbound + REST outbound)
-- [ ] **CHAN-06**: All three adapters implement existing ChannelAdapter + PluginAdapter traits
-- [ ] **CHAN-07**: All three adapters support FormatPipeline integration
+- [x] **CHAN-01**: Email adapter with IMAP polling for incoming messages and SMTP (lettre) for outgoing
+- [x] **CHAN-02**: Email thread-to-session mapping via In-Reply-To/References headers
+- [x] **CHAN-03**: iMessage adapter via BlueBubbles REST API with webhook for incoming messages
+- [x] **CHAN-04**: iMessage adapter documented as experimental (BlueBubbles requires macOS host)
+- [x] **CHAN-05**: SMS adapter via Twilio Programmable Messaging API (webhook inbound + REST outbound)
+- [x] **CHAN-06**: All three adapters implement existing ChannelAdapter + PluginAdapter traits
+- [x] **CHAN-07**: All three adapters support FormatPipeline integration
 
 ### OpenTelemetry
 
@@ -252,13 +252,13 @@ Deferred to v1.6+.
 | GDPR-04 | Phase 60 | Complete |
 | GDPR-05 | Phase 60 | Complete |
 | GDPR-06 | Phase 60 | Complete |
-| CHAN-01 | Phase 61 | Pending |
-| CHAN-02 | Phase 61 | Pending |
-| CHAN-03 | Phase 61 | Pending |
-| CHAN-04 | Phase 61 | Pending |
-| CHAN-05 | Phase 61 | Pending |
-| CHAN-06 | Phase 61 | Pending |
-| CHAN-07 | Phase 61 | Pending |
+| CHAN-01 | Phase 61 | Complete |
+| CHAN-02 | Phase 61 | Complete |
+| CHAN-03 | Phase 61 | Complete |
+| CHAN-04 | Phase 61 | Complete |
+| CHAN-05 | Phase 61 | Complete |
+| CHAN-06 | Phase 61 | Complete |
+| CHAN-07 | Phase 61 | Complete |
 | OTEL-01 | Phase 62 | Pending |
 | OTEL-02 | Phase 62 | Pending |
 | OTEL-03 | Phase 62 | Pending |

@@ -77,6 +77,8 @@ impl BusEvent {
             BusEvent::Session(SessionEvent::Closed { .. }) => "session.closed",
             BusEvent::Channel(ChannelEvent::MessageReceived { .. }) => "channel.message_received",
             BusEvent::Channel(ChannelEvent::MessageSent { .. }) => "channel.message_sent",
+            BusEvent::Channel(ChannelEvent::ConnectionLost { .. }) => "channel.connection_lost",
+            BusEvent::Channel(ChannelEvent::DeliveryFailed { .. }) => "channel.delivery_failed",
             BusEvent::Skill(SkillEvent::Invoked { .. }) => "skill.invoked",
             BusEvent::Skill(SkillEvent::Completed { .. }) => "skill.completed",
             BusEvent::Node(NodeEvent::Connected { .. }) => "node.connected",
@@ -202,6 +204,30 @@ pub enum ChannelEvent {
         timestamp: String,
         /// Channel name.
         channel: String,
+    },
+    /// A channel connection was lost.
+    ConnectionLost {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Channel name.
+        channel: String,
+        /// Error details.
+        error: String,
+    },
+    /// A message delivery failed.
+    DeliveryFailed {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Channel name.
+        channel: String,
+        /// Recipient identifier.
+        recipient: String,
+        /// Error details.
+        error: String,
     },
 }
 
@@ -908,7 +934,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_eighteen_bus_event_variants_exist() {
+    fn all_bus_event_variants_exist() {
         let _session = BusEvent::Session(SessionEvent::Created {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -1054,6 +1080,21 @@ mod tests {
             timestamp: now_timestamp(),
             user_id_hash: "sha256hash".into(),
         });
+
+        let _conn_lost = BusEvent::Channel(ChannelEvent::ConnectionLost {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            channel: "email".into(),
+            error: "IMAP connection timeout".into(),
+        });
+
+        let _delivery_failed = BusEvent::Channel(ChannelEvent::DeliveryFailed {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            channel: "sms".into(),
+            recipient: "+1234567890".into(),
+            error: "Twilio 429".into(),
+        });
     }
 
     #[test]
@@ -1149,6 +1190,25 @@ mod tests {
                     channel: String::new(),
                 }),
                 "channel.message_sent",
+            ),
+            (
+                BusEvent::Channel(ChannelEvent::ConnectionLost {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    channel: String::new(),
+                    error: String::new(),
+                }),
+                "channel.connection_lost",
+            ),
+            (
+                BusEvent::Channel(ChannelEvent::DeliveryFailed {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    channel: String::new(),
+                    recipient: String::new(),
+                    error: String::new(),
+                }),
+                "channel.delivery_failed",
             ),
             (
                 BusEvent::Skill(SkillEvent::Invoked {
