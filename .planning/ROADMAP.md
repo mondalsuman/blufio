@@ -106,7 +106,7 @@
 - [x] **Phase 59: Hook System & Hot Reload** - 11 lifecycle hooks with BTreeMap priority, config/TLS/plugin hot reload via ArcSwap (completed 2026-03-12)
 - [x] **Phase 60: GDPR Tooling & Data Export** - Right to erasure, transparency reports, JSON/CSV data export with filtering (completed 2026-03-12)
 - [x] **Phase 61: Channel Adapters** - Email (IMAP/SMTP), iMessage (BlueBubbles), SMS (Twilio) with trait and pipeline integration (completed 2026-03-13)
-- [ ] **Phase 62: Observability & API Surface** - OpenTelemetry tracing, OpenAPI spec generation, Litestream WAL replication support
+- [x] **Phase 62: Observability & API Surface** - OpenTelemetry tracing, OpenAPI spec generation, Litestream WAL replication support (completed 2026-03-13)
 - [ ] **Phase 63: Code Quality Hardening** - Clippy unwrap enforcement, function decomposition, test coverage expansion, benchmark regression
 
 ## Phase Details
@@ -273,7 +273,13 @@ Plans:
   2. Trace context propagates through MCP calls, and OTel coexists with existing Prometheus metrics (OTel for traces, Prometheus for metrics)
   3. OpenAPI 3.1 spec is auto-generated from axum route annotations and served at /openapi.json, with optional Swagger UI at /docs
   4. `blufio litestream init` generates config templates, `blufio litestream status` checks replication lag, and SQLCipher incompatibility is documented with application-level backup as the alternative
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 62-01-PLAN.md -- Foundation: workspace deps (OTel, utoipa, insta), feature flags (otel, swagger-ui, full), config types (OpenTelemetryConfig, LitestreamConfig, OpenApiConfig)
+- [ ] 62-02-PLAN.md -- OTel core: otel.rs module (TracerProvider, OTLP HTTP exporter, BatchSpanProcessor), init_tracing refactor to registry-based layered subscriber, graceful shutdown flush
+- [ ] 62-03-PLAN.md -- OTel spans & MCP propagation: 5 key span instrumentation (agent loop, LLM call, tool exec, memory retrieve, context assemble), W3C traceparent injection/extraction, X-Trace-Id header
+- [ ] 62-04-PLAN.md -- OpenAPI: utoipa annotations on all 18+ gateway handlers, ApiDoc struct, /openapi.json route, Swagger UI at /docs, snapshot test
+- [ ] 62-05-PLAN.md -- Litestream: CLI init/status subcommands, YAML template generation, WAL autocheckpoint pragma, SQLCipher warning, doctor check
 
 ### Phase 63: Code Quality Hardening
 **Goal**: The codebase is free of unwrap panics in library code, oversized functions are decomposed, and new subsystems have test coverage
@@ -355,9 +361,9 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 59. Hook System & Hot Reload | 4/4 | Complete    | 2026-03-12 | - |
 | 60. GDPR Tooling & Data Export | 3/3 | Complete    | 2026-03-12 | - |
 | 61. Channel Adapters | 4/4 | Complete    | 2026-03-13 | - |
-| 62. Observability & API Surface | v1.5 | 0/0 | Not started | - |
+| 62. Observability & API Surface | 5/5 | Complete    | 2026-03-13 | - |
 | 63. Code Quality Hardening | v1.5 | 0/0 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-13 after Phase 61 planning*
+*Last updated: 2026-03-13 after Phase 62 planning*

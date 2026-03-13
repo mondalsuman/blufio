@@ -11,6 +11,19 @@
 //! - Sanitized descriptions (instruction stripping, length capping)
 //! - Response truncation per server size cap (CLNT-09)
 //! - Error mapping from rmcp errors to `ToolOutput { is_error: true }`
+//! - OTel span instrumentation per MCP call (`blufio.mcp.call`)
+//!
+//! ## W3C Traceparent Propagation (OTEL-04)
+//!
+//! Each MCP tool invocation is wrapped in a `blufio.mcp.call` tracing span.
+//! When the `otel` feature is enabled and the OpenTelemetryLayer is active,
+//! this span participates in the distributed trace.
+//!
+//! **Limitation:** The rmcp crate manages its own HTTP transport internally.
+//! W3C `traceparent` header injection into outbound MCP HTTP requests requires
+//! rmcp to expose a header hook or middleware point. Until rmcp supports this,
+//! trace context is correlated at the Blufio level via the `blufio.mcp.call`
+//! span (which captures server name, tool name, and trust zone).
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -133,6 +146,16 @@ impl BlufioTool for ExternalTool {
     }
 
     async fn invoke(&self, input: serde_json::Value) -> Result<ToolOutput, BlufioError> {
+        // OTEL-04: Create MCP call span for distributed tracing visibility.
+        let mcp_span = tracing::info_span!(
+            "blufio.mcp.call",
+            "tool_name" = %self.tool_name,
+            "server_name" = %self.server_name,
+            "blufio.mcp.trust_zone" = if self.trusted { "trusted" } else { "untrusted" },
+            "otel.status_code" = tracing::field::Empty,
+        );
+
+        use tracing::Instrument;
         let result = self
             .session
             .call_tool(CallToolRequestParams {
@@ -141,8 +164,12 @@ impl BlufioTool for ExternalTool {
                 arguments: input.as_object().cloned(),
                 task: None,
             })
+            .instrument(mcp_span.clone())
             .await
-            .map_err(BlufioError::mcp_tool_failed)?;
+            .map_err(|e| {
+                mcp_span.record("otel.status_code", "ERROR");
+                BlufioError::mcp_tool_failed(e)
+            })?;
 
         // Extract text content from MCP response.
         let content = Self::extract_text(&result);

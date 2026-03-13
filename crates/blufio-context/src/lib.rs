@@ -157,6 +157,17 @@ impl ContextEngine {
         &self,
         params: AssemblyParams<'_>,
     ) -> Result<AssembledContext, BlufioError> {
+        // OTel: Context assembly span with per-zone token count attributes.
+        // Created as a handle (not entered) because entered spans are !Send.
+        // Recording fields on the handle still exports them via OTel.
+        let _ctx_span = tracing::info_span!(
+            "blufio.context.assemble",
+            "blufio.context.static_tokens" = tracing::field::Empty,
+            "blufio.context.conditional_tokens" = tracing::field::Empty,
+            "blufio.context.dynamic_tokens" = tracing::field::Empty,
+            "blufio.context.total_tokens" = tracing::field::Empty,
+        );
+
         let AssemblyParams {
             provider,
             storage,
@@ -219,6 +230,18 @@ impl ContextEngine {
             budget::count_messages_tokens(&dynamic_result.messages, counter.as_ref()).await;
         metrics::gauge!("blufio_context_zone_tokens", "zone" => "dynamic")
             .set(actual_dynamic as f64);
+
+        // OTel: Record per-zone and total token counts on context assembly span.
+        _ctx_span.record("blufio.context.static_tokens", actual_static as u64);
+        _ctx_span.record(
+            "blufio.context.conditional_tokens",
+            actual_conditional as u64,
+        );
+        _ctx_span.record("blufio.context.dynamic_tokens", actual_dynamic as u64);
+        _ctx_span.record(
+            "blufio.context.total_tokens",
+            (actual_static + actual_conditional + actual_dynamic) as u64,
+        );
 
         // --- Step 4: Combine conditional + dynamic messages ---
         let mut all_messages = conditional_messages;

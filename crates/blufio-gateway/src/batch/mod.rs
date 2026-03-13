@@ -13,14 +13,14 @@ pub mod store;
 use serde::{Deserialize, Serialize};
 
 /// Request body for submitting a batch of chat completion requests.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 pub struct BatchRequest {
     /// Individual chat completion requests to process.
     pub items: Vec<serde_json::Value>,
 }
 
 /// Response returned immediately when a batch is submitted (202 Accepted).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct BatchSubmitResponse {
     /// Unique batch identifier for polling status.
     pub id: String,
@@ -33,7 +33,7 @@ pub struct BatchSubmitResponse {
 }
 
 /// Full batch status response (returned by GET /v1/batch/:id).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct BatchResponse {
     /// Unique batch identifier.
     pub id: String,
@@ -56,7 +56,7 @@ pub struct BatchResponse {
 }
 
 /// Result of a single batch item.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct BatchItemResult {
     /// Index of the item in the original request array.
     pub index: usize,

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 61-04-PLAN.md
-last_updated: "2026-03-13T00:23:04.251Z"
-last_activity: 2026-03-13 -- Phase 61 Plan 04 complete (all three channel adapters wired in serve.rs with webhook route composition)
+stopped_at: Completed 62-03-PLAN.md
+last_updated: "2026-03-13T11:38:26.697Z"
+last_activity: 2026-03-13 -- Phase 62 Plan 05 complete (Litestream CLI init/status, WAL autocheckpoint pragma, doctor check)
 progress:
   total_phases: 11
-  completed_phases: 7
-  total_plans: 30
-  completed_plans: 38
+  completed_phases: 8
+  total_plans: 35
+  completed_plans: 43
   percent: 100
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 
 ## Current Position
 
-Phase: 61 of 63 (Channel Adapters) -- ninth of 11 phases in v1.5
-Plan: 04 of 4 complete
+Phase: 62 of 63 (Observability & API Surface) -- tenth of 11 phases in v1.5
+Plan: 05 of 5 complete
 Status: In Progress
-Last activity: 2026-03-13 -- Phase 61 Plan 04 complete (all three channel adapters wired in serve.rs with webhook route composition)
+Last activity: 2026-03-13 -- Phase 62 Plan 05 complete (Litestream CLI init/status, WAL autocheckpoint pragma, doctor check)
 
 Progress: [██████████] 100%
 
@@ -82,6 +82,11 @@ Progress: [██████████] 100%
 | Phase 61 P02 | 8min | 2 tasks | 6 files |
 | Phase 61 P03 | 7min | 2 tasks | 10 files |
 | Phase 61 P04 | 3min | 2 tasks | 2 files |
+| Phase 62 P01 | 6min | 2 tasks | 4 files |
+| Phase 62 P05 | 8min | 2 tasks | 4 files |
+| Phase 62 P02 | 11min | 2 tasks | 2 files |
+| Phase 62 P04 | 14min | 2 tasks | 17 files |
+| Phase 62 P03 | 25min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -211,6 +216,22 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 61]: mail-parser DateTime manual ISO 8601 conversion (no built-in method)
 - [Phase 61]: IMAP connect-per-cycle pattern for simplicity over persistent connections
 - [Phase 61]: axum added as runtime dependency to blufio crate for Router::merge() in webhook composition
+- [Phase 62]: opentelemetry_sdk uses underscore crate name (not opentelemetry-sdk)
+- [Phase 62]: utoipa non-optional (always compiled) in both blufio and blufio-gateway; OTel deps optional behind otel feature
+- [Phase 62]: ObservabilityConfig wraps OpenTelemetryConfig; OpenApiConfig nested inside GatewayConfig
+- [Phase 62]: SQLCipher detection uses BLUFIO_DB_KEY env var (existing convention from doctor.rs)
+- [Phase 62]: WAL autocheckpoint pragma set via separate open_connection (isolation pattern)
+- [Phase 62]: otel.rs always compiled (not cfg-gated module) for dual otel_span! macro variants
+- [Phase 62]: TracingState struct with cfg-gated otel_provider field for clean feature-conditional API
+- [Phase 62]: ParentBased(TraceIdRatioBased) sampler for proper distributed trace propagation
+- [Phase 62]: OTel init/shutdown uses eprintln (subscriber may not be ready/available)
+- [Phase 62]: Module named openapi.rs (not openapi_doc.rs) -- no utoipa::openapi namespace conflict at crate level
+- [Phase 62]: ModelsListResponse.data uses schema(value_type = Vec<Object>) since ModelInfo is from blufio-core without ToSchema
+- [Phase 62]: swagger_ui_enabled added to ServerConfig (config-driven toggle, not just feature gate)
+- [Phase 62]: /openapi.json is public (no auth) to support CI tooling, Postman imports, and code generators
+- [Phase 62]: Span handles (not .entered()) for async functions; tracing::Instrument for wrapping specific futures
+- [Phase 62]: rmcp traceparent injection deferred (rmcp manages own transport); blufio.mcp.call span for Blufio-level correlation
+- [Phase 62]: Conditional otel feature propagation via crate?/feature syntax (only if crate enabled)
 
 ### Pending Todos
 
@@ -226,6 +247,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T00:18:32.171Z
-Stopped at: Completed 61-04-PLAN.md
+Last session: 2026-03-13T11:32:02.658Z
+Stopped at: Completed 62-03-PLAN.md
 Resume file: None

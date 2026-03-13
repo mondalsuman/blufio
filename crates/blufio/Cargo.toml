@@ -38,6 +38,9 @@ gateway = ["dep:blufio-gateway"]
 mcp-server = ["dep:blufio-mcp-server"]
 mcp-client = ["dep:blufio-mcp-client"]
 node = ["dep:blufio-node"]
+otel = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry", "dep:opentelemetry-http", "blufio-mcp-client?/otel", "blufio-gateway?/otel"]
+swagger-ui = ["dep:utoipa-swagger-ui", "blufio-gateway/swagger-ui"]
+full = ["otel", "swagger-ui"]
 
 [dependencies]
 blufio-core = { path = "../blufio-core" }
@@ -122,6 +125,13 @@ notify-debouncer-mini.workspace = true
 metrics.workspace = true
 flate2 = "1"
 tar = "0.4"
+utoipa.workspace = true
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
+opentelemetry-http = { workspace = true, optional = true }
+utoipa-swagger-ui = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -150,3 +160,4 @@ rmcp.workspace = true
 async-trait.workspace = true
 semver.workspace = true
 serial_test.workspace = true
+insta.workspace = true

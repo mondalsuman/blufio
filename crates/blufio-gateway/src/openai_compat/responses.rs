@@ -37,7 +37,24 @@ use super::types::{GatewayErrorDetail, GatewayErrorResponse, parse_model_string}
 /// POST /v1/responses
 ///
 /// Accepts OpenResponses-format requests and streams semantic events
-/// compatible with the OpenAI Agents SDK.
+/// compatible with the OpenAI Agents SDK. Only streaming mode is supported.
+/// Returns Server-Sent Events with semantic event types: response.created,
+/// output_item.added, content_part.added, output_text.delta, output_text.done,
+/// content_part.done, output_item.done, response.completed.
+#[utoipa::path(
+    post,
+    path = "/v1/responses",
+    tag = "OpenAI Compatible",
+    request_body = ResponsesRequest,
+    responses(
+        (status = 200, description = "Streaming semantic events (SSE)"),
+        (status = 400, description = "Invalid request", body = GatewayErrorResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Provider not found", body = GatewayErrorResponse),
+        (status = 503, description = "Service unavailable", body = GatewayErrorResponse),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn post_responses(
     State(state): State<GatewayState>,
     Json(body): Json<ResponsesRequest>,

@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// POST /v1/chat/completions request body.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 pub struct GatewayCompletionRequest {
     /// Model identifier. Supports `provider/model` format (e.g., "openai/gpt-4o")
     /// or bare model names (routed to the default provider).
@@ -66,7 +66,7 @@ pub struct GatewayCompletionRequest {
 }
 
 /// A message in the conversation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayMessage {
     /// Role: "system", "user", "assistant", or "tool".
     pub role: String,
@@ -89,7 +89,7 @@ pub struct GatewayMessage {
 }
 
 /// Content within a message — either a string or array of typed parts.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(untagged)]
 pub enum GatewayContent {
     /// Simple text content.
@@ -99,7 +99,7 @@ pub enum GatewayContent {
 }
 
 /// A typed content part within a message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type")]
 pub enum GatewayContentPart {
     /// Text content part.
@@ -117,14 +117,14 @@ pub enum GatewayContentPart {
 }
 
 /// Image URL data for vision content.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayImageUrl {
     /// The URL (can be data: URI with base64).
     pub url: String,
 }
 
 /// An OpenAI tool definition.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayTool {
     /// Tool type (always "function").
     #[serde(rename = "type")]
@@ -134,7 +134,7 @@ pub struct GatewayTool {
 }
 
 /// Function definition within a tool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayFunctionDef {
     /// Function name.
     pub name: String,
@@ -145,7 +145,7 @@ pub struct GatewayFunctionDef {
 }
 
 /// A tool call made by the assistant.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayToolCall {
     /// Unique tool call identifier.
     pub id: String,
@@ -157,7 +157,7 @@ pub struct GatewayToolCall {
 }
 
 /// Function call details within a tool call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayFunctionCall {
     /// Function name.
     pub name: String,
@@ -166,7 +166,7 @@ pub struct GatewayFunctionCall {
 }
 
 /// Stream options.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayStreamOptions {
     /// Whether to include usage stats in the stream.
     #[serde(default)]
@@ -178,7 +178,7 @@ pub struct GatewayStreamOptions {
 // ---------------------------------------------------------------------------
 
 /// POST /v1/chat/completions response body (non-streaming).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct GatewayCompletionResponse {
     /// Response ID.
     pub id: String,
@@ -201,7 +201,7 @@ pub struct GatewayCompletionResponse {
 }
 
 /// A single choice in a response.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct GatewayChoice {
     /// Choice index.
     pub index: u32,
@@ -212,7 +212,7 @@ pub struct GatewayChoice {
 }
 
 /// Response message (different from request message — has no tool_call_id).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct GatewayResponseMessage {
     /// Role (always "assistant").
     pub role: String,
@@ -224,7 +224,7 @@ pub struct GatewayResponseMessage {
 }
 
 /// Token usage statistics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayUsage {
     /// Number of prompt tokens consumed.
     pub prompt_tokens: u32,
@@ -314,14 +314,14 @@ pub struct GatewayDeltaFunction {
 // ---------------------------------------------------------------------------
 
 /// OpenAI-compatible error response.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct GatewayErrorResponse {
     /// Error details.
     pub error: GatewayErrorDetail,
 }
 
 /// Error detail within an error response.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct GatewayErrorDetail {
     /// Human-readable error message.
     pub message: String,
@@ -356,16 +356,18 @@ pub struct GatewayErrorDetail {
 // ---------------------------------------------------------------------------
 
 /// Response for GET /v1/models.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ModelsListResponse {
     /// Object type (always "list").
+    #[schema(example = "list")]
     pub object: String,
     /// Model data.
+    #[schema(value_type = Vec<Object>)]
     pub data: Vec<ModelInfo>,
 }
 
 /// Query parameters for GET /v1/models.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct ModelsQueryParams {
     /// Filter by provider name.
     #[serde(default)]

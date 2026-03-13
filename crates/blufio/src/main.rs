@@ -24,9 +24,11 @@ mod gdpr_cmd;
 mod healthcheck;
 #[allow(dead_code)]
 mod hot_reload;
+mod litestream;
 #[cfg(feature = "mcp-server")]
 mod mcp_server;
 mod migrate;
+mod otel;
 mod pii_cmd;
 mod privacy;
 mod providers;
@@ -248,6 +250,17 @@ enum Commands {
         #[command(subcommand)]
         action: GdprCommands,
     },
+    /// Litestream WAL replication management.
+    #[command(
+        after_help = "Litestream enables continuous SQLite WAL replication to S3-compatible storage.\n\n\
+        NOTE: Litestream is INCOMPATIBLE with SQLCipher encrypted databases.\n\
+        If encryption is enabled, use `blufio backup` + cron for scheduled backups.\n\n\
+        Examples:\n  blufio litestream init\n  blufio litestream status"
+    )]
+    Litestream {
+        #[command(subcommand)]
+        command: LitestreamCommands,
+    },
 }
 
 /// Cron subcommands.
@@ -365,6 +378,15 @@ pub enum GdprCommands {
         #[arg(long)]
         json: bool,
     },
+}
+
+/// Litestream subcommands.
+#[derive(Subcommand, Debug)]
+pub enum LitestreamCommands {
+    /// Generate Litestream config template alongside database file.
+    Init,
+    /// Check Litestream replication status and lag.
+    Status,
 }
 
 /// Privacy subcommands.
@@ -992,6 +1014,20 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::Litestream { command }) => match command {
+            LitestreamCommands::Init => {
+                if let Err(e) = litestream::run_litestream_init(&config) {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+            LitestreamCommands::Status => {
+                if let Err(e) = litestream::run_litestream_status(&config) {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        },
         None => {
             println!("blufio: use --help for available commands");
         }

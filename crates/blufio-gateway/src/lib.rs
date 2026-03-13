@@ -14,6 +14,7 @@ pub mod batch;
 pub mod classify;
 pub mod handlers;
 pub mod openai_compat;
+pub mod openapi;
 pub mod rate_limit;
 pub mod server;
 pub mod sse;
@@ -328,6 +329,7 @@ impl ChannelAdapter for GatewayChannel {
             host: self.config.host.clone(),
             port: self.config.port,
             bearer_token: self.config.bearer_token.clone(),
+            swagger_ui_enabled: false,
         };
 
         // Take optional adapters (if set).

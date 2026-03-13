@@ -83,6 +83,8 @@ pub struct ServerConfig {
     pub port: u16,
     /// Bearer token for auth (None = auth disabled).
     pub bearer_token: Option<String>,
+    /// Whether to enable Swagger UI at /docs (requires `swagger-ui` feature).
+    pub swagger_ui_enabled: bool,
 }
 
 /// Start the gateway HTTP/WebSocket server.
@@ -107,10 +109,11 @@ pub async fn start_server(
 ) -> Result<(), BlufioError> {
     let auth_state = state.auth.clone();
 
-    // Unauthenticated public routes (health + metrics for systemd and Prometheus).
+    // Unauthenticated public routes (health + metrics + OpenAPI spec for systemd and Prometheus).
     let public_routes = Router::new()
         .route("/health", get(handlers::get_public_health))
         .route("/metrics", get(handlers::get_public_metrics))
+        .route("/openapi.json", get(get_openapi_json))
         .with_state(state.clone());
 
     // Routes requiring authentication.
@@ -207,6 +210,23 @@ pub async fn start_server(
         );
     }
 
+    // Swagger UI at /docs (feature-gated, config-driven).
+    #[cfg(feature = "swagger-ui")]
+    if config.swagger_ui_enabled {
+        use utoipa::OpenApi as _;
+        app = app.merge(
+            utoipa_swagger_ui::SwaggerUi::new("/docs")
+                .url("/openapi.json", crate::openapi::ApiDoc::openapi()),
+        );
+        tracing::info!("Swagger UI enabled at /docs");
+    }
+
+    // OTEL-04: X-Trace-Id response header middleware.
+    // When otel feature is active, extracts the current OTel trace ID from the
+    // tracing span context and injects it as an X-Trace-Id response header.
+    // When otel is not compiled, this is a no-op passthrough.
+    let app = app.layer(axum_middleware::from_fn(trace_id_header_middleware));
+
     // Permissive CORS for non-MCP routes.
     // NOTE: The MCP router already has its own restricted CORS layer applied internally.
     let app = app.layer(CorsLayer::permissive());
@@ -223,6 +243,58 @@ pub async fn start_server(
         .map_err(|e| BlufioError::channel_delivery_failed("gateway", e))?;
 
     Ok(())
+}
+
+/// GET /openapi.json -- Serve the OpenAPI 3.1 specification.
+///
+/// Public endpoint (no authentication required). Returns the auto-generated
+/// OpenAPI spec as JSON.
+async fn get_openapi_json() -> axum::response::Response {
+    use axum::response::IntoResponse;
+    use utoipa::OpenApi;
+    let spec = crate::openapi::ApiDoc::openapi()
+        .to_pretty_json()
+        .unwrap_or_else(|_| "{}".to_string());
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        spec,
+    )
+        .into_response()
+}
+
+/// OTEL-04: Middleware that injects `X-Trace-Id` response header.
+///
+/// When the `otel` feature is enabled and an active OTel trace context is
+/// present, this middleware extracts the trace ID from the current span and
+/// adds it as an `X-Trace-Id` response header. This allows API consumers to
+/// correlate HTTP responses with distributed traces in their observability
+/// backend.
+///
+/// When `otel` is not compiled, this is a zero-cost passthrough.
+async fn trace_id_header_middleware(
+    request: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    #[allow(unused_mut)] // `mut` needed when `otel` feature is active.
+    let mut response = next.run(request).await;
+
+    #[cfg(feature = "otel")]
+    {
+        use opentelemetry::trace::TraceContextExt;
+        use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+        let context = tracing::Span::current().context();
+        let span_ref = context.span();
+        let span_context = span_ref.span_context();
+        if span_context.is_valid() {
+            let trace_id = span_context.trace_id().to_string();
+            if let Ok(val) = axum::http::HeaderValue::from_str(&trace_id) {
+                response.headers_mut().insert("x-trace-id", val);
+            }
+        }
+    }
+
+    response
 }
 
 #[cfg(test)]
@@ -265,6 +337,7 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 3000,
             bearer_token: None,
+            swagger_ui_enabled: false,
         };
         let debug = format!("{config:?}");
         assert!(debug.contains("127.0.0.1"));

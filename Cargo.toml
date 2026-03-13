@@ -90,6 +90,14 @@ html2text = "0.16"
 comrak = "0.51"
 sha1 = "0.10"
 base64 = "0.22"
+opentelemetry = { version = "0.31", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["trace", "http-proto", "reqwest-client", "reqwest-rustls-webpki-roots"] }
+tracing-opentelemetry = "0.32"
+opentelemetry-http = "0.31"
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+insta = { version = "1", features = ["json"] }
 
 [profile.release]
 lto = "thin"

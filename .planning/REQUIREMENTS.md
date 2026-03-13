@@ -122,26 +122,26 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### OpenTelemetry
 
-- [ ] **OTEL-01**: OpenTelemetry tracing via tracing-opentelemetry bridge, feature-gated (disabled by default)
-- [ ] **OTEL-02**: OTLP export (HTTP mode) to configurable endpoint
-- [ ] **OTEL-03**: Key spans: agent loop iteration, LLM provider call, tool execution, memory retrieval, context assembly
-- [ ] **OTEL-04**: Trace context propagation through MCP calls
-- [ ] **OTEL-05**: Zero overhead when disabled (feature-gate at compile time)
-- [ ] **OTEL-06**: Coexists with existing Prometheus metrics (OTel for traces only, Prometheus for metrics)
+- [x] **OTEL-01**: OpenTelemetry tracing via tracing-opentelemetry bridge, feature-gated (disabled by default)
+- [x] **OTEL-02**: OTLP export (HTTP mode) to configurable endpoint
+- [x] **OTEL-03**: Key spans: agent loop iteration, LLM provider call, tool execution, memory retrieval, context assembly
+- [x] **OTEL-04**: Trace context propagation through MCP calls
+- [x] **OTEL-05**: Zero overhead when disabled (feature-gate at compile time)
+- [x] **OTEL-06**: Coexists with existing Prometheus metrics (OTel for traces only, Prometheus for metrics)
 
 ### OpenAPI
 
-- [ ] **OAPI-01**: OpenAPI 3.1 spec auto-generated from axum route definitions via utoipa annotations
-- [ ] **OAPI-02**: Spec served at /openapi.json endpoint
-- [ ] **OAPI-03**: Optional Swagger UI served at /docs when enabled in config
-- [ ] **OAPI-04**: All existing gateway endpoints annotated with request/response schemas
+- [x] **OAPI-01**: OpenAPI 3.1 spec auto-generated from axum route definitions via utoipa annotations
+- [x] **OAPI-02**: Spec served at /openapi.json endpoint
+- [x] **OAPI-03**: Optional Swagger UI served at /docs when enabled in config
+- [x] **OAPI-04**: All existing gateway endpoints annotated with request/response schemas
 
 ### Litestream
 
-- [ ] **LITE-01**: Litestream config template generation via `blufio litestream init`
-- [ ] **LITE-02**: `blufio litestream status` checks replication lag
-- [ ] **LITE-03**: Documentation of SQLCipher incompatibility with mitigation (application-level backup alternative)
-- [ ] **LITE-04**: WAL autocheckpoint disabled when Litestream mode active (PRAGMA wal_autocheckpoint=0)
+- [x] **LITE-01**: Litestream config template generation via `blufio litestream init`
+- [x] **LITE-02**: `blufio litestream status` checks replication lag
+- [x] **LITE-03**: Documentation of SQLCipher incompatibility with mitigation (application-level backup alternative)
+- [x] **LITE-04**: WAL autocheckpoint disabled when Litestream mode active (PRAGMA wal_autocheckpoint=0)
 
 ### Code Quality
 
@@ -259,20 +259,20 @@ Deferred to v1.6+.
 | CHAN-05 | Phase 61 | Complete |
 | CHAN-06 | Phase 61 | Complete |
 | CHAN-07 | Phase 61 | Complete |
-| OTEL-01 | Phase 62 | Pending |
-| OTEL-02 | Phase 62 | Pending |
-| OTEL-03 | Phase 62 | Pending |
-| OTEL-04 | Phase 62 | Pending |
-| OTEL-05 | Phase 62 | Pending |
-| OTEL-06 | Phase 62 | Pending |
-| OAPI-01 | Phase 62 | Pending |
-| OAPI-02 | Phase 62 | Pending |
-| OAPI-03 | Phase 62 | Pending |
-| OAPI-04 | Phase 62 | Pending |
-| LITE-01 | Phase 62 | Pending |
-| LITE-02 | Phase 62 | Pending |
-| LITE-03 | Phase 62 | Pending |
-| LITE-04 | Phase 62 | Pending |
+| OTEL-01 | Phase 62 | Complete |
+| OTEL-02 | Phase 62 | Complete |
+| OTEL-03 | Phase 62 | Complete |
+| OTEL-04 | Phase 62 | Complete |
+| OTEL-05 | Phase 62 | Complete |
+| OTEL-06 | Phase 62 | Complete |
+| OAPI-01 | Phase 62 | Complete |
+| OAPI-02 | Phase 62 | Complete |
+| OAPI-03 | Phase 62 | Complete |
+| OAPI-04 | Phase 62 | Complete |
+| LITE-01 | Phase 62 | Complete |
+| LITE-02 | Phase 62 | Complete |
+| LITE-03 | Phase 62 | Complete |
+| LITE-04 | Phase 62 | Complete |
 | QUAL-01 | Phase 63 | Pending |
 | QUAL-02 | Phase 63 | Pending |
 | QUAL-03 | Phase 63 | Pending |

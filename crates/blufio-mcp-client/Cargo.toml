@@ -29,6 +29,12 @@ hex = "0.4"
 tokio-rusqlite = { workspace = true }
 rusqlite = { workspace = true }
 tokio-util = { workspace = true }
+reqwest = { workspace = true }
+opentelemetry = { workspace = true, optional = true }
+
+[features]
+default = []
+otel = ["dep:opentelemetry"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }

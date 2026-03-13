@@ -16,6 +16,20 @@ use crate::server::GatewayState;
 /// POST /v1/webhooks -- Register a new webhook.
 ///
 /// Requires admin scope or master auth. The HMAC secret is returned once.
+#[utoipa::path(
+    post,
+    path = "/v1/webhooks",
+    tag = "Webhooks",
+    request_body = CreateWebhookRequest,
+    responses(
+        (status = 201, description = "Webhook created", body = CreateWebhookResponse),
+        (status = 400, description = "Invalid URL or empty events"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn post_create_webhook(
     Extension(auth_ctx): Extension<AuthContext>,
     State(state): State<GatewayState>,
@@ -52,6 +66,18 @@ pub async fn post_create_webhook(
 /// GET /v1/webhooks -- List all registered webhooks.
 ///
 /// Requires admin scope or master auth. Never exposes secrets.
+#[utoipa::path(
+    get,
+    path = "/v1/webhooks",
+    tag = "Webhooks",
+    responses(
+        (status = 200, description = "List of webhooks", body = Vec<WebhookListItem>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_list_webhooks(
     Extension(auth_ctx): Extension<AuthContext>,
     State(state): State<GatewayState>,
@@ -74,6 +100,19 @@ pub async fn get_list_webhooks(
 /// DELETE /v1/webhooks/:id -- Delete a webhook.
 ///
 /// Requires admin scope or master auth.
+#[utoipa::path(
+    delete,
+    path = "/v1/webhooks/{id}",
+    tag = "Webhooks",
+    params(("id" = String, Path, description = "Webhook ID to delete")),
+    responses(
+        (status = 204, description = "Webhook deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn delete_webhook(
     Extension(auth_ctx): Extension<AuthContext>,
     State(state): State<GatewayState>,

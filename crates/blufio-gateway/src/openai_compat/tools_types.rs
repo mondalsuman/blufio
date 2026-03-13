@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// Query parameters for GET /v1/tools.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct ToolsQueryParams {
     /// Filter by tool source: "builtin", "wasm", "mcp".
     #[serde(default)]
@@ -21,7 +21,7 @@ pub struct ToolsQueryParams {
 }
 
 /// Response for GET /v1/tools.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ToolListResponse {
     /// Object type (always "list").
     pub object: String,
@@ -30,7 +30,7 @@ pub struct ToolListResponse {
 }
 
 /// Extended tool info in OpenAI function schema format.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ToolInfo {
     /// Tool type (always "function").
     #[serde(rename = "type")]
@@ -48,7 +48,7 @@ pub struct ToolInfo {
 }
 
 /// Function info within a ToolInfo.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ToolFunctionInfo {
     /// Function name.
     pub name: String,
@@ -63,7 +63,7 @@ pub struct ToolFunctionInfo {
 // ---------------------------------------------------------------------------
 
 /// Request body for POST /v1/tools/invoke.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ToolInvokeRequest {
     /// Tool name to invoke.
     pub name: String,
@@ -77,7 +77,7 @@ fn default_empty_object() -> serde_json::Value {
 }
 
 /// Response body for POST /v1/tools/invoke.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ToolInvokeResponse {
     /// Tool name that was invoked.
     pub name: String,
