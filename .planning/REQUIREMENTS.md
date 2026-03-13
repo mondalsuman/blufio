@@ -122,8 +122,8 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### OpenTelemetry
 
-- [ ] **OTEL-01**: OpenTelemetry tracing via tracing-opentelemetry bridge, feature-gated (disabled by default)
-- [ ] **OTEL-02**: OTLP export (HTTP mode) to configurable endpoint
+- [x] **OTEL-01**: OpenTelemetry tracing via tracing-opentelemetry bridge, feature-gated (disabled by default)
+- [x] **OTEL-02**: OTLP export (HTTP mode) to configurable endpoint
 - [ ] **OTEL-03**: Key spans: agent loop iteration, LLM provider call, tool execution, memory retrieval, context assembly
 - [ ] **OTEL-04**: Trace context propagation through MCP calls
 - [x] **OTEL-05**: Zero overhead when disabled (feature-gate at compile time)
@@ -259,8 +259,8 @@ Deferred to v1.6+.
 | CHAN-05 | Phase 61 | Complete |
 | CHAN-06 | Phase 61 | Complete |
 | CHAN-07 | Phase 61 | Complete |
-| OTEL-01 | Phase 62 | Pending |
-| OTEL-02 | Phase 62 | Pending |
+| OTEL-01 | Phase 62 | Complete |
+| OTEL-02 | Phase 62 | Complete |
 | OTEL-03 | Phase 62 | Pending |
 | OTEL-04 | Phase 62 | Pending |
 | OTEL-05 | Phase 62 | Complete |

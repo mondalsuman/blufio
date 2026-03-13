@@ -1,0 +1,2311 @@
+---
+source: crates/blufio-gateway/src/openapi.rs
+assertion_line: 137
+expression: json
+---
+{
+  "components": {
+    "schemas": {
+      "ApiKey": {
+        "description": "A stored API key record (never includes the raw key or hash in API responses).",
+        "properties": {
+          "created_at": {
+            "description": "ISO 8601 creation timestamp.",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "ISO 8601 expiration timestamp (None = never expires).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "Unique key identifier.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Human-readable name for the key.",
+            "type": "string"
+          },
+          "rate_limit": {
+            "description": "Maximum requests per minute for this key.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "revoked_at": {
+            "description": "ISO 8601 revocation timestamp (None = not revoked).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scopes": {
+            "description": "Allowed scopes (e.g., \"chat.completions\", \"tools.invoke\", \"admin\").",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scopes",
+          "rate_limit",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "BatchItemResult": {
+        "description": "Result of a single batch item.",
+        "properties": {
+          "error": {
+            "description": "Error message (if failed).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "index": {
+            "description": "Index of the item in the original request array.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "response": {
+            "description": "Response data (if completed)."
+          },
+          "status": {
+            "description": "Item status: \"completed\" or \"failed\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "status"
+        ],
+        "type": "object"
+      },
+      "BatchRequest": {
+        "description": "Request body for submitting a batch of chat completion requests.",
+        "properties": {
+          "items": {
+            "description": "Individual chat completion requests to process.",
+            "items": {},
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "BatchResponse": {
+        "description": "Full batch status response (returned by GET /v1/batch/:id).",
+        "properties": {
+          "api_key_id": {
+            "description": "API key ID that submitted the batch (None for master tokens).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "description": "ISO 8601 completion timestamp (None if still processing).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_items": {
+            "description": "Number of successfully completed items.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "created_at": {
+            "description": "ISO 8601 creation timestamp.",
+            "type": "string"
+          },
+          "failed_items": {
+            "description": "Number of failed items.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "description": "Unique batch identifier.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Per-item results (populated when batch is complete).",
+            "items": {
+              "$ref": "#/components/schemas/BatchItemResult"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "status": {
+            "description": "Batch status: \"processing\", \"completed\", or \"failed\".",
+            "type": "string"
+          },
+          "total_items": {
+            "description": "Total number of items.",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "total_items",
+          "completed_items",
+          "failed_items",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "BatchSubmitResponse": {
+        "description": "Response returned immediately when a batch is submitted (202 Accepted).",
+        "properties": {
+          "created_at": {
+            "description": "ISO 8601 creation timestamp.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Unique batch identifier for polling status.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status (always \"processing\" on submit).",
+            "type": "string"
+          },
+          "total_items": {
+            "description": "Total number of items in the batch.",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "total_items",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "CreateKeyRequest": {
+        "description": "Request body for creating a new API key.",
+        "properties": {
+          "expires_in_hours": {
+            "description": "Hours until key expires (None = never expires).",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Human-readable name for the key.",
+            "type": "string"
+          },
+          "rate_limit": {
+            "description": "Rate limit in requests per minute (default: 60).",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "scopes": {
+            "description": "Scopes to grant (e.g., [\"chat.completions\", \"tools.invoke\"]).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "scopes"
+        ],
+        "type": "object"
+      },
+      "CreateKeyResponse": {
+        "description": "Response body after creating a new API key.\n\nThe `key` field contains the raw API key and is only shown once at creation time.",
+        "properties": {
+          "created_at": {
+            "description": "ISO 8601 creation timestamp.",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "ISO 8601 expiration timestamp (None = never expires).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "Unique key identifier.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Raw API key (shown only once -- store securely).",
+            "type": "string"
+          },
+          "name": {
+            "description": "Human-readable name.",
+            "type": "string"
+          },
+          "rate_limit": {
+            "description": "Rate limit in requests per minute.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "scopes": {
+            "description": "Granted scopes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "key",
+          "scopes",
+          "rate_limit",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "CreateWebhookRequest": {
+        "description": "Request body for creating a new webhook.",
+        "properties": {
+          "events": {
+            "description": "Event types to subscribe to (e.g., \"chat.completed\", \"tool.invoked\").",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "url": {
+            "description": "Delivery URL (must be https:// or http://localhost for dev).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "events"
+        ],
+        "type": "object"
+      },
+      "CreateWebhookResponse": {
+        "description": "Response body after creating a webhook (shows secret once).",
+        "properties": {
+          "created_at": {
+            "description": "ISO 8601 creation timestamp.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Event types subscribed to.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "Unique webhook identifier.",
+            "type": "string"
+          },
+          "secret": {
+            "description": "HMAC secret (shown once -- store securely).",
+            "type": "string"
+          },
+          "url": {
+            "description": "Delivery URL.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "secret",
+          "events",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "description": "Error response body.",
+        "properties": {
+          "error": {
+            "description": "Error description.",
+            "example": "Invalid request body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "GatewayChoice": {
+        "description": "A single choice in a response.",
+        "properties": {
+          "finish_reason": {
+            "description": "Reason the generation stopped (OpenAI convention).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "index": {
+            "description": "Choice index.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "message": {
+            "$ref": "#/components/schemas/GatewayResponseMessage",
+            "description": "Generated message."
+          }
+        },
+        "required": [
+          "index",
+          "message"
+        ],
+        "type": "object"
+      },
+      "GatewayCompletionRequest": {
+        "description": "POST /v1/chat/completions request body.",
+        "properties": {
+          "max_tokens": {
+            "description": "Maximum tokens to generate.",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "messages": {
+            "description": "Conversation messages.",
+            "items": {
+              "$ref": "#/components/schemas/GatewayMessage"
+            },
+            "type": "array"
+          },
+          "model": {
+            "description": "Model identifier. Supports `provider/model` format (e.g., \"openai/gpt-4o\")\nor bare model names (routed to the default provider).",
+            "type": "string"
+          },
+          "n": {
+            "description": "Number of completions (only 1 supported).",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "response_format": {
+            "description": "Response format (e.g., `{\"type\": \"json_object\"}`)."
+          },
+          "stop": {
+            "description": "Stop sequences."
+          },
+          "stream": {
+            "description": "Whether to stream the response via SSE.",
+            "type": "boolean"
+          },
+          "stream_options": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GatewayStreamOptions",
+                "description": "Stream options (e.g., include_usage)."
+              }
+            ]
+          },
+          "temperature": {
+            "description": "Sampling temperature (0.0 - 2.0).",
+            "format": "float",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tool_choice": {
+            "description": "Tool choice constraint."
+          },
+          "tools": {
+            "description": "Tool definitions available for the model.",
+            "items": {
+              "$ref": "#/components/schemas/GatewayTool"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "GatewayCompletionResponse": {
+        "description": "POST /v1/chat/completions response body (non-streaming).",
+        "properties": {
+          "choices": {
+            "description": "Response choices.",
+            "items": {
+              "$ref": "#/components/schemas/GatewayChoice"
+            },
+            "type": "array"
+          },
+          "created": {
+            "description": "Unix timestamp of creation.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "Response ID.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model that generated the response.",
+            "type": "string"
+          },
+          "object": {
+            "description": "Object type (always \"chat.completion\").",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/GatewayUsage",
+            "description": "Token usage statistics."
+          },
+          "x_latency_ms": {
+            "description": "Extended: latency in milliseconds.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "x_provider": {
+            "description": "Extended: provider name.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "model",
+          "choices",
+          "usage"
+        ],
+        "type": "object"
+      },
+      "GatewayContent": {
+        "description": "Content within a message — either a string or array of typed parts.",
+        "oneOf": [
+          {
+            "description": "Simple text content.",
+            "type": "string"
+          },
+          {
+            "description": "Array of typed content parts (text, image_url, etc.).",
+            "items": {
+              "$ref": "#/components/schemas/GatewayContentPart"
+            },
+            "type": "array"
+          }
+        ]
+      },
+      "GatewayContentPart": {
+        "description": "A typed content part within a message.",
+        "oneOf": [
+          {
+            "description": "Text content part.",
+            "properties": {
+              "text": {
+                "description": "The text content.",
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "text"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Image URL content part (for vision).",
+            "properties": {
+              "image_url": {
+                "$ref": "#/components/schemas/GatewayImageUrl",
+                "description": "The image URL data."
+              },
+              "type": {
+                "enum": [
+                  "image_url"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "image_url",
+              "type"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "GatewayErrorDetail": {
+        "description": "Error detail within an error response.",
+        "properties": {
+          "category": {
+            "description": "Extended: error category from BlufioError classification.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "code": {
+            "description": "Error code.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure_mode": {
+            "description": "Extended: failure mode from BlufioError classification.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "description": "Human-readable error message.",
+            "type": "string"
+          },
+          "param": {
+            "description": "Parameter that caused the error (if applicable).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider": {
+            "description": "Extended: provider that returned the error.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "retry_after": {
+            "description": "Extended: retry-after seconds.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "retryable": {
+            "description": "Extended: whether the error is retryable.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "type": {
+            "description": "Error type (e.g., \"invalid_request_error\", \"server_error\").",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "type"
+        ],
+        "type": "object"
+      },
+      "GatewayErrorResponse": {
+        "description": "OpenAI-compatible error response.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/GatewayErrorDetail",
+            "description": "Error details."
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "GatewayFunctionCall": {
+        "description": "Function call details within a tool call.",
+        "properties": {
+          "arguments": {
+            "description": "JSON-serialized arguments.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Function name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "arguments"
+        ],
+        "type": "object"
+      },
+      "GatewayFunctionDef": {
+        "description": "Function definition within a tool.",
+        "properties": {
+          "description": {
+            "description": "Human-readable description.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Function name.",
+            "type": "string"
+          },
+          "parameters": {
+            "description": "JSON Schema for parameters."
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "GatewayImageUrl": {
+        "description": "Image URL data for vision content.",
+        "properties": {
+          "url": {
+            "description": "The URL (can be data: URI with base64).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "GatewayMessage": {
+        "description": "A message in the conversation.",
+        "properties": {
+          "content": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GatewayContent",
+                "description": "Content — either a string or array of content parts."
+              }
+            ]
+          },
+          "name": {
+            "description": "Optional name field.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "description": "Role: \"system\", \"user\", \"assistant\", or \"tool\".",
+            "type": "string"
+          },
+          "tool_call_id": {
+            "description": "Tool call ID (for role=\"tool\" messages).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tool_calls": {
+            "description": "Tool calls made by the assistant.",
+            "items": {
+              "$ref": "#/components/schemas/GatewayToolCall"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "type": "object"
+      },
+      "GatewayResponseMessage": {
+        "description": "Response message (different from request message — has no tool_call_id).",
+        "properties": {
+          "content": {
+            "description": "Text content.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "description": "Role (always \"assistant\").",
+            "type": "string"
+          },
+          "tool_calls": {
+            "description": "Tool calls.",
+            "items": {
+              "$ref": "#/components/schemas/GatewayToolCall"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "type": "object"
+      },
+      "GatewayStreamOptions": {
+        "description": "Stream options.",
+        "properties": {
+          "include_usage": {
+            "description": "Whether to include usage stats in the stream.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "GatewayTool": {
+        "description": "An OpenAI tool definition.",
+        "properties": {
+          "function": {
+            "$ref": "#/components/schemas/GatewayFunctionDef",
+            "description": "Function definition."
+          },
+          "type": {
+            "description": "Tool type (always \"function\").",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "function"
+        ],
+        "type": "object"
+      },
+      "GatewayToolCall": {
+        "description": "A tool call made by the assistant.",
+        "properties": {
+          "function": {
+            "$ref": "#/components/schemas/GatewayFunctionCall",
+            "description": "Function call details."
+          },
+          "id": {
+            "description": "Unique tool call identifier.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Tool type (always \"function\").",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "function"
+        ],
+        "type": "object"
+      },
+      "GatewayUsage": {
+        "description": "Token usage statistics.",
+        "properties": {
+          "completion_tokens": {
+            "description": "Number of completion tokens generated.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "prompt_tokens": {
+            "description": "Number of prompt tokens consumed.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_tokens": {
+            "description": "Total tokens used.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens"
+        ],
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "Response body for GET /v1/health.",
+        "properties": {
+          "circuit_breakers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Per-dependency circuit breaker states (e.g., {\"anthropic\": \"closed\"}).",
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "degradation_level": {
+            "description": "Current degradation level (e.g., \"L0\").",
+            "example": "L0",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "degradation_name": {
+            "description": "Human-readable degradation level name (e.g., \"FullyOperational\").",
+            "example": "FullyOperational",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "description": "Health status string.",
+            "example": "ok",
+            "type": "string"
+          },
+          "uptime_secs": {
+            "description": "Uptime in seconds (placeholder).",
+            "example": 3600,
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "description": "Binary version.",
+            "example": "0.1.0",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "uptime_secs"
+        ],
+        "type": "object"
+      },
+      "MessageRequest": {
+        "description": "Request body for POST /v1/messages.",
+        "properties": {
+          "content": {
+            "description": "Message content text.",
+            "example": "Hello, how are you?",
+            "type": "string"
+          },
+          "sender_id": {
+            "description": "Optional sender identifier.",
+            "example": "user-456",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session_id": {
+            "description": "Optional session ID to continue an existing session.",
+            "example": "sess-abc123",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
+      "MessageResponse": {
+        "description": "Response body for POST /v1/messages.",
+        "properties": {
+          "content": {
+            "description": "Response content from the agent.",
+            "example": "I'm doing well, thank you!",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "ISO 8601 timestamp.",
+            "example": "2026-03-13T12:00:00Z",
+            "type": "string"
+          },
+          "id": {
+            "description": "Request/message ID.",
+            "example": "msg-abc123",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session ID (may be newly created).",
+            "example": "sess-abc123",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ModelsListResponse": {
+        "description": "Response for GET /v1/models.",
+        "properties": {
+          "data": {
+            "description": "Model data.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "object": {
+            "description": "Object type (always \"list\").",
+            "example": "list",
+            "type": "string"
+          }
+        },
+        "required": [
+          "object",
+          "data"
+        ],
+        "type": "object"
+      },
+      "PublicHealthResponse": {
+        "description": "Response body for GET /health (unauthenticated).",
+        "properties": {
+          "status": {
+            "description": "Health status string.",
+            "example": "healthy",
+            "type": "string"
+          },
+          "uptime_secs": {
+            "description": "Uptime in seconds.",
+            "example": 120,
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "uptime_secs"
+        ],
+        "type": "object"
+      },
+      "ResponsesFunction": {
+        "description": "Function definition for a responses tool.",
+        "properties": {
+          "description": {
+            "description": "Human-readable description.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Function name.",
+            "type": "string"
+          },
+          "parameters": {
+            "description": "JSON Schema for parameters."
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "ResponsesInput": {
+        "description": "Input for a responses request.",
+        "oneOf": [
+          {
+            "description": "Simple text input.",
+            "type": "string"
+          },
+          {
+            "description": "Array of messages.",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesInputMessage"
+            },
+            "type": "array"
+          }
+        ]
+      },
+      "ResponsesInputMessage": {
+        "description": "A single input message.",
+        "properties": {
+          "content": {
+            "description": "Message content.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role: \"user\", \"assistant\", etc.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "ResponsesRequest": {
+        "description": "POST /v1/responses request body.",
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/ResponsesInput",
+            "description": "Input — either a plain text string or an array of messages."
+          },
+          "instructions": {
+            "description": "System instructions for the model.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_output_tokens": {
+            "description": "Maximum output tokens.",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "model": {
+            "description": "Model identifier (supports provider/model format).",
+            "type": "string"
+          },
+          "previous_response_id": {
+            "description": "Previous response ID for multi-turn conversations.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stream": {
+            "description": "Whether to stream the response (default: true).",
+            "type": "boolean"
+          },
+          "temperature": {
+            "description": "Sampling temperature.",
+            "format": "float",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tools": {
+            "description": "Tool definitions.",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesTool"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "model",
+          "input"
+        ],
+        "type": "object"
+      },
+      "ResponsesTool": {
+        "description": "A tool definition in the responses API.",
+        "properties": {
+          "function": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ResponsesFunction",
+                "description": "Function definition (for type=\"function\")."
+              }
+            ]
+          },
+          "name": {
+            "description": "Built-in tool name (for non-function tools).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "description": "Tool type (\"function\" or built-in like \"web_search\").",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "SessionInfo": {
+        "description": "Information about a single session.",
+        "properties": {
+          "channel": {
+            "description": "Channel the session originates from.",
+            "example": "api",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "ISO 8601 creation timestamp.",
+            "example": "2026-03-13T12:00:00Z",
+            "type": "string"
+          },
+          "id": {
+            "description": "Session identifier.",
+            "example": "sess-abc123",
+            "type": "string"
+          },
+          "state": {
+            "description": "Session state.",
+            "example": "active",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "channel",
+          "state",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "SessionListResponse": {
+        "description": "Response body for GET /v1/sessions.",
+        "properties": {
+          "sessions": {
+            "description": "List of active sessions.",
+            "items": {
+              "$ref": "#/components/schemas/SessionInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions"
+        ],
+        "type": "object"
+      },
+      "ToolFunctionInfo": {
+        "description": "Function info within a ToolInfo.",
+        "properties": {
+          "description": {
+            "description": "Human-readable description.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Function name.",
+            "type": "string"
+          },
+          "parameters": {
+            "description": "JSON Schema for parameters."
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "ToolInfo": {
+        "description": "Extended tool info in OpenAI function schema format.",
+        "properties": {
+          "function": {
+            "$ref": "#/components/schemas/ToolFunctionInfo",
+            "description": "Function definition."
+          },
+          "required_permissions": {
+            "description": "Extended: required permissions/capabilities.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "Extended: tool source (\"builtin\", \"wasm\", \"mcp\").",
+            "type": "string"
+          },
+          "type": {
+            "description": "Tool type (always \"function\").",
+            "type": "string"
+          },
+          "version": {
+            "description": "Extended: tool version (if available).",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "function",
+          "source"
+        ],
+        "type": "object"
+      },
+      "ToolInvokeRequest": {
+        "description": "Request body for POST /v1/tools/invoke.",
+        "properties": {
+          "input": {
+            "description": "JSON input to pass to the tool."
+          },
+          "name": {
+            "description": "Tool name to invoke.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ToolInvokeResponse": {
+        "description": "Response body for POST /v1/tools/invoke.",
+        "properties": {
+          "duration_ms": {
+            "description": "Execution time in milliseconds.",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "is_error": {
+            "description": "Whether the execution resulted in an error.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Tool name that was invoked.",
+            "type": "string"
+          },
+          "output": {
+            "description": "Tool execution output.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "output",
+          "is_error"
+        ],
+        "type": "object"
+      },
+      "ToolListResponse": {
+        "description": "Response for GET /v1/tools.",
+        "properties": {
+          "data": {
+            "description": "Tool data.",
+            "items": {
+              "$ref": "#/components/schemas/ToolInfo"
+            },
+            "type": "array"
+          },
+          "object": {
+            "description": "Object type (always \"list\").",
+            "type": "string"
+          }
+        },
+        "required": [
+          "object",
+          "data"
+        ],
+        "type": "object"
+      },
+      "WebhookListItem": {
+        "description": "A webhook list item (never exposes the secret).",
+        "properties": {
+          "active": {
+            "description": "Whether the webhook is active.",
+            "type": "boolean"
+          },
+          "created_at": {
+            "description": "ISO 8601 creation timestamp.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Event types this webhook subscribes to.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "Unique webhook identifier.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Delivery URL.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "events",
+          "active",
+          "created_at"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer_auth": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "name": "Blufio Contributors"
+    },
+    "description": "Always-on personal AI agent REST API",
+    "license": {
+      "name": "MIT OR Apache-2.0"
+    },
+    "title": "Blufio API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "description": "Returns basic health status for systemd health checks and monitoring.\nDoes not require authentication. Returns minimal information.",
+        "operationId": "get_public_health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHealthResponse"
+                }
+              }
+            },
+            "description": "Service healthy"
+          }
+        },
+        "summary": "GET /health (unauthenticated)",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "description": "Returns Prometheus metrics in text format for scraping.\nDoes not require authentication.",
+        "operationId": "get_public_metrics",
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {}
+            },
+            "description": "Prometheus metrics"
+          },
+          "503": {
+            "description": "Metrics not available"
+          }
+        },
+        "summary": "GET /metrics (unauthenticated)",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/v1/api-keys": {
+      "get": {
+        "description": "Requires admin scope or master auth. Never exposes key hashes.",
+        "operationId": "get_list_api_keys",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKey"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of API keys"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "GET /v1/api-keys -- List all API keys.",
+        "tags": [
+          "API Keys"
+        ]
+      },
+      "post": {
+        "description": "Requires admin scope or master auth. Returns the raw key once.",
+        "operationId": "post_create_api_key",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateKeyResponse"
+                }
+              }
+            },
+            "description": "API key created"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "POST /v1/api-keys -- Create a new scoped API key.",
+        "tags": [
+          "API Keys"
+        ]
+      }
+    },
+    "/v1/api-keys/{id}": {
+      "delete": {
+        "description": "Requires admin scope or master auth. Revokes rather than deletes\nso the key is immediately rejected on all endpoints.",
+        "operationId": "delete_api_key",
+        "parameters": [
+          {
+            "description": "API key ID to revoke",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Key revoked"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "DELETE /v1/api-keys/:id -- Revoke an API key.",
+        "tags": [
+          "API Keys"
+        ]
+      }
+    },
+    "/v1/batch": {
+      "post": {
+        "description": "Requires chat.completions, admin scope, or master auth.\nReturns 202 Accepted with batch_id for status polling.",
+        "operationId": "post_create_batch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchSubmitResponse"
+                }
+              }
+            },
+            "description": "Batch accepted for processing"
+          },
+          "400": {
+            "description": "Invalid batch (empty or too large)"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "POST /v1/batch -- Submit a batch of chat completion requests.",
+        "tags": [
+          "Batch"
+        ]
+      }
+    },
+    "/v1/batch/{id}": {
+      "get": {
+        "description": "For scoped keys, verifies the batch was submitted by the same key.",
+        "operationId": "get_batch_status",
+        "parameters": [
+          {
+            "description": "Batch ID to check status",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            },
+            "description": "Batch status and results"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Batch not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "GET /v1/batch/:id -- Get batch status and results.",
+        "tags": [
+          "Batch"
+        ]
+      }
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "description": "Accepts OpenAI-compatible chat completion requests and returns responses\nin the same format. Supports both streaming (SSE) and non-streaming modes.\nWhen `stream: true`, returns Server-Sent Events with `data: [JSON]` chunks.",
+        "operationId": "post_chat_completions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GatewayCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayCompletionResponse"
+                }
+              }
+            },
+            "description": "Chat completion response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Provider not found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Provider error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "POST /v1/chat/completions",
+        "tags": [
+          "OpenAI Compatible"
+        ]
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "description": "Returns health status of the gateway, including degradation state when\nthe resilience subsystem is wired in. Returns 503 for L4+ degradation.",
+        "operationId": "get_health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Service healthy"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Service degraded"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "GET /v1/health",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/v1/messages": {
+      "post": {
+        "description": "Accepts a message, routes it through the agent loop, and returns the response.\nIf the Accept header contains \"text/event-stream\", routes to SSE streaming.",
+        "operationId": "post_messages",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Message processed"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Gateway timeout"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "POST /v1/messages",
+        "tags": [
+          "Messages"
+        ]
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "description": "Returns a list of available models across all configured providers.",
+        "operationId": "get_models",
+        "parameters": [
+          {
+            "description": "Filter by provider name.",
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsListResponse"
+                }
+              }
+            },
+            "description": "Model list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "GET /v1/models",
+        "tags": [
+          "OpenAI Compatible"
+        ]
+      }
+    },
+    "/v1/responses": {
+      "post": {
+        "description": "Accepts OpenResponses-format requests and streams semantic events\ncompatible with the OpenAI Agents SDK. Only streaming mode is supported.\nReturns Server-Sent Events with semantic event types: response.created,\noutput_item.added, content_part.added, output_text.delta, output_text.done,\ncontent_part.done, output_item.done, response.completed.",
+        "operationId": "post_responses",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResponsesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Streaming semantic events (SSE)"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Provider not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "POST /v1/responses",
+        "tags": [
+          "OpenAI Compatible"
+        ]
+      }
+    },
+    "/v1/sessions": {
+      "get": {
+        "description": "Returns list of active sessions from storage.",
+        "operationId": "get_sessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionListResponse"
+                }
+              }
+            },
+            "description": "Session list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "GET /v1/sessions",
+        "tags": [
+          "Sessions"
+        ]
+      }
+    },
+    "/v1/tools": {
+      "get": {
+        "description": "Returns a list of available tools in OpenAI function schema format.\nOnly tools in the config allowlist are returned.",
+        "operationId": "get_tools",
+        "parameters": [
+          {
+            "description": "Filter by tool source: \"builtin\", \"wasm\", \"mcp\".",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolListResponse"
+                }
+              }
+            },
+            "description": "Tool list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "GET /v1/tools",
+        "tags": [
+          "OpenAI Compatible"
+        ]
+      }
+    },
+    "/v1/tools/invoke": {
+      "post": {
+        "description": "Executes a tool directly (bypassing the LLM) and returns the result.\nOnly tools in the config allowlist can be invoked.",
+        "operationId": "post_tool_invoke",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolInvokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolInvokeResponse"
+                }
+              }
+            },
+            "description": "Tool execution result"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Tool not in allowlist"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Tool not found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayErrorResponse"
+                }
+              }
+            },
+            "description": "Tools not configured"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "POST /v1/tools/invoke",
+        "tags": [
+          "OpenAI Compatible"
+        ]
+      }
+    },
+    "/v1/webhooks": {
+      "get": {
+        "description": "Requires admin scope or master auth. Never exposes secrets.",
+        "operationId": "get_list_webhooks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookListItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of webhooks"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "GET /v1/webhooks -- List all registered webhooks.",
+        "tags": [
+          "Webhooks"
+        ]
+      },
+      "post": {
+        "description": "Requires admin scope or master auth. The HMAC secret is returned once.",
+        "operationId": "post_create_webhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateWebhookResponse"
+                }
+              }
+            },
+            "description": "Webhook created"
+          },
+          "400": {
+            "description": "Invalid URL or empty events"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "POST /v1/webhooks -- Register a new webhook.",
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    },
+    "/v1/webhooks/{id}": {
+      "delete": {
+        "description": "Requires admin scope or master auth.",
+        "operationId": "delete_webhook",
+        "parameters": [
+          {
+            "description": "Webhook ID to delete",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Webhook deleted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ],
+        "summary": "DELETE /v1/webhooks/:id -- Delete a webhook.",
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Message exchange API",
+      "name": "Messages"
+    },
+    {
+      "description": "Session management",
+      "name": "Sessions"
+    },
+    {
+      "description": "OpenAI-compatible endpoints",
+      "name": "OpenAI Compatible"
+    },
+    {
+      "description": "API key management",
+      "name": "API Keys"
+    },
+    {
+      "description": "Webhook management",
+      "name": "Webhooks"
+    },
+    {
+      "description": "Batch processing",
+      "name": "Batch"
+    },
+    {
+      "description": "Health and monitoring",
+      "name": "Health"
+    }
+  ]
+}

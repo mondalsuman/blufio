@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 62-05-PLAN.md
-last_updated: "2026-03-13T11:16:39.490Z"
-last_activity: 2026-03-13 -- Phase 62 Plan 01 complete (workspace deps, feature flags, config types for OTel/OpenAPI/Litestream)
+stopped_at: Completed 62-02-PLAN.md
+last_updated: "2026-03-13T11:19:29.636Z"
+last_activity: 2026-03-13 -- Phase 62 Plan 05 complete (Litestream CLI init/status, WAL autocheckpoint pragma, doctor check)
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 35
-  completed_plans: 40
+  completed_plans: 41
   percent: 100
 ---
 
@@ -84,6 +84,7 @@ Progress: [██████████] 100%
 | Phase 61 P04 | 3min | 2 tasks | 2 files |
 | Phase 62 P01 | 6min | 2 tasks | 4 files |
 | Phase 62 P05 | 8min | 2 tasks | 4 files |
+| Phase 62 P02 | 11min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -218,6 +219,10 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 62]: ObservabilityConfig wraps OpenTelemetryConfig; OpenApiConfig nested inside GatewayConfig
 - [Phase 62]: SQLCipher detection uses BLUFIO_DB_KEY env var (existing convention from doctor.rs)
 - [Phase 62]: WAL autocheckpoint pragma set via separate open_connection (isolation pattern)
+- [Phase 62]: otel.rs always compiled (not cfg-gated module) for dual otel_span! macro variants
+- [Phase 62]: TracingState struct with cfg-gated otel_provider field for clean feature-conditional API
+- [Phase 62]: ParentBased(TraceIdRatioBased) sampler for proper distributed trace propagation
+- [Phase 62]: OTel init/shutdown uses eprintln (subscriber may not be ready/available)
 
 ### Pending Todos
 
@@ -233,6 +238,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T11:16:39.486Z
-Stopped at: Completed 62-05-PLAN.md
+Last session: 2026-03-13T11:19:22.927Z
+Stopped at: Completed 62-02-PLAN.md
 Resume file: None
