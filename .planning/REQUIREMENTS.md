@@ -11,7 +11,7 @@ Requirements for v1.6 Performance & Scalability Validation. Each maps to roadmap
 
 - [x] **VEC-01**: Memory store uses sqlite-vec vec0 virtual table for disk-backed KNN vector search instead of in-memory brute-force cosine similarity
 - [x] **VEC-02**: sqlite-vec integrates with SQLCipher — vec0 data encrypted at rest alongside existing memories table
-- [ ] **VEC-03**: vec0 metadata columns filter status='active' and classification!='restricted' during KNN search, not post-query
+- [x] **VEC-03**: vec0 metadata columns filter status='active' and classification!='restricted' during KNN search, not post-query
 - [ ] **VEC-04**: Existing BLOB embeddings migrate to vec0 virtual table via batched migration (500-row chunks) with rollback strategy
 - [ ] **VEC-05**: Hybrid retrieval (BM25 + vec0 KNN + RRF fusion + temporal decay + importance boost + MMR diversity) preserved and functionally identical to pre-migration
 - [ ] **VEC-06**: Eviction (batch_evict) and soft-delete operations sync across both memories and vec0 tables in single transaction
@@ -78,7 +78,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | VEC-01 | Phase 65 | Complete |
 | VEC-02 | Phase 65 | Complete |
-| VEC-03 | Phase 65 | Pending |
+| VEC-03 | Phase 65 | Complete |
 | VEC-04 | Phase 67 | Pending |
 | VEC-05 | Phase 67 | Pending |
 | VEC-06 | Phase 67 | Pending |

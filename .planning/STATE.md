@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: executing
-stopped_at: "Completed 65-01-PLAN.md"
-last_updated: "2026-03-13T20:00:37Z"
-last_activity: 2026-03-13 -- 65-01 sqlite-vec foundation (deps, config, events, vec0.rs) completed
+stopped_at: Completed 65-02-PLAN.md
+last_updated: "2026-03-13T20:14:55.347Z"
+last_activity: 2026-03-13 -- 65-02 vec0 integration (dual-write, KNN search, fallback) completed
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 2
-  completed_plans: 1
-  percent: 10
+  total_plans: 3
+  completed_plans: 2
+  percent: 20
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 ## Current Position
 
 Phase: 65 -- first of 5 in v1.6 (sqlite-vec Foundation)
-Plan: 1 of 2 in current phase
-Status: Executing -- Plan 01 complete, Plan 02 next
-Last activity: 2026-03-13 -- 65-01 sqlite-vec foundation (deps, config, events, vec0.rs) completed
+Plan: 2 of 3 in current phase
+Status: Executing -- Plan 02 complete, Plan 03 next
+Last activity: 2026-03-13 -- 65-02 vec0 integration (dual-write, KNN search, fallback) completed
 
-Progress: [█░░░░░░░░░] 10% (v1.6)
+Progress: [██░░░░░░░░] 20% (v1.6)
 
 ## Performance Metrics
 
@@ -54,6 +54,13 @@ Progress: [█░░░░░░░░░] 10% (v1.6)
 - v1.5 shipped 49 plans in 4 days (steady)
 - Trend: Stable
 
+**v1.6 Execution:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 65 P01 | 14min | 2 | 10 |
+| Phase 65 P02 | 8min | 2 | 2 |
+
 ## Accumulated Context
 
 ### Decisions
@@ -67,6 +74,8 @@ Recent decisions affecting v1.6 work:
 - [v1.5 Phase 63]: Criterion benchmarks in crates/blufio/benches/ -- extend with vec0 and injection benchmarks
 - [v1.6 Phase 65-01]: sqlite-vec 0.1.6 compiles with SQLCipher (SQLITE_CORE), vec0 auxiliary columns require "float" not "real"
 - [v1.6 Phase 65-01]: vec0 UPDATE on metadata columns works -- no DELETE+INSERT fallback needed for soft-delete sync
+- [v1.6 Phase 65-02]: Dual-write uses SQLite transaction -- save(), batch_evict(), soft_delete() atomically sync vec0
+- [v1.6 Phase 65-02]: AtomicU64 fallback counters for lock-free rate-limited logging in hot search path
 
 ### Pending Todos
 
@@ -81,6 +90,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T20:00:37Z
-Stopped at: Completed 65-01-PLAN.md
-Resume file: .planning/phases/65-sqlite-vec-foundation/65-02-PLAN.md
+Last session: 2026-03-13T20:14:55.345Z
+Stopped at: Completed 65-02-PLAN.md
+Resume file: .planning/phases/65-sqlite-vec-foundation/65-03-PLAN.md
