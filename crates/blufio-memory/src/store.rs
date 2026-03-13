@@ -9,9 +9,12 @@ use blufio_bus::EventBus;
 use blufio_bus::events::{BusEvent, MemoryEvent, new_event_id, now_timestamp};
 use blufio_core::classification::DataClassification;
 use blufio_core::error::BlufioError;
+use metrics::gauge;
 use tokio_rusqlite::Connection;
+use tracing::info;
 
 use crate::types::{Memory, MemorySource, MemoryStatus, blob_to_vec, vec_to_blob};
+use crate::vec0;
 
 /// Helper to convert tokio_rusqlite errors into BlufioError::Storage.
 fn storage_err(e: tokio_rusqlite::Error) -> BlufioError {
@@ -27,6 +30,9 @@ pub struct MemoryStore {
     /// Optional event bus for emitting memory CRUD events.
     /// Set to `None` in tests and CLI contexts.
     event_bus: Option<Arc<EventBus>>,
+    /// Whether the sqlite-vec vec0 virtual table is enabled for dual-write
+    /// and disk-backed KNN search. Set once at construction time.
+    vec0_enabled: bool,
 }
 
 impl MemoryStore {
@@ -38,6 +44,7 @@ impl MemoryStore {
         Self {
             conn,
             event_bus: None,
+            vec0_enabled: false,
         }
     }
 
@@ -46,7 +53,29 @@ impl MemoryStore {
         Self {
             conn,
             event_bus: Some(event_bus),
+            vec0_enabled: false,
         }
+    }
+
+    /// Creates a new MemoryStore with optional event bus and vec0 toggle.
+    ///
+    /// When `vec0_enabled` is true, save/evict/soft_delete will dual-write
+    /// to the vec0 virtual table in the same transaction as the memories table.
+    pub fn with_vec0(
+        conn: Connection,
+        event_bus: Option<Arc<EventBus>>,
+        vec0_enabled: bool,
+    ) -> Self {
+        Self {
+            conn,
+            event_bus,
+            vec0_enabled,
+        }
+    }
+
+    /// Returns whether vec0 is enabled on this store.
+    pub fn vec0_enabled(&self) -> bool {
+        self.vec0_enabled
     }
 
     /// Access the underlying connection (for advanced operations like hard-delete).
@@ -55,10 +84,15 @@ impl MemoryStore {
     }
 
     /// Save a memory to the store.
+    ///
+    /// When `vec0_enabled` is true, the memory is dual-written to both the
+    /// `memories` table and the `memories_vec0` virtual table in a single
+    /// transaction. Both succeed or both fail.
     pub async fn save(&self, memory: &Memory) -> Result<(), BlufioError> {
         let id = memory.id.clone();
         let content = memory.content.clone();
         let embedding_blob = vec_to_blob(&memory.embedding);
+        let embedding_raw = memory.embedding.clone();
         let source = memory.source.as_str().to_string();
         let confidence = memory.confidence;
         let status = memory.status.as_str().to_string();
@@ -67,16 +101,50 @@ impl MemoryStore {
         let classification = memory.classification.as_str().to_string();
         let created_at = memory.created_at.clone();
         let updated_at = memory.updated_at.clone();
+        let vec0_enabled = self.vec0_enabled;
 
         let mem_id = memory.id.clone();
         let mem_source = memory.source.as_str().to_string();
 
         self.conn
             .call(move |conn| {
-                conn.execute(
-                    "INSERT INTO memories (id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                    rusqlite::params![id, content, embedding_blob, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at],
-                )?;
+                if vec0_enabled {
+                    // Transactional dual-write: memories + vec0
+                    let tx = conn.transaction()?;
+                    tx.execute(
+                        "INSERT INTO memories (id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                        rusqlite::params![id, content, embedding_blob, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at],
+                    )?;
+
+                    // Get the rowid for correlation with vec0
+                    let rowid: i64 = tx.query_row(
+                        "SELECT rowid FROM memories WHERE id = ?1",
+                        rusqlite::params![id],
+                        |row| row.get(0),
+                    )?;
+
+                    vec0::vec0_insert(
+                        &tx,
+                        rowid,
+                        &status,
+                        &classification,
+                        session_id.as_deref(),
+                        &embedding_raw,
+                        &id,
+                        &content,
+                        &source,
+                        confidence,
+                        &created_at,
+                    )?;
+
+                    tx.commit()?;
+                } else {
+                    // Original non-transactional single-table insert
+                    conn.execute(
+                        "INSERT INTO memories (id, content, embedding, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                        rusqlite::params![id, content, embedding_blob, source, confidence, status, superseded_by, session_id, classification, created_at, updated_at],
+                    )?;
+                }
                 Ok(())
             })
             .await
@@ -197,15 +265,38 @@ impl MemoryStore {
     }
 
     /// Soft-delete a memory (set status to 'forgotten').
+    ///
+    /// When `vec0_enabled` is true, also updates the status in the `memories_vec0`
+    /// table to 'forgotten' in the same transaction, so vec0 KNN search excludes it.
     pub async fn soft_delete(&self, id: &str) -> Result<(), BlufioError> {
         let mem_id = id.to_string();
         let id = id.to_string();
+        let vec0_enabled = self.vec0_enabled;
         self.conn
             .call(move |conn| {
-                conn.execute(
-                    "UPDATE memories SET status = 'forgotten', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
-                    rusqlite::params![id],
-                )?;
+                if vec0_enabled {
+                    let tx = conn.transaction()?;
+                    tx.execute(
+                        "UPDATE memories SET status = 'forgotten', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                        rusqlite::params![id],
+                    )?;
+                    let rowid: Option<i64> = tx
+                        .query_row(
+                            "SELECT rowid FROM memories WHERE id = ?1",
+                            rusqlite::params![id],
+                            |row| row.get(0),
+                        )
+                        .ok();
+                    if let Some(rowid) = rowid {
+                        let _ = vec0::vec0_update_status(&tx, rowid, "forgotten");
+                    }
+                    tx.commit()?;
+                } else {
+                    conn.execute(
+                        "UPDATE memories SET status = 'forgotten', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                        rusqlite::params![id],
+                    )?;
+                }
                 Ok(())
             })
             .await
@@ -287,6 +378,7 @@ impl MemoryStore {
         importance_boosts: (f64, f64, f64),
     ) -> Result<(usize, f64, f64), BlufioError> {
         let (boost_explicit, boost_extracted, boost_file) = importance_boosts;
+        let vec0_enabled = self.vec0_enabled;
 
         self.conn
             .call(move |conn| {
@@ -342,6 +434,27 @@ impl MemoryStore {
 
                 // Step 4: Delete in a single transaction (FTS5 triggers fire per row)
                 let tx = conn.transaction()?;
+
+                // When vec0_enabled, also delete from vec0 in the same transaction
+                if vec0_enabled {
+                    let rowid_placeholders: Vec<String> =
+                        (1..=ids.len()).map(|i| format!("?{i}")).collect();
+                    let rowid_sql = format!(
+                        "SELECT rowid FROM memories WHERE id IN ({})",
+                        rowid_placeholders.join(", ")
+                    );
+                    let rowid_params: Vec<&dyn rusqlite::types::ToSql> =
+                        ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+                    let mut rowid_stmt = tx.prepare(&rowid_sql)?;
+                    let rowids: Vec<i64> = rowid_stmt
+                        .query_map(rowid_params.as_slice(), |row| row.get(0))?
+                        .filter_map(|r| r.ok())
+                        .collect();
+                    for rowid in rowids {
+                        let _ = vec0::vec0_delete(&tx, rowid);
+                    }
+                }
+
                 let placeholders: Vec<String> =
                     (1..=ids.len()).map(|i| format!("?{i}")).collect();
                 let sql = format!(
@@ -386,6 +499,73 @@ impl MemoryStore {
             })
             .await
             .map_err(storage_err)
+    }
+
+    /// Populate the vec0 virtual table from existing memories.
+    ///
+    /// Copies all active, non-restricted embeddings to `memories_vec0` in
+    /// batches of 500. Idempotent: rows already in vec0 are skipped.
+    /// Emits `Vec0PopulationComplete` event and updates the `vec0_row_count` gauge.
+    ///
+    /// Returns `(populated_count, total_active)`.
+    pub async fn populate_vec0(&self) -> Result<(usize, usize), BlufioError> {
+        let start = std::time::Instant::now();
+        let (populated, total) = self
+            .conn
+            .call(move |conn| vec0::vec0_populate_batch(conn, 500))
+            .await
+            .map_err(storage_err)?;
+
+        info!("Populating vec0: {populated}/{total} memories copied");
+
+        // Update Prometheus gauge
+        let count = self
+            .conn
+            .call(move |conn| vec0::vec0_count(conn))
+            .await
+            .map_err(storage_err)?;
+        gauge!("blufio_memory_vec0_row_count").set(count as f64);
+
+        // Emit event
+        if let Some(ref bus) = self.event_bus {
+            bus.publish(BusEvent::Memory(MemoryEvent::Vec0PopulationComplete {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                count: populated,
+                duration_ms: start.elapsed().as_millis() as u64,
+            }))
+            .await;
+        }
+
+        Ok((populated, total))
+    }
+
+    /// Drop and recreate the vec0 virtual table, then repopulate.
+    ///
+    /// Used by the `blufio memory rebuild-vec0` CLI command for recovery.
+    /// Returns the count of repopulated rows.
+    pub async fn rebuild_vec0(&self) -> Result<usize, BlufioError> {
+        info!("Rebuilding vec0: dropping and recreating table...");
+
+        self.conn
+            .call(move |conn| vec0::vec0_drop_and_recreate(conn))
+            .await
+            .map_err(storage_err)?;
+
+        info!("Rebuilding vec0: repopulating from memories table...");
+
+        let (populated, total) = self
+            .conn
+            .call(move |conn| vec0::vec0_populate_batch(conn, 500))
+            .await
+            .map_err(storage_err)?;
+
+        info!("Rebuilding vec0: complete -- {populated}/{total} memories repopulated");
+
+        // Update Prometheus gauge
+        gauge!("blufio_memory_vec0_row_count").set(populated as f64);
+
+        Ok(populated)
     }
 }
 
@@ -960,5 +1140,182 @@ mod tests {
                 "round-trip failed for {level}"
             );
         }
+    }
+
+    // --- vec0 dual-write tests ---
+
+    /// Create a test DB with vec0 virtual table enabled.
+    async fn setup_test_db_with_vec0() -> Connection {
+        // Register sqlite-vec globally before opening the connection
+        vec0::ensure_sqlite_vec_registered();
+        let conn = setup_test_db().await;
+        // Create the vec0 virtual table (V15 migration)
+        conn.call(|conn| -> Result<(), rusqlite::Error> {
+            conn.execute_batch(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS memories_vec0 USING vec0(\
+                    status text, \
+                    classification text, \
+                    session_id text partition key, \
+                    embedding float[384] distance_metric=cosine, \
+                    +memory_id text, \
+                    +content text, \
+                    +source text, \
+                    +confidence float, \
+                    +created_at text\
+                );",
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        conn
+    }
+
+    /// Count rows in vec0 table via tokio-rusqlite conn.
+    async fn vec0_count_async(store: &MemoryStore) -> usize {
+        store
+            .conn()
+            .call(|conn| vec0::vec0_count(conn))
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn vec0_save_dual_writes_to_both_tables() {
+        let conn = setup_test_db_with_vec0().await;
+        let store = MemoryStore::with_vec0(conn, None, true);
+
+        let memory = make_test_memory("mem-v0-1", "User likes coffee");
+        store.save(&memory).await.unwrap();
+
+        // Memory should exist in memories table
+        let retrieved = store.get_by_id("mem-v0-1").await.unwrap().unwrap();
+        assert_eq!(retrieved.content, "User likes coffee");
+
+        // Memory should also exist in vec0 table
+        let count = vec0_count_async(&store).await;
+        assert_eq!(count, 1, "vec0 should have 1 row after dual-write save");
+    }
+
+    #[tokio::test]
+    async fn vec0_save_disabled_does_not_write_vec0() {
+        let conn = setup_test_db_with_vec0().await;
+        let store = MemoryStore::with_vec0(conn, None, false);
+
+        let memory = make_test_memory("mem-v0-2", "User likes tea");
+        store.save(&memory).await.unwrap();
+
+        // Memory should exist in memories table
+        let retrieved = store.get_by_id("mem-v0-2").await.unwrap().unwrap();
+        assert_eq!(retrieved.content, "User likes tea");
+
+        // vec0 table should be empty
+        let count = vec0_count_async(&store).await;
+        assert_eq!(count, 0, "vec0 should have 0 rows when disabled");
+    }
+
+    #[tokio::test]
+    async fn vec0_batch_evict_deletes_from_vec0() {
+        let conn = setup_test_db_with_vec0().await;
+        let store = MemoryStore::with_vec0(conn, None, true);
+
+        // Insert 5 memories with varying ages
+        for i in 0..5 {
+            let created = chrono::Utc::now() - chrono::Duration::days((i + 1) as i64);
+            let mut mem = make_test_memory(&format!("mem-evict-{i}"), &format!("Evict test {i}"));
+            mem.source = MemorySource::Extracted;
+            mem.created_at = created.to_rfc3339();
+            store.save(&mem).await.unwrap();
+        }
+
+        assert_eq!(vec0_count_async(&store).await, 5, "should start with 5 vec0 rows");
+
+        // Evict 3
+        let (deleted, _, _) = store
+            .batch_evict(3, 0.95, 0.1, (1.0, 0.6, 0.8))
+            .await
+            .unwrap();
+        assert_eq!(deleted, 3);
+
+        // vec0 should also have 3 fewer rows
+        assert_eq!(vec0_count_async(&store).await, 2, "vec0 should have 2 rows after evicting 3");
+    }
+
+    #[tokio::test]
+    async fn vec0_soft_delete_updates_status_in_vec0() {
+        let conn = setup_test_db_with_vec0().await;
+        let store = MemoryStore::with_vec0(conn, None, true);
+
+        let memory = make_test_memory("mem-soft-1", "Soft delete test");
+        store.save(&memory).await.unwrap();
+
+        assert_eq!(vec0_count_async(&store).await, 1);
+
+        // Soft-delete should update vec0 status to 'forgotten'
+        store.soft_delete("mem-soft-1").await.unwrap();
+
+        // vec0 row still exists but with status='forgotten'
+        // Searching for active should return 0 results
+        let search_results = store
+            .conn()
+            .call(|conn| {
+                vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None)
+            })
+            .await
+            .unwrap();
+        assert!(search_results.is_empty(), "forgotten memory should not appear in vec0 active search");
+    }
+
+    #[tokio::test]
+    async fn vec0_populate_copies_active_memories() {
+        let conn = setup_test_db_with_vec0().await;
+        // Save without vec0 first (populate will copy them later)
+        let store = MemoryStore::with_vec0(conn, None, false);
+
+        store.save(&make_test_memory("mem-pop-1", "Population test 1")).await.unwrap();
+        store.save(&make_test_memory("mem-pop-2", "Population test 2")).await.unwrap();
+        let mut forgotten = make_test_memory("mem-pop-3", "Forgotten memory");
+        forgotten.status = MemoryStatus::Forgotten;
+        store.save(&forgotten).await.unwrap();
+
+        assert_eq!(vec0_count_async(&store).await, 0, "vec0 should be empty before population");
+
+        // Now populate
+        let (populated, total) = store.populate_vec0().await.unwrap();
+        assert_eq!(populated, 2, "should populate 2 active memories");
+        assert_eq!(total, 2);
+        assert_eq!(vec0_count_async(&store).await, 2);
+    }
+
+    #[tokio::test]
+    async fn vec0_populate_is_idempotent() {
+        let conn = setup_test_db_with_vec0().await;
+        let store = MemoryStore::with_vec0(conn, None, false);
+
+        store.save(&make_test_memory("mem-idem-1", "Idempotent test")).await.unwrap();
+
+        let (first_pop, _) = store.populate_vec0().await.unwrap();
+        assert_eq!(first_pop, 1);
+
+        // Second call should insert 0 new rows
+        let (second_pop, _) = store.populate_vec0().await.unwrap();
+        assert_eq!(second_pop, 0, "second population should be idempotent (0 new rows)");
+        assert_eq!(vec0_count_async(&store).await, 1);
+    }
+
+    #[tokio::test]
+    async fn vec0_rebuild_drops_and_repopulates() {
+        let conn = setup_test_db_with_vec0().await;
+        let store = MemoryStore::with_vec0(conn, None, true);
+
+        // Insert memories with dual-write
+        store.save(&make_test_memory("mem-rb-1", "Rebuild test 1")).await.unwrap();
+        store.save(&make_test_memory("mem-rb-2", "Rebuild test 2")).await.unwrap();
+        assert_eq!(vec0_count_async(&store).await, 2);
+
+        // Rebuild should drop, recreate, and repopulate
+        let repopulated = store.rebuild_vec0().await.unwrap();
+        assert_eq!(repopulated, 2, "rebuild should repopulate all active memories");
+        assert_eq!(vec0_count_async(&store).await, 2);
     }
 }
