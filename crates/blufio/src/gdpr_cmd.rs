@@ -247,9 +247,7 @@ async fn cmd_erase(
                         [],
                         |row| row.get(0),
                     )
-                    .unwrap_or_else(|_| {
-                        blufio_audit::GENESIS_HASH.to_string()
-                    });
+                    .unwrap_or_else(|_| blufio_audit::GENESIS_HASH.to_string());
 
                 let entry_hash = blufio_audit::compute_entry_hash(
                     &prev_hash,
