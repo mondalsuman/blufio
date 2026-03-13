@@ -131,7 +131,7 @@ impl GeminiStreamParser {
         }
 
         // Scan from the current position to find a complete object.
-        let start = self.obj_start.unwrap();
+        let start = self.obj_start.expect("obj_start checked above");
         let mut scan_pos = if pos > start { pos } else { start };
 
         while scan_pos < len {

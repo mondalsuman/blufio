@@ -432,50 +432,50 @@ pub(crate) async fn spawn_memory_tasks(
     event_bus: &Arc<blufio_bus::EventBus>,
     cancel: &tokio_util::sync::CancellationToken,
 ) {
-    if config.memory.enabled {
-        if let Some(store) = memory_store {
-            // Spawn combined eviction + validation background task.
-            let bg_store = store.clone();
-            let bg_config = config.memory.clone();
-            let bg_bus = Some(event_bus.clone());
-            let bg_cancel = cancel.child_token();
-            tokio::spawn(async move {
-                blufio_memory::background::spawn_background_task(
-                    bg_store, bg_config, bg_bus, bg_cancel,
-                )
-                .await;
-            });
-            info!(
-                "memory background task started (eviction: {}s, validation: daily)",
-                config.memory.eviction_sweep_interval_secs
-            );
+    if config.memory.enabled
+        && let Some(store) = memory_store
+    {
+        // Spawn combined eviction + validation background task.
+        let bg_store = store.clone();
+        let bg_config = config.memory.clone();
+        let bg_bus = Some(event_bus.clone());
+        let bg_cancel = cancel.child_token();
+        tokio::spawn(async move {
+            blufio_memory::background::spawn_background_task(
+                bg_store, bg_config, bg_bus, bg_cancel,
+            )
+            .await;
+        });
+        info!(
+            "memory background task started (eviction: {}s, validation: daily)",
+            config.memory.eviction_sweep_interval_secs
+        );
 
-            // Start file watcher (if configured paths are non-empty).
-            if !config.memory.file_watcher.paths.is_empty() {
-                if let Some(embedder_arc) = memory_embedder {
-                    // Initial scan of existing files.
-                    match blufio_memory::watcher::initial_scan(
-                        &config.memory.file_watcher,
-                        store,
-                        embedder_arc,
-                    )
-                    .await
-                    {
-                        Ok(count) => info!(files = count, "file watcher initial scan complete"),
-                        Err(e) => warn!(error = %e, "file watcher initial scan failed"),
-                    }
-                    // Start watching for changes.
-                    if let Err(e) = blufio_memory::watcher::start_file_watcher(
-                        &config.memory.file_watcher,
-                        store.clone(),
-                        embedder_arc.clone(),
-                        cancel.child_token(),
-                    ) {
-                        warn!(error = %e, "file watcher failed to start");
-                    } else {
-                        info!(paths = ?config.memory.file_watcher.paths, "file watcher started");
-                    }
-                }
+        // Start file watcher (if configured paths are non-empty).
+        if !config.memory.file_watcher.paths.is_empty()
+            && let Some(embedder_arc) = memory_embedder
+        {
+            // Initial scan of existing files.
+            match blufio_memory::watcher::initial_scan(
+                &config.memory.file_watcher,
+                store,
+                embedder_arc,
+            )
+            .await
+            {
+                Ok(count) => info!(files = count, "file watcher initial scan complete"),
+                Err(e) => warn!(error = %e, "file watcher initial scan failed"),
+            }
+            // Start watching for changes.
+            if let Err(e) = blufio_memory::watcher::start_file_watcher(
+                &config.memory.file_watcher,
+                store.clone(),
+                embedder_arc.clone(),
+                cancel.child_token(),
+            ) {
+                warn!(error = %e, "file watcher failed to start");
+            } else {
+                info!(paths = ?config.memory.file_watcher.paths, "file watcher started");
             }
         }
     }

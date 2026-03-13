@@ -35,18 +35,18 @@ pub(crate) fn init_prometheus(
                 Ok(adapter) => {
                     info!("prometheus metrics enabled");
                     let handle = adapter.handle().clone();
-                    return Some(
+                    Some(
                         Arc::new(move || handle.render()) as Arc<dyn Fn() -> String + Send + Sync>
-                    );
+                    )
                 }
                 Err(e) => {
                     warn!(error = %e, "prometheus initialization failed, continuing without metrics");
-                    return None;
+                    None
                 }
             }
         } else {
             debug!("prometheus metrics disabled by configuration");
-            return None;
+            None
         }
     }
 

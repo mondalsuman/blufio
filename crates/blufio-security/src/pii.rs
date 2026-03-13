@@ -149,9 +149,12 @@ static PII_INDIVIDUAL_REGEXES: LazyLock<Vec<(PiiType, Regex)>> = LazyLock::new(|
 
 /// Regex patterns for stripping code blocks, inline code, and URLs.
 /// Replaced with equal-length whitespace to preserve span offsets (Pitfall 2).
-static FENCED_CODE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)```[^`]*```").unwrap());
-static INLINE_CODE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`[^`]+`").unwrap());
-static URL_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"https?://[^\s)>\]]+").unwrap());
+static FENCED_CODE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)```[^`]*```").expect("valid regex: fenced_code"));
+static INLINE_CODE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"`[^`]+`").expect("valid regex: inline_code"));
+static URL_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"https?://[^\s)>\]]+").expect("valid regex: url_pattern"));
 
 /// Replace code blocks, inline code, and URLs with equal-length whitespace.
 ///
@@ -193,7 +196,7 @@ pub fn luhn_validate(number: &str) -> bool {
     let digits: Vec<u32> = number
         .chars()
         .filter(|c| c.is_ascii_digit())
-        .map(|c| c.to_digit(10).unwrap())
+        .map(|c| c.to_digit(10).expect("digit after is_ascii_digit filter"))
         .collect();
 
     if digits.len() < 13 || digits.len() > 19 {
