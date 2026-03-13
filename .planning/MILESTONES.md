@@ -1,5 +1,34 @@
 # Milestones
 
+## v1.5 PRD Gap Closure (Shipped: 2026-03-13)
+
+**Delivered:** PRD gap closure — data classification with PII detection, tamper-evident audit trail, memory enhancements, multi-level compaction with quality gates, 5-layer prompt injection defense, cron scheduler with retention policies, hook system with hot reload, GDPR tooling, 3 new channel adapters (Email, iMessage, SMS), OpenTelemetry distributed tracing, OpenAPI spec generation, and clippy unwrap enforcement across all library crates.
+
+**Phases completed:** 12 phases (53-64), 49 plans
+**Timeline:** 4 days (2026-03-10 → 2026-03-13)
+**Commits:** 246 total
+**Files changed:** 368 (+73,120 / -3,413)
+**Total LOC:** 116,827 Rust across 37 crates
+**Git range:** cd813fc → 5b1c9ff
+**Requirements:** 93/93 satisfied (76 formally verified, 17 verification-doc gap for Phases 53-54)
+
+**Key accomplishments:**
+1. Data classification (4-level enum, PII regex detection with Luhn validation, auto-redaction) and hash-chained tamper-evident audit trail in dedicated audit.db with GDPR redact-in-place
+2. Memory enhancements: temporal decay (0.95^days), importance boost, MMR diversity reranking, LRU eviction at 10K entries, file watcher auto-reindexing with 500ms debounce
+3. Multi-level compaction (L0 raw → L1 turn-pair → L2 session → L3 archive) with quality gates (entity/decision/action/numerical scoring), entity extraction, and per-zone token budget enforcement
+4. 5-layer prompt injection defense: L1 pattern classifier with confidence scoring, L3 HMAC-SHA256 boundary tokens, L4 output screening for credential leaks, L5 human-in-the-loop confirmation
+5. Cron scheduler with TOML config and systemd timer generation, retention policies with soft-delete and classification-aware enforcement, hook system (11 lifecycle events with BTreeMap priority), config/TLS/plugin hot reload via ArcSwap
+6. GDPR tooling (erasure with cost anonymization, JSON/CSV export with PII redaction, transparency reports), plus Email (IMAP/SMTP), iMessage (BlueBubbles), and SMS (Twilio) channel adapters — 11 total channels
+7. OpenTelemetry distributed tracing (feature-gated, zero overhead when disabled), OpenAPI 3.1 spec with Swagger UI, Litestream WAL replication support
+8. Code quality hardening: `#![deny(clippy::unwrap_used)]` across 43 library crates, serve.rs/main.rs decomposition, property-based tests (proptest), criterion benchmarks with CI regression detection
+
+### Known Gaps
+- Phases 53, 54 missing VERIFICATION.md (code complete per SUMMARY files, verification documentation gap)
+- 15 tech debt items: 13 human verification items (E2E OTel, Swagger UI, Litestream replication, HITL visual flow, compaction cascade, etc.), 1 TLS hot reload stub, 1 ROADMAP formatting
+- Carry-forward from v1.1: 5 deferred MCP integration items, 4 human verification items
+
+---
+
 ## v1.4 Quality & Resilience (Shipped: 2026-03-09)
 
 **Delivered:** Quality and resilience hardening — typed error hierarchy with automated retry classification, accurate token counting (tiktoken-rs + HuggingFace tokenizers replacing len()/4), per-dependency circuit breakers with 6-level graceful degradation ladder, FormatPipeline integration into all 8 channel adapters, and architectural decision records.

@@ -245,6 +245,56 @@
 
 ---
 
+## Milestone: v1.5 — PRD Gap Closure
+
+**Shipped:** 2026-03-13
+**Phases:** 12 | **Plans:** 49
+
+### What Was Built
+- Data classification (4-level enum) with PII regex detection, Luhn validation, auto-redaction
+- Hash-chained tamper-evident audit trail in dedicated audit.db with GDPR redact-in-place
+- Memory enhancements: temporal decay, importance boost, MMR diversity, LRU eviction, file watcher
+- Multi-level compaction (L0-L3) with quality gates, entity extraction, per-zone token budgets
+- 5-layer prompt injection defense: pattern classifier, HMAC boundaries, output screening, HITL
+- Cron scheduler with retention policies, hook system (11 events), config/TLS/plugin hot reload
+- GDPR tooling (erasure, export, transparency), Email/iMessage/SMS channel adapters
+- OpenTelemetry tracing, OpenAPI spec with Swagger UI, Litestream replication support
+- Clippy unwrap enforcement across 43 crates, module decomposition, property-based tests, benchmark CI
+- 8 new crates, +73,120 lines added (total: 116,827 LOC across 37 crates)
+
+### What Worked
+- **Lowest gap-closure ratio ever**: Only 1 gap-closure phase (64) out of 12 total (8%). Phase 64 was 1 plan with 3 small wiring fixes. Integration during feature phases is finally mature.
+- **Consistent per-plan execution speed**: Plans averaged 10-15 minutes each, with v1.5 completing 49 plans in 4 days (~12 plans/day). Execution quality stable at scale.
+- **Audit-driven Phase 64**: The milestone audit identified exactly 3 low-severity integration gaps. Phase 64 closed all three in a single plan. Audit continues to find real issues.
+- **Fine-grained roadmap phases**: 12 phases for 93 requirements (avg 7.75 reqs/phase) kept each phase focused and independently verifiable.
+- **Established event patterns scale**: BusEvent sub-enums with String fields, EventBus subscribers, and the fire-and-forget pattern worked cleanly for 6 new event types (Classification, Compaction, Security, Cron, Hook, GDPR).
+
+### What Was Inefficient
+- **SUMMARY one_liner still empty**: Sixth milestone with empty `one_liner` frontmatter in all 49 SUMMARY files. Automated accomplishment extraction still fails. This is now clearly a tooling gap, not a process gap.
+- **Phases 53-54 missing VERIFICATION.md**: Early phases (executed 2026-03-10) lacked formal verification reports, creating 17 "partial" requirements in the audit. Code was complete per SUMMARYs but documentation gap persisted.
+- **Plan checkbox state stale in ROADMAP Phase Details**: Many plan entries showed `[ ]` despite having SUMMARY.md files. The roadmap Phase Details section drifted from disk state.
+- **Phase Detail section in ROADMAP grew unwieldy**: 12 phases with full success criteria and plan lists made the ROADMAP ~400 lines. Archived to milestones/ at completion.
+
+### Patterns Established
+- **BusEvent sub-enum with String fields**: All new event types (ClassificationEvent, CompactionEvent, SecurityEvent, CronEvent, HookEvent, GdprEvent) use String fields to avoid cross-crate dependencies
+- **ArcSwap for hot-swappable config**: Load + swap pattern enables lock-free config reads with session isolation
+- **cfg_attr(not(test), deny(clippy::unwrap_used))**: Compile-time unwrap ban in library code, CI-compatible with --all-targets
+- **Direct SQL for CLI-only audit events**: CLI commands operating outside serve.rs lifecycle use tokio-rusqlite directly instead of EventBus
+
+### Key Lessons
+1. **Gap-closure ratio improves with practice** — v1.0: 28%, v1.1: 37%, v1.2: 17%, v1.3: 35%, v1.4: 29%, v1.5: 8%. The pattern of wiring integration during feature phases is working.
+2. **SUMMARY one_liner must be enforced in gsd-tools** — six milestones of the same gap. No amount of process reminders fixes it. The tool must require it.
+3. **VERIFICATION.md should be generated immediately after phase execution** — the 2-day gap between Phase 53-54 execution and milestone audit created the documentation gap.
+4. **Phase Details in ROADMAP should be archived per-milestone, not accumulated** — the growing Phase Details section consumed ROADMAP readability. Archiving to milestones/ at completion is the right pattern.
+5. **93 requirements across 12 phases is tractable** — v1.5 was the largest milestone by requirement count and maintained quality (76/93 formally verified, remainder implementation-complete).
+
+### Cost Observations
+- Commits: 246 total
+- Timeline: 4 calendar days (2026-03-10 to 2026-03-13)
+- Notable: Gap-closure phase was 1 of 12 (8%), the lowest ratio in project history. Phase 64 completed in 13 minutes (1 plan, 3 wiring fixes).
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -256,6 +306,7 @@
 | v1.2 | 6 | 13 | ~13/day | Lowest gap-closure ratio (17%), mature audit pattern |
 | v1.3 | 17 | 47 | ~12/day | Largest milestone, three-audit pattern, provider crate decoupling |
 | v1.4 | 7 | 16 | ~16/day | Refactoring milestone, highest velocity tied with v1.1 |
+| v1.5 | 12 | 49 | ~12/day | Largest milestone (93 reqs), lowest gap-closure ratio (8%) |
 
 ### Cumulative Quality
 
@@ -266,6 +317,7 @@
 | v1.2 | 39,168 | 21 | 30 (148 total) | 30/30 | 12 (carry-forward) |
 | v1.3 | 71,808 | 35 | 71 (219 total) | 71/71 | 16 |
 | v1.4 | 80,101 | 35 | 39 (258 total) | 39/39 | 16 (carry-forward) |
+| v1.5 | 116,827 | 37 | 93 (351 total) | 76/93 | 15 (+13 human verification) |
 
 ### Gap-Closure Ratio
 
@@ -276,12 +328,13 @@
 | v1.2 | 6 | 1 | 17% | improvement |
 | v1.3 | 17 | 6 | 35% | reverted (large milestone, complex cross-crate wiring) |
 | v1.4 | 7 | 2 | 29% | stable (one wiring gap, one bookkeeping fix) |
+| v1.5 | 12 | 1 | 8% | best ever (single 1-plan gap-closure phase) |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. **Wire integration at phase boundaries** — all five milestones had wiring gaps caught only at audit. Must be enforced as a phase gate, not just advice.
-2. **Milestone audit before completion catches gaps** — v1.0 found 33 stale requirements; v1.1 found 26 orphaned; v1.3 found 5 runtime wiring gaps; v1.4 found CB→EventBus wiring gap. Always audit.
-3. **SUMMARY frontmatter must be filled during execution** — five milestones of empty/missing frontmatter. Tooling enforcement is overdue. This is the single most repeated lesson.
-4. **Gap-closure overhead correlates with milestone scope** — small milestones (v1.2: 17%) have less overhead than large ones (v1.3: 35%). v1.4's 29% is mid-range for a refactoring milestone.
+2. **Milestone audit before completion catches gaps** — v1.0 found 33 stale requirements; v1.1 found 26 orphaned; v1.3 found 5 runtime wiring gaps; v1.4 found CB→EventBus wiring gap; v1.5 found 3 integration gaps + 17 verification-doc gaps. Always audit.
+3. **SUMMARY frontmatter must be filled during execution** — six milestones of empty/missing frontmatter. Tooling enforcement is overdue. This is the single most repeated lesson.
+4. **Gap-closure overhead correlates with practice, not just scope** — v1.5 was the largest milestone (93 reqs) but had the lowest gap-closure ratio (8%). Integration discipline improves over time.
 5. **Small, focused gap-closure plans execute fastest** — v1.3 phases 40-45 averaged 2-7 minutes per plan; v1.4 Phase 52 completed in 2 minutes. This is the ideal plan granularity for wiring tasks.
 6. **Custom implementations beat external crates when trait compatibility is needed** — v1.4's ~200 LOC circuit breaker was cleaner than using failsafe/tower crates with dyn dispatch incompatibility.
