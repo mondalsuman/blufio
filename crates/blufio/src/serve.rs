@@ -205,7 +205,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                     .map_err(|e| e.into())
             })
             .await
-            .map_err(|e| {
+            .map_err(|e: tokio_rusqlite::Error| {
                 BlufioError::Config(format!(
                     "failed to set wal_autocheckpoint=0 for Litestream: {}",
                     e
@@ -2282,10 +2282,22 @@ fn init_tracing(log_level: &str, config: &BlufioConfig) -> TracingState {
     {
         let otel_result = crate::otel::try_init_otel_layer(&config.observability.opentelemetry);
         if let Some((otel_layer, provider)) = otel_result {
+            // OTel layer composed directly on Registry so the type matches.
+            // Filter and fmt are reconstructed here because the subscriber type
+            // changes when the OTel layer is inserted.
+            let otel_filter = EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new(format!("blufio={log_level},warn")));
+            let otel_writer = RedactingMakeWriter {
+                vault_values: vault_values.clone(),
+            };
+            let otel_fmt = tracing_subscriber::fmt::layer()
+                .with_target(true)
+                .with_thread_names(false)
+                .with_writer(otel_writer);
             tracing_subscriber::registry()
-                .with(filter)
-                .with(fmt_layer)
                 .with(otel_layer)
+                .with(otel_filter)
+                .with(otel_fmt)
                 .init();
             return TracingState {
                 vault_values,

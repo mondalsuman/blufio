@@ -260,6 +260,14 @@ impl SessionActor {
         Pin<Box<dyn Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>>,
         BlufioError,
     > {
+        // OTel: Agent loop span (one per turn, not per session).
+        // Created as a handle (not entered) because EnteredSpan is !Send.
+        let _agent_loop_span = tracing::info_span!(
+            "blufio.agent.loop",
+            "blufio.session.id" = %self.session_id,
+            "blufio.channel" = %self.channel,
+        );
+
         // Transition: Idle -> Receiving
         self.state = SessionState::Receiving;
 
@@ -665,8 +673,25 @@ impl SessionActor {
             return Err(primary_err);
         }
 
+        // OTel: LLM call span with GenAI semantic convention attributes.
+        let llm_span = tracing::info_span!(
+            "blufio.llm.call",
+            "gen_ai.system" = %self.provider_name,
+            "gen_ai.request.model" = %model,
+            "gen_ai.usage.input_tokens" = tracing::field::Empty,
+            "gen_ai.usage.output_tokens" = tracing::field::Empty,
+            "otel.status_code" = tracing::field::Empty,
+        );
+
         // Stream from provider using the assembled request.
-        let stream_result = self.provider.stream(assembled.request).await;
+        // Use Instrument to attach the span to the async call without holding
+        // an EnteredSpan guard across await (EnteredSpan is !Send).
+        use tracing::Instrument;
+        let stream_result = self
+            .provider
+            .stream(assembled.request)
+            .instrument(llm_span.clone())
+            .await;
 
         // Record result in circuit breaker (if resilience enabled).
         match &stream_result {
@@ -699,6 +724,9 @@ impl SessionActor {
                 self.last_call_was_fallback = false;
             }
             Err(e) => {
+                // OTel: Record error status on LLM span.
+                llm_span.record("otel.status_code", "ERROR");
+
                 if let Some(ref registry) = self.circuit_breaker_registry {
                     // Only count as failure if error trips the circuit breaker.
                     let trips = e.trips_circuit_breaker();
@@ -786,6 +814,15 @@ impl SessionActor {
             session_id = self.session_id.as_str(),
             "persisted assistant response"
         );
+
+        // OTel: Record token usage from the completed LLM call.
+        if let Some(ref u) = usage {
+            tracing::info_span!(
+                "blufio.llm.response",
+                "gen_ai.usage.input_tokens" = u.input_tokens,
+                "gen_ai.usage.output_tokens" = u.output_tokens,
+            );
+        }
 
         // Record cost in ledger and budget tracker.
         // Use routing decision to track intended vs actual model.
@@ -1011,6 +1048,13 @@ impl SessionActor {
                 drop(pipeline_guard);
             }
 
+            // OTel: Tool execution span with tool name attribute.
+            // Not entered directly -- used via Instrument on the async invoke.
+            let tool_span = tracing::info_span!(
+                "blufio.tool.execute",
+                "tool_name" = %tu.name,
+            );
+
             let registry = self.tool_registry.read().await;
             let (output, is_open_world) = match registry.get(&tu.name) {
                 Some(tool) => {
@@ -1024,7 +1068,8 @@ impl SessionActor {
                     // Drop the read guard before the async invoke to avoid holding
                     // the lock across an await point.
                     drop(registry);
-                    let out = match tool.invoke(tu.input.clone()).await {
+                    use tracing::Instrument;
+                    let out = match tool.invoke(tu.input.clone()).instrument(tool_span).await {
                         Ok(output) => output,
                         Err(e) => {
                             warn!(

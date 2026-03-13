@@ -97,6 +97,14 @@ impl HybridRetriever {
     /// 8. MMR diversity reranking (greedy, lambda-weighted)
     /// 9. Return Vec<ScoredMemory>
     pub async fn retrieve(&self, query: &str) -> Result<Vec<ScoredMemory>, BlufioError> {
+        // OTel: Memory retrieval span with result count and top score.
+        // Created as a handle (not entered) because entered spans are !Send.
+        let _memory_span = tracing::info_span!(
+            "blufio.memory.retrieve",
+            "blufio.memory.results_count" = tracing::field::Empty,
+            "blufio.memory.top_score" = tracing::field::Empty,
+        );
+
         // Step 1: Embed the query
         let output = self
             .embedder
@@ -165,6 +173,12 @@ impl HybridRetriever {
             self.config.mmr_lambda,
             self.config.max_retrieval_results,
         );
+
+        // OTel: Record retrieval result attributes on span.
+        _memory_span.record("blufio.memory.results_count", result.len() as u64);
+        if let Some(top) = result.first() {
+            _memory_span.record("blufio.memory.top_score", top.score as f64);
+        }
 
         Ok(result)
     }

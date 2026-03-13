@@ -42,7 +42,10 @@ use tracing_subscriber::Registry;
 pub fn try_init_otel_layer(
     config: &OpenTelemetryConfig,
 ) -> Option<(
-    OpenTelemetryLayer<Registry, opentelemetry_sdk::trace::SdkTracer>,
+    tracing_opentelemetry::OpenTelemetryLayer<
+        Registry,
+        opentelemetry_sdk::trace::SdkTracer,
+    >,
     SdkTracerProvider,
 )> {
     if !config.enabled {
