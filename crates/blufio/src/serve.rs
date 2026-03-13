@@ -193,6 +193,35 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
     #[cfg(not(feature = "sqlite"))]
     compile_error!("blufio requires the 'sqlite' feature for storage");
 
+    // Litestream WAL replication: disable autocheckpoint when enabled (LITE-04).
+    // Must be set BEFORE any other writes to allow Litestream to manage WAL checkpointing.
+    if config.litestream.enabled {
+        info!("Litestream mode active: disabling WAL autocheckpoint (PRAGMA wal_autocheckpoint=0)");
+        let pragma_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
+        pragma_conn
+            .call(|conn| {
+                conn.execute_batch("PRAGMA wal_autocheckpoint=0;")
+                    .map_err(|e| e.into())
+            })
+            .await
+            .map_err(|e| {
+                BlufioError::Config(format!(
+                    "failed to set wal_autocheckpoint=0 for Litestream: {}",
+                    e
+                ))
+            })?;
+
+        // LITE-03: Warn if SQLCipher encryption is active alongside Litestream.
+        if std::env::var("BLUFIO_DB_KEY").is_ok() {
+            warn!(
+                "Litestream is enabled but SQLCipher encryption is active. \
+                 Litestream CANNOT replicate encrypted databases. \
+                 Use `blufio backup` + cron instead. \
+                 See: https://github.com/benbjohnson/litestream/issues/177"
+            );
+        }
+    }
+
     // Mark stale sessions as interrupted (crash recovery).
     mark_stale_sessions(storage.as_ref()).await?;
 

@@ -77,6 +77,9 @@ pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Resul
     // Retention health check
     results.push(check_retention(config).await);
 
+    // Litestream WAL replication check
+    results.push(check_litestream(config));
+
     // Deep checks (only with --deep)
     if deep {
         results.push(check_db_integrity(&config.storage.database_path).await);
@@ -1323,6 +1326,63 @@ fn check_gdpr(config: &BlufioConfig) -> CheckResult {
     }
 }
 
+/// Check Litestream WAL replication configuration and binary availability.
+///
+/// - If `[litestream].enabled` is `false`, returns Pass (skipped).
+/// - If enabled but binary is missing, returns Warn with install link.
+/// - If enabled and SQLCipher encryption is active, returns Warn (incompatible).
+/// - If enabled and binary found, returns Pass.
+fn check_litestream(config: &BlufioConfig) -> CheckResult {
+    let start = Instant::now();
+
+    if !config.litestream.enabled {
+        return CheckResult {
+            name: "Litestream".to_string(),
+            status: CheckStatus::Pass,
+            message: "not enabled (skipped)".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    // Check if litestream binary exists in PATH.
+    let binary_exists = std::process::Command::new("which")
+        .arg("litestream")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if !binary_exists {
+        return CheckResult {
+            name: "Litestream".to_string(),
+            status: CheckStatus::Warn,
+            message:
+                "enabled but binary not found in PATH. Install: https://litestream.io/install/"
+                    .to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    // Check for SQLCipher incompatibility.
+    if std::env::var("BLUFIO_DB_KEY").is_ok() {
+        return CheckResult {
+            name: "Litestream".to_string(),
+            status: CheckStatus::Warn,
+            message: "enabled but SQLCipher encryption active -- incompatible. Use `blufio backup` + cron instead."
+                .to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    CheckResult {
+        name: "Litestream".to_string(),
+        status: CheckStatus::Pass,
+        message: "binary found, replication configured".to_string(),
+        duration: start.elapsed(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1500,5 +1560,29 @@ mod tests {
         let result = check_hot_reload(&config);
         assert_eq!(result.status, CheckStatus::Fail);
         assert!(result.message.contains("not found"));
+    }
+
+    #[test]
+    fn check_litestream_disabled_passes() {
+        let config = BlufioConfig::default();
+        // Default: litestream.enabled = false
+        let result = check_litestream(&config);
+        assert_eq!(result.status, CheckStatus::Pass);
+        assert!(result.message.contains("not enabled"));
+    }
+
+    #[test]
+    fn check_litestream_enabled_no_binary_warns() {
+        let mut config = BlufioConfig::default();
+        config.litestream.enabled = true;
+        let result = check_litestream(&config);
+        // On CI/dev machines without litestream installed, this should Warn.
+        // If litestream happens to be installed, it will Pass.
+        assert!(
+            result.status == CheckStatus::Warn || result.status == CheckStatus::Pass,
+            "expected Warn or Pass, got {:?}: {}",
+            result.status,
+            result.message
+        );
     }
 }
