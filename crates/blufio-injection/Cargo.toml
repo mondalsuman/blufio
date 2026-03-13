@@ -24,6 +24,8 @@ metrics.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 uuid.workspace = true
 chrono.workspace = true
+unicode-normalization = "0.1"
+base64.workspace = true
 
 [dev-dependencies]
 toml.workspace = true

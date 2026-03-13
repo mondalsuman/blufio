@@ -118,8 +118,15 @@ impl InjectionPipeline {
         let result: ClassificationResult = self.classifier.classify(input, source_type);
 
         // Record metrics for all detections.
+        // NOTE: Category label passed as first matched category; Plan 03 will
+        // expand this to record once per category.
         if result.score > 0.0 {
-            metrics::record_input_detection(source_type, &result.action);
+            let category = result
+                .categories
+                .first()
+                .map(|c| c.as_str())
+                .unwrap_or("unknown");
+            metrics::record_input_detection(source_type, &result.action, category);
         }
 
         // Generate SecurityEvent for any detection (score > 0).

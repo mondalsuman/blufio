@@ -139,6 +139,9 @@ impl BusEvent {
                 "security.output_screening"
             }
             BusEvent::Security(SecurityEvent::HitlPrompt { .. }) => "security.hitl_prompt",
+            BusEvent::Security(SecurityEvent::CanaryDetection { .. }) => {
+                "security.canary_detection"
+            }
             BusEvent::Cron(CronEvent::Completed { .. }) => "cron.completed",
             BusEvent::Cron(CronEvent::Failed { .. }) => "cron.failed",
             BusEvent::Hook(HookEvent::Triggered { .. }) => "hook.triggered",
@@ -820,6 +823,21 @@ pub enum SecurityEvent {
         /// Session identifier.
         session_id: String,
     },
+    /// Canary token leak detected in LLM output.
+    CanaryDetection {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Message-level correlation ID.
+        correlation_id: String,
+        /// Token type that was detected: `"global"` or `"session"`.
+        token_type: String,
+        /// Action taken: `"blocked"`.
+        action: String,
+        /// Truncated output for forensic analysis (first 500 chars).
+        content: String,
+    },
 }
 
 // --- Cron events ---
@@ -1131,6 +1149,15 @@ mod tests {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
             user_id_hash: "sha256hash".into(),
+        });
+
+        let _canary = BusEvent::Security(SecurityEvent::CanaryDetection {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            correlation_id: "corr-canary".into(),
+            token_type: "global".into(),
+            action: "blocked".into(),
+            content: "leaked content".into(),
         });
 
         let _conn_lost = BusEvent::Channel(ChannelEvent::ConnectionLost {
@@ -1641,6 +1668,17 @@ mod tests {
                     session_id: String::new(),
                 }),
                 "security.hitl_prompt",
+            ),
+            (
+                BusEvent::Security(SecurityEvent::CanaryDetection {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    correlation_id: String::new(),
+                    token_type: String::new(),
+                    action: String::new(),
+                    content: String::new(),
+                }),
+                "security.canary_detection",
             ),
             // Cron events
             (

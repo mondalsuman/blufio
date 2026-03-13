@@ -72,6 +72,30 @@ pub fn output_screening_event(
     }
 }
 
+/// Create a `SecurityEvent::CanaryDetection` event.
+///
+/// Truncates content to first 500 chars for forensic analysis.
+pub fn canary_detection_event(
+    correlation_id: &str,
+    token_type: &str,
+    action: &str,
+    content: &str,
+) -> SecurityEvent {
+    let truncated = if content.len() > 500 {
+        &content[..500]
+    } else {
+        content
+    };
+    SecurityEvent::CanaryDetection {
+        event_id: new_event_id(),
+        timestamp: now_timestamp(),
+        correlation_id: correlation_id.to_string(),
+        token_type: token_type.to_string(),
+        action: action.to_string(),
+        content: truncated.to_string(),
+    }
+}
+
 /// Create a `SecurityEvent::HitlPrompt` event.
 pub fn hitl_prompt_event(
     correlation_id: &str,
@@ -192,6 +216,41 @@ mod tests {
                 assert_eq!(session_id, "sess-1");
             }
             _ => panic!("expected HitlPrompt"),
+        }
+    }
+
+    #[test]
+    fn canary_detection_event_constructs_correctly() {
+        let event = canary_detection_event("corr-canary", "global", "blocked", "leaked output");
+        match event {
+            SecurityEvent::CanaryDetection {
+                event_id,
+                timestamp,
+                correlation_id,
+                token_type,
+                action,
+                content,
+            } => {
+                assert!(!event_id.is_empty());
+                assert!(!timestamp.is_empty());
+                assert_eq!(correlation_id, "corr-canary");
+                assert_eq!(token_type, "global");
+                assert_eq!(action, "blocked");
+                assert_eq!(content, "leaked output");
+            }
+            _ => panic!("expected CanaryDetection"),
+        }
+    }
+
+    #[test]
+    fn canary_detection_event_truncates_content() {
+        let long_content = "x".repeat(1000);
+        let event = canary_detection_event("corr-trunc", "session", "blocked", &long_content);
+        match event {
+            SecurityEvent::CanaryDetection { content, .. } => {
+                assert_eq!(content.len(), 500);
+            }
+            _ => panic!("expected CanaryDetection"),
         }
     }
 

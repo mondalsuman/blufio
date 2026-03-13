@@ -14,11 +14,13 @@
 //! correlation IDs and cross-layer escalation.
 
 pub mod boundary;
+pub mod canary;
 pub mod classifier;
 pub mod config;
 pub mod events;
 pub mod hitl;
 pub mod metrics;
+pub mod normalize;
 pub mod output_screen;
 pub mod patterns;
 pub mod pipeline;
