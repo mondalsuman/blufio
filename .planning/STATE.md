@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Completed 66-03-PLAN.md
-last_updated: "2026-03-13T22:17:11.523Z"
-last_activity: 2026-03-13 -- 66-03 dual scan, severity weights, test-canary CLI, doctor canary check
+stopped_at: Completed 66-04-PLAN.md
+last_updated: "2026-03-13T22:28:03Z"
+last_activity: 2026-03-13 -- 66-04 corpus validation CI gates, benign/attack fixtures
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 7
-  completed_plans: 6
-  percent: 42
+  completed_plans: 7
+  percent: 50
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 ## Current Position
 
 Phase: 66 -- second of 5 in v1.6 (Injection Defense Hardening) -- IN PROGRESS
-Plan: 3 of 4 in current phase (3 complete)
-Status: Plan 66-03 complete -- normalization pre-pass, severity weights, CLI/doctor canary integration
-Last activity: 2026-03-13 -- 66-03 dual scan, severity weights, test-canary CLI, doctor canary check
+Plan: 4 of 4 in current phase (4 complete)
+Status: Phase 66 complete -- all 4 plans delivered, corpus validation CI gates passing
+Last activity: 2026-03-13 -- 66-04 benign/attack corpus fixtures, corpus validation integration tests
 
-Progress: [████░░░░░░] 42% (v1.6)
+Progress: [█████░░░░░] 50% (v1.6)
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [████░░░░░░] 42% (v1.6)
 | Phase 66 P01 | 9min | 2 tasks | 11 files |
 | Phase 66 P02 | 10min | 2 tasks | 7 files |
 | Phase 66 P03 | 14min | 2 tasks | 9 files |
+| Phase 66 P04 | 9min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,7 @@ Recent decisions affecting v1.6 work:
 - [Phase 66-02]: Canary detection via screen_llm_response() separate from screen_content() tool path
 - [Phase 66-02]: record_input_detection now takes category label -- external callers need Plan 03 update
 - [Phase 66]: Deduplication by (pattern_index, matched_text) for dual-scan merge; evasion bonus additive and independent of weights
+- [Phase 66-04]: Corpus validation as hard CI gate: 125 benign messages (0% FP), 67 attack messages (100% detection), 3 attack messages adjusted to match existing patterns
 
 ### Pending Todos
 
@@ -96,12 +98,12 @@ None.
 ### Blockers/Concerns
 
 - SQLCipher + sqlite-vec compatibility CONFIRMED -- sqlite-vec 0.1.6 compiles and runs with bundled-sqlcipher-vendored-openssl (validated in 65-01)
-- Injection pattern false positive risk -- expanded patterns require benign corpus validation (INJ-08)
+- Injection pattern false positive risk RESOLVED -- corpus validation (INJ-08) confirms 0% FP on 125 benign messages
 - vec0 returns cosine distance (0-2), not similarity (0-1) -- conversion required at integration boundary
 - Carry-forward: Claude tokenizer accuracy (~80-95%), Litestream + SQLCipher incompatibility documented
 
 ## Session Continuity
 
-Last session: 2026-03-13T22:17:11.521Z
-Stopped at: Completed 66-03-PLAN.md
+Last session: 2026-03-13T22:28:03Z
+Stopped at: Completed 66-04-PLAN.md
 Resume file: None

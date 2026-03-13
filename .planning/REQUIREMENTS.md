@@ -27,7 +27,7 @@ Requirements for v1.6 Performance & Scalability Validation. Each maps to roadmap
 - [x] **INJ-05**: Multi-language injection patterns cover French, German, Spanish, Chinese, and Japanese attack vectors
 - [x] **INJ-06**: Configurable severity weights via TOML config allow operators to tune per-category detection thresholds
 - [x] **INJ-07**: Canary token planted in system prompt detected if echoed in LLM output, indicating prompt leaking attack
-- [ ] **INJ-08**: Benign message corpus (100+ messages) validates all patterns have acceptable false positive rate before production promotion
+- [x] **INJ-08**: Benign message corpus (100+ messages) validates all patterns have acceptable false positive rate before production promotion
 
 ### Performance Benchmarking
 
@@ -91,7 +91,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INJ-05 | Phase 66 | Complete |
 | INJ-06 | Phase 66 | Complete |
 | INJ-07 | Phase 66 | Complete |
-| INJ-08 | Phase 66 | Pending |
+| INJ-08 | Phase 66 | Complete |
 | PERF-01 | Phase 68 | Pending |
 | PERF-02 | Phase 68 | Pending |
 | PERF-03 | Phase 68 | Pending |
