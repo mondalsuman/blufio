@@ -898,6 +898,7 @@ dependencies = [
  "blufio-storage",
  "chrono",
  "metrics",
+ "proptest",
  "regex",
  "serde",
  "serde_json",

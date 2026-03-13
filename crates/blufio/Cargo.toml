@@ -161,3 +161,20 @@ async-trait.workspace = true
 semver.workspace = true
 serial_test.workspace = true
 insta.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "bench_context"
+harness = false
+
+[[bench]]
+name = "bench_memory"
+harness = false
+
+[[bench]]
+name = "bench_pii"
+harness = false
+
+[[bench]]
+name = "bench_compaction"
+harness = false
