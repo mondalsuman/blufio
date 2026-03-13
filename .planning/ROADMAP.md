@@ -7,7 +7,7 @@
 - ✅ **v1.2 Production Hardening** — Phases 23-28 (shipped 2026-03-04)
 - ✅ **v1.3 Ecosystem Expansion** — Phases 29-45 (shipped 2026-03-08)
 - ✅ **v1.4 Quality & Resilience** — Phases 46-52 (shipped 2026-03-09)
-- **v1.5 PRD Gap Closure** — Phases 53-63 (in progress)
+- **v1.5 PRD Gap Closure** — Phases 53-64 (in progress)
 
 ## Phases
 
@@ -108,6 +108,7 @@
 - [x] **Phase 61: Channel Adapters** - Email (IMAP/SMTP), iMessage (BlueBubbles), SMS (Twilio) with trait and pipeline integration (completed 2026-03-13)
 - [x] **Phase 62: Observability & API Surface** - OpenTelemetry tracing, OpenAPI spec generation, Litestream WAL replication support (completed 2026-03-13)
 - [x] **Phase 63: Code Quality Hardening** - Clippy unwrap enforcement, function decomposition, test coverage expansion, benchmark regression (completed 2026-03-13)
+- [ ] **Phase 64: Close Integration Wiring Gaps** - Wire channel_interactive to HITL adapters, share PII patterns with OutputScreener, emit audit event from GDPR erasure CLI (gap closure)
 
 ## Phase Details
 
@@ -299,6 +300,19 @@ Plans:
 - [ ] 63-04-PLAN.md -- Integration tests (wiremock) for Email/iMessage/SMS adapters + property-based tests (proptest) for core algorithms
 - [ ] 63-05-PLAN.md -- Criterion benchmarks for 4 hot paths + CI regression detection workflow
 
+### Phase 64: Close Integration Wiring Gaps
+**Goal**: Close 3 low-severity cross-phase integration gaps identified by milestone audit
+**Depends on**: Phases 53, 54, 57, 60, 61 (all involved phases must be complete)
+**Requirements**: CHAN-04, INJC-05, PII-02, INJC-04, GDPR-01, AUDT-02
+**Gap Closure:** Closes integration gaps from v1.5 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. `channel_interactive` parameter in InjectionPipeline is connected to actual channel adapter capabilities so HITL confirmation respects channel interactivity
+  2. OutputScreener reuses blufio-security PII detection patterns instead of maintaining separate CREDENTIAL_PATTERNS
+  3. GDPR erasure CLI emits an audit event for the erasure action itself (even when operating outside serve.rs lifecycle)
+**Plans**: 1 plan
+Plans:
+- [ ] 64-01-PLAN.md -- Wire channel_interactive to adapters, share PII patterns with OutputScreener, emit audit event from GDPR CLI
+
 ## Progress
 
 **Execution Order:**
@@ -369,6 +383,7 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 61. Channel Adapters | 4/4 | Complete    | 2026-03-13 | - |
 | 62. Observability & API Surface | 5/5 | Complete    | 2026-03-13 | - |
 | 63. Code Quality Hardening | 5/5 | Complete    | 2026-03-13 | - |
+| 64. Close Integration Wiring Gaps | 0/1 | Pending | - | - |
 
 ---
 *Roadmap created: 2026-02-28*

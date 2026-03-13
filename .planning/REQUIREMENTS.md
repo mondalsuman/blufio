@@ -191,12 +191,12 @@ Deferred to v1.6+.
 | DCLS-04 | Phase 53 | Complete |
 | DCLS-05 | Phase 53 | Complete |
 | PII-01 | Phase 53 | Complete |
-| PII-02 | Phase 53 | Complete |
+| PII-02 | Phase 53, Phase 64 | Complete (integration gap closure in Phase 64) |
 | PII-03 | Phase 53 | Complete |
 | PII-04 | Phase 53 | Complete |
 | PII-05 | Phase 53 | Complete |
 | AUDT-01 | Phase 54 | Complete |
-| AUDT-02 | Phase 54 | Complete |
+| AUDT-02 | Phase 54, Phase 64 | Complete (integration gap closure in Phase 64) |
 | AUDT-03 | Phase 54 | Complete |
 | AUDT-04 | Phase 54 | Complete |
 | AUDT-05 | Phase 54 | Complete |
@@ -220,8 +220,8 @@ Deferred to v1.6+.
 | INJC-01 | Phase 57 | Complete |
 | INJC-02 | Phase 57 | Complete |
 | INJC-03 | Phase 57 | Complete |
-| INJC-04 | Phase 57 | Complete |
-| INJC-05 | Phase 57 | Complete |
+| INJC-04 | Phase 57, Phase 64 | Complete (integration gap closure in Phase 64) |
+| INJC-05 | Phase 57, Phase 64 | Complete (integration gap closure in Phase 64) |
 | INJC-06 | Phase 57 | Complete |
 | CRON-01 | Phase 58 | Complete |
 | CRON-02 | Phase 58 | Complete |
@@ -246,7 +246,7 @@ Deferred to v1.6+.
 | HTRL-04 | Phase 59 | Complete |
 | HTRL-05 | Phase 59 | Complete |
 | HTRL-06 | Phase 59 | Complete |
-| GDPR-01 | Phase 60 | Complete |
+| GDPR-01 | Phase 60, Phase 64 | Complete (integration gap closure in Phase 64) |
 | GDPR-02 | Phase 60 | Complete |
 | GDPR-03 | Phase 60 | Complete |
 | GDPR-04 | Phase 60 | Complete |
@@ -255,7 +255,7 @@ Deferred to v1.6+.
 | CHAN-01 | Phase 61 | Complete |
 | CHAN-02 | Phase 61 | Complete |
 | CHAN-03 | Phase 61 | Complete |
-| CHAN-04 | Phase 61 | Complete |
+| CHAN-04 | Phase 61, Phase 64 | Complete (integration gap closure in Phase 64) |
 | CHAN-05 | Phase 61 | Complete |
 | CHAN-06 | Phase 61 | Complete |
 | CHAN-07 | Phase 61 | Complete |
