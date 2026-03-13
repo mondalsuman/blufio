@@ -76,35 +76,35 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VEC-01 | — | Pending |
-| VEC-02 | — | Pending |
-| VEC-03 | — | Pending |
-| VEC-04 | — | Pending |
-| VEC-05 | — | Pending |
-| VEC-06 | — | Pending |
-| VEC-07 | — | Pending |
-| VEC-08 | — | Pending |
-| INJ-01 | — | Pending |
-| INJ-02 | — | Pending |
-| INJ-03 | — | Pending |
-| INJ-04 | — | Pending |
-| INJ-05 | — | Pending |
-| INJ-06 | — | Pending |
-| INJ-07 | — | Pending |
-| INJ-08 | — | Pending |
-| PERF-01 | — | Pending |
-| PERF-02 | — | Pending |
-| PERF-03 | — | Pending |
-| PERF-04 | — | Pending |
-| PERF-05 | — | Pending |
-| PERF-06 | — | Pending |
-| PERF-07 | — | Pending |
+| VEC-01 | Phase 65 | Pending |
+| VEC-02 | Phase 65 | Pending |
+| VEC-03 | Phase 65 | Pending |
+| VEC-04 | Phase 67 | Pending |
+| VEC-05 | Phase 67 | Pending |
+| VEC-06 | Phase 67 | Pending |
+| VEC-07 | Phase 67 | Pending |
+| VEC-08 | Phase 67 | Pending |
+| INJ-01 | Phase 66 | Pending |
+| INJ-02 | Phase 66 | Pending |
+| INJ-03 | Phase 66 | Pending |
+| INJ-04 | Phase 66 | Pending |
+| INJ-05 | Phase 66 | Pending |
+| INJ-06 | Phase 66 | Pending |
+| INJ-07 | Phase 66 | Pending |
+| INJ-08 | Phase 66 | Pending |
+| PERF-01 | Phase 68 | Pending |
+| PERF-02 | Phase 68 | Pending |
+| PERF-03 | Phase 68 | Pending |
+| PERF-04 | Phase 68 | Pending |
+| PERF-05 | Phase 68 | Pending |
+| PERF-06 | Phase 68 | Pending |
+| PERF-07 | Phase 68 | Pending |
 
 **Coverage:**
 - v1.6 requirements: 23 total
-- Mapped to phases: 0
-- Unmapped: 23
+- Mapped to phases: 23
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-13*
-*Last updated: 2026-03-13 after initial definition*
+*Last updated: 2026-03-13 after roadmap creation (traceability populated)*
