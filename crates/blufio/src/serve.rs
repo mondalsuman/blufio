@@ -57,6 +57,9 @@ use blufio_irc::IrcChannel;
 #[cfg(feature = "matrix")]
 use blufio_matrix::MatrixChannel;
 
+#[cfg(feature = "email")]
+use blufio_email::EmailChannel;
+
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
@@ -370,6 +373,10 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         #[cfg(feature = "matrix")]
         if config.matrix.homeserver_url.is_some() {
             channel_names.push("matrix".to_string());
+        }
+        #[cfg(feature = "email")]
+        if config.email.imap_host.is_some() {
+            channel_names.push("email".to_string());
         }
         #[cfg(feature = "gateway")]
         if config.gateway.enabled {
@@ -845,6 +852,21 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             }
         } else {
             info!("matrix channel skipped (no homeserver_url configured)");
+        }
+    }
+
+    // Add Email channel (if enabled and configured).
+    #[cfg(feature = "email")]
+    {
+        if config.email.imap_host.is_some() {
+            let email = EmailChannel::new(config.email.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize Email channel");
+                e
+            })?;
+            mux.add_channel("email".to_string(), Box::new(email));
+            info!("email channel added to multiplexer");
+        } else {
+            info!("email channel skipped (no imap_host configured)");
         }
     }
 
