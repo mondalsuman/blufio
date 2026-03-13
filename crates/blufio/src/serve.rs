@@ -60,6 +60,12 @@ use blufio_matrix::MatrixChannel;
 #[cfg(feature = "email")]
 use blufio_email::EmailChannel;
 
+#[cfg(feature = "imessage")]
+use blufio_imessage::{IMessageChannel, webhook::{IMessageWebhookState, imessage_webhook_routes}};
+
+#[cfg(feature = "sms")]
+use blufio_sms::{SmsChannel, webhook::{SmsWebhookState, sms_webhook_routes}};
+
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
 
@@ -377,6 +383,14 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         #[cfg(feature = "email")]
         if config.email.imap_host.is_some() {
             channel_names.push("email".to_string());
+        }
+        #[cfg(feature = "imessage")]
+        if config.imessage.bluebubbles_url.is_some() {
+            channel_names.push("imessage".to_string());
+        }
+        #[cfg(feature = "sms")]
+        if config.sms.account_sid.is_some() {
+            channel_names.push("sms".to_string());
         }
         #[cfg(feature = "gateway")]
         if config.gateway.enabled {
@@ -870,6 +884,58 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         }
     }
 
+    // Add iMessage channel (if enabled and configured).
+    #[cfg(feature = "imessage")]
+    let _imessage_webhook_state: Option<IMessageWebhookState> = {
+        if config.imessage.bluebubbles_url.is_some() {
+            let imessage = IMessageChannel::new(config.imessage.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize iMessage channel");
+                e
+            })?;
+            let inbound_tx = imessage.inbound_tx();
+            let webhook_state = IMessageWebhookState {
+                inbound_tx,
+                webhook_secret: config.imessage.webhook_secret.clone(),
+                allowed_contacts: config.imessage.allowed_contacts.clone(),
+                group_trigger: config.imessage.group_trigger.clone().unwrap_or_else(|| "Blufio".to_string()),
+            };
+            mux.add_channel("imessage".to_string(), Box::new(imessage));
+            info!("imessage channel added to multiplexer");
+            Some(webhook_state)
+        } else {
+            info!("imessage channel skipped (no bluebubbles_url configured)");
+            None
+        }
+    };
+    #[cfg(not(feature = "imessage"))]
+    let _imessage_webhook_state: Option<()> = None;
+
+    // Add SMS channel (if enabled and configured).
+    #[cfg(feature = "sms")]
+    let _sms_webhook_state: Option<SmsWebhookState> = {
+        if config.sms.account_sid.is_some() {
+            let sms = SmsChannel::new(config.sms.clone()).map_err(|e| {
+                error!(error = %e, "failed to initialize SMS channel");
+                e
+            })?;
+            let inbound_tx = sms.inbound_tx();
+            let webhook_state = SmsWebhookState {
+                inbound_tx,
+                auth_token: config.sms.auth_token.clone().unwrap_or_default(),
+                webhook_url: config.sms.webhook_url.clone().unwrap_or_default(),
+                allowed_numbers: config.sms.allowed_numbers.clone(),
+            };
+            mux.add_channel("sms".to_string(), Box::new(sms));
+            info!("sms channel added to multiplexer");
+            Some(webhook_state)
+        } else {
+            info!("sms channel skipped (no account_sid configured)");
+            None
+        }
+    };
+    #[cfg(not(feature = "sms"))]
+    let _sms_webhook_state: Option<()> = None;
+
     // Install signal handler early so the cancellation token is available
     // for MCP HTTP transport and gateway startup.
     let cancel = shutdown::install_signal_handler();
@@ -1128,14 +1194,49 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 );
             }
 
-            // Wire WhatsApp webhook routes into gateway (unauthenticated public routes).
-            #[cfg(feature = "whatsapp")]
-            if let Some(ref webhook_state) = _whatsapp_webhook_state {
-                let whatsapp_routes =
-                    blufio_whatsapp::webhook::whatsapp_webhook_routes(webhook_state.clone());
-                gateway.set_extra_public_routes(whatsapp_routes).await;
-                info!("whatsapp webhook routes mounted on gateway at /webhooks/whatsapp");
+            // Compose ALL webhook routes into a single Router.
+            // CRITICAL: set_extra_public_routes() REPLACES (not appends), so compose first.
+            {
+                let mut webhook_routes: Option<axum::Router> = None;
+
+                #[cfg(feature = "whatsapp")]
+                if let Some(ref state) = _whatsapp_webhook_state {
+                    let routes = blufio_whatsapp::webhook::whatsapp_webhook_routes(state.clone());
+                    webhook_routes = Some(match webhook_routes {
+                        Some(existing) => existing.merge(routes),
+                        None => routes,
+                    });
+                    info!("whatsapp webhook routes added at /webhooks/whatsapp");
+                }
+
+                #[cfg(feature = "imessage")]
+                if let Some(ref state) = _imessage_webhook_state {
+                    let routes = imessage_webhook_routes(state.clone());
+                    webhook_routes = Some(match webhook_routes {
+                        Some(existing) => existing.merge(routes),
+                        None => routes,
+                    });
+                    info!("imessage webhook routes added at /webhooks/imessage");
+                }
+
+                #[cfg(feature = "sms")]
+                if let Some(ref state) = _sms_webhook_state {
+                    let routes = sms_webhook_routes(state.clone());
+                    webhook_routes = Some(match webhook_routes {
+                        Some(existing) => existing.merge(routes),
+                        None => routes,
+                    });
+                    info!("sms webhook routes added at /webhooks/sms");
+                }
+
+                if let Some(routes) = webhook_routes {
+                    gateway.set_extra_public_routes(routes).await;
+                    info!("webhook routes mounted on gateway");
+                }
             }
+
+            // Gateway warning: webhooks configured but gateway disabled makes no sense,
+            // but this block only runs when gateway IS enabled. Warnings go below.
 
             mux.add_channel("gateway".to_string(), Box::new(gateway));
             info!(
@@ -1145,6 +1246,16 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             );
         } else {
             debug!("gateway channel disabled by configuration");
+
+            // Warn about webhooks configured without gateway.
+            #[cfg(feature = "imessage")]
+            if config.imessage.bluebubbles_url.is_some() {
+                warn!("iMessage webhooks configured but gateway is disabled -- incoming messages will not work");
+            }
+            #[cfg(feature = "sms")]
+            if config.sms.account_sid.is_some() {
+                warn!("SMS webhooks configured but gateway is disabled -- incoming messages will not work");
+            }
         }
     }
 
