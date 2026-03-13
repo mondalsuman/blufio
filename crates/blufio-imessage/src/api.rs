@@ -84,11 +84,7 @@ impl BlueBubblesClient {
     /// Send a text message to a chat.
     ///
     /// Returns the message GUID from the response.
-    pub async fn send_message(
-        &self,
-        chat_guid: &str,
-        text: &str,
-    ) -> Result<String, BlufioError> {
+    pub async fn send_message(&self, chat_guid: &str, text: &str) -> Result<String, BlufioError> {
         let url = self.url("/api/v1/message/text");
         let body = BlueBubblesSendRequest {
             chat_guid: chat_guid.to_string(),
@@ -183,10 +179,10 @@ impl BlueBubblesClient {
 
 /// Extract the message GUID from a send response.
 fn extract_message_guid(resp: BlueBubblesSendResponse) -> Result<String, BlufioError> {
-    if let Some(data) = &resp.data {
-        if let Some(guid) = data.get("guid").and_then(|v| v.as_str()) {
-            return Ok(guid.to_string());
-        }
+    if let Some(data) = &resp.data
+        && let Some(guid) = data.get("guid").and_then(|v| v.as_str())
+    {
+        return Ok(guid.to_string());
     }
     // Fall back to a generated UUID if the response doesn't contain a GUID.
     Ok(uuid::Uuid::new_v4().to_string())

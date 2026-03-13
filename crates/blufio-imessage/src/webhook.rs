@@ -32,10 +32,7 @@ pub struct IMessageWebhookState {
 /// Returns a `Router` with a POST handler at `/webhooks/imessage`.
 pub fn imessage_webhook_routes(state: IMessageWebhookState) -> Router {
     Router::new()
-        .route(
-            "/webhooks/imessage",
-            axum::routing::post(imessage_webhook),
-        )
+        .route("/webhooks/imessage", axum::routing::post(imessage_webhook))
         .with_state(state)
 }
 
@@ -92,11 +89,11 @@ async fn imessage_webhook(
     }
 
     // Ignore tapback reactions (associated_message_type != 0).
-    if let Some(amt) = message.associated_message_type {
-        if amt != 0 {
-            debug!(associated_message_type = amt, "Ignoring tapback reaction");
-            return StatusCode::OK;
-        }
+    if let Some(amt) = message.associated_message_type
+        && amt != 0
+    {
+        debug!(associated_message_type = amt, "Ignoring tapback reaction");
+        return StatusCode::OK;
     }
 
     // Extract sender address.
@@ -109,9 +106,7 @@ async fn imessage_webhook(
     };
 
     // Check allowed contacts filter.
-    if !state.allowed_contacts.is_empty()
-        && !state.allowed_contacts.contains(&sender_address)
-    {
+    if !state.allowed_contacts.is_empty() && !state.allowed_contacts.contains(&sender_address) {
         debug!(sender = %sender_address, "Ignoring message from non-allowed contact");
         return StatusCode::OK;
     }
@@ -129,14 +124,12 @@ async fn imessage_webhook(
 
     // Group chat handling: check for trigger prefix.
     let is_group = chat_guid.contains(";+;");
-    if is_group {
-        if !state.group_trigger.is_empty() {
-            if let Some(stripped) = text.strip_prefix(&state.group_trigger) {
-                text = stripped.trim_start().to_string();
-            } else {
-                debug!("Ignoring group chat message without trigger prefix");
-                return StatusCode::OK;
-            }
+    if is_group && !state.group_trigger.is_empty() {
+        if let Some(stripped) = text.strip_prefix(&state.group_trigger) {
+            text = stripped.trim_start().to_string();
+        } else {
+            debug!("Ignoring group chat message without trigger prefix");
+            return StatusCode::OK;
         }
     }
 

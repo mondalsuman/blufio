@@ -44,9 +44,7 @@ impl IMessageChannel {
     pub fn new(config: IMessageConfig) -> Result<Self, BlufioError> {
         // Validate required fields.
         let url = config.bluebubbles_url.as_deref().ok_or_else(|| {
-            BlufioError::Config(
-                "imessage.bluebubbles_url is required for iMessage adapter".into(),
-            )
+            BlufioError::Config("imessage.bluebubbles_url is required for iMessage adapter".into())
         })?;
 
         if !url.starts_with("http://") && !url.starts_with("https://") {

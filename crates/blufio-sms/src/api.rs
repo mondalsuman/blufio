@@ -53,7 +53,7 @@ impl TwilioClient {
     /// Build a form-urlencoded body for sending an SMS.
     fn build_form_body(to: &str, from: &str, body: &str) -> String {
         let params = [("To", to), ("From", from), ("Body", body)];
-        serde_urlencoded::to_string(&params).unwrap_or_default()
+        serde_urlencoded::to_string(params).unwrap_or_default()
     }
 
     /// Send an SMS via Twilio, returning the response.
@@ -120,10 +120,7 @@ impl TwilioClient {
         }
 
         if !status.is_success() {
-            let body_text = resp
-                .text()
-                .await
-                .unwrap_or_default();
+            let body_text = resp.text().await.unwrap_or_default();
             return Err(BlufioError::Config(format!(
                 "Twilio API error ({status}): {body_text}"
             )));

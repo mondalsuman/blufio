@@ -150,9 +150,10 @@ async fn run_poll_cycle(
         })?;
 
         // Search for UNSEEN messages.
-        let unseen = session.search("UNSEEN").await.map_err(|e| {
-            BlufioError::Config(format!("email: IMAP search UNSEEN failed: {e}"))
-        })?;
+        let unseen = session
+            .search("UNSEEN")
+            .await
+            .map_err(|e| BlufioError::Config(format!("email: IMAP search UNSEEN failed: {e}")))?;
 
         if unseen.is_empty() {
             debug!(folder, "no unseen messages");
@@ -169,9 +170,10 @@ async fn run_poll_cycle(
             .join(",");
 
         // Fetch full RFC822 body for each.
-        let messages_stream = session.fetch(&seq_set, "RFC822").await.map_err(|e| {
-            BlufioError::Config(format!("email: IMAP fetch failed: {e}"))
-        })?;
+        let messages_stream = session
+            .fetch(&seq_set, "RFC822")
+            .await
+            .map_err(|e| BlufioError::Config(format!("email: IMAP fetch failed: {e}")))?;
 
         let messages: Vec<_> = messages_stream
             .try_collect()
@@ -191,9 +193,10 @@ async fn run_poll_cycle(
 
             // Check allowed_senders filter.
             if !config.allowed_senders.is_empty()
-                && !config.allowed_senders.iter().any(|s| {
-                    s.eq_ignore_ascii_case(&parsed.from)
-                })
+                && !config
+                    .allowed_senders
+                    .iter()
+                    .any(|s| s.eq_ignore_ascii_case(&parsed.from))
             {
                 debug!(from = %parsed.from, "sender not in allowed_senders, skipping");
                 continue;
@@ -241,13 +244,12 @@ async fn run_poll_cycle(
         let store_stream = session
             .store(&seq_set, "+FLAGS (\\Seen)")
             .await
-            .map_err(|e| {
-                BlufioError::Config(format!("email: IMAP store \\Seen failed: {e}"))
-            })?;
+            .map_err(|e| BlufioError::Config(format!("email: IMAP store \\Seen failed: {e}")))?;
         // Consume the store response stream.
-        let _: Vec<_> = store_stream.try_collect().await.map_err(|e| {
-            BlufioError::Config(format!("email: IMAP store collect failed: {e}"))
-        })?;
+        let _: Vec<_> = store_stream
+            .try_collect()
+            .await
+            .map_err(|e| BlufioError::Config(format!("email: IMAP store collect failed: {e}")))?;
 
         debug!(folder, count = unseen.len(), "marked messages as seen");
     }
@@ -269,10 +271,10 @@ fn determine_thread_id(
     thread_map: &HashMap<String, String>,
 ) -> String {
     // Check In-Reply-To first.
-    if let Some(ref irt) = parsed.in_reply_to {
-        if let Some(tid) = thread_map.get(irt) {
-            return tid.clone();
-        }
+    if let Some(ref irt) = parsed.in_reply_to
+        && let Some(tid) = thread_map.get(irt)
+    {
+        return tid.clone();
     }
 
     // Check References (last reference is most recent parent).

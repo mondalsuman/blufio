@@ -30,13 +30,17 @@ pub async fn build_smtp_transport(
         .smtp_username
         .as_deref()
         .or(config.username.as_deref())
-        .ok_or_else(|| BlufioError::Config("email: smtp_username or username is required".into()))?;
+        .ok_or_else(|| {
+            BlufioError::Config("email: smtp_username or username is required".into())
+        })?;
 
     let password = config
         .smtp_password
         .as_deref()
         .or(config.password.as_deref())
-        .ok_or_else(|| BlufioError::Config("email: smtp_password or password is required".into()))?;
+        .ok_or_else(|| {
+            BlufioError::Config("email: smtp_password or password is required".into())
+        })?;
 
     let credentials = Credentials::new(username.to_string(), password.to_string());
 
@@ -80,10 +84,7 @@ pub async fn send_email_reply(
     in_reply_to: Option<&str>,
     references: Option<&str>,
 ) -> Result<String, BlufioError> {
-    let from_name = config
-        .from_name
-        .as_deref()
-        .unwrap_or("Blufio");
+    let from_name = config.from_name.as_deref().unwrap_or("Blufio");
     let from_address = config
         .from_address
         .as_deref()
@@ -146,7 +147,7 @@ pub async fn send_email_reply(
         .await
         .map_err(|e| BlufioError::channel_delivery_failed("email", e))?;
 
-    Ok(format!("{}", response.message().collect::<Vec<_>>().join(" ")))
+    Ok(response.message().collect::<Vec<_>>().join(" ").to_string())
 }
 
 #[cfg(test)]

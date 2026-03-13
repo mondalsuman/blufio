@@ -61,10 +61,16 @@ use blufio_matrix::MatrixChannel;
 use blufio_email::EmailChannel;
 
 #[cfg(feature = "imessage")]
-use blufio_imessage::{IMessageChannel, webhook::{IMessageWebhookState, imessage_webhook_routes}};
+use blufio_imessage::{
+    IMessageChannel,
+    webhook::{IMessageWebhookState, imessage_webhook_routes},
+};
 
 #[cfg(feature = "sms")]
-use blufio_sms::{SmsChannel, webhook::{SmsWebhookState, sms_webhook_routes}};
+use blufio_sms::{
+    SmsChannel,
+    webhook::{SmsWebhookState, sms_webhook_routes},
+};
 
 #[cfg(feature = "gateway")]
 use blufio_gateway::{GatewayChannel, GatewayChannelConfig};
@@ -897,7 +903,11 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
                 inbound_tx,
                 webhook_secret: config.imessage.webhook_secret.clone(),
                 allowed_contacts: config.imessage.allowed_contacts.clone(),
-                group_trigger: config.imessage.group_trigger.clone().unwrap_or_else(|| "Blufio".to_string()),
+                group_trigger: config
+                    .imessage
+                    .group_trigger
+                    .clone()
+                    .unwrap_or_else(|| "Blufio".to_string()),
             };
             mux.add_channel("imessage".to_string(), Box::new(imessage));
             info!("imessage channel added to multiplexer");
@@ -1250,11 +1260,15 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
             // Warn about webhooks configured without gateway.
             #[cfg(feature = "imessage")]
             if config.imessage.bluebubbles_url.is_some() {
-                warn!("iMessage webhooks configured but gateway is disabled -- incoming messages will not work");
+                warn!(
+                    "iMessage webhooks configured but gateway is disabled -- incoming messages will not work"
+                );
             }
             #[cfg(feature = "sms")]
             if config.sms.account_sid.is_some() {
-                warn!("SMS webhooks configured but gateway is disabled -- incoming messages will not work");
+                warn!(
+                    "SMS webhooks configured but gateway is disabled -- incoming messages will not work"
+                );
             }
         }
     }

@@ -170,7 +170,9 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
             resource_id: channel.clone(),
             actor: "system".to_string(),
             session_id: String::new(),
-            details_json: serde_json::json!({ "channel": channel, "recipient": recipient, "error": error }).to_string(),
+            details_json:
+                serde_json::json!({ "channel": channel, "recipient": recipient, "error": error })
+                    .to_string(),
         },
 
         // --- Skill events ---

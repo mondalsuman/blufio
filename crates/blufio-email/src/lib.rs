@@ -62,12 +62,12 @@ impl EmailChannel {
         }
 
         // Basic format check on username.
-        if let Some(ref user) = config.username {
-            if !user.contains('@') {
-                return Err(BlufioError::Config(
-                    "email.username must contain '@'".into(),
-                ));
-            }
+        if let Some(ref user) = config.username
+            && !user.contains('@')
+        {
+            return Err(BlufioError::Config(
+                "email.username must contain '@'".into(),
+            ));
         }
 
         let (inbound_tx, inbound_rx) = mpsc::channel(100);
@@ -149,8 +149,7 @@ impl ChannelAdapter for EmailChannel {
         }
 
         // Start IMAP polling.
-        let handle =
-            imap::start_imap_polling(self.config.clone(), self.inbound_tx.clone()).await?;
+        let handle = imap::start_imap_polling(self.config.clone(), self.inbound_tx.clone()).await?;
         {
             let mut ph = self.poll_handle.lock().await;
             *ph = Some(handle);
@@ -166,34 +165,33 @@ impl ChannelAdapter for EmailChannel {
             .ok_or_else(|| BlufioError::channel_connection_lost("email"))?;
 
         // Extract reply metadata from the message.
-        let (recipient, subject, in_reply_to, references) =
-            if let Some(ref metadata) = msg.metadata
-                && let Ok(meta) = serde_json::from_str::<serde_json::Value>(metadata)
-            {
-                let from = meta
-                    .get("from")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                let subject = meta
-                    .get("subject")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("(no subject)")
-                    .to_string();
-                let irt = meta
-                    .get("message_id")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                let refs = meta
-                    .get("in_reply_to")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                (from, subject, irt, refs)
-            } else {
-                return Err(BlufioError::Config(
-                    "email send: metadata with 'from' field is required".into(),
-                ));
-            };
+        let (recipient, subject, in_reply_to, references) = if let Some(ref metadata) = msg.metadata
+            && let Ok(meta) = serde_json::from_str::<serde_json::Value>(metadata)
+        {
+            let from = meta
+                .get("from")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let subject = meta
+                .get("subject")
+                .and_then(|v| v.as_str())
+                .unwrap_or("(no subject)")
+                .to_string();
+            let irt = meta
+                .get("message_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let refs = meta
+                .get("in_reply_to")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            (from, subject, irt, refs)
+        } else {
+            return Err(BlufioError::Config(
+                "email send: metadata with 'from' field is required".into(),
+            ));
+        };
 
         if recipient.is_empty() {
             return Err(BlufioError::Config(

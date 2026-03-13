@@ -147,10 +147,11 @@ pub fn strip_quoted_text(text: &str) -> String {
         }
 
         // Outlook pattern: "From: ..." followed by "Sent: ..."
-        if trimmed.starts_with("From: ") {
-            if i + 1 < lines.len() && lines[i + 1].trim_end().starts_with("Sent: ") {
-                break;
-            }
+        if trimmed.starts_with("From: ")
+            && i + 1 < lines.len()
+            && lines[i + 1].trim_end().starts_with("Sent: ")
+        {
+            break;
         }
 
         // Skip inline quoted lines (starting with >).
@@ -196,15 +197,13 @@ mod tests {
 
     #[test]
     fn test_strip_quoted_text_outlook() {
-        let input =
-            "Hello\n\nFrom: User\nSent: Monday\nTo: Bot\nSubject: Re: Help";
+        let input = "Hello\n\nFrom: User\nSent: Monday\nTo: Bot\nSubject: Re: Help";
         assert_eq!(strip_quoted_text(input), "Hello");
     }
 
     #[test]
     fn test_strip_quoted_text_apple_mail() {
-        let input =
-            "Hello\n\nOn Jan 1, 2026, at 12:00 PM, User <user@example.com> wrote:\n> old";
+        let input = "Hello\n\nOn Jan 1, 2026, at 12:00 PM, User <user@example.com> wrote:\n> old";
         assert_eq!(strip_quoted_text(input), "Hello");
     }
 
@@ -261,9 +260,6 @@ mod tests {
         assert!(parsed.body.contains("Hello, this is the body."));
         assert!(parsed.body.contains("Subject: Test Subject"));
         assert_eq!(parsed.from, "sender@example.com");
-        assert_eq!(
-            parsed.message_id.as_deref(),
-            Some("abc123@example.com")
-        );
+        assert_eq!(parsed.message_id.as_deref(), Some("abc123@example.com"));
     }
 }
