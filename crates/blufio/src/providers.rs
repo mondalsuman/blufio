@@ -376,7 +376,9 @@ mod tests {
             &self,
             _request: ProviderRequest,
         ) -> Result<ProviderResponse, BlufioError> {
-            unimplemented!("mock provider")
+            Err(BlufioError::Internal(
+                "mock provider: complete not implemented".to_string(),
+            ))
         }
 
         async fn stream(
@@ -386,7 +388,9 @@ mod tests {
             Pin<Box<dyn Stream<Item = Result<ProviderStreamChunk, BlufioError>> + Send>>,
             BlufioError,
         > {
-            unimplemented!("mock provider")
+            Err(BlufioError::Internal(
+                "mock provider: stream not implemented".to_string(),
+            ))
         }
     }
 

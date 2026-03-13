@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Blufio Contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
+#![cfg_attr(not(test), deny(clippy::unwrap_used))]
 
 //! Cross-channel message bridge for the Blufio agent framework.
 //!

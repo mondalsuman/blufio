@@ -145,14 +145,14 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Code Quality
 
-- [ ] **QUAL-01**: #![deny(clippy::unwrap_used)] enforced across all library crates
-- [ ] **QUAL-02**: All 1,444+ unwrap() calls in library crates replaced with proper error handling
-- [ ] **QUAL-03**: /api/status endpoint returns actual uptime instead of hardcoded 0
-- [ ] **QUAL-04**: Mock provider replaces unimplemented!() with proper stubs
-- [ ] **QUAL-05**: serve.rs and other oversized functions decomposed into smaller init functions
-- [ ] **QUAL-06**: Integration tests added for channel adapters
-- [ ] **QUAL-07**: Property-based testing for core algorithms (compaction quality, PII detection, hash chain verification)
-- [ ] **QUAL-08**: Benchmark regression detection in CI
+- [x] **QUAL-01**: #![deny(clippy::unwrap_used)] enforced across all library crates
+- [x] **QUAL-02**: All 1,444+ unwrap() calls in library crates replaced with proper error handling
+- [x] **QUAL-03**: /api/status endpoint returns actual uptime instead of hardcoded 0
+- [x] **QUAL-04**: Mock provider replaces unimplemented!() with proper stubs
+- [x] **QUAL-05**: serve.rs and other oversized functions decomposed into smaller init functions
+- [x] **QUAL-06**: Integration tests added for channel adapters
+- [x] **QUAL-07**: Property-based testing for core algorithms (compaction quality, PII detection, hash chain verification)
+- [x] **QUAL-08**: Benchmark regression detection in CI
 
 ## Future Requirements
 
@@ -191,12 +191,12 @@ Deferred to v1.6+.
 | DCLS-04 | Phase 53 | Complete |
 | DCLS-05 | Phase 53 | Complete |
 | PII-01 | Phase 53 | Complete |
-| PII-02 | Phase 53 | Complete |
+| PII-02 | Phase 53, Phase 64 | Complete (integration gap closure in Phase 64) |
 | PII-03 | Phase 53 | Complete |
 | PII-04 | Phase 53 | Complete |
 | PII-05 | Phase 53 | Complete |
 | AUDT-01 | Phase 54 | Complete |
-| AUDT-02 | Phase 54 | Complete |
+| AUDT-02 | Phase 54, Phase 64 | Complete (integration gap closure in Phase 64) |
 | AUDT-03 | Phase 54 | Complete |
 | AUDT-04 | Phase 54 | Complete |
 | AUDT-05 | Phase 54 | Complete |
@@ -220,8 +220,8 @@ Deferred to v1.6+.
 | INJC-01 | Phase 57 | Complete |
 | INJC-02 | Phase 57 | Complete |
 | INJC-03 | Phase 57 | Complete |
-| INJC-04 | Phase 57 | Complete |
-| INJC-05 | Phase 57 | Complete |
+| INJC-04 | Phase 57, Phase 64 | Complete (integration gap closure in Phase 64) |
+| INJC-05 | Phase 57, Phase 64 | Complete (integration gap closure in Phase 64) |
 | INJC-06 | Phase 57 | Complete |
 | CRON-01 | Phase 58 | Complete |
 | CRON-02 | Phase 58 | Complete |
@@ -246,7 +246,7 @@ Deferred to v1.6+.
 | HTRL-04 | Phase 59 | Complete |
 | HTRL-05 | Phase 59 | Complete |
 | HTRL-06 | Phase 59 | Complete |
-| GDPR-01 | Phase 60 | Complete |
+| GDPR-01 | Phase 60, Phase 64 | Complete (integration gap closure in Phase 64) |
 | GDPR-02 | Phase 60 | Complete |
 | GDPR-03 | Phase 60 | Complete |
 | GDPR-04 | Phase 60 | Complete |
@@ -255,7 +255,7 @@ Deferred to v1.6+.
 | CHAN-01 | Phase 61 | Complete |
 | CHAN-02 | Phase 61 | Complete |
 | CHAN-03 | Phase 61 | Complete |
-| CHAN-04 | Phase 61 | Complete |
+| CHAN-04 | Phase 61, Phase 64 | Complete (integration gap closure in Phase 64) |
 | CHAN-05 | Phase 61 | Complete |
 | CHAN-06 | Phase 61 | Complete |
 | CHAN-07 | Phase 61 | Complete |
@@ -273,14 +273,14 @@ Deferred to v1.6+.
 | LITE-02 | Phase 62 | Complete |
 | LITE-03 | Phase 62 | Complete |
 | LITE-04 | Phase 62 | Complete |
-| QUAL-01 | Phase 63 | Pending |
-| QUAL-02 | Phase 63 | Pending |
-| QUAL-03 | Phase 63 | Pending |
-| QUAL-04 | Phase 63 | Pending |
-| QUAL-05 | Phase 63 | Pending |
-| QUAL-06 | Phase 63 | Pending |
-| QUAL-07 | Phase 63 | Pending |
-| QUAL-08 | Phase 63 | Pending |
+| QUAL-01 | Phase 63 | Complete |
+| QUAL-02 | Phase 63 | Complete |
+| QUAL-03 | Phase 63 | Complete |
+| QUAL-04 | Phase 63 | Complete |
+| QUAL-05 | Phase 63 | Complete |
+| QUAL-06 | Phase 63 | Complete |
+| QUAL-07 | Phase 63 | Complete |
+| QUAL-08 | Phase 63 | Complete |
 
 **Coverage:**
 - v1.5 requirements: 93 total

@@ -35,7 +35,7 @@ pub fn markdown_to_mrkdwn(text: &str) -> String {
     // Phase 1: Protect code blocks and inline code with placeholders.
 
     // Protect fenced code blocks (```...```)
-    let code_block_re = Regex::new(r"(?s)```[^\n]*\n.*?```").unwrap();
+    let code_block_re = Regex::new(r"(?s)```[^\n]*\n.*?```").expect("valid regex: code_block");
     loop {
         let current = result.clone();
         if let Some(m) = code_block_re.find(&current) {
@@ -54,7 +54,7 @@ pub fn markdown_to_mrkdwn(text: &str) -> String {
     }
 
     // Protect inline code (`...`)
-    let inline_code_re = Regex::new(r"`[^`]+`").unwrap();
+    let inline_code_re = Regex::new(r"`[^`]+`").expect("valid regex: inline_code");
     let mut inline_codes: Vec<String> = Vec::new();
     loop {
         let current = result.clone();
@@ -76,11 +76,11 @@ pub fn markdown_to_mrkdwn(text: &str) -> String {
     // Phase 2: Convert markdown syntax to mrkdwn.
 
     // Convert links: [text](url) -> <url|text>
-    let link_re = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
+    let link_re = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").expect("valid regex: link");
     result = link_re.replace_all(&result, "<$2|$1>").to_string();
 
     // Convert bold: **text** -> temporary markers
-    let bold_re = Regex::new(r"\*\*(.+?)\*\*").unwrap();
+    let bold_re = Regex::new(r"\*\*(.+?)\*\*").expect("valid regex: bold");
     result = bold_re
         .replace_all(&result, |caps: &regex::Captures| {
             format!("{BOLD_OPEN}{}{BOLD_CLOSE}", &caps[1])
@@ -90,18 +90,18 @@ pub fn markdown_to_mrkdwn(text: &str) -> String {
     // Convert italic: remaining *text* -> _text_
     // Note: Must use ${1} not $1_ because the regex crate interprets $1_ as
     // a capture group named "1_" (underscore is a valid identifier char).
-    let italic_re = Regex::new(r"\*([^*]+?)\*").unwrap();
+    let italic_re = Regex::new(r"\*([^*]+?)\*").expect("valid regex: italic");
     result = italic_re.replace_all(&result, "_${1}_").to_string();
 
     // Restore bold markers to Slack bold (*text*)
     result = result.replace(BOLD_OPEN, "*").replace(BOLD_CLOSE, "*");
 
     // Convert strikethrough: ~~text~~ -> ~text~
-    let strike_re = Regex::new(r"~~(.+?)~~").unwrap();
+    let strike_re = Regex::new(r"~~(.+?)~~").expect("valid regex: strikethrough");
     result = strike_re.replace_all(&result, "~$1~").to_string();
 
     // Convert headers: # text -> *text* (bold)
-    let header_re = Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap();
+    let header_re = Regex::new(r"(?m)^#{1,6}\s+(.+)$").expect("valid regex: header");
     result = header_re.replace_all(&result, "*$1*").to_string();
 
     // Phase 3: Restore protected code blocks and inline code.

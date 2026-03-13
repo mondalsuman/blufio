@@ -35,25 +35,29 @@ static CREDENTIAL_PATTERNS: LazyLock<Vec<(&'static str, Regex)>> = LazyLock::new
         // Most specific first to prevent double-matching
         (
             "anthropic_api_key",
-            Regex::new(r"sk-ant-[a-zA-Z0-9_\-]{20,}").unwrap(),
+            Regex::new(r"sk-ant-[a-zA-Z0-9_\-]{20,}").expect("valid regex: anthropic_api_key"),
         ),
         (
             "openai_project_key",
-            Regex::new(r"sk-proj-[a-zA-Z0-9]{20,}").unwrap(),
+            Regex::new(r"sk-proj-[a-zA-Z0-9]{20,}").expect("valid regex: openai_project_key"),
         ),
         (
             "openai_api_key",
             // Runs after sk-ant- and sk-proj- are already redacted
-            Regex::new(r"sk-[a-zA-Z0-9]{20,}").unwrap(),
+            Regex::new(r"sk-[a-zA-Z0-9]{20,}").expect("valid regex: openai_api_key"),
         ),
-        ("aws_access_key", Regex::new(r"AKIA[0-9A-Z]{16}").unwrap()),
+        (
+            "aws_access_key",
+            Regex::new(r"AKIA[0-9A-Z]{16}").expect("valid regex: aws_access_key"),
+        ),
         (
             "database_connection_string",
-            Regex::new(r"(postgres|mysql|mongodb|redis)://[^\s]+").unwrap(),
+            Regex::new(r"(postgres|mysql|mongodb|redis)://[^\s]+")
+                .expect("valid regex: database_connection_string"),
         ),
         (
             "bearer_token",
-            Regex::new(r"Bearer\s+[a-zA-Z0-9._\-]{20,}").unwrap(),
+            Regex::new(r"Bearer\s+[a-zA-Z0-9._\-]{20,}").expect("valid regex: bearer_token"),
         ),
     ]
 });

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Blufio Contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
+#![cfg_attr(not(test), deny(clippy::unwrap_used))]
 
 //! Prompt injection defense system for the Blufio agent framework.
 //!

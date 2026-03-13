@@ -283,7 +283,7 @@ pub async fn get_health(State(state): State<GatewayState>) -> Response {
     let resp = HealthResponse {
         status: status.to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_secs: 0, // TODO: track actual uptime
+        uptime_secs: state.health.start_time.elapsed().as_secs(),
         degradation_level,
         degradation_name,
         circuit_breakers,

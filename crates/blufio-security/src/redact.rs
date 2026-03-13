@@ -18,13 +18,13 @@ use crate::pii::redact_pii;
 static REDACTION_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         // Anthropic API keys: sk-ant-api03-...
-        Regex::new(r"sk-ant-[a-zA-Z0-9_\-]{20,}").unwrap(),
+        Regex::new(r"sk-ant-[a-zA-Z0-9_\-]{20,}").expect("valid regex: anthropic_key"),
         // Generic secret keys: sk-... (OpenAI style)
-        Regex::new(r"sk-[a-zA-Z0-9]{20,}").unwrap(),
+        Regex::new(r"sk-[a-zA-Z0-9]{20,}").expect("valid regex: generic_secret_key"),
         // Bearer tokens in headers
-        Regex::new(r"Bearer\s+[a-zA-Z0-9._\-]{10,}").unwrap(),
+        Regex::new(r"Bearer\s+[a-zA-Z0-9._\-]{10,}").expect("valid regex: bearer_token"),
         // Telegram bot tokens: 123456789:ABCdefGHI-zyx57W2v1u123ew11
-        Regex::new(r"\d{8,10}:[a-zA-Z0-9_\-]{35}").unwrap(),
+        Regex::new(r"\d{8,10}:[a-zA-Z0-9_\-]{35}").expect("valid regex: telegram_bot_token"),
     ]
 });
 

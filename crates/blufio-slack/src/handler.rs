@@ -35,7 +35,8 @@ pub fn is_authorized(user_id: &str, allowed_users: &[String]) -> bool {
 
 /// Strips the bot @mention from message text.
 pub fn strip_mention(text: &str, bot_user_id: &str) -> String {
-    let mention_re = Regex::new(&format!(r"<@{}>", regex::escape(bot_user_id))).unwrap();
+    let mention_re =
+        Regex::new(&format!(r"<@{}>", regex::escape(bot_user_id))).expect("valid regex: mention");
     mention_re.replace_all(text, "").trim().to_string()
 }
 

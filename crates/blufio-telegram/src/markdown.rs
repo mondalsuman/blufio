@@ -31,7 +31,7 @@ pub fn escape_markdown_v2(text: &str) -> String {
             let mut backtick_count = 0;
             let mut temp = String::new();
             while chars.peek() == Some(&'`') {
-                temp.push(chars.next().unwrap());
+                temp.push(chars.next().expect("peeked Some above"));
                 backtick_count += 1;
             }
 
@@ -78,9 +78,9 @@ pub fn escape_markdown_v2(text: &str) -> String {
             }
         } else if SPECIAL_CHARS.contains(&ch) {
             result.push('\\');
-            result.push(chars.next().unwrap());
+            result.push(chars.next().expect("peeked Some above"));
         } else {
-            result.push(chars.next().unwrap());
+            result.push(chars.next().expect("peeked Some above"));
         }
     }
 

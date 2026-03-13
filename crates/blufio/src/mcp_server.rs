@@ -37,7 +37,7 @@ pub async fn run_mcp_server(config: BlufioConfig) -> Result<(), BlufioError> {
     }
 
     // Open database.
-    let db = crate::open_db(&config).await?;
+    let db = crate::cli::config_cmd::open_db(&config).await?;
 
     // Vault startup check (for WASM skills that may need secrets).
     {

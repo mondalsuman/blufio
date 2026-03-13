@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 62-03-PLAN.md
-last_updated: "2026-03-13T11:38:26.697Z"
-last_activity: 2026-03-13 -- Phase 62 Plan 05 complete (Litestream CLI init/status, WAL autocheckpoint pragma, doctor check)
+stopped_at: Completed 63-03-PLAN.md
+last_updated: "2026-03-13T15:38:14.333Z"
+last_activity: "2026-03-13 -- Phase 63 Plan 02 complete (unwrap sweep batch 1: 6 crates hardened)"
 progress:
   total_phases: 11
-  completed_phases: 8
-  total_plans: 35
-  completed_plans: 43
+  completed_phases: 9
+  total_plans: 40
+  completed_plans: 48
   percent: 100
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-12)
+See: .planning/PROJECT.md (updated 2026-03-13)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** v1.5 PRD Gap Closure -- Phase 61 Channel Adapters
+**Current focus:** v1.5 PRD Gap Closure -- COMPLETE (all 11 phases verified)
 
 ## Current Position
 
-Phase: 62 of 63 (Observability & API Surface) -- tenth of 11 phases in v1.5
-Plan: 05 of 5 complete
+Phase: 63 of 63 (Code Quality & Hardening) -- eleventh of 11 phases in v1.5
+Plan: 5 of 5
 Status: In Progress
-Last activity: 2026-03-13 -- Phase 62 Plan 05 complete (Litestream CLI init/status, WAL autocheckpoint pragma, doctor check)
+Last activity: 2026-03-13 -- Phase 63 Plan 02 complete (unwrap sweep batch 1: 6 crates hardened)
 
 Progress: [██████████] 100%
 
@@ -87,6 +87,11 @@ Progress: [██████████] 100%
 | Phase 62 P02 | 11min | 2 tasks | 2 files |
 | Phase 62 P04 | 14min | 2 tasks | 17 files |
 | Phase 62 P03 | 25min | 2 tasks | 9 files |
+| Phase 63 P05 | 11min | 2 tasks | 7 files |
+| Phase 63 P04 | 15min | 2 tasks | 12 files |
+| Phase 63 P01 | 45min | 2 tasks | 18 files |
+| Phase 63 P02 | 10min | 2 tasks | 9 files |
+| Phase 63 P03 | 23min | 2 tasks | 56 files |
 
 ## Accumulated Context
 
@@ -232,6 +237,14 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 62]: Span handles (not .entered()) for async functions; tracing::Instrument for wrapping specific futures
 - [Phase 62]: rmcp traceparent injection deferred (rmcp manages own transport); blufio.mcp.call span for Blufio-level correlation
 - [Phase 62]: Conditional otel feature propagation via crate?/feature syntax (only if crate enabled)
+- [Phase 63]: Benchmarks placed in crates/blufio/benches/ (not workspace root) because root Cargo.toml has no [package] section
+- [Phase 63]: CPU-bound hot paths only benchmarked (no LLM/DB I/O) for deterministic reproducible results
+- [Phase 63]: PII proptest placed in blufio-security (where pii.rs lives) not blufio-core as plan specified
+- [Phase 63]: TwilioClient refactored with base_url field and test constructors for wiremock testability
+- [Phase 63]: MCP client init kept inline in serve/mod.rs (complex generics resist abstraction)
+- [Phase 63]: init_gateway() takes individual webhook state params to avoid borrow checker conflicts with ChannelInitResult
+- [Phase 63]: Most crates had zero non-test unwrap() -- deny directive serves as compile-time guard for future code
+- [Phase 63]: cfg_attr(not(test), deny(clippy::unwrap_used)) wrapping for CI compatibility with --all-targets
 
 ### Pending Todos
 
@@ -247,6 +260,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T11:32:02.658Z
-Stopped at: Completed 62-03-PLAN.md
+Last session: 2026-03-13
+Stopped at: Phase 63 complete, v1.5 milestone complete — all 11 phases verified
 Resume file: None

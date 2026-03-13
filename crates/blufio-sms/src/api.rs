@@ -11,11 +11,15 @@ use tracing::warn;
 
 use crate::types::{TwilioAccountInfo, TwilioSendResponse};
 
+/// Default Twilio API base URL.
+const TWILIO_BASE_URL: &str = "https://api.twilio.com";
+
 /// Client for the Twilio REST API.
 pub struct TwilioClient {
     account_sid: String,
     auth_token: String,
     from_number: String,
+    base_url: String,
     client: reqwest::Client,
 }
 
@@ -38,15 +42,66 @@ impl TwilioClient {
             account_sid: account_sid.to_string(),
             auth_token: auth_token.to_string(),
             from_number: from_number.to_string(),
+            base_url: TWILIO_BASE_URL.to_string(),
             client: reqwest::Client::new(),
+        })
+    }
+
+    /// Create a Twilio client with a custom base URL (for testing with mock servers).
+    pub fn new_with_base_url(
+        account_sid: &str,
+        auth_token: &str,
+        from_number: &str,
+        base_url: &str,
+    ) -> Result<Self, BlufioError> {
+        if !validate_e164(from_number) {
+            return Err(BlufioError::Config(format!(
+                "sms.twilio_phone_number must be E.164 format (e.g., +1234567890), got: {from_number}"
+            )));
+        }
+
+        Ok(Self {
+            account_sid: account_sid.to_string(),
+            auth_token: auth_token.to_string(),
+            from_number: from_number.to_string(),
+            base_url: base_url.trim_end_matches('/').to_string(),
+            client: reqwest::Client::new(),
+        })
+    }
+
+    /// Create a Twilio client with a custom base URL and timeout (for testing).
+    pub fn new_with_base_url_and_timeout(
+        account_sid: &str,
+        auth_token: &str,
+        from_number: &str,
+        base_url: &str,
+        timeout: std::time::Duration,
+    ) -> Result<Self, BlufioError> {
+        if !validate_e164(from_number) {
+            return Err(BlufioError::Config(format!(
+                "sms.twilio_phone_number must be E.164 format (e.g., +1234567890), got: {from_number}"
+            )));
+        }
+
+        let client = reqwest::Client::builder()
+            .timeout(timeout)
+            .build()
+            .map_err(|e| BlufioError::Config(format!("Failed to build HTTP client: {e}")))?;
+
+        Ok(Self {
+            account_sid: account_sid.to_string(),
+            auth_token: auth_token.to_string(),
+            from_number: from_number.to_string(),
+            base_url: base_url.trim_end_matches('/').to_string(),
+            client,
         })
     }
 
     /// Build the messages API URL for this account.
     fn messages_url(&self) -> String {
         format!(
-            "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
-            self.account_sid
+            "{}/2010-04-01/Accounts/{}/Messages.json",
+            self.base_url, self.account_sid
         )
     }
 
@@ -139,8 +194,8 @@ impl TwilioClient {
     /// Check account status (health check / credential verification).
     pub async fn account_status(&self) -> Result<String, BlufioError> {
         let url = format!(
-            "https://api.twilio.com/2010-04-01/Accounts/{}.json",
-            self.account_sid
+            "{}/2010-04-01/Accounts/{}.json",
+            self.base_url, self.account_sid
         );
 
         let resp = self
