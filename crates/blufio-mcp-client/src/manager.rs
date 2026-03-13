@@ -402,9 +402,15 @@ async fn discover_and_register(
                     categories = ?desc_scan.categories,
                     "injection pattern detected in MCP tool description (informational)"
                 );
+                let category = desc_scan
+                    .categories
+                    .first()
+                    .map(|c| c.as_str())
+                    .unwrap_or("unknown");
                 blufio_injection::metrics::record_input_detection(
                     "mcp_description",
                     &desc_scan.action,
+                    category,
                 );
             }
         }

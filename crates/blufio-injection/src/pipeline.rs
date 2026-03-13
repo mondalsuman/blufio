@@ -299,11 +299,7 @@ impl InjectionPipeline {
     ///
     /// Delegates to the pipeline's own canary token manager for detection,
     /// then records metrics and generates events as appropriate.
-    pub fn screen_llm_response(
-        &mut self,
-        response: &str,
-        correlation_id: &str,
-    ) -> ScreeningResult {
+    pub fn screen_llm_response(&mut self, response: &str, correlation_id: &str) -> ScreeningResult {
         if !self.enabled {
             return ScreeningResult {
                 action: ScreeningAction::Allow,
@@ -321,15 +317,18 @@ impl InjectionPipeline {
             };
         }
 
-        let token_type = self.canary.detected_token_type(response).unwrap_or("unknown");
+        let token_type = self
+            .canary
+            .detected_token_type(response)
+            .unwrap_or("unknown");
         metrics::record_canary_detection(token_type);
 
-        let event = crate::events::canary_detection_event(correlation_id, token_type, "blocked", response);
+        let event =
+            crate::events::canary_detection_event(correlation_id, token_type, "blocked", response);
 
         warn!(
             correlation_id,
-            token_type,
-            "L4: canary token leak detected in LLM response, blocking"
+            token_type, "L4: canary token leak detected in LLM response, blocking"
         );
 
         ScreeningResult {

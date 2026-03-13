@@ -194,7 +194,12 @@ impl BlufioTool for ExternalTool {
                     action = %scan.action,
                     "injection pattern detected in MCP tool output"
                 );
-                blufio_injection::metrics::record_input_detection("mcp", &scan.action);
+                let category = scan
+                    .categories
+                    .first()
+                    .map(|c| c.as_str())
+                    .unwrap_or("unknown");
+                blufio_injection::metrics::record_input_detection("mcp", &scan.action, category);
 
                 // Block if score exceeds MCP blocking threshold (0.98).
                 if scan.score >= 0.98 {

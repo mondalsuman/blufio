@@ -696,6 +696,16 @@ enum InjectionCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Run canary token self-test.
+    TestCanary,
+    /// Validate a benign corpus file against current patterns.
+    ValidateCorpus {
+        /// Path to JSON array of strings to validate.
+        path: String,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// Database management subcommands.
