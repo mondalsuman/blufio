@@ -208,12 +208,11 @@ static BASE64_SEGMENT_RE: LazyLock<Regex> = LazyLock::new(|| {
 fn decode_base64_segments(input: &str) -> (Vec<String>, usize) {
     let mut decoded = Vec::new();
     for m in BASE64_SEGMENT_RE.find_iter(input) {
-        if let Ok(bytes) = STANDARD.decode(m.as_str()) {
-            if let Ok(text) = String::from_utf8(bytes) {
-                if !text.trim().is_empty() {
-                    decoded.push(text);
-                }
-            }
+        if let Ok(bytes) = STANDARD.decode(m.as_str())
+            && let Ok(text) = String::from_utf8(bytes)
+            && !text.trim().is_empty()
+        {
+            decoded.push(text);
         }
     }
     let count = decoded.len();
@@ -225,9 +224,8 @@ fn decode_base64_segments(input: &str) -> (Vec<String>, usize) {
 // ---------------------------------------------------------------------------
 
 /// Regex for extracting HTML comment content.
-static HTML_COMMENT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"<!--([\s\S]*?)-->").expect("HTML comment regex must compile")
-});
+static HTML_COMMENT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"<!--([\s\S]*?)-->").expect("HTML comment regex must compile"));
 
 /// Regex for extracting markdown code fence content.
 static MARKDOWN_FENCE_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -374,9 +372,7 @@ mod tests {
     #[test]
     fn strip_zero_width_removes_all_zero_width_chars() {
         // Test each zero-width character
-        let input = format!(
-            "a\u{200B}b\u{200C}c\u{200D}d\u{FEFF}e\u{2060}f\u{180E}g\u{00AD}h"
-        );
+        let input = format!("a\u{200B}b\u{200C}c\u{200D}d\u{FEFF}e\u{2060}f\u{180E}g\u{00AD}h");
         let (result, count) = strip_zero_width(&input);
         assert_eq!(result, "abcdefgh");
         assert_eq!(count, 7);
@@ -471,7 +467,10 @@ mod tests {
     #[test]
     fn decode_base64_ignores_invalid_utf8() {
         // Create a base64 segment that decodes to invalid UTF-8
-        let invalid_bytes: Vec<u8> = vec![0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA, 0xF9, 0xF8, 0xF7, 0xF6, 0xF5, 0xF4, 0xF3, 0xF2, 0xF1, 0xF0];
+        let invalid_bytes: Vec<u8> = vec![
+            0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA, 0xF9, 0xF8, 0xF7, 0xF6, 0xF5, 0xF4, 0xF3, 0xF2,
+            0xF1, 0xF0,
+        ];
         let encoded = STANDARD.encode(&invalid_bytes);
         let (decoded, count) = decode_base64_segments(&encoded);
         assert_eq!(count, 0);

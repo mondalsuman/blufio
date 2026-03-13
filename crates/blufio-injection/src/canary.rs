@@ -24,6 +24,12 @@ pub struct CanaryTokenManager {
     session_token: Option<String>,
 }
 
+impl Default for CanaryTokenManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CanaryTokenManager {
     /// Create a new canary token manager with a fresh global token.
     pub fn new() -> Self {
@@ -71,10 +77,10 @@ impl CanaryTokenManager {
         if output.contains(&self.global_token) {
             return true;
         }
-        if let Some(ref session) = self.session_token {
-            if output.contains(session) {
-                return true;
-            }
+        if let Some(ref session) = self.session_token
+            && output.contains(session)
+        {
+            return true;
         }
         false
     }
@@ -87,10 +93,10 @@ impl CanaryTokenManager {
         if output.contains(&self.global_token) {
             return Some("global");
         }
-        if let Some(ref session) = self.session_token {
-            if output.contains(session) {
-                return Some("session");
-            }
+        if let Some(ref session) = self.session_token
+            && output.contains(session)
+        {
+            return Some("session");
         }
         None
     }

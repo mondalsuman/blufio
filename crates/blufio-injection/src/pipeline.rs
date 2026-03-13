@@ -81,6 +81,8 @@ impl InjectionPipeline {
             config.dry_run,
             // Create a separate classifier for L4 relay detection.
             InjectionClassifier::new(config),
+            // Canary token manager will be wired in Plan 03 (pipeline integration).
+            None,
         );
         let hitl = HitlManager::new(&config.hitl, config.dry_run);
 
