@@ -179,3 +179,7 @@ harness = false
 [[bench]]
 name = "bench_compaction"
 harness = false
+
+[[bench]]
+name = "bench_vec0"
+harness = false
