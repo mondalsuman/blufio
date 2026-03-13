@@ -145,8 +145,8 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Code Quality
 
-- [ ] **QUAL-01**: #![deny(clippy::unwrap_used)] enforced across all library crates
-- [ ] **QUAL-02**: All 1,444+ unwrap() calls in library crates replaced with proper error handling
+- [x] **QUAL-01**: #![deny(clippy::unwrap_used)] enforced across all library crates
+- [x] **QUAL-02**: All 1,444+ unwrap() calls in library crates replaced with proper error handling
 - [x] **QUAL-03**: /api/status endpoint returns actual uptime instead of hardcoded 0
 - [x] **QUAL-04**: Mock provider replaces unimplemented!() with proper stubs
 - [x] **QUAL-05**: serve.rs and other oversized functions decomposed into smaller init functions
@@ -273,8 +273,8 @@ Deferred to v1.6+.
 | LITE-02 | Phase 62 | Complete |
 | LITE-03 | Phase 62 | Complete |
 | LITE-04 | Phase 62 | Complete |
-| QUAL-01 | Phase 63 | Pending |
-| QUAL-02 | Phase 63 | Pending |
+| QUAL-01 | Phase 63 | Complete |
+| QUAL-02 | Phase 63 | Complete |
 | QUAL-03 | Phase 63 | Complete |
 | QUAL-04 | Phase 63 | Complete |
 | QUAL-05 | Phase 63 | Complete |
