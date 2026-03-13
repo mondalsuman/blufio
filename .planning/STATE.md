@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 62-04-PLAN.md
-last_updated: "2026-03-13T11:23:11.566Z"
+stopped_at: Completed 62-03-PLAN.md
+last_updated: "2026-03-13T11:32:02.661Z"
 last_activity: 2026-03-13 -- Phase 62 Plan 05 complete (Litestream CLI init/status, WAL autocheckpoint pragma, doctor check)
 progress:
   total_phases: 11
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 35
-  completed_plans: 42
+  completed_plans: 43
   percent: 100
 ---
 
@@ -86,6 +86,7 @@ Progress: [██████████] 100%
 | Phase 62 P05 | 8min | 2 tasks | 4 files |
 | Phase 62 P02 | 11min | 2 tasks | 2 files |
 | Phase 62 P04 | 14min | 2 tasks | 17 files |
+| Phase 62 P03 | 25min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -228,6 +229,9 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 62]: ModelsListResponse.data uses schema(value_type = Vec<Object>) since ModelInfo is from blufio-core without ToSchema
 - [Phase 62]: swagger_ui_enabled added to ServerConfig (config-driven toggle, not just feature gate)
 - [Phase 62]: /openapi.json is public (no auth) to support CI tooling, Postman imports, and code generators
+- [Phase 62]: Span handles (not .entered()) for async functions; tracing::Instrument for wrapping specific futures
+- [Phase 62]: rmcp traceparent injection deferred (rmcp manages own transport); blufio.mcp.call span for Blufio-level correlation
+- [Phase 62]: Conditional otel feature propagation via crate?/feature syntax (only if crate enabled)
 
 ### Pending Todos
 
@@ -243,6 +247,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T11:23:11.563Z
-Stopped at: Completed 62-04-PLAN.md
+Last session: 2026-03-13T11:32:02.658Z
+Stopped at: Completed 62-03-PLAN.md
 Resume file: None
