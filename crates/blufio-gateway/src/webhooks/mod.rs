@@ -33,7 +33,7 @@ pub struct Webhook {
 }
 
 /// A webhook list item (never exposes the secret).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct WebhookListItem {
     /// Unique webhook identifier.
     pub id: String,
@@ -48,7 +48,7 @@ pub struct WebhookListItem {
 }
 
 /// Request body for creating a new webhook.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 pub struct CreateWebhookRequest {
     /// Delivery URL (must be https:// or http://localhost for dev).
     pub url: String,
@@ -57,7 +57,7 @@ pub struct CreateWebhookRequest {
 }
 
 /// Response body after creating a webhook (shows secret once).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct CreateWebhookResponse {
     /// Unique webhook identifier.
     pub id: String,

@@ -28,6 +28,22 @@ use super::types::{
 ///
 /// Accepts OpenAI-compatible chat completion requests and returns responses
 /// in the same format. Supports both streaming (SSE) and non-streaming modes.
+/// When `stream: true`, returns Server-Sent Events with `data: [JSON]` chunks.
+#[utoipa::path(
+    post,
+    path = "/v1/chat/completions",
+    tag = "OpenAI Compatible",
+    request_body = GatewayCompletionRequest,
+    responses(
+        (status = 200, description = "Chat completion response", body = GatewayCompletionResponse),
+        (status = 400, description = "Invalid request", body = GatewayErrorResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Provider not found", body = GatewayErrorResponse),
+        (status = 502, description = "Provider error", body = GatewayErrorResponse),
+        (status = 503, description = "Service unavailable", body = GatewayErrorResponse),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn post_chat_completions(
     State(state): State<GatewayState>,
     Json(body): Json<GatewayCompletionRequest>,
@@ -204,6 +220,18 @@ pub async fn post_chat_completions(
 /// GET /v1/models
 ///
 /// Returns a list of available models across all configured providers.
+#[utoipa::path(
+    get,
+    path = "/v1/models",
+    tag = "OpenAI Compatible",
+    params(ModelsQueryParams),
+    responses(
+        (status = 200, description = "Model list", body = ModelsListResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error", body = GatewayErrorResponse),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_models(
     State(state): State<GatewayState>,
     Query(params): Query<ModelsQueryParams>,

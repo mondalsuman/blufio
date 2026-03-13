@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// POST /v1/responses request body.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ResponsesRequest {
     /// Model identifier (supports provider/model format).
     pub model: String,
@@ -51,7 +51,7 @@ fn default_true() -> bool {
 }
 
 /// Input for a responses request.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(untagged)]
 pub enum ResponsesInput {
     /// Simple text input.
@@ -61,7 +61,7 @@ pub enum ResponsesInput {
 }
 
 /// A single input message.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ResponsesInputMessage {
     /// Role: "user", "assistant", etc.
     pub role: String,
@@ -70,7 +70,7 @@ pub struct ResponsesInputMessage {
 }
 
 /// A tool definition in the responses API.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ResponsesTool {
     /// Tool type ("function" or built-in like "web_search").
     #[serde(rename = "type")]
@@ -86,7 +86,7 @@ pub struct ResponsesTool {
 }
 
 /// Function definition for a responses tool.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ResponsesFunction {
     /// Function name.
     pub name: String,

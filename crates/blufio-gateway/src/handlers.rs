@@ -22,45 +22,57 @@ use crate::server::GatewayState;
 use crate::sse;
 
 /// Request body for POST /v1/messages.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct MessageRequest {
     /// Message content text.
+    #[schema(example = "Hello, how are you?")]
     pub content: String,
     /// Optional session ID to continue an existing session.
     #[serde(default)]
+    #[schema(example = "sess-abc123")]
     pub session_id: Option<String>,
     /// Optional sender identifier.
     #[serde(default)]
+    #[schema(example = "user-456")]
     pub sender_id: Option<String>,
 }
 
 /// Response body for POST /v1/messages.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct MessageResponse {
     /// Request/message ID.
+    #[schema(example = "msg-abc123")]
     pub id: String,
     /// Response content from the agent.
+    #[schema(example = "I'm doing well, thank you!")]
     pub content: String,
     /// Session ID (may be newly created).
+    #[schema(example = "sess-abc123")]
     pub session_id: Option<String>,
     /// ISO 8601 timestamp.
+    #[schema(example = "2026-03-13T12:00:00Z")]
     pub created_at: String,
 }
 
 /// Response body for GET /v1/health.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct HealthResponse {
     /// Health status string.
+    #[schema(example = "ok")]
     pub status: String,
     /// Binary version.
+    #[schema(example = "0.1.0")]
     pub version: String,
     /// Uptime in seconds (placeholder).
+    #[schema(example = 3600)]
     pub uptime_secs: u64,
     /// Current degradation level (e.g., "L0").
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(example = "L0")]
     pub degradation_level: Option<String>,
     /// Human-readable degradation level name (e.g., "FullyOperational").
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(example = "FullyOperational")]
     pub degradation_name: Option<String>,
     /// Per-dependency circuit breaker states (e.g., {"anthropic": "closed"}).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,36 +80,66 @@ pub struct HealthResponse {
 }
 
 /// Response body for GET /v1/sessions.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct SessionListResponse {
     /// List of active sessions.
     pub sessions: Vec<SessionInfo>,
 }
 
 /// Information about a single session.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct SessionInfo {
     /// Session identifier.
+    #[schema(example = "sess-abc123")]
     pub id: String,
     /// Channel the session originates from.
+    #[schema(example = "api")]
     pub channel: String,
     /// Session state.
+    #[schema(example = "active")]
     pub state: String,
     /// ISO 8601 creation timestamp.
+    #[schema(example = "2026-03-13T12:00:00Z")]
     pub created_at: String,
 }
 
 /// Error response body.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ErrorResponse {
     /// Error description.
+    #[schema(example = "Invalid request body")]
     pub error: String,
+}
+
+/// Response body for GET /health (unauthenticated).
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct PublicHealthResponse {
+    /// Health status string.
+    #[schema(example = "healthy")]
+    pub status: String,
+    /// Uptime in seconds.
+    #[schema(example = 120)]
+    pub uptime_secs: u64,
 }
 
 /// POST /v1/messages
 ///
 /// Accepts a message, routes it through the agent loop, and returns the response.
 /// If the Accept header contains "text/event-stream", routes to SSE streaming.
+#[utoipa::path(
+    post,
+    path = "/v1/messages",
+    tag = "Messages",
+    request_body = MessageRequest,
+    responses(
+        (status = 200, description = "Message processed", body = MessageResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 503, description = "Service unavailable", body = ErrorResponse),
+        (status = 504, description = "Gateway timeout", body = ErrorResponse),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn post_messages(
     State(state): State<GatewayState>,
     headers: HeaderMap,
@@ -205,6 +247,17 @@ pub async fn post_messages(
 ///
 /// Returns health status of the gateway, including degradation state when
 /// the resilience subsystem is wired in. Returns 503 for L4+ degradation.
+#[utoipa::path(
+    get,
+    path = "/v1/health",
+    tag = "Health",
+    responses(
+        (status = 200, description = "Service healthy", body = HealthResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 503, description = "Service degraded", body = HealthResponse),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_health(State(state): State<GatewayState>) -> Response {
     let (degradation_level, degradation_name, circuit_breakers, level_val) =
         if let Some(dm) = &state.degradation_manager {
@@ -243,19 +296,18 @@ pub async fn get_health(State(state): State<GatewayState>) -> Response {
     }
 }
 
-/// Response body for GET /health (unauthenticated).
-#[derive(Debug, Serialize)]
-pub struct PublicHealthResponse {
-    /// Health status string.
-    pub status: String,
-    /// Uptime in seconds.
-    pub uptime_secs: u64,
-}
-
 /// GET /health (unauthenticated)
 ///
 /// Returns basic health status for systemd health checks and monitoring.
 /// Does not require authentication. Returns minimal information.
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "Health",
+    responses(
+        (status = 200, description = "Service healthy", body = PublicHealthResponse),
+    )
+)]
 pub async fn get_public_health(State(state): State<GatewayState>) -> Json<PublicHealthResponse> {
     let uptime = state.health.start_time.elapsed().as_secs();
     Json(PublicHealthResponse {
@@ -268,6 +320,15 @@ pub async fn get_public_health(State(state): State<GatewayState>) -> Json<Public
 ///
 /// Returns Prometheus metrics in text format for scraping.
 /// Does not require authentication.
+#[utoipa::path(
+    get,
+    path = "/metrics",
+    tag = "Health",
+    responses(
+        (status = 200, description = "Prometheus metrics", content_type = "text/plain"),
+        (status = 503, description = "Metrics not available"),
+    )
+)]
 pub async fn get_public_metrics(State(state): State<GatewayState>) -> Response {
     match &state.health.prometheus_render {
         Some(render_fn) => {
@@ -289,6 +350,17 @@ pub async fn get_public_metrics(State(state): State<GatewayState>) -> Response {
 /// GET /v1/sessions
 ///
 /// Returns list of active sessions from storage.
+#[utoipa::path(
+    get,
+    path = "/v1/sessions",
+    tag = "Sessions",
+    responses(
+        (status = 200, description = "Session list", body = SessionListResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_sessions(State(state): State<GatewayState>) -> Response {
     let Some(storage) = &state.storage else {
         return Json(SessionListResponse { sessions: vec![] }).into_response();

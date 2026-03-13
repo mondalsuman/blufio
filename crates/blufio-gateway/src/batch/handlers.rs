@@ -20,6 +20,21 @@ use crate::server::GatewayState;
 ///
 /// Requires chat.completions, admin scope, or master auth.
 /// Returns 202 Accepted with batch_id for status polling.
+#[utoipa::path(
+    post,
+    path = "/v1/batch",
+    tag = "Batch",
+    request_body = BatchRequest,
+    responses(
+        (status = 202, description = "Batch accepted for processing", body = BatchSubmitResponse),
+        (status = 400, description = "Invalid batch (empty or too large)"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Insufficient scope"),
+        (status = 500, description = "Internal server error"),
+        (status = 503, description = "Service unavailable"),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn post_create_batch(
     Extension(auth_ctx): Extension<AuthContext>,
     State(state): State<GatewayState>,
@@ -113,6 +128,20 @@ pub async fn post_create_batch(
 /// GET /v1/batch/:id -- Get batch status and results.
 ///
 /// For scoped keys, verifies the batch was submitted by the same key.
+#[utoipa::path(
+    get,
+    path = "/v1/batch/{id}",
+    tag = "Batch",
+    params(("id" = String, Path, description = "Batch ID to check status")),
+    responses(
+        (status = 200, description = "Batch status and results", body = BatchResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Batch not found"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_batch_status(
     Extension(auth_ctx): Extension<AuthContext>,
     State(state): State<GatewayState>,

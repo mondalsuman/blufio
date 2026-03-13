@@ -25,6 +25,17 @@ use super::types::{GatewayErrorDetail, GatewayErrorResponse};
 ///
 /// Returns a list of available tools in OpenAI function schema format.
 /// Only tools in the config allowlist are returned.
+#[utoipa::path(
+    get,
+    path = "/v1/tools",
+    tag = "OpenAI Compatible",
+    params(ToolsQueryParams),
+    responses(
+        (status = 200, description = "Tool list", body = ToolListResponse),
+        (status = 401, description = "Unauthorized"),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_tools(
     State(state): State<GatewayState>,
     Query(params): Query<ToolsQueryParams>,
@@ -86,6 +97,20 @@ pub async fn get_tools(
 ///
 /// Executes a tool directly (bypassing the LLM) and returns the result.
 /// Only tools in the config allowlist can be invoked.
+#[utoipa::path(
+    post,
+    path = "/v1/tools/invoke",
+    tag = "OpenAI Compatible",
+    request_body = ToolInvokeRequest,
+    responses(
+        (status = 200, description = "Tool execution result", body = ToolInvokeResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Tool not in allowlist", body = GatewayErrorResponse),
+        (status = 404, description = "Tool not found", body = GatewayErrorResponse),
+        (status = 503, description = "Tools not configured", body = GatewayErrorResponse),
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn post_tool_invoke(
     State(state): State<GatewayState>,
     Json(body): Json<ToolInvokeRequest>,

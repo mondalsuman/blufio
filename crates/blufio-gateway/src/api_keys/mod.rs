@@ -12,7 +12,7 @@ pub mod store;
 use serde::{Deserialize, Serialize};
 
 /// A stored API key record (never includes the raw key or hash in API responses).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ApiKey {
     /// Unique key identifier.
     pub id: String,
@@ -113,7 +113,7 @@ impl AuthContext {
 }
 
 /// Request body for creating a new API key.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 pub struct CreateKeyRequest {
     /// Human-readable name for the key.
     pub name: String,
@@ -128,7 +128,7 @@ pub struct CreateKeyRequest {
 /// Response body after creating a new API key.
 ///
 /// The `key` field contains the raw API key and is only shown once at creation time.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct CreateKeyResponse {
     /// Unique key identifier.
     pub id: String,
