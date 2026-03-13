@@ -133,7 +133,11 @@
   2. KNN search via vec0 returns semantically relevant results ranked by cosine similarity (distance converted to 1.0 - distance)
   3. vec0 metadata columns filter status='active' and classification!='restricted' during KNN search, not post-query — result count matches filter expectations
   4. Existing memory search continues to work (no regression) while new vec0 path is available
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 65-01-PLAN.md — Foundation: sqlite-vec dependency, config, events, migration, vec0.rs CRUD operations
+- [ ] 65-02-PLAN.md — Wiring: dual-write store, vec0 search in retriever, fallback, population, metrics
+- [ ] 65-03-PLAN.md — Validation: CLI rebuild-vec0, doctor health check, integration tests, benchmarks
 
 ### Phase 66: Injection Defense Hardening
 **Goal**: Injection classifier detects Unicode evasion, encoding obfuscation, prompt leaking, and multi-language attacks with validated false positive rates
@@ -193,7 +197,7 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 29-45 | v1.3 | 47/47 | Complete | 2026-03-08 |
 | 46-52 | v1.4 | 16/16 | Complete | 2026-03-09 |
 | 53-64 | v1.5 | 49/49 | Complete | 2026-03-13 |
-| 65. sqlite-vec Foundation | v1.6 | 0/? | Not started | - |
+| 65. sqlite-vec Foundation | v1.6 | 0/3 | Not started | - |
 | 66. Injection Defense Hardening | v1.6 | 0/? | Not started | - |
 | 67. Vector Search Migration & Hybrid Pipeline | v1.6 | 0/? | Not started | - |
 | 68. Performance Benchmarking Suite | v1.6 | 0/? | Not started | - |
@@ -203,4 +207,4 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-13 after v1.6 milestone roadmap creation*
+*Last updated: 2026-03-13 after Phase 65 planning (3 plans created)*
