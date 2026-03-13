@@ -117,6 +117,13 @@ impl BusEvent {
             BusEvent::Memory(MemoryEvent::Deleted { .. }) => "memory.deleted",
             BusEvent::Memory(MemoryEvent::Retrieved { .. }) => "memory.retrieved",
             BusEvent::Memory(MemoryEvent::Evicted { .. }) => "memory.evicted",
+            BusEvent::Memory(MemoryEvent::Vec0Enabled { .. }) => "memory.vec0_enabled",
+            BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered { .. }) => {
+                "memory.vec0_fallback_triggered"
+            }
+            BusEvent::Memory(MemoryEvent::Vec0PopulationComplete { .. }) => {
+                "memory.vec0_population_complete"
+            }
             BusEvent::Audit(AuditMetaEvent::Enabled { .. }) => "audit.enabled",
             BusEvent::Audit(AuditMetaEvent::Disabled { .. }) => "audit.disabled",
             BusEvent::Audit(AuditMetaEvent::Erased { .. }) => "audit.erased",
@@ -580,6 +587,33 @@ pub enum MemoryEvent {
         /// Highest composite score among evicted memories.
         highest_score: f64,
     },
+    /// vec0 backend was enabled at startup.
+    Vec0Enabled {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+    },
+    /// vec0 query or registration failed; fell back to in-memory search.
+    Vec0FallbackTriggered {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Reason for the fallback.
+        reason: String,
+    },
+    /// vec0 startup population completed.
+    Vec0PopulationComplete {
+        /// Unique event identifier.
+        event_id: String,
+        /// ISO 8601 timestamp.
+        timestamp: String,
+        /// Number of memories populated into vec0.
+        count: usize,
+        /// Duration of the population in milliseconds.
+        duration_ms: u64,
+    },
 }
 
 // --- Audit meta-events ---
@@ -1012,6 +1046,24 @@ mod tests {
             source: "conversation".into(),
         });
 
+        let _vec0_enabled = BusEvent::Memory(MemoryEvent::Vec0Enabled {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+        });
+
+        let _vec0_fallback = BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            reason: "extension not loaded".into(),
+        });
+
+        let _vec0_population = BusEvent::Memory(MemoryEvent::Vec0PopulationComplete {
+            event_id: new_event_id(),
+            timestamp: now_timestamp(),
+            count: 100,
+            duration_ms: 500,
+        });
+
         let _audit = BusEvent::Audit(AuditMetaEvent::Enabled {
             event_id: new_event_id(),
             timestamp: now_timestamp(),
@@ -1441,6 +1493,30 @@ mod tests {
                 }),
                 "memory.evicted",
             ),
+            (
+                BusEvent::Memory(MemoryEvent::Vec0Enabled {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                }),
+                "memory.vec0_enabled",
+            ),
+            (
+                BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    reason: String::new(),
+                }),
+                "memory.vec0_fallback_triggered",
+            ),
+            (
+                BusEvent::Memory(MemoryEvent::Vec0PopulationComplete {
+                    event_id: String::new(),
+                    timestamp: String::new(),
+                    count: 0,
+                    duration_ms: 0,
+                }),
+                "memory.vec0_population_complete",
+            ),
             // Audit events
             (
                 BusEvent::Audit(AuditMetaEvent::Enabled {
@@ -1786,5 +1862,90 @@ mod tests {
             }
             _ => panic!("expected Resilience::DegradationLevelChanged"),
         }
+    }
+
+    #[test]
+    fn memory_event_vec0_enabled_roundtrip() {
+        let event = BusEvent::Memory(MemoryEvent::Vec0Enabled {
+            event_id: "evt-v0-1".into(),
+            timestamp: "2026-03-13T00:00:00Z".into(),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: BusEvent = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            BusEvent::Memory(MemoryEvent::Vec0Enabled {
+                event_id,
+                timestamp,
+            }) => {
+                assert_eq!(event_id, "evt-v0-1");
+                assert_eq!(timestamp, "2026-03-13T00:00:00Z");
+            }
+            _ => panic!("expected Memory::Vec0Enabled"),
+        }
+
+        assert_eq!(event.event_type_string(), "memory.vec0_enabled");
+    }
+
+    #[test]
+    fn memory_event_vec0_fallback_triggered_roundtrip() {
+        let event = BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered {
+            event_id: "evt-v0-2".into(),
+            timestamp: "2026-03-13T00:00:00Z".into(),
+            reason: "extension not loaded".into(),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: BusEvent = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered {
+                event_id,
+                reason,
+                ..
+            }) => {
+                assert_eq!(event_id, "evt-v0-2");
+                assert_eq!(reason, "extension not loaded");
+            }
+            _ => panic!("expected Memory::Vec0FallbackTriggered"),
+        }
+
+        assert_eq!(
+            event.event_type_string(),
+            "memory.vec0_fallback_triggered"
+        );
+    }
+
+    #[test]
+    fn memory_event_vec0_population_complete_roundtrip() {
+        let event = BusEvent::Memory(MemoryEvent::Vec0PopulationComplete {
+            event_id: "evt-v0-3".into(),
+            timestamp: "2026-03-13T00:00:00Z".into(),
+            count: 500,
+            duration_ms: 1200,
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: BusEvent = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            BusEvent::Memory(MemoryEvent::Vec0PopulationComplete {
+                event_id,
+                count,
+                duration_ms,
+                ..
+            }) => {
+                assert_eq!(event_id, "evt-v0-3");
+                assert_eq!(count, 500);
+                assert_eq!(duration_ms, 1200);
+            }
+            _ => panic!("expected Memory::Vec0PopulationComplete"),
+        }
+
+        assert_eq!(
+            event.event_type_string(),
+            "memory.vec0_population_complete"
+        );
     }
 }

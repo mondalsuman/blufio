@@ -604,6 +604,47 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
             })
             .to_string(),
         },
+        BusEvent::Memory(MemoryEvent::Vec0Enabled { timestamp, .. }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "enable".to_string(),
+            resource_type: "memory".to_string(),
+            resource_id: "vec0".to_string(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: "{}".to_string(),
+        },
+        BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered {
+            timestamp, reason, ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "fallback".to_string(),
+            resource_type: "memory".to_string(),
+            resource_id: "vec0".to_string(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({ "reason": reason }).to_string(),
+        },
+        BusEvent::Memory(MemoryEvent::Vec0PopulationComplete {
+            timestamp,
+            count,
+            duration_ms,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: "populate".to_string(),
+            resource_type: "memory".to_string(),
+            resource_id: "vec0".to_string(),
+            actor: "system".to_string(),
+            session_id: String::new(),
+            details_json: serde_json::json!({
+                "count": count,
+                "duration_ms": duration_ms,
+            })
+            .to_string(),
+        },
 
         // --- Audit meta-events ---
         BusEvent::Audit(AuditMetaEvent::Enabled { timestamp, .. }) => PendingEntry {
@@ -1355,6 +1396,21 @@ mod tests {
                 count: 5,
                 lowest_score: 0.1,
                 highest_score: 0.5,
+            }),
+            BusEvent::Memory(MemoryEvent::Vec0Enabled {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+            }),
+            BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                reason: "extension not loaded".into(),
+            }),
+            BusEvent::Memory(MemoryEvent::Vec0PopulationComplete {
+                event_id: new_event_id(),
+                timestamp: now_timestamp(),
+                count: 100,
+                duration_ms: 500,
             }),
             BusEvent::Audit(AuditMetaEvent::Enabled {
                 event_id: new_event_id(),

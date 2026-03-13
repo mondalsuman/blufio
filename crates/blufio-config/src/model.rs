@@ -1026,6 +1026,13 @@ pub struct MemoryConfig {
     /// File watcher configuration for auto-indexing workspace files.
     #[serde(default)]
     pub file_watcher: FileWatcherConfig,
+
+    // --- vec0 backend ---
+    /// Enable the sqlite-vec vec0 virtual table for disk-backed KNN vector search.
+    /// When false, the memory system uses in-memory brute-force cosine similarity.
+    /// Requires restart to take effect (hot reload does not trigger vec0 population).
+    #[serde(default)]
+    pub vec0_enabled: bool,
 }
 
 /// Configuration for the file watcher subsystem.
@@ -1077,6 +1084,7 @@ impl Default for MemoryConfig {
             eviction_sweep_interval_secs: default_eviction_sweep_interval_secs(),
             stale_threshold_days: default_stale_threshold_days(),
             file_watcher: FileWatcherConfig::default(),
+            vec0_enabled: false,
         }
     }
 }
@@ -3740,5 +3748,27 @@ max_file_size = 51200
         assert_eq!(config.memory.eviction_sweep_interval_secs, 300);
         assert_eq!(config.memory.stale_threshold_days, 180);
         assert!(config.memory.file_watcher.paths.is_empty());
+        assert!(!config.memory.vec0_enabled);
+    }
+
+    #[test]
+    fn memory_config_default_vec0_enabled_is_false() {
+        let config = MemoryConfig::default();
+        assert!(!config.vec0_enabled);
+    }
+
+    #[test]
+    fn memory_config_vec0_enabled_roundtrip() {
+        let toml_str = r#"
+[memory]
+vec0_enabled = true
+"#;
+        let config: BlufioConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.memory.vec0_enabled);
+
+        // Round-trip through serialization
+        let serialized = toml::to_string(&config).unwrap();
+        let deserialized: BlufioConfig = toml::from_str(&serialized).unwrap();
+        assert!(deserialized.memory.vec0_enabled);
     }
 }

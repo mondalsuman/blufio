@@ -99,6 +99,7 @@ utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 insta = { version = "1", features = ["json"] }
 criterion = { version = "^0.5", features = ["html_reports"] }
+sqlite-vec = "0.1.6"
 wiremock = "0.6"
 
 [profile.release]
