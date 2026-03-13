@@ -1901,9 +1901,7 @@ mod tests {
 
         match deserialized {
             BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered {
-                event_id,
-                reason,
-                ..
+                event_id, reason, ..
             }) => {
                 assert_eq!(event_id, "evt-v0-2");
                 assert_eq!(reason, "extension not loaded");
@@ -1911,10 +1909,7 @@ mod tests {
             _ => panic!("expected Memory::Vec0FallbackTriggered"),
         }
 
-        assert_eq!(
-            event.event_type_string(),
-            "memory.vec0_fallback_triggered"
-        );
+        assert_eq!(event.event_type_string(), "memory.vec0_fallback_triggered");
     }
 
     #[test]
@@ -1943,9 +1938,6 @@ mod tests {
             _ => panic!("expected Memory::Vec0PopulationComplete"),
         }
 
-        assert_eq!(
-            event.event_type_string(),
-            "memory.vec0_population_complete"
-        );
+        assert_eq!(event.event_type_string(), "memory.vec0_population_complete");
     }
 }

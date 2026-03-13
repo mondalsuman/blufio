@@ -62,8 +62,7 @@ pub(crate) async fn handle_memory_command(
         MemoryCommand::RebuildVec0 => {
             blufio_memory::vec0::ensure_sqlite_vec_registered();
             let conn = blufio_storage::open_connection(&config.storage.database_path).await?;
-            let store =
-                blufio_memory::MemoryStore::with_vec0(conn, None, true);
+            let store = blufio_memory::MemoryStore::with_vec0(conn, None, true);
             match store.rebuild_vec0().await {
                 Ok(count) => {
                     println!("Rebuilt vec0 table: {count} memories repopulated");

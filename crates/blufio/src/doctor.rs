@@ -1414,7 +1414,10 @@ async fn check_vec0(config: &BlufioConfig) -> CheckResult {
     // Open a connection and check vec0 health.
     match blufio_storage::open_connection(db_path).await {
         Ok(conn) => {
-            let result: Result<(Option<String>, Option<usize>, usize), tokio_rusqlite::Error<rusqlite::Error>> = conn
+            let result: Result<
+                (Option<String>, Option<usize>, usize),
+                tokio_rusqlite::Error<rusqlite::Error>,
+            > = conn
                 .call(|conn| {
                     // Check 1: Extension loaded
                     let version = blufio_memory::vec0::check_vec0_available(conn);
@@ -1438,28 +1441,20 @@ async fn check_vec0(config: &BlufioConfig) -> CheckResult {
 
             match result {
                 Ok((version, vec0_count, active_count)) => {
-                    let ver_label = version
-                        .as_deref()
-                        .unwrap_or("NOT LOADED");
+                    let ver_label = version.as_deref().unwrap_or("NOT LOADED");
 
                     if version.is_none() {
                         return CheckResult {
                             name: "vec0 Search".to_string(),
                             status: CheckStatus::Fail,
-                            message: format!(
-                                "extension NOT LOADED (call ensure_sqlite_vec_registered at startup)"
-                            ),
+                            message: "extension NOT LOADED (call ensure_sqlite_vec_registered at startup)".to_string(),
                             duration: start.elapsed(),
                         };
                     }
 
                     match vec0_count {
                         Some(v0_count) => {
-                            let drift = if active_count > v0_count {
-                                active_count - v0_count
-                            } else {
-                                v0_count - active_count
-                            };
+                            let drift = active_count.abs_diff(v0_count);
 
                             if drift > 0 {
                                 CheckResult {
@@ -1474,9 +1469,7 @@ async fn check_vec0(config: &BlufioConfig) -> CheckResult {
                                 CheckResult {
                                     name: "vec0 Search".to_string(),
                                     status: CheckStatus::Pass,
-                                    message: format!(
-                                        "{ver_label}, {v0_count} vec0 rows, in sync"
-                                    ),
+                                    message: format!("{ver_label}, {v0_count} vec0 rows, in sync"),
                                     duration: start.elapsed(),
                                 }
                             }

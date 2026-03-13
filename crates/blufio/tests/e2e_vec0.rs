@@ -155,8 +155,8 @@ async fn setup_test_db_no_vec0() -> Connection {
 /// Generate a normalized deterministic 384-dim embedding from a seed.
 fn synthetic_embedding(seed: u64) -> Vec<f32> {
     let mut emb = vec![0.0f32; 384];
-    for i in 0..384 {
-        emb[i] = ((seed as f32 * 0.1 + i as f32 * 0.01).sin()) * 0.1;
+    for (i, val) in emb.iter_mut().enumerate() {
+        *val = ((seed as f32 * 0.1 + i as f32 * 0.01).sin()) * 0.1;
     }
     let norm: f32 = emb.iter().map(|x| x * x).sum::<f32>().sqrt();
     if norm > 0.0 {
@@ -206,8 +206,7 @@ async fn test_sqlcipher_vec0_compatibility() {
     let result = conn
         .call(|conn| -> Result<(), rusqlite::Error> {
             // Verify sqlite-vec is loaded
-            let version: String =
-                conn.query_row("SELECT vec_version()", [], |row| row.get(0))?;
+            let version: String = conn.query_row("SELECT vec_version()", [], |row| row.get(0))?;
             assert!(
                 version.starts_with("v"),
                 "expected version starting with 'v', got: {version}"
@@ -306,21 +305,14 @@ async fn test_vec0_parity_with_in_memory() {
         .into_iter()
         .filter_map(|(id, emb)| {
             let sim = blufio_memory::types::cosine_similarity(&query_emb, &emb);
-            if sim >= 0.0 {
-                Some((id, sim))
-            } else {
-                None
-            }
+            if sim >= 0.0 { Some((id, sim)) } else { None }
         })
         .collect();
     in_memory_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     in_memory_results.truncate(10);
 
     // Both should return results
-    assert!(
-        !vec0_results.is_empty(),
-        "vec0 should return results"
-    );
+    assert!(!vec0_results.is_empty(), "vec0 should return results");
     assert!(
         !in_memory_results.is_empty(),
         "in-memory should return results"
@@ -334,13 +326,13 @@ async fn test_vec0_parity_with_in_memory() {
 
     // Check that vec0 IDs are a subset of in-memory IDs (vec0 filters status/classification)
     let vec0_ids: Vec<&str> = vec0_results.iter().map(|r| r.memory_id.as_str()).collect();
-    let in_mem_ids: Vec<&str> = in_memory_results.iter().map(|(id, _)| id.as_str()).collect();
+    let in_mem_ids: Vec<&str> = in_memory_results
+        .iter()
+        .map(|(id, _)| id.as_str())
+        .collect();
 
     // At minimum, the top results should overlap
-    let overlap_count = vec0_ids
-        .iter()
-        .filter(|id| in_mem_ids.contains(id))
-        .count();
+    let overlap_count = vec0_ids.iter().filter(|id| in_mem_ids.contains(id)).count();
     assert!(
         overlap_count >= vec0_ids.len() / 2,
         "at least half of vec0 results should appear in in-memory results"
@@ -601,7 +593,10 @@ async fn test_vec0_dual_write_atomicity() {
 
     assert_eq!(memories_count, 1, "memories table should have 1 row");
     assert_eq!(vec0_count, 1, "vec0 table should have 1 row");
-    assert!(rowids_match, "rowids should match between memories and vec0");
+    assert!(
+        rowids_match,
+        "rowids should match between memories and vec0"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -633,8 +628,8 @@ async fn test_vec0_eviction_sync() {
     let (evicted, _low, _high) = store
         .batch_evict(
             2,
-            0.95,           // decay_factor
-            0.1,            // decay_floor
+            0.95,            // decay_factor
+            0.1,             // decay_floor
             (1.5, 1.0, 1.2), // importance_boosts (explicit, extracted, file)
         )
         .await

@@ -1228,7 +1228,11 @@ mod tests {
             store.save(&mem).await.unwrap();
         }
 
-        assert_eq!(vec0_count_async(&store).await, 5, "should start with 5 vec0 rows");
+        assert_eq!(
+            vec0_count_async(&store).await,
+            5,
+            "should start with 5 vec0 rows"
+        );
 
         // Evict 3
         let (deleted, _, _) = store
@@ -1238,7 +1242,11 @@ mod tests {
         assert_eq!(deleted, 3);
 
         // vec0 should also have 3 fewer rows
-        assert_eq!(vec0_count_async(&store).await, 2, "vec0 should have 2 rows after evicting 3");
+        assert_eq!(
+            vec0_count_async(&store).await,
+            2,
+            "vec0 should have 2 rows after evicting 3"
+        );
     }
 
     #[tokio::test]
@@ -1258,12 +1266,13 @@ mod tests {
         // Searching for active should return 0 results
         let search_results = store
             .conn()
-            .call(|conn| {
-                vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None)
-            })
+            .call(|conn| vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None))
             .await
             .unwrap();
-        assert!(search_results.is_empty(), "forgotten memory should not appear in vec0 active search");
+        assert!(
+            search_results.is_empty(),
+            "forgotten memory should not appear in vec0 active search"
+        );
     }
 
     #[tokio::test]
@@ -1272,13 +1281,23 @@ mod tests {
         // Save without vec0 first (populate will copy them later)
         let store = MemoryStore::with_vec0(conn, None, false);
 
-        store.save(&make_test_memory("mem-pop-1", "Population test 1")).await.unwrap();
-        store.save(&make_test_memory("mem-pop-2", "Population test 2")).await.unwrap();
+        store
+            .save(&make_test_memory("mem-pop-1", "Population test 1"))
+            .await
+            .unwrap();
+        store
+            .save(&make_test_memory("mem-pop-2", "Population test 2"))
+            .await
+            .unwrap();
         let mut forgotten = make_test_memory("mem-pop-3", "Forgotten memory");
         forgotten.status = MemoryStatus::Forgotten;
         store.save(&forgotten).await.unwrap();
 
-        assert_eq!(vec0_count_async(&store).await, 0, "vec0 should be empty before population");
+        assert_eq!(
+            vec0_count_async(&store).await,
+            0,
+            "vec0 should be empty before population"
+        );
 
         // Now populate
         let (populated, total) = store.populate_vec0().await.unwrap();
@@ -1292,14 +1311,20 @@ mod tests {
         let conn = setup_test_db_with_vec0().await;
         let store = MemoryStore::with_vec0(conn, None, false);
 
-        store.save(&make_test_memory("mem-idem-1", "Idempotent test")).await.unwrap();
+        store
+            .save(&make_test_memory("mem-idem-1", "Idempotent test"))
+            .await
+            .unwrap();
 
         let (first_pop, _) = store.populate_vec0().await.unwrap();
         assert_eq!(first_pop, 1);
 
         // Second call should insert 0 new rows
         let (second_pop, _) = store.populate_vec0().await.unwrap();
-        assert_eq!(second_pop, 0, "second population should be idempotent (0 new rows)");
+        assert_eq!(
+            second_pop, 0,
+            "second population should be idempotent (0 new rows)"
+        );
         assert_eq!(vec0_count_async(&store).await, 1);
     }
 
@@ -1309,13 +1334,22 @@ mod tests {
         let store = MemoryStore::with_vec0(conn, None, true);
 
         // Insert memories with dual-write
-        store.save(&make_test_memory("mem-rb-1", "Rebuild test 1")).await.unwrap();
-        store.save(&make_test_memory("mem-rb-2", "Rebuild test 2")).await.unwrap();
+        store
+            .save(&make_test_memory("mem-rb-1", "Rebuild test 1"))
+            .await
+            .unwrap();
+        store
+            .save(&make_test_memory("mem-rb-2", "Rebuild test 2"))
+            .await
+            .unwrap();
         assert_eq!(vec0_count_async(&store).await, 2);
 
         // Rebuild should drop, recreate, and repopulate
         let repopulated = store.rebuild_vec0().await.unwrap();
-        assert_eq!(repopulated, 2, "rebuild should repopulate all active memories");
+        assert_eq!(
+            repopulated, 2,
+            "rebuild should repopulate all active memories"
+        );
         assert_eq!(vec0_count_async(&store).await, 2);
     }
 }

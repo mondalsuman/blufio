@@ -40,11 +40,10 @@ pub struct Vec0SearchResult {
 /// on every connection (including tokio-rusqlite's background thread).
 ///
 /// Safe to call multiple times -- `sqlite3_auto_extension` ignores duplicates.
+#[allow(clippy::missing_transmute_annotations)]
 pub fn ensure_sqlite_vec_registered() {
     unsafe {
-        sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite3_vec_init as *const (),
-        )));
+        sqlite3_auto_extension(Some(std::mem::transmute(sqlite3_vec_init as *const ())));
     }
 }
 
@@ -62,6 +61,7 @@ pub fn check_vec0_available(conn: &rusqlite::Connection) -> Option<String> {
 /// The `rowid` should match the rowid of the corresponding row in the `memories`
 /// table for direct correlation. The `embedding` is serialized to bytes via
 /// `vec_to_blob()`.
+#[allow(clippy::too_many_arguments)]
 pub fn vec0_insert(
     tx: &rusqlite::Transaction,
     rowid: i64,
@@ -227,8 +227,20 @@ pub fn vec0_populate_batch(
              ORDER BY m.rowid LIMIT ?1 OFFSET ?2",
         )?;
 
-        let rows: Vec<(i64, String, String, Vec<u8>, String, f64, String, String, Option<String>, String)> =
-            stmt.query_map(rusqlite::params![batch_size as i64, offset], |row| {
+        #[allow(clippy::type_complexity)]
+        let rows: Vec<(
+            i64,
+            String,
+            String,
+            Vec<u8>,
+            String,
+            f64,
+            String,
+            String,
+            Option<String>,
+            String,
+        )> = stmt
+            .query_map(rusqlite::params![batch_size as i64, offset], |row| {
                 Ok((
                     row.get(0)?,
                     row.get(1)?,
@@ -251,7 +263,19 @@ pub fn vec0_populate_batch(
 
         let batch_count = rows.len();
         let tx = conn.unchecked_transaction()?;
-        for (rowid, memory_id, content, embedding_blob, source, confidence, status, classification, session_id, created_at) in &rows {
+        for (
+            rowid,
+            memory_id,
+            content,
+            embedding_blob,
+            source,
+            confidence,
+            status,
+            classification,
+            session_id,
+            created_at,
+        ) in &rows
+        {
             tx.execute(
                 "INSERT INTO memories_vec0(rowid, status, classification, session_id, \
                  embedding, memory_id, content, source, confidence, created_at) \
@@ -285,8 +309,7 @@ pub fn vec0_populate_batch(
 
 /// Count the number of rows in the `memories_vec0` table.
 pub fn vec0_count(conn: &rusqlite::Connection) -> Result<usize, rusqlite::Error> {
-    let count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM memories_vec0", [], |row| row.get(0))?;
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM memories_vec0", [], |row| row.get(0))?;
     Ok(count as usize)
 }
 
@@ -365,8 +388,8 @@ mod tests {
     fn synthetic_embedding(seed: u32) -> Vec<f32> {
         let mut emb = vec![0.0f32; 384];
         // Create a somewhat unique vector based on seed
-        for i in 0..384 {
-            emb[i] = ((seed as f32 * 0.1 + i as f32 * 0.01).sin()) * 0.1;
+        for (i, val) in emb.iter_mut().enumerate() {
+            *val = ((seed as f32 * 0.1 + i as f32 * 0.01).sin()) * 0.1;
         }
         // Normalize to unit length
         let norm: f32 = emb.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -397,7 +420,10 @@ mod tests {
         let version: String = conn
             .query_row("SELECT vec_version()", [], |row| row.get(0))
             .unwrap();
-        assert!(version.starts_with("v"), "expected version string starting with 'v', got: {version}");
+        assert!(
+            version.starts_with("v"),
+            "expected version string starting with 'v', got: {version}"
+        );
     }
 
     #[test]
@@ -446,9 +472,48 @@ mod tests {
 
         // Insert three memories
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &base_emb, "mem-base", "Base memory", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
-        vec0_insert(&tx, 2, "active", "internal", None, &close_emb, "mem-close", "Close memory", "explicit", 0.8, "2026-01-02T00:00:00Z").unwrap();
-        vec0_insert(&tx, 3, "active", "internal", None, &far_emb, "mem-far", "Far memory", "explicit", 0.7, "2026-01-03T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &base_emb,
+            "mem-base",
+            "Base memory",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        vec0_insert(
+            &tx,
+            2,
+            "active",
+            "internal",
+            None,
+            &close_emb,
+            "mem-close",
+            "Close memory",
+            "explicit",
+            0.8,
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+        vec0_insert(
+            &tx,
+            3,
+            "active",
+            "internal",
+            None,
+            &far_emb,
+            "mem-far",
+            "Far memory",
+            "explicit",
+            0.7,
+            "2026-01-03T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         // Search with the base embedding -- should find closest first
@@ -457,12 +522,18 @@ mod tests {
         assert!(!results.is_empty(), "search should return results");
         // The first result should be the exact match (mem-base)
         assert_eq!(results[0].memory_id, "mem-base");
-        assert!(results[0].similarity > 0.99, "exact match should have similarity ~1.0, got {}", results[0].similarity);
+        assert!(
+            results[0].similarity > 0.99,
+            "exact match should have similarity ~1.0, got {}",
+            results[0].similarity
+        );
 
         // Second result should be the close embedding
         if results.len() > 1 {
             assert_eq!(results[1].memory_id, "mem-close");
-            assert!(results[1].similarity > results.last().unwrap().similarity || results.len() == 2);
+            assert!(
+                results[1].similarity > results.last().unwrap().similarity || results.len() == 2
+            );
         }
     }
 
@@ -472,13 +543,30 @@ mod tests {
         let emb = synthetic_embedding(1);
 
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb, "mem-1", "Test", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb,
+            "mem-1",
+            "Test",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         // Searching with the exact same embedding should yield similarity ~1.0
         let results = vec0_search(&conn, &emb, 10, 0.0, None).unwrap();
         assert_eq!(results.len(), 1);
-        assert!(results[0].similarity > 0.99, "similarity should be ~1.0 for exact match, got {}", results[0].similarity);
+        assert!(
+            results[0].similarity > 0.99,
+            "similarity should be ~1.0 for exact match, got {}",
+            results[0].similarity
+        );
     }
 
     #[test]
@@ -488,8 +576,34 @@ mod tests {
         let emb2 = synthetic_embedding(2);
 
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", Some("sess-A"), &emb1, "mem-1", "Session A memory", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
-        vec0_insert(&tx, 2, "active", "internal", Some("sess-B"), &emb2, "mem-2", "Session B memory", "explicit", 0.8, "2026-01-02T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            Some("sess-A"),
+            &emb1,
+            "mem-1",
+            "Session A memory",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        vec0_insert(
+            &tx,
+            2,
+            "active",
+            "internal",
+            Some("sess-B"),
+            &emb2,
+            "mem-2",
+            "Session B memory",
+            "explicit",
+            0.8,
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         // Search with session_id filter -- should only return sess-A
@@ -504,7 +618,20 @@ mod tests {
         let emb = synthetic_embedding(1);
 
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb, "mem-1", "Test", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb,
+            "mem-1",
+            "Test",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         assert_eq!(vec0_count(&conn).unwrap(), 1);
@@ -527,7 +654,20 @@ mod tests {
         let emb = synthetic_embedding(1);
 
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb, "mem-1", "Test", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb,
+            "mem-1",
+            "Test",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         // Should be findable with status='active' filter
@@ -542,7 +682,10 @@ mod tests {
 
         // Now search with status='active' filter should return empty
         let results = vec0_search(&conn, &emb, 10, 0.0, None).unwrap();
-        assert!(results.is_empty(), "forgotten memory should not appear in active search");
+        assert!(
+            results.is_empty(),
+            "forgotten memory should not appear in active search"
+        );
     }
 
     #[test]
@@ -553,9 +696,48 @@ mod tests {
         let emb3 = synthetic_embedding(3);
 
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb1, "mem-active", "Active memory", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
-        vec0_insert(&tx, 2, "forgotten", "internal", None, &emb2, "mem-forgotten", "Forgotten memory", "explicit", 0.8, "2026-01-02T00:00:00Z").unwrap();
-        vec0_insert(&tx, 3, "superseded", "internal", None, &emb3, "mem-superseded", "Superseded memory", "explicit", 0.7, "2026-01-03T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb1,
+            "mem-active",
+            "Active memory",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        vec0_insert(
+            &tx,
+            2,
+            "forgotten",
+            "internal",
+            None,
+            &emb2,
+            "mem-forgotten",
+            "Forgotten memory",
+            "explicit",
+            0.8,
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+        vec0_insert(
+            &tx,
+            3,
+            "superseded",
+            "internal",
+            None,
+            &emb3,
+            "mem-superseded",
+            "Superseded memory",
+            "explicit",
+            0.7,
+            "2026-01-03T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         // Search should only return the active memory
@@ -571,8 +753,34 @@ mod tests {
         let emb2 = synthetic_embedding(2);
 
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb1, "mem-internal", "Internal memory", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
-        vec0_insert(&tx, 2, "active", "restricted", None, &emb2, "mem-restricted", "Restricted memory", "explicit", 0.8, "2026-01-02T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb1,
+            "mem-internal",
+            "Internal memory",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        vec0_insert(
+            &tx,
+            2,
+            "active",
+            "restricted",
+            None,
+            &emb2,
+            "mem-restricted",
+            "Restricted memory",
+            "explicit",
+            0.8,
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         // Search should exclude restricted
@@ -588,13 +796,43 @@ mod tests {
         let emb2 = synthetic_embedding(100); // very different
 
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb1, "mem-close", "Close", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
-        vec0_insert(&tx, 2, "active", "internal", None, &emb2, "mem-far", "Far", "explicit", 0.8, "2026-01-02T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb1,
+            "mem-close",
+            "Close",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+        vec0_insert(
+            &tx,
+            2,
+            "active",
+            "internal",
+            None,
+            &emb2,
+            "mem-far",
+            "Far",
+            "explicit",
+            0.8,
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         // Search with high threshold -- only exact/near match should pass
         let results = vec0_search(&conn, &emb1, 10, 0.99, None).unwrap();
-        assert_eq!(results.len(), 1, "only exact match should pass 0.99 threshold");
+        assert_eq!(
+            results.len(),
+            1,
+            "only exact match should pass 0.99 threshold"
+        );
         assert_eq!(results[0].memory_id, "mem-close");
     }
 
@@ -605,7 +843,20 @@ mod tests {
 
         let emb = synthetic_embedding(1);
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb, "mem-1", "Test", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb,
+            "mem-1",
+            "Test",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         assert_eq!(vec0_count(&conn).unwrap(), 1);
@@ -617,7 +868,20 @@ mod tests {
         let emb = synthetic_embedding(1);
 
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb, "mem-1", "Test", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb,
+            "mem-1",
+            "Test",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
 
         assert_eq!(vec0_count(&conn).unwrap(), 1);
@@ -629,7 +893,20 @@ mod tests {
 
         // Should still be usable after recreate
         let tx = conn.transaction().unwrap();
-        vec0_insert(&tx, 1, "active", "internal", None, &emb, "mem-1", "Test", "explicit", 0.9, "2026-01-01T00:00:00Z").unwrap();
+        vec0_insert(
+            &tx,
+            1,
+            "active",
+            "internal",
+            None,
+            &emb,
+            "mem-1",
+            "Test",
+            "explicit",
+            0.9,
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
         tx.commit().unwrap();
         assert_eq!(vec0_count(&conn).unwrap(), 1);
     }

@@ -290,9 +290,9 @@ impl HybridRetriever {
         let results = self
             .store
             .conn()
-            .call(move |conn| vec0::vec0_search(&conn, &query_emb, k, threshold, None))
+            .call(move |conn| vec0::vec0_search(conn, &query_emb, k, threshold, None))
             .await
-            .map_err(|e| BlufioError::storage_connection_failed(e))?;
+            .map_err(BlufioError::storage_connection_failed)?;
 
         Ok(results
             .into_iter()
@@ -946,15 +946,16 @@ mod tests {
         let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
 
         // Insert a memory with dual-write
-        store.save(&make_test_memory_full("mem-r1", "Coffee preference")).await.unwrap();
+        store
+            .save(&make_test_memory_full("mem-r1", "Coffee preference"))
+            .await
+            .unwrap();
 
         // Use vec0 search directly through the retriever's private method
         // We test by calling the store's vec0 search
         let results = store
             .conn()
-            .call(|conn| {
-                vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None)
-            })
+            .call(|conn| vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None))
             .await
             .unwrap();
 
@@ -967,7 +968,10 @@ mod tests {
         let conn = setup_retriever_test_db().await;
         let store = Arc::new(MemoryStore::with_vec0(conn, None, false));
 
-        store.save(&make_test_memory_full("mem-r2", "Tea preference")).await.unwrap();
+        store
+            .save(&make_test_memory_full("mem-r2", "Tea preference"))
+            .await
+            .unwrap();
 
         // vec0 should be empty (disabled)
         let vec0_count = store
@@ -1024,7 +1028,10 @@ mod tests {
         let store = Arc::new(MemoryStore::with_vec0(conn, None, false));
 
         // Save a memory normally (no dual-write)
-        store.save(&make_test_memory_full("mem-fallback", "Fallback test")).await.unwrap();
+        store
+            .save(&make_test_memory_full("mem-fallback", "Fallback test"))
+            .await
+            .unwrap();
 
         // Vec0 search should fail (no table), verify in-memory works as fallback
         let query_emb = vec![0.1f32; 384];
@@ -1032,15 +1039,20 @@ mod tests {
         // vec0 search should fail
         let vec0_result = store
             .conn()
-            .call(move |conn| {
-                vec0::vec0_search(conn, &query_emb, 10, 0.0, None)
-            })
+            .call(move |conn| vec0::vec0_search(conn, &query_emb, 10, 0.0, None))
             .await;
-        assert!(vec0_result.is_err(), "vec0 search should fail without table");
+        assert!(
+            vec0_result.is_err(),
+            "vec0 search should fail without table"
+        );
 
         // In-memory search should still work
         let in_mem_results = store.get_active_embeddings().await.unwrap();
-        assert_eq!(in_mem_results.len(), 1, "in-memory path should work as fallback");
+        assert_eq!(
+            in_mem_results.len(),
+            1,
+            "in-memory path should work as fallback"
+        );
     }
 
     #[tokio::test]
@@ -1049,13 +1061,14 @@ mod tests {
         let conn = setup_retriever_test_db().await;
         let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
 
-        store.save(&make_test_memory_full("mem-fmt-1", "Format test")).await.unwrap();
+        store
+            .save(&make_test_memory_full("mem-fmt-1", "Format test"))
+            .await
+            .unwrap();
 
         let results = store
             .conn()
-            .call(|conn| {
-                vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None)
-            })
+            .call(|conn| vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None))
             .await
             .unwrap();
 
@@ -1104,7 +1117,10 @@ mod tests {
         let conn = setup_retriever_test_db().await;
         let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
 
-        store.save(&make_test_memory_full("mem-cmp-1", "Comparison test")).await.unwrap();
+        store
+            .save(&make_test_memory_full("mem-cmp-1", "Comparison test"))
+            .await
+            .unwrap();
 
         let query_emb = vec![0.1f32; 384];
 

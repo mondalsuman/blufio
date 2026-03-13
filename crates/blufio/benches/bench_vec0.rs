@@ -22,8 +22,8 @@ use blufio_memory::vec0;
 /// Generate a normalized deterministic 384-dim embedding from a seed.
 fn make_embedding(seed: u32) -> Vec<f32> {
     let mut emb = vec![0.0f32; 384];
-    for i in 0..384 {
-        emb[i] = ((seed as f32 * 0.1 + i as f32 * 0.01).sin()) * 0.1;
+    for (i, val) in emb.iter_mut().enumerate() {
+        *val = ((seed as f32 * 0.1 + i as f32 * 0.01).sin()) * 0.1;
     }
     let norm: f32 = emb.iter().map(|x| x * x).sum::<f32>().sqrt();
     if norm > f32::EPSILON {
@@ -143,14 +143,9 @@ fn bench_vector_search(c: &mut Criterion) {
             &(&conn, &query_emb),
             |b, &(conn, query_emb)| {
                 b.iter(|| {
-                    let results = vec0::vec0_search(
-                        black_box(conn),
-                        black_box(query_emb),
-                        10,
-                        0.3,
-                        None,
-                    )
-                    .unwrap();
+                    let results =
+                        vec0::vec0_search(black_box(conn), black_box(query_emb), 10, 0.3, None)
+                            .unwrap();
                     black_box(results);
                 });
             },
@@ -175,9 +170,8 @@ fn bench_vector_search(c: &mut Criterion) {
                             }
                         })
                         .collect();
-                    results.sort_by(|a, b| {
-                        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-                    });
+                    results
+                        .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                     results.truncate(10);
                     black_box(results);
                 });
