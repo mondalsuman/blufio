@@ -12,19 +12,19 @@
 #[cfg(feature = "otel")]
 use blufio_config::model::OpenTelemetryConfig;
 #[cfg(feature = "otel")]
-use opentelemetry::trace::TracerProvider as _;
-#[cfg(feature = "otel")]
 use opentelemetry::KeyValue;
 #[cfg(feature = "otel")]
+use opentelemetry::trace::TracerProvider as _;
+#[cfg(feature = "otel")]
 use opentelemetry_otlp::WithExportConfig;
+#[cfg(feature = "otel")]
+use opentelemetry_sdk::Resource;
 #[cfg(feature = "otel")]
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 #[cfg(feature = "otel")]
 use opentelemetry_sdk::trace::{
     BatchConfigBuilder, BatchSpanProcessor, Sampler, SdkTracerProvider,
 };
-#[cfg(feature = "otel")]
-use opentelemetry_sdk::Resource;
 #[cfg(feature = "otel")]
 use std::time::Duration;
 #[cfg(feature = "otel")]
@@ -40,10 +40,7 @@ use tracing_subscriber::Registry;
 pub fn try_init_otel_layer(
     config: &OpenTelemetryConfig,
 ) -> Option<(
-    tracing_opentelemetry::OpenTelemetryLayer<
-        Registry,
-        opentelemetry_sdk::trace::SdkTracer,
-    >,
+    tracing_opentelemetry::OpenTelemetryLayer<Registry, opentelemetry_sdk::trace::SdkTracer>,
     SdkTracerProvider,
 )> {
     if !config.enabled {
@@ -84,8 +81,7 @@ pub fn try_init_otel_layer(
 
     // Append user-defined resource attributes.
     for (k, v) in &config.resource_attributes {
-        resource_builder =
-            resource_builder.with_attribute(KeyValue::new(k.clone(), v.clone()));
+        resource_builder = resource_builder.with_attribute(KeyValue::new(k.clone(), v.clone()));
     }
 
     let resource = resource_builder.build();
@@ -161,9 +157,7 @@ macro_rules! otel_span {
 #[cfg(not(feature = "otel"))]
 #[macro_export]
 macro_rules! otel_span {
-    ($name:expr $(, $key:expr => $val:expr)* $(,)?) => {{
-        tracing::debug_span!($name)
-    }};
+    ($name:expr $(, $key:expr => $val:expr)* $(,)?) => {{ tracing::debug_span!($name) }};
 }
 
 #[cfg(all(test, feature = "otel"))]

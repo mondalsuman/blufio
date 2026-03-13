@@ -1528,36 +1528,22 @@ impl Default for OpenTelemetryConfig {
 ///
 /// When enabled, sets `PRAGMA wal_autocheckpoint=0` on database open so
 /// Litestream can manage WAL checkpointing for continuous replication.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct LitestreamConfig {
     /// Enable Litestream integration (sets PRAGMA wal_autocheckpoint=0).
     pub enabled: bool,
 }
 
-impl Default for LitestreamConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
-}
-
 /// OpenAPI documentation configuration.
 ///
 /// Controls Swagger UI availability at the `/docs` endpoint.
 /// The `/openapi.json` spec endpoint is always served regardless of this setting.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct OpenApiConfig {
     /// Enable Swagger UI at `/docs` (requires `swagger-ui` feature compiled in).
     pub swagger_ui_enabled: bool,
-}
-
-impl Default for OpenApiConfig {
-    fn default() -> Self {
-        Self {
-            swagger_ui_enabled: false,
-        }
-    }
 }
 
 /// Daemon and memory management configuration.

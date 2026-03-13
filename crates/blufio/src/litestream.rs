@@ -126,16 +126,17 @@ pub fn run_litestream_init(config: &BlufioConfig) -> Result<(), BlufioError> {
     let template = generate_template(db_path, &audit_path);
 
     // Ensure parent directory exists.
-    if let Some(parent) = Path::new(&config_path).parent() {
-        if !parent.exists() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                BlufioError::Config(format!(
-                    "failed to create directory {}: {}",
-                    parent.display(),
-                    e
-                ))
-            })?;
-        }
+    if let Some(parent) = Path::new(&config_path).parent()
+        && !parent.as_os_str().is_empty()
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            BlufioError::Config(format!(
+                "failed to create directory {}: {}",
+                parent.display(),
+                e
+            ))
+        })?;
     }
 
     // Write the template file.
@@ -304,7 +305,7 @@ mod tests {
     #[test]
     fn audit_db_path_derives_correctly() {
         assert_eq!(audit_db_path("/data/blufio.db"), "/data/audit.db");
-        assert_eq!(audit_db_path("blufio.db"), "./audit.db");
+        assert_eq!(audit_db_path("blufio.db"), "audit.db");
     }
 
     #[test]
@@ -313,7 +314,7 @@ mod tests {
             litestream_config_path("/data/blufio.db"),
             "/data/litestream.yml"
         );
-        assert_eq!(litestream_config_path("blufio.db"), "./litestream.yml");
+        assert_eq!(litestream_config_path("blufio.db"), "litestream.yml");
     }
 
     #[test]

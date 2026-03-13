@@ -233,7 +233,10 @@ impl ContextEngine {
 
         // OTel: Record per-zone and total token counts on context assembly span.
         _ctx_span.record("blufio.context.static_tokens", actual_static as u64);
-        _ctx_span.record("blufio.context.conditional_tokens", actual_conditional as u64);
+        _ctx_span.record(
+            "blufio.context.conditional_tokens",
+            actual_conditional as u64,
+        );
         _ctx_span.record("blufio.context.dynamic_tokens", actual_dynamic as u64);
         _ctx_span.record(
             "blufio.context.total_tokens",

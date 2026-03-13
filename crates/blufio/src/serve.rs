@@ -200,10 +200,7 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
         info!("Litestream mode active: disabling WAL autocheckpoint (PRAGMA wal_autocheckpoint=0)");
         let pragma_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
         pragma_conn
-            .call(|conn| {
-                conn.execute_batch("PRAGMA wal_autocheckpoint=0;")
-                    .map_err(|e| e.into())
-            })
+            .call(|conn| conn.execute_batch("PRAGMA wal_autocheckpoint=0;"))
             .await
             .map_err(|e: tokio_rusqlite::Error| {
                 BlufioError::Config(format!(
@@ -2261,8 +2258,8 @@ struct TracingState {
 /// # Panics
 /// Panics if a tracing subscriber is already installed.
 fn init_tracing(log_level: &str, config: &BlufioConfig) -> TracingState {
-    use tracing_subscriber::prelude::*;
     use tracing_subscriber::EnvFilter;
+    use tracing_subscriber::prelude::*;
 
     let vault_values = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
 
