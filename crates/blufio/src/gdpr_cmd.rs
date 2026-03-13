@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use colored::Colorize;
+use sha2::{Digest, Sha256};
 
 use blufio_config::model::BlufioConfig;
 use blufio_core::BlufioError;
@@ -216,6 +217,89 @@ async fn cmd_erase(
     // k. Cleanup memory index (synchronous)
     if let Err(e) = cleanup_memory_index(&conn, &session_ids).await {
         eprintln!("{}", format!("Warning: FTS5 cleanup failed: {e}").yellow());
+    }
+
+    // k2. Emit audit trail entry recording the erasure event.
+    if let Some(ref ac) = audit_conn {
+        let user_id_hash = hex::encode(Sha256::digest(user.as_bytes()));
+        let details = serde_json::json!({
+            "user_id_hash": user_id_hash,
+            "records_affected": {
+                "messages": manifest.messages_deleted,
+                "sessions": manifest.sessions_deleted,
+                "memories": manifest.memories_deleted,
+                "archives": manifest.archives_deleted,
+                "cost_records": manifest.cost_records_anonymized,
+                "audit_entries": manifest.audit_entries_redacted,
+            }
+        });
+        let details_json = details.to_string();
+        let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let entry_id = uuid::Uuid::new_v4().to_string();
+        let ac_clone = ac.clone();
+
+        let audit_result = ac_clone
+            .call(move |db| -> Result<(), rusqlite::Error> {
+                // Retrieve the last entry hash for chain continuity.
+                let prev_hash: String = db
+                    .query_row(
+                        "SELECT entry_hash FROM audit_entries ORDER BY id DESC LIMIT 1",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or_else(|_| {
+                        blufio_audit::GENESIS_HASH.to_string()
+                    });
+
+                let entry_hash = blufio_audit::compute_entry_hash(
+                    &prev_hash,
+                    &timestamp,
+                    "gdpr.erasure",
+                    "erase",
+                    "user",
+                    &entry_id,
+                );
+
+                db.execute(
+                    "INSERT INTO audit_entries \
+                     (entry_hash, prev_hash, timestamp, event_type, action, \
+                      resource_type, resource_id, actor, session_id, details_json, pii_marker) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    rusqlite::params![
+                        entry_hash,
+                        prev_hash,
+                        timestamp,
+                        "gdpr.erasure",
+                        "erase",
+                        "user",
+                        entry_id,
+                        "cli",
+                        "",
+                        details_json,
+                        1,
+                    ],
+                )?;
+                Ok(())
+            })
+            .await;
+
+        match audit_result {
+            Ok(()) => {
+                tracing::debug!("GDPR erasure audit entry written");
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    format!("Warning: audit trail entry for erasure failed: {e}").yellow()
+                );
+            }
+        }
+    } else {
+        eprintln!(
+            "{}",
+            "Audit database not found; erasure event not logged. Run `blufio serve` at least once to initialize audit.db."
+                .yellow()
+        );
     }
 
     // l. Record Prometheus metrics

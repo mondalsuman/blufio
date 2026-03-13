@@ -112,6 +112,7 @@ rusqlite = { workspace = true, features = ["backup"] }
 croner.workspace = true
 ring.workspace = true
 hex.workspace = true
+sha2.workspace = true
 ed25519-dalek.workspace = true
 self-replace = { workspace = true }
 tempfile = { workspace = true }
