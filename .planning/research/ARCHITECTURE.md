@@ -1,1006 +1,452 @@
 # Architecture Patterns
 
-**Domain:** v1.5 PRD Gap Closure -- Feature Integration Into 35-Crate Rust AI Agent Platform
-**Researched:** 2026-03-10
-**Confidence:** HIGH (based on direct analysis of 80,101 LOC across 35 crates, 11 migration files, workspace Cargo.toml, and component wiring in serve.rs)
+**Domain:** v1.6 Performance & Scalability Validation -- sqlite-vec Migration, Benchmarking Suite, Injection Hardening
+**Researched:** 2026-03-13
+**Confidence:** HIGH (direct analysis of blufio-memory/retriever.rs, store.rs, types.rs; blufio-injection/classifier.rs, patterns.rs, pipeline.rs; 4 existing bench files; sqlite-vec API docs; OWASP LLM Top 10 2025)
 
 ## Recommended Architecture
 
-The v1.5 features integrate into the existing 35-crate workspace through three strategies: (A) **extend existing crates** where the feature naturally belongs, (B) **create new crates** where a new domain boundary exists, and (C) **add infrastructure** where cross-cutting concerns require new wiring. The guiding principle is: a new crate only when a new adapter trait or a clearly orthogonal subsystem justifies it.
-
-### Crate Impact Map
-
-| Feature | Strategy | Primary Crate(s) | New Crate? | New Migration? |
-|---------|----------|-------------------|------------|----------------|
-| Multi-level compaction (L0-L3) | Extend | blufio-context | No | No (metadata in existing messages table) |
-| Prompt injection defense | Extend | blufio-security, blufio-agent | No | No |
-| Cron/scheduler | **New crate** | blufio-scheduler | **Yes** | Yes (V12: scheduled_jobs) |
-| Memory enhancements | Extend | blufio-memory | No | Yes (V13: ALTER memories) |
-| Audit trail | **New crate** | blufio-audit | **Yes** | Yes (V14: audit_log) |
-| Data classification | Extend | blufio-core (traits) | No | No |
-| Retention policies | Extend | blufio-storage | No | Yes (V15: soft delete columns) |
-| Hook system | **New crate** | blufio-hooks | **Yes** | No (TOML-driven) |
-| Hot reload | Extend | blufio-config | No | No |
-| iMessage adapter | **New crate** | blufio-imessage | **Yes** | No |
-| Email adapter | **New crate** | blufio-email | **Yes** | No |
-| SMS adapter | **New crate** | blufio-sms | **Yes** | No |
-| PII redaction expansion | Extend | blufio-security | No | No |
-| GDPR tooling | Extend | blufio (CLI binary) | No | No |
-| OpenTelemetry | **New crate** | blufio-otel | **Yes** | No |
-| OpenAPI spec | Extend | blufio-gateway | No | No |
-| Litestream replication | External sidecar | blufio (CLI/docs) | No | No |
-| Code quality hardening | Cross-cutting | All library crates | No | No |
-
-**Summary: 7 new crates, 4 new migrations (V12-V15), bringing total to ~42 crates.**
-
----
-
-## Component Architecture: Per-Feature Integration
-
-### 1. Multi-Level Compaction (L0-L3) -- blufio-context
-
-**Current state:** Single-level compaction in `compaction.rs` -- a flat module with `generate_compaction_summary()` and `persist_compaction_summary()`. The `DynamicZone` in `dynamic.rs` splits history at the midpoint and summarizes the older half via a single Haiku LLM call. No quality scoring, no tiered summarization, no archive, no soft/hard thresholds.
-
-**Architecture change:**
+Three integration areas into the existing 37-crate workspace, each touching different subsystems with minimal cross-dependency:
 
 ```
-blufio-context/
-  src/
-    compaction/           # Promote from single file to module
-      mod.rs              # CompactionEngine with level-based dispatch
-      levels.rs           # L0 (raw), L1 (session summary), L2 (topic cluster), L3 (persona)
-      quality.rs          # QualityScoringGate -- cosine sim between summary and source
-      triggers.rs         # Soft/hard threshold configuration and trigger logic
-      archive.rs          # Cold storage serialization for compacted messages
-    dynamic.rs            # Delegates to CompactionEngine instead of bare functions
+Feature 1: sqlite-vec
+  blufio-memory/store.rs    -- vec0 virtual table + KNN queries replace get_active_embeddings()
+  blufio-memory/retriever.rs -- vector_search() delegates to store instead of in-memory scan
+  blufio-storage/migrations/ -- V15 migration creates vec0 shadow table
+  Cargo.toml (workspace)     -- sqlite-vec dependency
+
+Feature 2: Performance Benchmarking
+  crates/blufio/benches/     -- new bench_injection.rs, expanded bench_memory.rs
+  .github/workflows/bench.yml -- binary size + RSS tracking
+  crates/blufio/src/bench_cmd.rs -- CLI bench subcommand enhancements
+
+Feature 3: Injection Hardening
+  blufio-injection/patterns.rs   -- expanded PATTERNS array
+  blufio-injection/classifier.rs -- encoding detection, fuzzy matching
+  blufio-injection/output_screen.rs -- expanded credential patterns
 ```
 
-**Data flow change:**
+### Component Boundaries
 
+| Component | Responsibility | Modified/New | Communicates With |
+|-----------|---------------|--------------|-------------------|
+| `blufio-memory/store.rs` | MODIFIED: Add vec0 table management, KNN query method | Modified | retriever.rs, blufio-storage (migrations) |
+| `blufio-memory/retriever.rs` | MODIFIED: Replace in-memory cosine scan with store.knn_search() | Modified | store.rs |
+| `blufio-memory/types.rs` | UNCHANGED: cosine_similarity() kept for MMR reranking | Unchanged | retriever.rs |
+| `blufio-storage/migrations/V15` | NEW: Create vec0 virtual table shadowing memories.embedding | New | SQLite schema |
+| `blufio-injection/patterns.rs` | MODIFIED: Expand PATTERNS array with new categories | Modified | classifier.rs |
+| `blufio-injection/classifier.rs` | MODIFIED: Add encoding detection, fuzzy matching | Modified | patterns.rs, pipeline.rs |
+| `blufio-injection/output_screen.rs` | MODIFIED: Expand credential patterns, PII sharing | Modified | classifier.rs |
+| `crates/blufio/benches/bench_injection.rs` | NEW: Criterion benchmarks for injection pipeline | New | blufio-injection |
+| `crates/blufio/benches/bench_memory.rs` | MODIFIED: Add sqlite-vec KNN benchmark group | Modified | blufio-memory |
+
+### Data Flow Changes
+
+**Current vector search flow (in-memory, O(n)):**
 ```
-DynamicZone::assemble_messages()
-  |
-  +-- Estimate tokens via TokenizerCache (existing)
-  |
-  +-- IF tokens > soft_threshold (default 0.60):
-  |     CompactionEngine::compact_incremental(L0 -> L1)
-  |     QualityScoringGate::verify(summary, source_messages)
-  |       IF quality_score < 0.7 -> retry with enhanced prompt
-  |
-  +-- IF tokens > hard_threshold (default 0.85):
-  |     CompactionEngine::compact_deep(L1 -> L2, L2 -> L3)
-  |     Archive::store(compacted_messages)  # optional cold storage
-  |
-  +-- Return DynamicResult with compaction_usage (Vec, not Option)
-```
-
-**Key integration points:**
-- `ContextConfig` in blufio-config gains `compaction_soft_threshold`, `compaction_hard_threshold`, `compaction_quality_min`, `compaction_archive_enabled` fields
-- `DynamicZone` delegates to `CompactionEngine` rather than calling `generate_compaction_summary` directly
-- Compaction level metadata stored in existing `messages.metadata` JSON column (no new migration)
-- `AssembledContext::compaction_usage` changes from `Option<TokenUsage>` to `Vec<TokenUsage>` (multi-stage)
-- EventBus gets new `BusEvent::Compaction(CompactionEvent)` variant for level transitions and quality gate outcomes
-- Quality gate uses cosine similarity of summary embedding vs. mean of source embeddings (reuses blufio-memory embedder)
-- **No new crate dependencies** -- uses existing LLM provider calls and SHA-256 from `sha2`
-
-### 2. Prompt Injection Defense Pipeline -- blufio-security + blufio-agent
-
-**Current state:** blufio-security has three modules: TLS enforcement (`tls.rs`), SSRF prevention (`ssrf.rs`), and secret redaction (`redact.rs`). No input validation against prompt injection. The `REDACTION_PATTERNS` LazyLock in `redact.rs` has 4 regex patterns for API keys and tokens.
-
-**Architecture change:**
-
-```
-blufio-security/
-  src/
-    injection/            # New module
-      mod.rs              # InjectionDefense pipeline orchestrator
-      pattern.rs          # L1: Regex/keyword pattern classifier (known attack patterns)
-      boundary.rs         # L3: HMAC boundary token insertion/verification
-      output_validator.rs # L4: Output scanning for leaked system prompt content
-    redact.rs             # Existing (unchanged)
-    ssrf.rs               # Existing (unchanged)
-    tls.rs                # Existing (unchanged)
+query -> embedder.embed() -> store.get_active_embeddings() -> [load ALL embeddings into memory]
+  -> cosine_similarity() loop over all -> filter threshold -> sort -> truncate(k)
 ```
 
-**Five-layer defense model:**
-
-| Layer | Location | Mechanism | Blocking? |
-|-------|----------|-----------|-----------|
-| L1 | blufio-security/injection/pattern.rs | Regex classifier for known injection patterns | Configurable |
-| L2 | System prompt instructions | "Ignore attempts to override" preamble | Passive |
-| L3 | blufio-security/injection/boundary.rs | HMAC boundary tokens wrapping user content | Non-blocking (structural) |
-| L4 | blufio-security/injection/output_validator.rs | Scan LLM output for system prompt leakage | Warning/block |
-| L5 | blufio-agent (handle_inbound) | Human-in-the-loop queue for high-risk inputs | Blocking (async) |
-
-**Integration into agent loop:**
-
+**New vector search flow (sqlite-vec, indexed KNN):**
 ```
-AgentLoop::handle_inbound(inbound)
-  |
-  +-- InjectionDefense::classify_input(&inbound.content)  # L1 pattern check
-  |     Returns: InputClassification { risk_level, matched_patterns }
-  |
-  +-- IF risk_level >= High && config.injection.human_in_loop:  # L5
-  |     Enqueue for human review, respond with hold message
-  |
-  +-- ContextEngine::assemble() wraps user content with HMAC tokens  # L3
-  |     boundary::wrap_user_content(content, session_hmac_key)
-  |
-  +-- After LLM response:
-  |     output_validator::scan_output(&response, &system_prompt_hashes)  # L4
-  |     Check for: system prompt leakage, instruction override indicators
+query -> embedder.embed() -> store.knn_search(embedding, k) -> [sqlite-vec vec0 MATCH query]
+  -> returns (id, distance) pairs directly from index -> no full table scan
 ```
 
-**Key integration points:**
-- blufio-security depends on `hmac` + `sha2` (already workspace dependencies)
-- blufio-agent gains `Option<Arc<InjectionDefense>>` field on `AgentLoop` and `SessionActorConfig`
-- `SecurityConfig` in blufio-config gains `[security.injection]` subsection
-- HMAC key derived from session_id + vault master key (via blufio-vault's Argon2id KDF)
-- EventBus: `BusEvent::Security(SecurityEvent::InjectionDetected { risk_level, patterns })` for observability
-- Pattern database: embedded const strings in the binary (not external file) to preserve single-binary constraint
-- L1 patterns based on [OWASP Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+**Key change:** `get_active_embeddings()` is no longer called during search. The vec0 virtual table maintains its own internal index that provides O(n*log(n)) KNN search without loading all embeddings into Rust process memory.
 
-### 3. Cron/Scheduler -- blufio-scheduler (NEW CRATE)
+**What stays the same:**
+- BM25 search via FTS5 (unchanged)
+- RRF fusion of vector + BM25 results (unchanged)
+- Temporal decay, importance boost, MMR reranking (unchanged)
+- cosine_similarity() used in MMR reranking (unchanged -- operates on already-loaded Memory structs)
+- Embedding storage as BLOB in memories table (unchanged -- vec0 is a shadow/parallel index)
 
-**Rationale for new crate:** Scheduling is an orthogonal concern -- it does not belong in blufio-agent (message processing), blufio-config (configuration loading), or blufio-storage (persistence). It needs its own lifecycle (start/stop), its own persistence (job run history), and its own error domain. It parallels blufio-resilience in being a cross-cutting operational concern.
+## Integration Detail: sqlite-vec
 
-**Architecture:**
+### Extension Loading with tokio-rusqlite
 
-```
-blufio-scheduler/
-  Cargo.toml             # Deps: blufio-core, blufio-config, blufio-bus, croner, tokio, chrono
-  src/
-    lib.rs               # Scheduler struct with start/stop/list
-    job.rs               # ScheduledJob definition (cron expr, action, enabled)
-    executor.rs          # Job execution loop (tokio::spawn + tick interval)
-    systemd.rs           # systemd timer file generation (blufio scheduler export-systemd)
-    config.rs            # SchedulerConfig with [[scheduler.jobs]] TOML array
-```
+The project uses `tokio-rusqlite` 0.7 wrapping `rusqlite` 0.37 with `bundled-sqlcipher-vendored-openssl`. sqlite-vec must be loaded as a compile-time extension via `sqlite3_auto_extension`, which registers the extension globally before any connection is opened.
 
-**Integration:**
+**Critical constraint:** The `sqlite3_auto_extension` call must happen once, before any `Connection::open()`. The current architecture has a centralized connection factory in blufio-storage. The auto_extension call goes there.
 
 ```rust
-// serve.rs wiring (same pattern as circuit breaker registry):
-let scheduler = Scheduler::new(&config.scheduler, event_bus.clone(), storage.clone());
-scheduler.start(cancel_token.clone()).await;
-```
+// In blufio-storage or blufio-memory initialization (once, at startup)
+use sqlite_vec::sqlite3_vec_init;
+use rusqlite::ffi::sqlite3_auto_extension;
 
-**TOML configuration:**
-
-```toml
-[scheduler]
-enabled = true
-tick_interval_ms = 500
-
-[[scheduler.jobs]]
-name = "daily-memory-cleanup"
-cron = "0 3 * * *"
-action = "memory:cleanup"
-enabled = true
-
-[[scheduler.jobs]]
-name = "retention-enforcement"
-cron = "0 4 * * *"
-action = "retention:enforce"
-enabled = true
-```
-
-**Key integration points:**
-- New `[scheduler]` section in BlufioConfig with `enabled` bool and `[[scheduler.jobs]]` array
-- Actions are string-typed dispatch keys: `memory:cleanup`, `retention:enforce`, `backup:run`, `health:check`
-- Scheduler publishes `BusEvent::Scheduler(SchedulerEvent::JobTriggered { ... })` to EventBus
-- Action dispatch routes to internal subsystem methods via a registered action handler map
-- Migration V12 adds `scheduled_jobs` table for job run history (last_run, next_run, run_count, last_error)
-- CLI: `blufio scheduler list`, `blufio scheduler run <job>`, `blufio scheduler export-systemd`
-- Uses `croner` crate for cron expression parsing (lightweight, well-maintained, no std issues)
-
-### 4. Memory Enhancements -- blufio-memory
-
-**Current state:** `HybridRetriever` does vector + BM25 + RRF fusion with confidence-based boosting (`explicit=0.9`, `extracted=0.6`). The `Memory` struct has `created_at`/`updated_at` timestamps but no access tracking. No temporal decay, no MMR diversity reranking, no index size bounds, no background validation.
-
-**Architecture change:**
-
-```
-blufio-memory/
-  src/
-    retriever.rs          # Add temporal_decay(), importance_boost(), mmr_rerank() stages
-    store.rs              # Add last_accessed_at tracking, LRU eviction, count queries
-    validator.rs          # NEW: Background task to validate embedding dimensionality
-    watcher.rs            # NEW: notify-based file watcher for auto re-indexing
-    types.rs              # Add last_accessed_at, access_count fields to Memory struct
-```
-
-**Enhanced retrieval pipeline:**
-
-```
-HybridRetriever::retrieve(query)
-  |
-  +-- embed(query)                          # existing
-  +-- vector_search()                       # existing
-  +-- bm25_search()                         # existing
-  +-- rrf_fusion()                          # existing
-  +-- temporal_decay(0.95^days)             # NEW: score *= decay_factor^(days_since_created)
-  +-- importance_boost(source)              # NEW: explicit=1.2x boost, extracted=1.0x
-  +-- mmr_rerank(lambda=0.7)               # NEW: Maximal Marginal Relevance for diversity
-  +-- update_access_timestamps()            # NEW: track last_accessed_at for LRU
-  +-- return top-K results
-```
-
-**MMR algorithm:**
-
-```
-Selected = {most relevant result}
-While |Selected| < K:
-  For each candidate not in Selected:
-    mmr_score = lambda * relevance(candidate) - (1-lambda) * max(sim(candidate, s) for s in Selected)
-  Add candidate with highest mmr_score to Selected
-```
-
-**Key integration points:**
-- Migration V13: `ALTER TABLE memories ADD COLUMN last_accessed_at TEXT DEFAULT NULL; ALTER TABLE memories ADD COLUMN access_count INTEGER DEFAULT 0;`
-- `MemoryConfig` gains `temporal_decay_factor` (default 0.95), `mmr_lambda` (default 0.7), `max_index_size` (default 10000), `lru_eviction_enabled` (default true)
-- LRU eviction: background tokio task checks `SELECT COUNT(*) FROM memories WHERE status='active'` > `max_index_size`, evicts least-recently-accessed
-- File watcher uses `notify` crate for monitoring skill/memory directories for changes
-- Background validator: spawned as tokio task in serve.rs, checks embedding dimensionality consistency
-- EventBus: `BusEvent::Memory(MemoryEvent::Evicted { count, reason })` for observability
-- New dependency: `notify = "7"` (shared with blufio-config hot reload)
-
-### 5. Audit Trail -- blufio-audit (NEW CRATE)
-
-**Rationale for new crate:** Audit is a cross-cutting concern that every subsystem feeds into but that must be independently reliable. It has its own storage table, its own integrity guarantees (hash chain), and its own verification logic. Embedding it in blufio-storage would conflate CRUD persistence with tamper-evident logging.
-
-**Architecture:**
-
-```
-blufio-audit/
-  Cargo.toml             # Deps: blufio-core, sha2, serde, serde_json, tokio-rusqlite, chrono, uuid
-  src/
-    lib.rs               # AuditLogger with append(), verify_chain(), export()
-    entry.rs             # AuditEntry struct with hash_self, hash_prev fields
-    chain.rs             # Hash chain verification logic
-    canonical.rs         # Deterministic JSON serialization (sorted keys, no whitespace)
-```
-
-**Hash chain structure:**
-
-```rust
-pub struct AuditEntry {
-    pub id: String,                    // UUID v4
-    pub timestamp: String,             // ISO 8601
-    pub actor: String,                 // "user:<id>", "system", "agent", "admin"
-    pub action: String,                // "message.sent", "session.created", "memory.deleted"
-    pub resource_type: String,         // "session", "message", "memory", "config"
-    pub resource_id: Option<String>,   // ID of affected resource
-    pub metadata: Option<String>,      // JSON: additional context (data classification tagged)
-    pub hash_prev: String,             // SHA-256 of previous entry (or "genesis" for first)
-    pub hash_self: String,             // SHA-256(canonical(fields + hash_prev))
-}
-
-// Chain integrity: hash_self = SHA-256(canonical_json(timestamp, actor, action, resource_type,
-//                                       resource_id, metadata, hash_prev))
-// Canonical JSON: keys sorted alphabetically, no whitespace, stable float repr
-```
-
-**Key integration points:**
-- Migration V14: `CREATE TABLE audit_log (id TEXT PK, timestamp TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT, metadata TEXT, hash_prev TEXT NOT NULL, hash_self TEXT NOT NULL UNIQUE); CREATE INDEX idx_audit_timestamp ON audit_log(timestamp); CREATE INDEX idx_audit_actor ON audit_log(actor); CREATE INDEX idx_audit_action ON audit_log(action);`
-- **Separate audit.db preferred** over same-database storage: isolates audit chain from main DB operations, allows different backup cadence, prevents accidental cascade deletes
-- `AuditLogger` wrapped in `Arc<AuditLogger>` -- injected into serve.rs and passed to AgentLoop
-- Async append via buffered mpsc channel: agent loop sends audit events, background task flushes to SQLite in batches (never blocks hot path)
-- EventBus integration: `AuditLogger` subscribes as reliable subscriber to EventBus, auto-generates audit entries from all event variants
-- CLI: `blufio audit verify` (checks full hash chain), `blufio audit export --format json --since 2026-03-01`
-- **Critical design decision:** Canonical serialization uses sorted keys and no pretty-printing -- without deterministic serialization, verification produces false positives
-
-### 6. Data Classification -- blufio-core (traits)
-
-**Current state:** No data classification. All data treated uniformly in logs, exports, API responses.
-
-**Architecture change:**
-
-```rust
-// New file: blufio-core/src/classification.rs (or add to types.rs)
-
-/// Data sensitivity classification following a four-level model.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum DataClassification {
-    /// System status, model names, public configuration, version info.
-    Public,
-    /// Session IDs, message counts, operational metrics, timestamps.
-    Internal,
-    /// Message content, memory facts, user preferences, conversation history.
-    Confidential,
-    /// Credentials, PII, encryption keys, audit chain hashes, vault entries.
-    Restricted,
-}
-
-/// Types that carry a data sensitivity classification.
-pub trait Classifiable {
-    fn classification(&self) -> DataClassification;
+unsafe {
+    sqlite3_auto_extension(Some(std::mem::transmute(
+        sqlite3_vec_init as *const ()
+    )));
 }
 ```
 
-**Key integration points:**
-- `Classifiable` trait implemented on core types: `Message` (Confidential), `Session` (Internal), `Memory` (Confidential), vault entries (Restricted)
-- Classification drives: log redaction depth (Restricted always redacted), export filtering (GDPR export respects level), API response field filtering
-- blufio-security redaction uses classification: Restricted fields always redacted in logs, Confidential redacted at info/debug level
-- No migration needed -- classification is derived from type, not stored as a column
-- DataClassification is `PartialOrd` so you can write `if classification >= Confidential { redact() }`
-- Re-exported from blufio-core crate root alongside other traits
+**Compatibility note:** sqlite-vec 0.1.6 depends on `rusqlite ^0.31`. The project uses rusqlite 0.37. The sqlite-vec crate only uses rusqlite's FFI types (`sqlite3_auto_extension`), so the actual API surface is the raw C `sqlite3` pointer, which is stable. This should work but MUST be verified at compile time. If the crate version pins conflict, the `sqlite3_vec_init` function pointer can be obtained directly from the C library compiled alongside SQLCipher -- sqlite-vec is pure C with zero dependencies.
 
-### 7. Retention Policies -- blufio-storage + blufio-scheduler
+### vec0 Virtual Table Design
 
-**Architecture:**
-
-```
-blufio-storage/
-  src/
-    retention.rs          # NEW: RetentionPolicy struct, RetentionEnforcer
+```sql
+-- V15 migration: Create vec0 virtual table for vector search
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_vec USING vec0(
+    memory_id TEXT PRIMARY KEY,
+    embedding float[384] distance_metric=cosine,
+    status TEXT
+);
 ```
 
-**TOML configuration:**
+**Design decisions:**
 
-```toml
-[retention]
-enabled = true
+1. **Separate table, not replacing memories.embedding BLOB:** The BLOB column stays because (a) MMR reranking in retriever.rs reads embeddings from Memory structs, (b) GDPR erasure/export operates on the memories table directly, (c) backward compatibility for existing data. The vec0 table is an index, not a replacement.
 
-[retention.messages]
-max_age_days = 90
-soft_delete = true       # Mark deleted_at, don't DROP rows
+2. **`memory_id TEXT PRIMARY KEY`:** Maps to `memories.id`. Required for joining back to the main table after KNN search.
 
-[retention.sessions]
-max_age_days = 365
-archive_closed = true    # Move to archived_at after close
+3. **`status TEXT` as metadata column:** sqlite-vec metadata columns support WHERE clause filtering during KNN. This lets us filter `status = 'active'` directly in the vector search without a post-filter JOIN. This is the key performance win -- the current code loads ALL active embeddings, even if we only need top-k.
 
-[retention.memories]
-max_age_days = 0          # 0 = never expire
-min_access_count = 0      # Memories accessed < N times eligible for pruning
+4. **`distance_metric=cosine`:** Matches the existing cosine similarity search. sqlite-vec returns distance (1 - similarity), so results need `similarity = 1.0 - distance` conversion.
 
-[retention.audit]
-max_age_days = 730        # 2 years for compliance
-immutable = true          # Never auto-delete audit entries
+5. **No classification metadata column:** The `classification != 'restricted'` filter could be a metadata column, but this adds complexity. Instead, post-filter restricted results after the KNN join. With typical memory counts (<10K), the KNN result set is small enough that post-filtering is negligible.
+
+6. **No partition key:** Partition keys are for datasets in the millions. Memory tables at target scale (100-10K entries) don't need partitioning.
+
+### Sync Strategy
+
+The vec0 table must stay in sync with the memories table. Two approaches:
+
+**Option A: Dual-write in MemoryStore methods (RECOMMENDED)**
+- `save()`: INSERT into memories + INSERT into memories_vec
+- `soft_delete()`: UPDATE memories status + UPDATE memories_vec status
+- `supersede()`: UPDATE memories status + UPDATE memories_vec status
+- `batch_evict()`: DELETE from memories + DELETE from memories_vec
+
+**Why not triggers:** SQLite triggers cannot INSERT into vec0 virtual tables (vec0 uses a custom virtual table module that intercepts INSERT/UPDATE/DELETE directly). The trigger-based approach that works for FTS5 does not work for vec0.
+
+**Migration for existing data:** The V15 migration creates the table. A one-time backfill query populates it:
+```sql
+INSERT INTO memories_vec(memory_id, embedding, status)
+SELECT id, embedding, status FROM memories
+WHERE deleted_at IS NULL;
 ```
+This runs in the migration or as a post-migration step on first startup.
 
-**Key integration points:**
-- Migration V15: `ALTER TABLE messages ADD COLUMN deleted_at TEXT DEFAULT NULL; ALTER TABLE sessions ADD COLUMN archived_at TEXT DEFAULT NULL;` (soft delete support)
-- `RetentionEnforcer::enforce()` called by scheduler job `retention:enforce` on configured cron
-- Enforcer respects `DataClassification` -- Restricted data has minimum retention period (configurable)
-- Audit entries are immutable by default: retention policy skips audit_log unless `immutable = false`
-- EventBus: `BusEvent::Retention(RetentionEvent::Enforced { deleted_messages, archived_sessions })` for observability
-- Soft delete means `get_messages()` needs `WHERE deleted_at IS NULL` filter (backward-compatible: existing queries see only active messages)
-
-### 8. Hook System -- blufio-hooks (NEW CRATE)
-
-**Rationale for new crate:** Hooks are a distinct extension mechanism -- shell-based external commands triggered by lifecycle events. This is orthogonal to the plugin system (compiled-in Rust adapters) and the skill system (WASM sandboxed). Hooks bridge Blufio to external tooling.
-
-**Architecture:**
-
-```
-blufio-hooks/
-  Cargo.toml             # Deps: blufio-core, blufio-bus, blufio-config, tokio
-  src/
-    lib.rs               # HookRegistry with register(), trigger()
-    runner.rs            # HookRunner: tokio::process::Command with timeout + env isolation
-    config.rs            # [[hooks]] TOML config parsing
-    events.rs            # 11 lifecycle hook points mapped from BusEvent variants
-```
-
-**11 lifecycle hook points (mapped to BusEvent):**
-
-| Hook | BusEvent Source | Environment Variables |
-|------|----------------|----------------------|
-| `on_startup` | AgentLoop init | BLUFIO_EVENT=startup |
-| `on_shutdown` | CancellationToken | BLUFIO_EVENT=shutdown |
-| `on_session_start` | Session(Created) | SESSION_ID, CHANNEL |
-| `on_session_end` | Session(Closed) | SESSION_ID |
-| `on_message_received` | Channel(MessageReceived) | CHANNEL, SENDER_ID |
-| `on_message_sent` | Channel(MessageSent) | CHANNEL |
-| `on_skill_invoked` | Skill(Invoked) | SKILL_NAME, SESSION_ID |
-| `on_skill_completed` | Skill(Completed) | SKILL_NAME, IS_ERROR |
-| `on_memory_extracted` | Memory(Extracted) | MEMORY_COUNT (new event) |
-| `on_error` | Error events | ERROR_TYPE, SEVERITY |
-| `on_health_degraded` | Resilience(DegradationLevelChanged) | FROM_LEVEL, TO_LEVEL |
-
-**TOML configuration:**
-
-```toml
-[[hooks]]
-event = "on_session_start"
-command = "/usr/local/bin/notify-new-session.sh"
-timeout_secs = 10
-priority = 100            # BTreeMap ordering (lower = earlier)
-environment = { SESSION_ID = "{{session_id}}", CHANNEL = "{{channel}}" }
-enabled = true
-```
-
-**Key integration points:**
-- HookRegistry subscribes to EventBus as reliable subscriber (guaranteed delivery)
-- Background task matches events to registered hooks, executes in BTreeMap priority order
-- Shell execution: `tokio::process::Command` with configurable timeout, stdin closed, stdout/stderr captured and logged
-- Sandbox: hooks run with restricted environment -- only TOML-specified env vars plus `BLUFIO_EVENT_TYPE`
-- No migration -- hooks are TOML-defined and stateless (fire-and-forget)
-- Hook failures logged and emitted as `BusEvent::Hook(HookEvent::Failed { ... })` but **never block the agent loop**
-- Maximum concurrent hooks: configurable (default 4) to prevent fork bombs
-
-### 9. Hot Reload -- blufio-config
-
-**Current state:** Config loaded once at startup via `figment` (TOML + env vars). No runtime reload. `BlufioConfig` passed by value/clone to subsystems.
-
-**Architecture change:**
-
-```
-blufio-config/
-  src/
-    hot_reload.rs         # NEW: ConfigWatcher using notify + ArcSwap
-    loader.rs             # Existing (unchanged)
-    model.rs              # Existing (unchanged)
-```
-
-**Core pattern using ArcSwap:**
+### Modified store.rs API
 
 ```rust
-use arc_swap::ArcSwap;
-use notify::{RecommendedWatcher, RecursiveMode, Event};
-
-pub struct ConfigWatcher {
-    config: Arc<ArcSwap<BlufioConfig>>,
-    _watcher: RecommendedWatcher,
+impl MemoryStore {
+    /// KNN vector search via sqlite-vec vec0 table.
+    /// Returns (memory_id, distance) pairs for the k nearest neighbors
+    /// among active memories.
+    pub async fn knn_search(
+        &self,
+        query_embedding: &[f32],
+        k: usize,
+    ) -> Result<Vec<(String, f32)>, BlufioError> {
+        let embedding_blob = vec_to_blob(query_embedding);
+        let limit = k as i64;
+        self.conn
+            .call(move |conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT memory_id, distance
+                     FROM memories_vec
+                     WHERE embedding MATCH ?1
+                       AND k = ?2
+                       AND status = 'active'"
+                )?;
+                let results = stmt
+                    .query_map(rusqlite::params![embedding_blob, limit], |row| {
+                        let id: String = row.get(0)?;
+                        let distance: f32 = row.get(1)?;
+                        Ok((id, distance))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(results)
+            })
+            .await
+            .map_err(storage_err)
+    }
 }
+```
 
-impl ConfigWatcher {
-    pub fn new(initial: BlufioConfig, config_path: PathBuf) -> Result<Self, BlufioError> {
-        let config = Arc::new(ArcSwap::from_pointee(initial));
-        let config_clone = config.clone();
+### Modified retriever.rs
 
-        let mut watcher = notify::recommended_watcher(move |res: Result<Event, _>| {
-            if let Ok(event) = res {
-                if event.kind.is_modify() {
-                    // Reload, validate, swap
-                    match load_and_validate_from_path(&config_path) {
-                        Ok(new_config) => {
-                            config_clone.store(Arc::new(new_config));
-                            tracing::info!("configuration reloaded");
-                        }
-                        Err(errors) => {
-                            tracing::error!(?errors, "config reload failed validation, keeping current");
-                        }
-                    }
-                }
+```rust
+/// Vector search via sqlite-vec KNN (replaces in-memory cosine scan).
+/// Returns (id, similarity) pairs, sorted by similarity descending.
+async fn vector_search(
+    &self,
+    query_embedding: &[f32],
+) -> Result<Vec<(String, f32)>, BlufioError> {
+    let knn_results = self.store.knn_search(
+        query_embedding,
+        self.config.max_retrieval_results,
+    ).await?;
+
+    // Convert distance to similarity: cosine distance = 1 - cosine similarity
+    let results: Vec<(String, f32)> = knn_results
+        .into_iter()
+        .filter_map(|(id, distance)| {
+            let similarity = 1.0 - distance;
+            if similarity >= self.config.similarity_threshold as f32 {
+                Some((id, similarity))
+            } else {
+                None
             }
-        })?;
+        })
+        .collect();
 
-        watcher.watch(&config_path, RecursiveMode::NonRecursive)?;
-        Ok(Self { config, _watcher: watcher })
-    }
-
-    pub fn current(&self) -> arc_swap::Guard<Arc<BlufioConfig>> {
-        self.config.load()
-    }
-
-    pub fn handle(&self) -> Arc<ArcSwap<BlufioConfig>> {
-        self.config.clone()
-    }
+    Ok(results)
 }
 ```
 
-**Reload scope (what can vs. cannot be hot-reloaded):**
+**What is removed:** `get_active_embeddings()` is no longer called in the search hot path. It remains available for other uses (validation, export) but the O(n) full-table scan is eliminated from retrieval.
 
-| Config Section | Hot Reload? | Reason |
-|----------------|-------------|--------|
-| `[agent]` system_prompt | Yes | Re-builds StaticZone on next assemble |
-| `[context]` thresholds | Yes | DynamicZone reads config per-request |
-| `[security]` TLS certs | Yes | Rebuild reqwest client on change |
-| `[cost]` budgets | Yes | BudgetTracker reads config per-check |
-| `[routing]` thresholds | Yes | ModelRouter reads config per-request |
-| `[hooks]` definitions | Yes | HookRegistry re-registers hooks |
-| `[scheduler.jobs]` | Yes | Scheduler reloads job list |
-| `[retention]` policies | Yes | Enforcer reads config per-run |
-| `[telegram]` token | **No** | Requires channel disconnect/reconnect |
-| `[storage]` path/key | **No** | Requires DB close/reopen |
-| `[anthropic]` API key | **No** | Requires provider re-initialization |
+## Integration Detail: Performance Benchmarking Suite
 
-**Key integration points:**
-- New workspace dependencies: `arc-swap = "1"` (lock-free reads), `notify = "7"` (file watching)
-- ConfigWatcher created in serve.rs, `Arc<ArcSwap<BlufioConfig>>` shared to all subsystems
-- Subsystems reading config per-request (router, context, cost) get latest config via `config.load()` on each call
-- Subsystems caching config (StaticZone, TLS client) need explicit reload handlers triggered by ConfigWatcher callback
-- EventBus: `BusEvent::Config(ConfigEvent::Reloaded { changed_sections })` variant
-- **Critical safety rule:** ConfigWatcher runs full `validation::validate_config()` on new config. If validation fails, keep old config and log error. Never swap invalid config.
+### Existing Infrastructure
 
-### 10. New Channel Adapters (iMessage/Email/SMS)
+The project already has:
+- 4 criterion bench files: `bench_memory.rs`, `bench_context.rs`, `bench_compaction.rs`, `bench_pii.rs`
+- `bench_results` SQLite table (V11 migration) for storing benchmark results
+- `.github/workflows/bench.yml` with >20% regression detection
+- `cargo bench -p blufio` as the bench entry point
 
-Each follows the established pattern: new crate implementing `ChannelAdapter` + `PluginAdapter` traits from blufio-core, feature-gated in the main binary. This is the same pattern used by all 8 existing channel adapters.
+### New Benchmarks to Add
 
-#### blufio-imessage (NEW CRATE)
-
+**1. bench_injection.rs (NEW file)**
 ```
-blufio-imessage/
-  Cargo.toml             # Deps: blufio-core, blufio-config, reqwest, async-trait, serde, serde_json
-  src/
-    lib.rs               # BlueBubblesChannel implementing ChannelAdapter
-    api.rs               # BlueBubbles REST API client (HTTP + password auth)
-    webhook.rs           # BlueBubbles webhook receiver
-    types.rs             # BlueBubbles API response types
+Benchmark groups:
+- injection_classify: RegexSet fast-path + detail extraction at 1KB/5KB/10KB input sizes
+- injection_score: calculate_score() with 1/3/5/10 matches
+- injection_pipeline: Full pipeline.scan_input() with clean/suspicious/hostile inputs
+- injection_credential: OutputScreener.check_credentials() with mixed content
+- injection_output_screen: Full screen_tool_args() with various arg sizes
 ```
 
-- Talks to BlueBubbles macOS server via REST API (HTTP, password query param auth)
-- Receives messages via BlueBubbles webhooks (POST to gateway extra public route)
-- Webhook registration via REST API on connect()
-- Feature flag: `imessage = ["dep:blufio-imessage"]` in main binary
-- Config: `[imessage]` section with `server_url`, `password_vault_key`, `webhook_port`
-- Requires BlueBubbles server running on macOS -- documented as prerequisite
-
-#### blufio-email (NEW CRATE)
-
+**2. bench_memory.rs (MODIFIED -- add vec group)**
 ```
-blufio-email/
-  Cargo.toml             # Deps: blufio-core, blufio-config, lettre, mail-parser, async-trait, tokio
-  src/
-    lib.rs               # EmailChannel implementing ChannelAdapter
-    imap.rs              # IMAP polling loop for receive()
-    smtp.rs              # SMTP for send() via lettre
-    types.rs             # Email message types
+New benchmark groups:
+- memory_knn_search: sqlite-vec KNN at 100/500/1000/5000 memories
+  (requires in-memory SQLite with sqlite-vec loaded)
+- memory_vec_insert: vec0 INSERT throughput at batch sizes
+- memory_vec_sync: dual-write (memories + memories_vec) vs single-write overhead
 ```
 
-- IMAP poll loop for receive(), SMTP send for send()
-- Config: `[email]` section with `imap_host`, `smtp_host`, `username`, `password_vault_key`, `poll_interval_secs`, `allowed_senders`
-- Feature flag: `email = ["dep:blufio-email"]`
-- New workspace dependencies: `lettre = "0.11"` (SMTP), `mail-parser = "0.9"` (IMAP message parsing)
+**3. Binary size and RSS tracking (bench.yml enhancement)**
+```yaml
+# After benchmarks run:
+- name: Measure binary size
+  run: |
+    cargo build --release -p blufio
+    ls -la target/release/blufio | awk '{print $5}' > binary-size.txt
+    echo "Binary size: $(cat binary-size.txt) bytes"
 
-#### blufio-sms (NEW CRATE)
-
-```
-blufio-sms/
-  Cargo.toml             # Deps: blufio-core, blufio-config, reqwest, async-trait
-  src/
-    lib.rs               # TwilioSmsChannel implementing ChannelAdapter
-    api.rs               # Twilio REST API client
-    webhook.rs           # Twilio webhook handler (receives SMS via HTTP POST)
-```
-
-- Twilio API for outbound, Twilio webhook for inbound (same pattern as WhatsApp adapter)
-- Webhook endpoint registered on gateway as extra public route (same mechanism as `blufio-whatsapp`)
-- Config: `[sms]` section with `account_sid`, `auth_token_vault_key`, `from_number`, `webhook_url`
-- Feature flag: `sms = ["dep:blufio-sms"]`
-- No new dependencies (uses reqwest, already in workspace)
-
-### 11. PII Redaction Expansion -- blufio-security
-
-**Current state:** `redact.rs` has 4 `LazyLock` regex patterns (Anthropic keys, generic sk-*, Bearer tokens, Telegram bot tokens) plus exact-match vault values. The `RedactingWriter` wraps `std::io::Write`.
-
-**Architecture change:**
-
-```
-blufio-security/
-  src/
-    pii.rs                # NEW: PII-specific patterns and detection logic
-    redact.rs             # Import and use PII patterns alongside existing secret patterns
+- name: Measure peak RSS (optional, Linux only)
+  run: |
+    /usr/bin/time -v target/release/blufio doctor 2>&1 | \
+      grep "Maximum resident" | awk '{print $NF}' > peak-rss.txt || true
 ```
 
-**New PII patterns:**
+### Benchmark Data Strategy
+
+The `bench_results` table (V11) already exists. The CLI `blufio bench` command can store results there. The new benchmarks should:
+1. Run via `cargo bench -p blufio` (criterion, for CI regression detection)
+2. Optionally store results via `blufio bench store` (for historical tracking in SQLite)
+3. Compare against baselines via `blufio bench compare` (for operator visibility)
+
+## Integration Detail: Injection Defense Hardening
+
+### Current State
+
+The injection defense system has:
+- 11 patterns across 3 categories (RoleHijacking, InstructionOverride, DataExfiltration)
+- Two-phase detection: RegexSet fast path + individual Regex detail extraction
+- Confidence scoring: severity + positional bonus + multi-match bonus
+- 5-layer pipeline: L1 classifier, L3 HMAC boundaries, L4 output screening, L5 HITL
+- Custom patterns via TOML config
+
+### Expansion Areas
+
+**New injection categories to add to `InjectionCategory` enum:**
 
 ```rust
-// Email addresses
-Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap(),
-// Phone numbers (international format)
-Regex::new(r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}").unwrap(),
-// US SSN
-Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap(),
-// Credit card numbers (space or dash separated)
-Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap(),
-// IPv4 addresses
-Regex::new(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b").unwrap(),
-```
-
-**Key integration points:**
-- `SecurityConfig` gains `[security.pii]` subsection with `redact_email`, `redact_phone`, `redact_ssn`, `redact_credit_card`, `redact_ip` booleans (all default true)
-- PII redaction applied in two places: (1) log output via `RedactingWriter`, (2) optional pre-storage redaction of LLM responses
-- `DataClassification::Restricted` auto-triggers all PII redaction regardless of per-type config
-- PII detection events published to EventBus for audit logging
-- `redact()` function gains an optional `PiiConfig` parameter to control which patterns are active
-
-### 12. GDPR Tooling -- blufio (CLI binary)
-
-**Architecture:** New CLI subcommands in the main binary. No separate crate because GDPR operations orchestrate across existing crates (storage, memory, audit) and the CLI is the right surface.
-
-```
-blufio/src/
-  gdpr.rs                 # NEW: GDPR CLI commands module
-```
-
-**CLI commands:**
-
-```
-blufio gdpr erase --user <user_id> [--dry-run]
-blufio gdpr export --user <user_id> [--format json|csv] [--since 2026-01-01] [--classification-max confidential]
-blufio gdpr report --user <user_id>
-```
-
-**Key integration points:**
-- `gdpr erase`: cascading delete across sessions, messages, memories for a user_id. Audit entries for the user are **redacted** (content replaced with "[ERASED]") but **not deleted** (hash chain integrity preserved). Queue entries purged.
-- `gdpr export`: JSON/CSV export filtered by user, date range, data type. Uses `DataClassification` to filter fields (e.g., `--classification-max internal` excludes Confidential content).
-- `gdpr report`: generates transparency report listing: what data types are stored, retention policies in effect, processing purposes, data recipients (channels).
-- All GDPR operations create audit entries with `actor = "admin"`, `action = "gdpr.erase"` / `"gdpr.export"`.
-- Dry-run mode for erase: shows what would be deleted without executing.
-
-### 13. OpenTelemetry -- blufio-otel (NEW CRATE)
-
-**Rationale for new crate:** Observability adapters are feature-gated. OpenTelemetry is optional alongside Prometheus (which has its own crate, blufio-prometheus). Keeping OTel in a separate crate avoids pulling opentelemetry + OTLP + protobuf dependencies when not needed.
-
-**Architecture:**
-
-```
-blufio-otel/
-  Cargo.toml             # Deps: blufio-core, opentelemetry, opentelemetry-otlp,
-                          #   opentelemetry_sdk, tracing-opentelemetry
-  src/
-    lib.rs               # OtelSetup with init(), shutdown(), create_layer()
-    config.rs            # OtelConfig validation
-```
-
-**Integration pattern:**
-
-```rust
-// In serve.rs, alongside existing Prometheus setup:
-#[cfg(feature = "otel")]
-{
-    let otel_layer = blufio_otel::create_tracing_layer(&config.otel)?;
-    // Added as tracing-subscriber layer alongside existing env-filter and fmt layers
+pub enum InjectionCategory {
+    RoleHijacking,           // existing
+    InstructionOverride,     // existing
+    DataExfiltration,        // existing
+    EncodingObfuscation,     // NEW: base64, hex, rot13 encoded instructions
+    DelimiterManipulation,   // NEW: markdown/HTML delimiters to create false boundaries
+    IndirectInjection,       // NEW: patterns found in tool output (MCP/WASM returns)
 }
 ```
 
-**Key integration points:**
-- Feature flag: `otel = ["dep:blufio-otel"]` (disabled by default per PRD requirement)
-- Config: `[otel]` section with `enabled`, `endpoint`, `service_name`, `protocol` (grpc/http), `sample_rate`
-- Coexists with Prometheus: both can be active simultaneously (Prometheus for pull metrics, OTel for push traces)
-- Uses `tracing-opentelemetry` layer which piggybacks on existing `#[instrument]` and `tracing::info!()` calls -- **zero code changes needed in any subsystem**
-- Gateway handlers should extract/inject W3C trace context headers for distributed tracing
-- New workspace dependencies: `opentelemetry = "0.28"`, `opentelemetry-otlp = "0.28"`, `opentelemetry_sdk = "0.28"`, `tracing-opentelemetry = "0.29"`
+**New patterns to add to PATTERNS array (expanding from 11 to ~25-30):**
 
-### 14. OpenAPI Spec -- blufio-gateway
+| Category | Pattern | Severity | Rationale |
+|----------|---------|----------|-----------|
+| RoleHijacking | `(?i)act\s+as\s+(if\s+)?you'?re?\s+not\s+bound` | 0.4 | DAN-style unbounding |
+| RoleHijacking | `(?i)pretend\s+(you\s+are|to\s+be)\s+` | 0.3 | Persona hijacking |
+| RoleHijacking | `(?i)(?:from\s+now\s+on|henceforth)\s+you\s+(will|shall|must)\s+` | 0.3 | Future-tense role override |
+| InstructionOverride | `(?i)(?:developer|admin|debug)\s+mode` | 0.4 | Mode switching attacks |
+| InstructionOverride | `(?i)reveal\s+(your|the)\s+(system\s+)?prompt` | 0.4 | System prompt extraction |
+| InstructionOverride | `(?i)<\|(?:system|user|assistant)\|>` | 0.4 | ChatML delimiter injection |
+| InstructionOverride | `(?i)<<\s*SYS\s*>>` | 0.4 | Llama-style system delimiter |
+| InstructionOverride | `(?i)\[/?SYSTEM\]` | 0.3 | Bracketed system tag |
+| DataExfiltration | `(?i)(?:fetch|load|visit|open)\s+(https?://|ftp://)` | 0.3 | URL-triggered exfiltration |
+| DataExfiltration | `(?i)(?:include|import|require|fetch)\s+(?:the\s+)?(?:file|url|link)` | 0.2 | Resource inclusion |
+| DataExfiltration | `(?i)(?:curl|wget|http\s+get)\s+` | 0.3 | Command-line exfiltration |
+| DelimiterManipulation | `(?i)```(?:system|instruction|admin)` | 0.3 | Code block false boundary |
+| DelimiterManipulation | `(?i)---\s*(?:new\s+)?(?:system|instruction)` | 0.3 | Markdown HR as delimiter |
+| EncodingObfuscation | `(?i)(?:base64|b64)\s*(?:decode|:\s)` | 0.2 | Explicit encoding reference |
 
-**Architecture change:**
-
-```
-blufio-gateway/
-  src/
-    openapi.rs            # NEW: OpenAPI spec composition and /openapi.json handler
-    handlers.rs           # Add #[utoipa::path(...)] annotations to existing handlers
-    server.rs             # Mount /openapi.json route
-```
-
-**Key integration points:**
-- New workspace dependencies: `utoipa = "5"`, `utoipa-axum = "0.2"`
-- Annotate existing handler functions with `#[utoipa::path]` proc macros
-- Request/response types annotated with `#[derive(utoipa::ToSchema)]`
-- Spec served at GET `/openapi.json` (compile-time generated, zero runtime cost)
-- Optional Swagger UI at `/docs` gated behind `[gateway.swagger_ui]` config boolean
-- Does NOT require restructuring routes -- `utoipa-axum` works with existing axum Router patterns
-- Covers: `/v1/chat/completions`, `/v1/responses`, `/v1/tools`, `/v1/sessions`, `/v1/health`, `/v1/keys`, `/v1/webhooks`, `/v1/batch`
-
-### 15. Litestream Replication -- External Sidecar
-
-**Architecture:** Litestream is NOT embedded in the Rust binary. It runs as a separate Go process alongside Blufio. This is the correct integration pattern because Litestream is designed as a sidecar that monitors SQLite WAL files.
-
-**Integration approach:**
-
-```bash
-# Option A: Litestream wraps the blufio process
-litestream replicate -config /etc/litestream.yml -exec "blufio serve"
-
-# Option B: Litestream as separate sidecar
-litestream replicate /var/lib/blufio/blufio.db s3://bucket/blufio/
-```
-
-**Blufio provides:**
-1. Documentation on Litestream setup (docs/litestream.md)
-2. CLI helper: `blufio litestream init` (generates litestream.yml template)
-3. Docker compose with Litestream sidecar container
-4. `blufio doctor` gains Litestream health check (process running, replication lag)
-
-**Critical compatibility issue:** Litestream requires exclusive control of WAL checkpointing. When Litestream is active, SQLite must not auto-checkpoint. blufio-storage must disable auto-checkpoint via `PRAGMA wal_autocheckpoint=0` when `[storage.litestream_mode]` is true. Without this, Litestream and SQLite will race on checkpoint operations, causing replication gaps.
-
-**Key integration points:**
-- No new crate or Rust dependency
-- blufio-storage already uses WAL mode (Litestream requirement satisfied)
-- SQLCipher compatibility: Litestream replicates encrypted WAL pages (transparent)
-- New config: `[storage] litestream_mode = false` (when true, disables auto-checkpoint)
-- Docker compose template: `services: { litestream: { image: litestream/litestream, ... } }`
-
----
-
-## Data Flow Changes
-
-### Pre-v1.5 Data Flow
-
-```
-Channel.receive() -> AgentLoop.handle_inbound()
-  -> ContextEngine.assemble() [static + conditional + dynamic]
-  -> Provider.stream() -> consume_stream()
-  -> Channel.send() -> Storage.insert_message()
-```
-
-### Post-v1.5 Data Flow (additions marked with >>)
-
-```
-Channel.receive()
-  >> InjectionDefense.classify_input()           # L1 pattern check
-  >> AuditLogger.append("message.received")      # tamper-evident log
-  >> HookRegistry.trigger("on_message_received") # shell hooks
-  -> AgentLoop.handle_inbound()
-  -> ContextEngine.assemble()
-     >> CompactionEngine.compact_if_needed()      # multi-level with quality gates
-     >> boundary::wrap_user_content()             # L3 HMAC boundary tokens
-  -> Provider.stream() -> consume_stream()
-  >> OutputValidator.scan()                       # L4 check for prompt leakage
-  >> PiiRedactor.redact_response()                # if configured
-  -> Channel.send()
-  -> Storage.insert_message()
-  >> AuditLogger.append("message.sent")
-  >> HookRegistry.trigger("on_message_sent")
-```
-
-### New Background Tasks
-
-```
-Scheduler (tokio task, 500ms tick):
-  -> Check cron expressions against current time
-  -> Execute due jobs:
-     -> retention:enforce -> RetentionEnforcer.enforce()
-     -> memory:cleanup -> MemoryStore.evict_lru()
-     -> backup:run -> backup logic (existing)
-
-ConfigWatcher (notify file events):
-  -> Detect blufio.toml modification
-  -> Reload + validate via load_and_validate()
-  -> ArcSwap::store(new_config)
-  -> Publish ConfigEvent::Reloaded to EventBus
-
-MemoryValidator (periodic tokio task):
-  -> Check embedding dimensionality consistency
-  -> Re-index stale entries via file watcher events
-  -> LRU eviction if over max_index_size
-
-AuditLogger (mpsc consumer):
-  -> Receive audit entries from mpsc channel
-  -> Compute hash chain (hash_self = SHA-256(canonical + hash_prev))
-  -> Batch insert to audit.db
-```
-
----
-
-## Dependency Graph (New Edges)
-
-```
-blufio (binary)
-  +-- blufio-scheduler (NEW) --> blufio-core, blufio-bus, blufio-config
-  +-- blufio-audit (NEW) --> blufio-core, sha2, serde_json, tokio-rusqlite
-  +-- blufio-hooks (NEW) --> blufio-core, blufio-bus, blufio-config
-  +-- blufio-otel (NEW) --> blufio-core, opentelemetry, tracing-opentelemetry
-  +-- blufio-imessage (NEW) --> blufio-core, blufio-config, reqwest
-  +-- blufio-email (NEW) --> blufio-core, blufio-config, lettre, mail-parser
-  +-- blufio-sms (NEW) --> blufio-core, blufio-config, reqwest
-
-  blufio-context --> (no new deps, compaction is internal refactor)
-  blufio-security --> hmac (already in workspace)
-  blufio-memory --> notify (NEW workspace dep)
-  blufio-config --> arc-swap (NEW), notify (NEW)
-  blufio-gateway --> utoipa (NEW), utoipa-axum (NEW)
-```
-
-**New workspace-level dependencies (12 total):**
-
-| Dependency | Version | Purpose | Used By |
-|-----------|---------|---------|---------|
-| `arc-swap` | 1 | Lock-free config hot reload | blufio-config |
-| `notify` | 7 | File system watching | blufio-config, blufio-memory |
-| `utoipa` | 5 | OpenAPI spec generation | blufio-gateway |
-| `utoipa-axum` | 0.2 | Axum route integration for utoipa | blufio-gateway |
-| `croner` | 2 | Cron expression parsing | blufio-scheduler |
-| `lettre` | 0.11 | SMTP email sending | blufio-email |
-| `mail-parser` | 0.9 | IMAP email parsing | blufio-email |
-| `opentelemetry` | 0.28 | OTel API | blufio-otel |
-| `opentelemetry-otlp` | 0.28 | OTLP exporter | blufio-otel |
-| `opentelemetry_sdk` | 0.28 | OTel SDK | blufio-otel |
-| `tracing-opentelemetry` | 0.29 | tracing <-> OTel bridge | blufio-otel |
-
-Note: `hmac`, `sha2`, `tokio-rusqlite`, `reqwest`, `serde`, `serde_json`, `chrono`, `uuid` are already workspace dependencies.
-
----
-
-## Suggested Build Order (Dependency-Driven)
-
-The build order is determined by which features are prerequisites for others. Features within the same phase have no inter-dependencies and can be parallelized.
-
-### Phase 1: Foundation Layer
-*No inter-dependencies. Everything else builds on these.*
-
-1. **Data Classification (blufio-core)** -- 1 plan
-   - Adds `DataClassification` enum and `Classifiable` trait
-   - Zero breaking changes, purely additive
-   - Required by: PII redaction, retention policies, GDPR, audit trail
-
-2. **PII Redaction Expansion (blufio-security)** -- 1 plan
-   - Extends `redact.rs` with PII patterns, adds `pii.rs` module
-   - Uses DataClassification for redaction depth decisions
-   - Required by: GDPR tooling, prompt injection output validator
-
-3. **Hot Reload Infrastructure (blufio-config)** -- 1 plan
-   - ArcSwap + notify file watcher for live config
-   - Required by: scheduler (reload jobs), hooks (reload definitions), all subsystems reading config
-
-### Phase 2: Storage & Data Infrastructure
-*Migrations and data infrastructure that later features persist into.*
-
-4. **Audit Trail (blufio-audit)** -- 2 plans (crate + integration wiring)
-   - New crate, hash-chained SQLite log, migration V14
-   - Required by: GDPR (audit entries on erasure), retention (audit enforcement events)
-   - Depends on: DataClassification (Phase 1)
-
-5. **Memory Enhancements (blufio-memory)** -- 2 plans (retrieval pipeline + background tasks)
-   - Temporal decay, MMR, LRU eviction, background validator, migration V13
-   - Depends on: Hot Reload (Phase 1, for live config updates)
-
-6. **Retention Policies (blufio-storage)** -- 1 plan
-   - RetentionEnforcer with soft-delete, migration V15
-   - Depends on: DataClassification (Phase 1), Audit Trail (Phase 2)
-
-### Phase 3: Context & Security Pipeline
-*Agent loop modifications that change message processing flow.*
-
-7. **Multi-Level Compaction (blufio-context)** -- 2 plans (engine refactor + quality gates)
-   - Promote compaction.rs to module, add L0-L3 levels and quality scoring
-   - Depends on: Hot Reload (Phase 1, for live threshold tuning)
-
-8. **Prompt Injection Defense (blufio-security + blufio-agent)** -- 2 plans (classifier + boundary/output)
-   - L1 pattern classifier, L3 HMAC boundaries, L4 output validator, L5 human-in-loop
-   - Modifies AgentLoop::handle_inbound() flow
-   - Depends on: PII Redaction (Phase 1, shared redaction infrastructure), Audit Trail (Phase 2, security event logging)
-
-### Phase 4: Operational Automation
-*Scheduler and hooks that automate operations from earlier phases.*
-
-9. **Cron/Scheduler (blufio-scheduler)** -- 2 plans (crate + systemd export)
-   - New crate, migration V12, job execution loop
-   - Depends on: Retention Policies (Phase 2, scheduler runs `retention:enforce`)
-   - Depends on: Memory Enhancements (Phase 2, scheduler runs `memory:cleanup`)
-   - Depends on: Hot Reload (Phase 1, live job list updates)
-
-10. **Hook System (blufio-hooks)** -- 1 plan
-    - New crate, BusEvent-driven shell execution with BTreeMap priority
-    - Depends on: EventBus event variants from Phases 2-3 (new Compaction, Security, Memory events)
-
-### Phase 5: Channels & API
-*New adapters and API surface. Fully independent of each other and mostly independent of Phases 1-4.*
-
-11. **iMessage Adapter (blufio-imessage)** -- 1 plan
-12. **Email Adapter (blufio-email)** -- 1 plan
-13. **SMS Adapter (blufio-sms)** -- 1 plan
-14. **OpenAPI Spec (blufio-gateway)** -- 1 plan
-
-### Phase 6: Observability & Infrastructure
-
-15. **OpenTelemetry (blufio-otel)** -- 1 plan
-    - Benefits from all Phase 1-4 tracing spans but has no hard dependency
-
-16. **Litestream Replication** -- 1 plan
-    - Documentation, CLI helper, Docker compose, storage.litestream_mode config
-
-### Phase 7: Compliance & Export
-
-17. **GDPR Tooling (blufio CLI)** -- 1 plan
-    - CLI subcommands for erasure, export, reporting
-    - Depends on: DataClassification, PII Redaction, Audit Trail, Retention Policies (all earlier phases)
-
-### Phase 8: Code Quality Hardening
-
-18. **Clippy unwrap enforcement** -- 1 plan
-19. **Test coverage expansion** -- 1 plan
-20. **Bug fixes and tech debt** -- 1 plan
-
-**Total: ~24 plans across 8 phases (vs. 16 plans across 7 phases for v1.4)**
-
----
-
-## EventBus Extensions
-
-The existing `BusEvent` enum (7 variants) needs these new variants for v1.5:
+**Encoding detection (new capability):**
 
 ```rust
-pub enum BusEvent {
-    // Existing 7 variants (unchanged):
-    Session(SessionEvent),
-    Channel(ChannelEvent),
-    Skill(SkillEvent),
-    Node(NodeEvent),
-    Webhook(WebhookEvent),
-    Batch(BatchEvent),
-    Resilience(ResilienceEvent),
-
-    // New v1.5 variants (7 additions):
-    Compaction(CompactionEvent),      // Triggered, Completed with level/quality
-    Security(SecurityEvent),          // InjectionDetected, PiiFound
-    Memory(MemoryEvent),              // Extracted, Evicted, Validated
-    Scheduler(SchedulerEvent),        // JobTriggered, JobCompleted, JobFailed
-    Config(ConfigEvent),              // Reloaded, ValidationFailed
-    Retention(RetentionEvent),        // Enforced, PolicyUpdated
-    Hook(HookEvent),                  // Executed, Failed, TimedOut
+/// Check if input contains base64-encoded injection patterns.
+/// Scans for base64 segments, decodes them, and re-classifies the decoded content.
+fn check_encoded_content(input: &str) -> Vec<InjectionMatch> {
+    // Find base64 candidate segments (40+ chars of [A-Za-z0-9+/=])
+    // Decode each segment
+    // Run classifier on decoded text
+    // If decoded text triggers patterns, return matches with EncodingObfuscation category
 }
 ```
 
-Each new variant requires: `event_type_string()` match arm, `Serialize`/`Deserialize` derives, and serde roundtrip tests. The exhaustive match on `BusEvent` in `event_type_string()` ensures the compiler catches any unhandled variants.
+**Implementation approach:** Add this as an optional second pass after the RegexSet fast path. Only runs if the fast path finds zero matches AND the input contains suspicious characteristics (long alphanumeric sequences suggesting encoding). This avoids performance overhead on clean inputs.
 
----
+### Credential Pattern Expansion (output_screen.rs)
+
+Current credential patterns: 6 (Anthropic, OpenAI project, OpenAI, AWS, database URI, Bearer token).
+
+**New patterns to add:**
+
+| Name | Pattern | Rationale |
+|------|---------|-----------|
+| `google_api_key` | `AIza[0-9A-Za-z_-]{35}` | Google/Gemini API keys |
+| `github_token` | `gh[ps]_[A-Za-z0-9]{36,}` | GitHub personal/secret tokens |
+| `slack_token` | `xox[baprs]-[0-9a-zA-Z-]{10,}` | Slack bot/app tokens |
+| `stripe_key` | `(?:sk\|pk)_(?:test\|live)_[0-9a-zA-Z]{24,}` | Stripe API keys |
+| `jwt_token` | `eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+` | JWT tokens (three-part base64) |
+| `private_key_block` | `-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----` | PEM private key headers |
+
+### PII Pattern Sharing (Cross-Crate)
+
+The existing architecture already has PII detection shared between `blufio-security::pii` and `blufio-injection::output_screen.rs`. The L4 output screener calls `detect_pii()` from blufio-security. This pattern is already correctly wired (Phase 64 completed this integration). No architectural change needed -- just expand the pattern sets in their respective crates.
+
+## Patterns to Follow
+
+### Pattern 1: Dual-Write Sync (vec0 + memories)
+**What:** Every MemoryStore write operation updates both the memories table and the memories_vec virtual table within the same tokio-rusqlite `call()` closure.
+**When:** Any mutation to memories that affects embedding or status.
+**Why:** SQLite triggers don't work with vec0 virtual tables. Keeping both writes in the same closure ensures atomicity through tokio-rusqlite's single-writer thread.
+```rust
+self.conn.call(move |conn| {
+    let tx = conn.transaction()?;
+    tx.execute("INSERT INTO memories ...", params![...])?;
+    tx.execute("INSERT INTO memories_vec(memory_id, embedding, status) VALUES (?1, ?2, ?3)",
+        params![id, embedding_blob, "active"])?;
+    tx.commit()?;
+    Ok(())
+}).await
+```
+
+### Pattern 2: Lazy Extension Loading
+**What:** Register sqlite-vec via `sqlite3_auto_extension` once at process startup, before any connection is opened.
+**When:** In the storage/memory initialization path.
+**Why:** `auto_extension` is global and must precede connection creation. Calling it multiple times is safe (idempotent) but unnecessary.
+
+### Pattern 3: Feature-Gated Benchmarks
+**What:** Benchmarks that need sqlite-vec loaded should gate on test infrastructure, not production features.
+**When:** bench_memory.rs KNN benchmarks.
+**Why:** Criterion benchmarks run in the test profile. The sqlite-vec extension must be loaded in the bench harness setup, not via the production auto_extension path.
+
+### Pattern 4: Pattern Array as Single Source of Truth
+**What:** All injection patterns defined in one `PATTERNS` array, with RegexSet and individual Regex compiled from the same source (existing pattern from patterns.rs).
+**When:** Adding new injection patterns.
+**Why:** Prevents index mismatch between RegexSet (fast path) and individual Regex (detail extraction). This is the same architecture used by `blufio-security::pii`.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Monolithic Migration
-**What:** Putting all 4 schema changes in one massive migration file.
-**Why bad:** If any part fails, the entire migration rolls back. Refinery tracks migrations individually.
-**Instead:** One migration per feature domain (V12 scheduler, V13 memory, V14 audit, V15 retention). Each independently testable and rollback-safe.
+### Anti-Pattern 1: Replacing memories.embedding BLOB with vec0-only storage
+**What:** Removing the embedding BLOB column from the memories table and storing embeddings only in vec0.
+**Why bad:** (a) MMR reranking in retriever.rs reads embeddings from Memory structs to compute pairwise similarity. If embeddings are only in vec0, every MMR step requires a vec0 query. (b) GDPR export needs to include embeddings. (c) Memory validation uses embeddings for duplicate detection. (d) vec0 is an extension -- if it fails to load, the system becomes non-functional instead of degrading to the current in-memory search.
+**Instead:** Keep the BLOB column. vec0 is an index, like FTS5 is an index for content.
 
-### Anti-Pattern 2: Circular Crate Dependencies
-**What:** blufio-audit depending on blufio-agent which depends on blufio-audit.
-**Why bad:** Compile error. Rust workspace does not allow circular dependencies.
-**Instead:** Audit subscribes to EventBus (one-way). Agent publishes to EventBus. No direct crate dependency between them. AuditLogger injected as `Arc<AuditLogger>` via serve.rs wiring.
+### Anti-Pattern 2: Loading all embeddings for benchmarking
+**What:** Benchmarking KNN by loading all embeddings into Rust and measuring cosine similarity.
+**Why bad:** This benchmarks the OLD path, not the new sqlite-vec path. The point of sqlite-vec is to avoid loading all embeddings.
+**Instead:** Benchmark the actual `store.knn_search()` path that hits sqlite-vec's internal index.
 
-### Anti-Pattern 3: Synchronous Audit Writes in Hot Path
-**What:** Blocking the agent loop's `handle_inbound()` to write audit entries to SQLite.
-**Why bad:** Audit storage latency (1-5ms per write) directly impacts response latency.
-**Instead:** Audit writes go through a buffered mpsc channel. Background tokio task flushes to SQLite in batches (every 100ms or 50 entries). Agent loop sends and continues immediately.
+### Anti-Pattern 3: Encoding detection on every input
+**What:** Running base64/hex decode + re-classify on every user message.
+**Why bad:** 99%+ of inputs are clean. Decoding is expensive relative to regex. This adds latency to every message.
+**Instead:** Only run encoding detection when (a) the primary classifier finds zero matches AND (b) heuristics detect long alphanumeric segments suggesting encoding.
 
-### Anti-Pattern 4: Hot Reload Without Validation
-**What:** Swapping config on file change without re-running `validate_config()`.
-**Why bad:** Invalid config silently takes effect, causing runtime errors (e.g., negative thresholds, missing required fields).
-**Instead:** ConfigWatcher runs full validation pipeline on new config. If validation fails, keep current config, log error, publish `ConfigEvent::ValidationFailed`. Never swap invalid config.
-
-### Anti-Pattern 5: PII Stored Then Redacted on Read
-**What:** Storing PII in plain text and redacting every time data is read.
-**Why bad:** PII remains in DB (compliance risk), redaction cost on every read.
-**Instead:** Optionally redact PII before storage write (configurable). Store redacted version. Original only in encrypted audit log for compliance evidence.
-
-### Anti-Pattern 6: Hook Failures Blocking Agent Loop
-**What:** Agent loop awaiting hook completion before processing next message.
-**Why bad:** A hanging hook script blocks all message processing.
-**Instead:** Hooks triggered via EventBus subscription. Hook execution is fire-and-forget with per-hook timeout. Failures logged and emitted as events but never propagate to the agent loop or block message processing.
-
-### Anti-Pattern 7: Global Config Mutex for Hot Reload
-**What:** Using `Arc<RwLock<BlufioConfig>>` for hot reload.
-**Why bad:** Every config read takes a read lock. Under high concurrency, writer starvation or reader contention.
-**Instead:** `ArcSwap` provides lock-free reads (just a pointer load). Writes are also lock-free (atomic pointer swap). Zero contention on reads, which happen thousands of times per second.
-
----
+### Anti-Pattern 4: Failing CI on any benchmark regression
+**What:** Setting the regression threshold to 0% or 5%.
+**Why bad:** Criterion measurements have natural variance, especially in CI (shared runners, variable load). Tight thresholds cause flaky failures that erode trust in the CI signal.
+**Instead:** Keep the existing 20% threshold for CI failure. Log all regressions (even small ones) as warnings for human review.
 
 ## Scalability Considerations
 
-| Concern | At 100 users | At 10K users | At 1M users |
-|---------|--------------|--------------|-------------|
-| Audit log size | ~10MB/day, negligible | ~1GB/day, partition by month | Out of scope (single-instance) |
-| Compaction CPU | Negligible (few Haiku calls) | Linear with active sessions | LLM API cost dominates |
-| Memory index | <10K entries, all in LRU | LRU keeps at 10K via eviction | Not applicable |
-| Hook execution | Serial execution fine | Parallel with pool (max 4) | Not applicable |
-| PII regex | ~1ms/message (5 patterns) | ~1ms/message (regex is O(n)) | Not applicable |
-| Config reload | Instant via ArcSwap | Instant (single pointer swap) | N/A |
-| Audit chain verify | <1s for full chain | ~10s for 1M entries | Chunk-based verification needed |
-| Retention enforcement | <1s for 100K messages | ~5s with DELETE batching | Paginated DELETE with LIMIT |
+| Concern | Current (in-memory) | With sqlite-vec (100-1K memories) | At 10K memories | At 100K memories |
+|---------|---------------------|----------------------------------|-----------------|------------------|
+| Vector search latency | Load all + O(n) scan: ~1-5ms at 500 | KNN query: <1ms | KNN query: ~1-5ms | KNN query: ~5-20ms |
+| Memory usage for search | All embeddings in RAM: ~750KB at 500 (384 * 4B * 500) | Near zero (SQLite manages) | Near zero | Near zero |
+| Insert overhead | 1 write | 2 writes (memories + vec0) | Same | Same |
+| Cold start | No index build | vec0 index in SQLite file | Same | Same |
+| BM25 search | FTS5 (unchanged) | FTS5 (unchanged) | FTS5 (unchanged) | FTS5 (unchanged) |
+| Injection scan | 11 patterns: <0.1ms | ~25 patterns: <0.2ms | N/A | N/A |
 
----
+## Build Order and Dependencies
+
+The three features have minimal cross-dependency. Suggested build order:
+
+```
+Phase 1: sqlite-vec Integration
+  1a. Add sqlite-vec dependency to workspace Cargo.toml
+  1b. Register extension in storage/memory initialization
+  1c. V15 migration: CREATE vec0 table + backfill existing data
+  1d. Add knn_search() to MemoryStore
+  1e. Add dual-write to save(), soft_delete(), supersede(), batch_evict()
+  1f. Replace vector_search() in retriever.rs to use knn_search()
+  1g. Verify: existing tests pass, new KNN tests pass
+
+Phase 2: Injection Defense Hardening
+  2a. Add new categories to InjectionCategory enum
+  2b. Expand PATTERNS array (~15 new patterns)
+  2c. Add encoding detection (base64/hex decode + re-classify)
+  2d. Expand credential patterns in output_screen.rs (~6 new patterns)
+  2e. Update tests for all new patterns
+  2f. Verify: existing tests pass, new pattern tests pass
+
+Phase 3: Performance Benchmarking Suite
+  3a. Add bench_injection.rs (criterion benchmarks for injection pipeline)
+  3b. Add KNN benchmark group to bench_memory.rs
+  3c. Enhance bench.yml with binary size + RSS tracking
+  3d. Run full benchmark suite, establish baselines
+  3e. Verify: no >20% regressions from sqlite-vec or pattern expansion
+
+Dependencies:
+  Phase 3 depends on Phase 1 (KNN benchmarks need sqlite-vec)
+  Phase 3 depends on Phase 2 (injection benchmarks need expanded patterns)
+  Phase 1 and Phase 2 are independent of each other
+```
 
 ## Sources
 
-- Direct analysis of 80,101 LOC across 35 crates (HIGH confidence)
-- [ArcSwap patterns documentation](https://docs.rs/arc-swap/latest/arc_swap/docs/patterns/index.html)
-- [ArcSwap crate](https://crates.io/crates/arc-swap)
-- [OpenTelemetry Rust documentation](https://opentelemetry.io/docs/languages/rust/)
-- [tracing-opentelemetry crate](https://docs.rs/tracing-opentelemetry)
-- [OpenTelemetry tracing integration guide (Feb 2026)](https://oneuptime.com/blog/post/2026-02-06-opentelemetry-tracing-rust-tracing-crate/view)
-- [Litestream - How it works](https://litestream.io/how-it-works/)
-- [Litestream tips and caveats](https://litestream.io/tips/)
-- [utoipa - OpenAPI generation for Rust](https://github.com/juhaku/utoipa)
-- [utoipa-axum integration](https://docs.rs/utoipa-axum)
-- [OWASP Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
-- [OWASP LLM01:2025 Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
-- [tldrsec/prompt-injection-defenses](https://github.com/tldrsec/prompt-injection-defenses)
-- [BlueBubbles REST API & Webhooks](https://docs.bluebubbles.app/server/developer-guides/rest-api-and-webhooks)
-- [tokio-cron-scheduler](https://crates.io/crates/tokio-cron-scheduler)
-- [croner crate](https://crates.io/crates/croner)
-- [Hash-chained tamper-evident audit log](https://dev.to/veritaschain/building-a-tamper-evident-audit-log-with-sha-256-hash-chains-zero-dependencies-h0b)
-- [Clawprint: tamper-evident audit trail for agent runs](https://github.com/cyntrisec/clawprint)
+- [sqlite-vec official documentation](https://alexgarcia.xyz/sqlite-vec/) - HIGH confidence
+- [sqlite-vec Rust integration guide](https://alexgarcia.xyz/sqlite-vec/rust.html) - HIGH confidence
+- [sqlite-vec API reference](https://alexgarcia.xyz/sqlite-vec/api-reference.html) - HIGH confidence
+- [sqlite-vec KNN query documentation](https://alexgarcia.xyz/sqlite-vec/features/knn.html) - HIGH confidence
+- [sqlite-vec metadata columns blog](https://alexgarcia.xyz/blog/2024/sqlite-vec-metadata-release/index.html) - HIGH confidence
+- [sqlite-vec GitHub repository](https://github.com/asg017/sqlite-vec) - HIGH confidence
+- [sqlite-vec crate on crates.io](https://crates.io/crates/sqlite-vec) (v0.1.6) - HIGH confidence
+- [OWASP LLM Top 10 2025 - Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) - HIGH confidence
+- [OWASP LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html) - HIGH confidence
+- [criterion.rs GitHub](https://github.com/bheisler/criterion.rs) - HIGH confidence
+- [Bencher - Track Criterion benchmarks in CI](https://bencher.dev/learn/track-in-ci/rust/criterion/) - MEDIUM confidence
+- Direct code analysis of blufio-memory (retriever.rs, store.rs, types.rs, embedder.rs, eviction.rs) - HIGH confidence
+- Direct code analysis of blufio-injection (classifier.rs, patterns.rs, pipeline.rs, output_screen.rs, config.rs) - HIGH confidence
+- Direct analysis of bench_memory.rs, bench_context.rs, bench_compaction.rs, bench_pii.rs - HIGH confidence
+- Direct analysis of V3, V11 migrations and bench.yml CI workflow - HIGH confidence

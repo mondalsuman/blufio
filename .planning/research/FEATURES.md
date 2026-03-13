@@ -1,464 +1,232 @@
-# Feature Research
+# Feature Landscape
 
-**Domain:** PRD Gap Closure for a multi-provider AI agent platform (Rust)
-**Researched:** 2026-03-10
-**Confidence:** HIGH
+**Domain:** sqlite-vec vector search migration, performance benchmarking suite, injection defense hardening
+**Researched:** 2026-03-13
+**Milestone:** v1.6 Performance & Scalability Validation
 
-## Scope
+## Table Stakes
 
-This document covers the 15 NEW feature domains targeted for v1.5 PRD Gap Closure. All existing shipped features (FSM agent loop, 5 LLM providers, 8 channel adapters, three-zone context engine with single-pass compaction, WASM skills, SQLCipher, AES-256 vault, circuit breakers, degradation ladder, FormatPipeline, accurate token counting, Prometheus metrics, MCP client+server, hybrid memory search, event bus) are treated as foundation -- they are dependencies, not scope.
+Features users/operators expect from production-grade AI agent memory, benchmarking, and security.
 
-The v1.5 goal: close every remaining gap between the PRD vision and the shipped product.
+### sqlite-vec Integration
 
----
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| vec0 virtual table for vector storage | Current approach loads ALL embeddings into Rust memory for brute-force cosine similarity (`get_active_embeddings()` in retriever.rs). At 10K entries x 384 dims x 4 bytes = 15MB per query scan. sqlite-vec pushes this to C with SIMD (AVX/NEON). | Med | rusqlite 0.37, sqlite-vec crate, migration V-next | vec0 supports `float[384]` columns with cosine distance metric |
+| KNN query via `MATCH` + `k = N` | Replace `retriever.rs::vector_search()` which currently iterates all active embeddings in Rust. sqlite-vec does brute-force in C with SIMD, ~3-10x faster for 10K vectors. | Med | vec0 table created, embeddings migrated | Query: `WHERE embedding MATCH ?1 AND k = ?2` returns (rowid, distance) |
+| Metadata columns for status/classification filtering | Current SQL queries filter `status = 'active' AND classification != 'restricted'` in separate queries. vec0 metadata columns support `=`, `!=`, `>`, `<`, `BETWEEN` in KNN WHERE clauses -- pre-filter before vector scan. | Med | vec0 table definition includes metadata columns | Supported types: boolean, integer, float, text. NULL not supported yet. |
+| SQLCipher compatibility | Blufio uses `bundled-sqlcipher-vendored-openssl`. sqlite-vec compiles C source via `cc` crate. Must verify vec0 works when SQLite is actually SQLCipher. Extension loading via `sqlite3_auto_extension` should work since both link against the same SQLite. | High | Build-time integration testing | **CRITICAL RISK**: sqlite-vec C source compiled against SQLCipher headers, not stock SQLite. Needs explicit verification. |
+| Migration from BLOB embeddings to vec0 | Existing `memories` table stores embeddings as raw BLOB. Need migration to create vec0 shadow table, copy embeddings, and ensure FTS5 triggers still work. | Med | New refinery migration (V-next), rollback strategy | vec0 is a separate virtual table -- can coexist with existing memories table |
+| BM25 + vec0 hybrid search preserved | Current hybrid search (RRF fusion of cosine + BM25) must continue working. BM25 uses FTS5 `memories_fts`. vec0 replaces only the vector search leg. | Low | vec0 for vector, FTS5 for BM25, RRF fusion unchanged | RRF fusion code in `retriever.rs::reciprocal_rank_fusion()` stays identical |
+| Eviction works with vec0 | `batch_evict()` currently DELETEs from `memories` table. Must also remove from vec0 virtual table. | Med | vec0 DELETE support, transactional consistency | vec0 supports DELETE. Need to wrap both deletes in same transaction. |
+| Temporal decay + importance boost preserved | Scoring pipeline (`rrf_score * importance * decay`) remains in Rust. vec0 only replaces the raw similarity computation, not the post-processing. | Low | None -- Rust scoring code unchanged | No vec0 dependency for this. Just verify scores still comparable. |
 
-## Feature Landscape
+### Performance Benchmarking Suite
 
-### Table Stakes (Users Expect These)
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| Binary size measurement and tracking | PROJECT.md specifies 25-50MB target. Must validate `cargo bloat --release` output and track regressions as dependencies change. | Low | cargo-bloat (dev tool), CI integration | Already have `release-musl` profile with `opt-level = "s"`, `strip = "symbols"` |
+| Memory usage profiling (idle + load) | PROJECT.md specifies 50-80MB idle, 100-200MB under load. Must measure RSS with jemalloc stats (already has `tikv-jemalloc-ctl` with `stats` feature). | Med | jemalloc stats API, sysinfo crate (already dep) | jemalloc `epoch.advance()` + `stats.allocated` gives precise heap usage |
+| Token reduction validation | Context engine claims 68-84% token reduction vs inject-everything. Must measure actual token counts before/after compaction across representative workloads. | Med | Token counter (tiktoken-rs/HuggingFace), compaction pipeline | Existing `bench_context.rs` has heuristic counting; need end-to-end validation |
+| Criterion benchmarks for vec0 vs in-memory | Direct A/B comparison: current `get_active_embeddings()` + Rust cosine vs vec0 KNN query. At 100, 1K, 5K, 10K entries. | Med | Both implementations available during migration | Benchmarks should cover query latency and memory delta |
+| Injection classifier throughput benchmark | Current `bench_pii.rs` covers PII detection. Need equivalent for injection classifier at various input sizes (1KB, 5KB, 10KB). | Low | blufio-injection classifier, criterion | Extends existing benchmark pattern; classifier is synchronous |
+| Regression CI baselines | Store benchmark results as baselines; fail CI if perf degrades beyond threshold. | Med | criterion JSON output, CI script | Existing `bench_regression` CI mentioned in PROJECT.md Phase 63 |
 
-Features that any production AI agent platform must have. Missing these means the product feels incomplete for operators running Blufio for months on a VPS.
+### Injection Defense Hardening
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Multi-level context compaction (L0-L3) with quality scoring | Current compaction is single-pass, splits at history midpoint, and has no quality validation. Long-running sessions (days/weeks) accumulate compaction summaries that lose critical context. Any agent platform advertising long-term conversations must preserve key facts through compaction rounds. OpenClaw loses context entirely after ~50 turns. | HIGH | Extends existing `blufio-context/compaction.rs`. L0=raw messages, L1=turn-pair summaries, L2=session summary, L3=cross-session archive. Each level retains entity/decision graphs. Quality gates use probe-based validation: after compaction, test that key facts survive via LLM probe queries. ACON research shows 26-54% peak token reduction while preserving 95%+ accuracy with multi-step validation. Existing `DynamicZone` triggers compaction at 70% threshold -- extend with tiered triggers (L0 at 50%, L1 at 70%, L2 at 85%). |
-| Prompt injection defense layers | OWASP Top 10 for LLM Apps 2025 ranks prompt injection #1. Attack success rates reach 84% in agentic systems. Blufio has MCP description sanitization and trust zone labeling but no systematic input/output defense. Any agent system executing tools (WASM skills, MCP) from user-influenced context is vulnerable to injection. | HIGH | 5-layer defense as specified in PRD: L1=regex pattern classifier (known attack signatures), L3=HMAC boundary tokens (cryptographic separation of system/user content), L4=output validator (LLM output screened before tool execution), L5=human-in-the-loop (configurable confirmation for high-risk operations). L2 was omitted in PRD -- reserved for future ML classifier. Existing `blufio-security` crate handles TLS/SSRF/redaction; extend with injection defense module. |
-| PII detection and redaction | Existing `redact.rs` handles API keys and bearer tokens only. No detection of user PII (email, phone, SSN, credit cards). For a personal AI agent handling private conversations, PII appearing in logs, exports, or LLM context is a compliance liability. Operators in EU/California expect PII awareness. | MEDIUM | Extend `blufio-security/redact.rs` with regex patterns: email (`[\w.+-]+@[\w-]+\.[\w.]+`), phone (international formats), SSN (`\d{3}-\d{2}-\d{4}`), credit cards (Luhn-validated 13-19 digit patterns). Use regex-only approach for v1.5 -- ML-based NER is overkill for a single-binary agent. Apply redaction in log output (existing `RedactingWriter`), data exports, and optionally in LLM context injection. |
-| Data export (JSON, CSV) | Any system storing user data must provide export capability. GDPR Article 20 (data portability) requires machine-readable export. Operators need export for backup verification, migration, and debugging. | LOW | Export sessions, messages, memories, cost records filtered by session/date/type. JSON for programmatic use, CSV for spreadsheet analysis. CLI command `blufio export --format json --session <id> --from <date> --to <date>`. Reads directly from SQLite via existing `blufio-storage` queries. |
-| Retention policy enforcement | Long-running agents accumulate unbounded data. Without retention policies, SQLite database grows indefinitely. Cost records, old session messages, and superseded memories should be automatically cleaned. Operators expect configurable TTLs per data type. | MEDIUM | TOML config per data type: `[retention] messages_days = 90`, `sessions_days = 180`, `cost_records_days = 365`, `memories_days = 0` (0=forever). Background task runs on configurable interval (default: daily). Deletes records older than retention period. Must respect audit trail (hash chain entries are never deleted). Must respect GDPR erasure requests (immediate, not waiting for retention). |
-| OpenAPI spec generation | Blufio ships an API gateway with 15+ endpoints. Any production API needs documentation. OpenAPI enables client SDK generation, Swagger UI, and API testing. Without it, integrators must read source code or guess at payloads. | MEDIUM | Use `utoipa` + `utoipa-axum` crates for compile-time OpenAPI 3.1 generation from existing axum handlers. Add `#[utoipa::path]` annotations to gateway handlers. Serve spec at `/openapi.json` and optional Swagger UI at `/docs`. Does not require restructuring existing handlers -- annotation-only changes. |
-| Clippy unwrap enforcement | 80K LOC codebase with uncounted `.unwrap()` calls. Any `unwrap` in library code is a potential panic in production. For a system targeting months of uptime on a $4/month VPS, panics are unacceptable. | LOW | Add `#![deny(clippy::unwrap_used)]` to all library crate `lib.rs` files. Replace `.unwrap()` with `.expect("reason")`, `?`, or `.unwrap_or_default()` as appropriate. Binary crate (`blufio/main.rs`) can keep `unwrap()` in startup paths where panicking is acceptable. |
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| Unicode/invisible character detection | Current 11 patterns use standard regex. Attackers embed U+200B (zero-width space), U+200C/D, U+FEFF, Unicode tags (E0000-E007F) between injection keywords to bypass pattern matching. | Med | regex crate (already dep), Unicode normalization | Strip/detect zero-width chars BEFORE pattern matching. Regex: `[\u{200B}-\u{200F}\u{2060}-\u{2064}\u{FEFF}]` |
+| Homoglyph normalization | Cyrillic 'a' (U+0430) visually identical to Latin 'a'. Attackers substitute characters to evade regex. NFKC normalization resolves most confusables. | Med | unicode-normalization crate (new dep, ~50KB) | Apply NFKC before classifier. Also map known confusables (Cyrillic/Greek -> Latin). |
+| Base64/encoding detection | Attackers encode injection payloads as Base64 strings. Pattern: detect `[A-Za-z0-9+/]{40,}={0,2}` then decode and re-scan. | Low | base64 crate (already dep) | Decode candidate strings, re-run classifier on decoded content. False positive risk on legitimate base64 data. |
+| Expanded pattern coverage | Current 11 patterns cover 3 categories. Missing: prompt leaking (`"repeat the above"`), jailbreak keywords (`"DAN mode"`, `"developer mode"`), multi-language patterns, delimiter manipulation (`"""`, `---`, triple backticks). | Med | regex crate, PATTERNS array expansion | OWASP LLM Top 10 2025 identifies these as active attack vectors |
+| Indirect injection detection | MCP tool results and external content can contain embedded instructions. L4 OutputScreener already checks tool output, but needs patterns specific to indirect injection (instructions hidden in HTML comments, markdown, JSON). | Med | L4 OutputScreener, additional patterns | Check `<!-- ignore previous -->` in HTML, hidden markdown, JSON string injection |
+| Configurable severity weights | Current severities are hardcoded (0.1-0.5). Operators should tune weights per deployment. TOML config for `[injection.pattern_weights]`. | Low | blufio-config, InjectionDefenseConfig | Extend existing InputDetectionConfig with optional per-category weights |
 
-### Differentiators (Competitive Advantage)
+## Differentiators
 
-Features that set Blufio apart from OpenClaw and other agent platforms. These are not table stakes but create significant competitive advantage.
+Features that set Blufio apart from competitors. Not universally expected, but demonstrate quality.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Hash-chained tamper-evident audit trail | No open-source AI agent platform provides cryptographic audit trails. Every action (tool execution, memory modification, config change, provider call) gets a hash-chained log entry where altering any historical record breaks the chain. Enables enterprise trust and regulatory compliance. AuditableLLM research shows negligible overhead: 3.4ms/step, 5.7% slowdown. | MEDIUM | New `blufio-audit` crate or module in `blufio-storage`. Each entry: `{id, timestamp, actor, action, target, detail, prev_hash, hash}` where `hash = SHA-256(prev_hash || serialized_entry)`. Store in dedicated `audit_trail` SQLite table. Verification CLI command `blufio audit verify` walks chain and reports breaks. Integrate with EventBus -- subscribe to all event types and log audit entries. Audit entries are append-only; retention policies NEVER delete them (separate from message retention). |
-| Data classification framework (4 levels) | No competitor classifies data sensitivity levels. With 4 levels (Public/Internal/Confidential/Restricted), Blufio can enforce per-level controls: Restricted data never leaves the system, Confidential data is encrypted at rest (already via SQLCipher), Internal data is access-controlled, Public data flows freely. This is table stakes for enterprise but a differentiator in the AI agent space. | MEDIUM | Enum `DataClassification { Public, Internal, Confidential, Restricted }` in `blufio-core`. Tag memories, messages, exports, and config values with classification level. Controls matrix: Restricted = never exported + never in LLM context + encrypted at rest. Confidential = encrypted at rest + redacted in logs. Internal = access-controlled + audit-logged. Public = no restrictions. Classification can be set explicitly or inferred (messages with PII auto-classify as Confidential). |
-| Memory temporal decay with MMR diversity | Current retriever uses RRF fusion (vector + BM25) with confidence boost but no temporal decay and no diversity enforcement. Older memories rank equally to recent ones. Redundant memories (same topic, slight variations) dominate results. OpenClaw implements both decay and MMR. Blufio's memory retrieval must match or exceed. | MEDIUM | Temporal decay: `score *= 0.95^days_since_creation` (configurable decay factor). Half-life ~14 days. MMR re-ranking: after RRF fusion, apply `finalScore = lambda * relevance - (1-lambda) * max_similarity_to_already_selected` with lambda=0.7. This runs on the already-scored results, so zero additional API calls. Both apply in `HybridRetriever::retrieve()` after the existing RRF step. Add `importance` field to Memory struct for manual boost (explicit memories get importance=1.0, extracted get 0.6). |
-| Lifecycle hook system (11 events) | No agent platform provides extensible lifecycle hooks. Hooks let operators run shell commands at specific lifecycle points: backup before shutdown, notify on degradation, sync memory on session close, restart services on config change. Kubernetes/Nomad/Docker all have lifecycle hooks because the pattern is proven. | MEDIUM | 11 lifecycle events: `pre_start`, `post_start`, `pre_shutdown`, `post_shutdown`, `session_created`, `session_closed`, `pre_compaction`, `post_compaction`, `degradation_changed`, `config_reloaded`, `memory_extracted`. Each hook defined in TOML with priority (BTreeMap ordering), command, timeout, and sandbox flag. Hooks run as shell subprocesses with configurable environment variables. Sandboxed hooks run with restricted PATH and no network. Subscribe to EventBus events to trigger hooks asynchronously. |
-| Hot reload (config, TLS, plugins) | No competitor supports zero-downtime config reload. Blufio targets months of uptime; restarting for a config change breaks that promise. ArcSwap provides wait-free, lock-free atomic pointer swaps. Combined with `notify` crate for file watching, config changes apply within seconds without dropping connections. | HIGH | Three reload targets: (1) Config: watch `blufio.toml` with `notify` crate, parse new config, validate, swap via `ArcSwap<BlufioConfig>`. All components that hold config references must read through ArcSwap. (2) TLS certs: use `tls-hot-reload` crate or implement `rustls::server::ResolvesServerCert` with file watcher. Certificate rotation applies without connection drop. (3) Plugin state: re-scan skill directory, reload changed WASM modules, verify signatures. The config change is the hardest because every crate reads config at construction time -- must refactor to read through shared ArcSwap. |
-| Cron/scheduler system | No agent platform provides built-in scheduled tasks. Operators want scheduled memory cleanup, backup triggers, health report generation, and custom skill execution on cron schedules. Currently requires external crontab or systemd timers. | MEDIUM | Use `tokio-cron-scheduler` crate (active, 0.15.x, tokio-native). Define schedules in TOML: `[[cron]] name = "daily-backup"`, `schedule = "0 3 * * *"`, `command = "blufio backup"`. Also generate systemd timer unit files via `blufio cron generate-timers`. Built-in tasks: memory cleanup, cost report, health check, retention enforcement. Custom tasks run as shell commands (same sandbox as hooks). Store last-run timestamps in SQLite to handle restarts gracefully. |
-| GDPR erasure tooling | OpenClaw has no GDPR tooling. Blufio can be the first open-source agent platform with built-in right-to-erasure support. EDPB 2025 CEF report found that most controllers lack appropriate procedures. CLI command `blufio gdpr erase --user <id>` deletes all user data: messages, memories, session metadata, cost records. Transparency disclosure via `blufio gdpr report --user <id>` shows what data is held. | MEDIUM | Must handle: (1) message deletion from all sessions, (2) memory deletion and re-embedding of remaining memories, (3) cost record anonymization (keep aggregates, remove user association), (4) audit trail annotation (log erasure event without deleting audit entries -- GDPR allows keeping processing records). Also: retention policy enforcement as automated erasure. Export before erasure as safety net. Backup exclusion -- must document that backup files may contain pre-erasure data. |
-| iMessage, Email, SMS channel adapters | Expanding from 8 to 11 channels. iMessage reaches iOS users (massive market). Email enables async agent interaction. SMS provides universal reach. These three channels cover the remaining major communication platforms not yet supported. | MEDIUM-HIGH | **iMessage:** BlueBubbles REST API + webhook adapter. Requires macOS server running BlueBubbles. Poll or webhook for incoming messages. REST API for sending. OpenClaw has a BlueBubbles plugin as reference. **Email:** IMAP polling for incoming + SMTP via `lettre` for outgoing. `async-imap` crate for async IMAP. Map email threads to sessions via In-Reply-To headers. **SMS:** Twilio Programmable Messaging API. Webhook for incoming (same pattern as WhatsApp Cloud API). REST API for outgoing. No official Twilio Rust SDK -- use reqwest directly (same as WhatsApp adapter). Each adapter implements existing `ChannelAdapter` trait. |
-| OpenTelemetry distributed tracing | Blufio has Prometheus metrics but no distributed tracing. For operators running Blufio behind reverse proxies, load balancers, or with MCP servers, trace propagation is essential for debugging latency. OpenTelemetry is the industry standard. | MEDIUM | Use `opentelemetry` + `tracing-opentelemetry` crates. Bridge existing `tracing` spans to OpenTelemetry. Export via OTLP (gRPC or HTTP) to Jaeger, Tempo, or any OTLP-compatible backend. Optional and disabled by default (zero overhead when disabled). Config: `[opentelemetry] enabled = false`, `endpoint = "http://localhost:4317"`, `service_name = "blufio"`. Key spans: agent loop iteration, LLM provider call, tool execution, memory retrieval, context assembly. Trace context propagation through MCP calls. |
-| Litestream WAL-based replication | SQLite is a single-file database. Disk failure = total data loss. Litestream provides continuous WAL-frame streaming to S3/GCS/Azure Blob with point-in-time recovery. For a $4/month VPS, this is the difference between "acceptable risk" and "production-grade." | LOW | Litestream runs as a sidecar process -- no code changes in Blufio. Ship `litestream.yml` config template. Document setup in operator guide. CLI command `blufio litestream init` generates config from `blufio.toml` storage path. `blufio litestream status` checks replication lag. Blufio's existing WAL mode is compatible (Litestream requires WAL). Only consideration: Litestream takes over checkpointing, so Blufio must not set `wal_autocheckpoint` to 0 conflictingly. |
+### sqlite-vec Integration
 
-### Anti-Features (Commonly Requested, Often Problematic)
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| Partition key by session_id | vec0 `partition key` internally shards the index. Searching within a session is ~3x faster because only that partition is scanned. Competitors use flat vector stores. | Low | vec0 partition key declaration | `session_id text partition key` in table def. Only helps when querying within-session. |
+| Auxiliary columns for content | vec0 `+content text` auxiliary columns avoid a JOIN to `memories` table when retrieving search results. Single query returns vectors + content. | Low | vec0 auxiliary column support | Reduces query count from 2 (vec0 KNN + memories lookup) to 1 |
+| vec0 + FTS5 in single transaction | Both vec0 and FTS5 managed within same SQLite connection ensures ACID consistency. No external vector DB to sync. Single-file deployment preserved. | Low | Already using single SQLite connection | Key differentiator vs Chroma/Pinecone/Weaviate which require separate processes |
+| Quantized vectors (int8/bit) | vec0 supports `int8[384]` (4x compression) and `bit[384]` (32x compression). Could reduce storage for cold/archived memories while maintaining search quality. | Med | vec0 quantization support, quality validation | int8 typically retains 95%+ recall. Defer to future if not needed. |
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| ML-based PII detection (NER models) | "Regex misses context-dependent PII like names and addresses" | Adds ONNX model loading overhead (already have one for embeddings). False positive rate on names is high (is "Paris" a city or a name?). Increases binary size. For a personal agent with one user, the user's own data is not "unknown PII" -- they chose to share it. | Regex patterns for structured PII (email, phone, SSN, CC). Users tag sensitive memories manually via data classification. ML-based NER deferred to v2+ if demand materializes. |
-| Real-time PII scanning of all LLM context | "Scan every message sent to LLM providers for PII before transmission" | Adds latency to every LLM call (regex scan of full context window = 100K+ tokens). PII in conversation IS the conversation -- the user is talking about their life. Blocking PII from reaching the LLM defeats the purpose of a personal agent. | PII redaction in logs and exports only. Optional PII stripping for LLM context as opt-in config. Data classification framework handles what should/should not leave the system. |
-| Blockchain-based audit trail | "Hash chains are not truly tamper-proof without distributed consensus" | Blockchain adds massive complexity, external dependencies (node, consensus, storage), and latency for zero practical benefit in a single-instance system. The threat model is "detect tampering," not "prevent tampering by a Byzantine adversary." | SHA-256 hash-chained log in SQLite. Operator can periodically snapshot chain head hash to external witness (cloud KMS, git repo, email) for independent verification. This is what Certificate Transparency uses (Trillian) and it works at internet scale. |
-| Full GDPR consent management UI | "Need cookie banners, consent tracking, and preference centers" | Blufio is a CLI/API agent, not a web application. There is no web UI for users to interact with. Consent management requires a user-facing interface that does not exist. | Document that Blufio operators are data controllers responsible for obtaining consent. Provide GDPR tooling (erasure, export, transparency) but not consent UI. Operators integrate with their own consent management systems. |
-| Cross-provider session migration on hot reload | "When config changes the default provider, migrate active sessions to the new provider" | Different providers have different tokenizers, context window sizes, tool calling formats, and prompt caching. Mid-conversation provider switch produces incoherent responses and wastes cached context. | Hot reload applies to new sessions only. Active sessions complete on their current provider. Operator can force-close sessions via CLI if immediate migration is needed. Document this as a design decision. |
-| Embedded Litestream (compiled into binary) | "Ship Litestream as part of the Blufio binary for single-binary purity" | Litestream is a Go binary. Embedding it means CGO or subprocess management. Litestream's lifecycle (continuous WAL monitoring) is better managed as a sidecar. Single-binary constraint already has exceptions (signal-cli sidecar). | Ship config templates and CLI helpers. `blufio litestream init` generates config. Document sidecar deployment in operator guide. Docker compose includes Litestream container. |
-| Automatic PII-based data classification | "Automatically classify all data based on PII content detection" | Auto-classification creates false confidence. A message mentioning "credit card" in casual conversation gets classified as Restricted. The user then cannot access their own conversation. Classification should be explicit or rule-based, not inference-based. | Rule-based classification: messages with detected PII patterns auto-tag as Confidential (not Restricted). Operators define classification rules in TOML. Users can manually classify memories. Restricted level requires explicit operator designation. |
+### Performance Benchmarking Suite
 
----
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| End-to-end memory pipeline benchmark | Full pipeline: embed query -> vec0 KNN -> BM25 FTS5 -> RRF fusion -> temporal decay -> MMR rerank. No competitor benchmarks the complete retrieval pipeline. | High | ONNX model loaded, SQLite with data, full pipeline wired | Requires test fixture with pre-embedded data. ONNX model download in CI. |
+| Comparative benchmark vs OpenClaw | Measure Blufio idle RSS vs OpenClaw (300-800MB/24h reported). Token usage per turn. Startup time. Concrete numbers for the "kill shot" narrative. | Med | OpenClaw instance for comparison, consistent workload | Powerful marketing material. Must be reproducible. |
+| Binary size breakdown by crate | `cargo bloat --release --crates` showing each of 37 crates' contribution. Identify bloat candidates. Track across releases. | Low | cargo-bloat | Already have 37-crate workspace; breakdown is trivial |
+| jemalloc allocation tracking per subsystem | Tag allocations by subsystem (memory, context, injection, gateway) using jemalloc arenas or Prometheus gauges. | High | jemalloc arena APIs or custom allocator tracking | Complex; may not be worth it for v1.6. Prometheus memory gauges may suffice. |
+
+### Injection Defense Hardening
+
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| Input sanitization layer (pre-classifier) | Strip zero-width chars, normalize Unicode, detect encoding before pattern matching. Runs in O(n) on input length, catches evasion that regex alone misses. | Med | unicode-normalization, custom sanitizer | OWASP recommends this as first defense line. Most competitors skip it. |
+| Multi-language injection patterns | `"ignorez les instructions precedentes"` (French), `"ignoriere vorherige Anweisungen"` (German). Polyglot users and attackers use non-English. | Med | Expanded PATTERNS array, i18n-aware regex | OWASP 2025 flags multi-language as emerging vector. Start with top 5 languages. |
+| Canary token detection | Detect if LLM output echoes a planted canary string, indicating the LLM was manipulated into revealing system prompt content. Insert canary in system prompt, check if output contains it. | Med | System prompt modification, output scanning | Novel defense against prompt leaking attacks. Low false positive rate. |
+| Injection detection Prometheus metrics | Per-category detection counts, score distributions, false positive tracking. Enables operators to tune thresholds with data. | Low | metrics crate (already dep), Prometheus | Existing `metrics::record_input_detection()` provides foundation; expand with histograms |
+
+## Anti-Features
+
+Features to explicitly NOT build in this milestone.
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| ANN index (HNSW/IVF) in vec0 | sqlite-vec v0.1.7-alpha does not yet ship ANN indexes. Brute-force is sufficient for 10K entries (sub-50ms at 384 dims). ANN adds complexity for no gain at this scale. | Use brute-force vec0 KNN. Revisit at 100K+ entries. |
+| Separate vector database (Chroma/Pinecone) | Violates single-binary, single-file deployment model. Adds network dependency, ops burden, and sync complexity. | sqlite-vec keeps everything in SQLite. Zero additional infrastructure. |
+| ML-based injection classifier | Training/fine-tuning a small ML model for injection detection adds ONNX model weight, inference latency, and maintenance burden. Regex patterns are transparent, auditable, and fast. | Expand regex patterns + pre-processing. ML classifier is v2.0+ territory. |
+| GPU-accelerated vector search | CUDA/ROCm adds 100MB+ to binary, platform-specific builds, driver dependencies. Blufio targets $4/month VPS. | CPU SIMD via sqlite-vec. GPU is anti-pattern for single-binary edge deployment. |
+| Real-time adversarial training | Dynamically updating injection patterns based on detected attacks requires persistence, learning pipeline, and can be poisoned. | Static patterns + operator custom patterns via TOML config. Ship updated patterns in releases. |
+| flamegraph/profiling in release binary | Embedding profiling instrumentation in release builds adds size and performance overhead. | Use `cargo flamegraph` on debug/release builds during development. CI benchmarks for regression. |
+| Load testing suite (wrk/k6) | HTTP load testing is orthogonal to the benchmarking suite goal. Gateway performance is not a v1.6 concern. | Criterion for micro-benchmarks. Load testing deferred to future milestone. |
+| Multimodal injection detection (images) | OWASP 2025 identifies image-based injection. Blufio is text-only for now (no vision input in agent loop). | Detect only text-based injection. Image injection becomes relevant when vision providers are added. |
 
 ## Feature Dependencies
 
 ```
-Prompt Injection Defense
-    |
-    +--requires--> blufio-security crate (existing, extend)
-    +--requires--> HMAC primitives (already have hmac via blufio-vault)
-    |
-    +--enhances--> Agent loop (pre/post LLM call validation)
-    +--enhances--> WASM skill sandbox (tool call validation)
-    +--enhances--> MCP client (external tool output validation)
+sqlite-vec crate integration
+  |-> vec0 virtual table creation (migration V-next)
+  |    |-> SQLCipher compatibility verification (CRITICAL GATE)
+  |    |-> Metadata columns (status, classification) in vec0
+  |    |-> Partition key (session_id) in vec0
+  |    |-> Auxiliary column (+content) in vec0
+  |-> Embedding migration (BLOB -> vec0 INSERT)
+  |    |-> Rollback strategy (keep memories table, add vec0 alongside)
+  |-> HybridRetriever refactor
+  |    |-> vector_search() uses vec0 KNN instead of get_active_embeddings()
+  |    |-> BM25 search unchanged (FTS5)
+  |    |-> RRF fusion unchanged
+  |-> Eviction update
+  |    |-> batch_evict() deletes from both memories + vec0
 
-Data Classification Framework
-    |
-    +--requires--> blufio-core types (new enum)
-    |
-    +--enables--> PII Redaction (auto-classify PII-containing data as Confidential)
-    +--enables--> Retention Policies (per-classification retention rules)
-    +--enables--> GDPR Tooling (classification drives export/erasure scope)
-    +--enables--> Data Export (classification drives what is exportable)
+Unicode/homoglyph sanitization (pre-classifier)
+  |-> InjectionClassifier.classify() calls sanitizer first
+  |-> Zero-width character stripping
+  |-> NFKC normalization
+  |-> Confusable character mapping
 
-PII Detection
-    |
-    +--requires--> blufio-security/redact.rs (extend existing patterns)
-    |
-    +--enhances--> Data Classification (auto-tag PII-detected content)
-    +--enhances--> GDPR Tooling (find all user PII for erasure)
-    +--enhances--> Data Export (redact PII from exports)
-    +--enhances--> Audit Trail (redact PII from audit entries)
+Pattern expansion
+  |-> New PATTERNS entries (prompt leaking, jailbreak, delimiters)
+  |-> Multi-language patterns
+  |-> Base64 detection + decode + re-scan
+  |-> Updated severity weights
 
-Hash-Chained Audit Trail
-    |
-    +--requires--> EventBus (subscribe to all events for audit logging)
-    +--requires--> blufio-storage (new audit_trail table)
-    +--requires--> SHA-256 (already have via sha2 crate in workspace)
-    |
-    +--enhances--> GDPR Tooling (erasure events logged in audit trail)
-    +--enhances--> Data Classification (classification changes logged)
-
-Retention Policies
-    |
-    +--requires--> Data Classification (per-classification retention rules)
-    +--requires--> Cron/Scheduler (automated enforcement on schedule)
-    |
-    +--enhances--> GDPR Tooling (retention = automated erasure)
-    +--conflicts--> Audit Trail (audit entries exempt from retention deletion)
-
-GDPR Tooling
-    |
-    +--requires--> PII Detection (find user PII across all tables)
-    +--requires--> Data Export (export before erasure as safety net)
-    +--requires--> Audit Trail (log erasure events)
-    +--requires--> Data Classification (scope erasure by classification)
-
-Multi-Level Compaction
-    |
-    +--requires--> blufio-context (extend existing compaction.rs)
-    +--requires--> Accurate token counting (already shipped in v1.4)
-    |
-    +--enhances--> Memory system (compacted summaries feed memory extraction)
-    +--independent-of--> Security/compliance features
-
-Memory Enhancements (temporal decay, MMR, LRU)
-    |
-    +--requires--> blufio-memory (extend existing retriever.rs, store.rs)
-    |
-    +--independent-of--> Security/compliance features
-    +--independent-of--> Compaction (different subsystem)
-
-Lifecycle Hooks
-    |
-    +--requires--> EventBus (hook triggers from bus events)
-    +--requires--> Config system (TOML hook definitions)
-    |
-    +--enhances--> Hot Reload (hooks fire on config reload)
-    +--enhances--> Cron/Scheduler (hooks can trigger scheduled tasks)
-
-Hot Reload
-    |
-    +--requires--> ArcSwap (new dependency)
-    +--requires--> notify crate (file watcher, new dependency)
-    +--requires--> Config refactor (components read through ArcSwap)
-    |
-    +--enhances--> Lifecycle Hooks (config_reloaded hook fires)
-    +--enhances--> TLS cert rotation (zero-downtime)
-
-Cron/Scheduler
-    |
-    +--requires--> tokio-cron-scheduler (new dependency)
-    +--requires--> blufio-storage (last-run timestamps)
-    |
-    +--enables--> Retention Policy enforcement (scheduled cleanup)
-    +--enables--> Background memory validation
-    +--enhances--> Lifecycle Hooks (cron tasks can trigger hooks)
-
-Channel Adapters (iMessage, Email, SMS)
-    |
-    +--requires--> ChannelAdapter trait (already exists)
-    +--requires--> blufio-config (new config sections)
-    +--requires--> FormatPipeline integration (already wired in v1.4)
-    |
-    +--independent-of--> All other v1.5 features
-
-OpenTelemetry
-    |
-    +--requires--> opentelemetry + tracing-opentelemetry crates (new deps)
-    +--requires--> blufio-config (new otel config section)
-    |
-    +--independent-of--> All other v1.5 features
-
-OpenAPI Spec
-    |
-    +--requires--> utoipa + utoipa-axum crates (new deps)
-    +--requires--> blufio-gateway handlers (annotation changes)
-    |
-    +--independent-of--> All other v1.5 features
-
-Litestream Replication
-    |
-    +--requires--> WAL mode (already enabled)
-    +--requires--> Config templates (no code changes)
-    |
-    +--independent-of--> All other v1.5 features
+Benchmarking suite
+  |-> Binary size: cargo bloat (no code dep)
+  |-> Memory: jemalloc stats (existing dep)
+  |-> vec0 vs in-memory: both implementations available
+  |-> Injection classifier: existing classifier code
+  |-> Token reduction: existing compaction + counters
 ```
 
-### Dependency Notes
+## MVP Recommendation
 
-- **Data Classification should come before PII Detection:** Classification framework provides the enum and tagging infrastructure that PII detection populates. Building PII detection first means retrofitting classification tags later.
-- **PII Detection should come before GDPR Tooling:** GDPR erasure needs to find all user PII across all tables. PII detection patterns provide the scanning capability.
-- **Audit Trail should come before GDPR Tooling:** Erasure events must be logged in the audit trail. Building GDPR tooling without audit trail means erasure events are unauditable.
-- **Cron/Scheduler should come before Retention Policies:** Retention enforcement runs on a schedule. Without the scheduler, retention requires external crontab (defeats single-binary value).
-- **Compaction and Memory enhancements are independent of security/compliance features.** They can be developed on a parallel track.
-- **Channel adapters are fully independent.** Each adapter is a separate crate implementing the existing ChannelAdapter trait. No dependency on any other v1.5 feature.
-- **OpenTelemetry, OpenAPI, and Litestream are fully independent.** They can be built at any point in the milestone.
-- **Hot Reload is the highest-risk feature.** It requires refactoring how every component reads config. This should be scoped carefully and potentially deferred to late in the milestone.
+### Phase 1: sqlite-vec Integration (highest priority, highest risk)
 
----
+Prioritize:
+1. **SQLCipher + sqlite-vec build compatibility** -- gate everything else. If sqlite-vec C source cannot compile/link against SQLCipher, the entire vec0 approach fails. Test this FIRST.
+2. **vec0 virtual table with cosine distance** -- create alongside existing memories table. Add metadata columns (status text, classification text). Dual-write during migration period.
+3. **Migration script** -- copy existing BLOB embeddings into vec0 table. Non-destructive: keep original memories table intact.
+4. **HybridRetriever refactor** -- replace `vector_search()` to use vec0 KNN query. Keep BM25 + RRF unchanged.
+5. **Eviction update** -- `batch_evict()` deletes from both tables in single transaction.
 
-## MVP Definition
+### Phase 2: Performance Benchmarking Suite (medium priority, low risk)
 
-### Must Ship (v1.5 Core)
+Prioritize:
+1. **Binary size measurement** -- `cargo bloat --release` baseline. Measure delta from sqlite-vec addition.
+2. **Memory RSS tracking** -- jemalloc stats for idle and under-load measurement. Compare before/after vec0.
+3. **vec0 vs in-memory criterion benchmarks** -- A/B at 100, 1K, 5K, 10K entries.
+4. **Injection classifier throughput benchmark** -- 1KB, 5KB, 10KB inputs.
+5. **Token reduction validation** -- end-to-end compaction measurement.
 
-- [ ] **Multi-level compaction with quality scoring** -- Fixes the single biggest long-term usability problem: context degradation over extended conversations. Directly addresses core value of running for months.
-- [ ] **Prompt injection defense (L1, L3, L4)** -- Security table stakes for any system executing tools from user-influenced context. L5 (human-in-loop) is stretch.
-- [ ] **Cron/scheduler system** -- Unblocks retention policies, automated memory cleanup, and background tasks. Foundation for operational automation.
-- [ ] **Memory temporal decay and MMR diversity** -- Fixes memory retrieval quality for long-running agents. Direct user-facing improvement.
-- [ ] **Hash-chained audit trail** -- Differentiator. Enables compliance storytelling and operator trust.
-- [ ] **Data classification framework** -- Foundation for PII, GDPR, retention, and export features.
-- [ ] **Retention policy enforcement** -- Prevents unbounded database growth. Operational necessity for long-running agents.
-- [ ] **PII detection patterns** -- Extends existing redaction system. Compliance foundation.
-- [ ] **Data export (JSON, CSV)** -- GDPR Article 20 compliance. Simple to implement on existing queries.
-- [ ] **GDPR erasure tooling** -- First open-source agent platform with built-in erasure. Competitive differentiator.
-- [ ] **Clippy unwrap enforcement** -- Code quality. Prevents panics in production.
+### Phase 3: Injection Defense Hardening (medium priority, medium risk)
 
-### Should Ship (v1.5 Extended)
+Prioritize:
+1. **Input sanitization layer** -- Unicode normalization + zero-width stripping before classifier. Highest impact for evasion prevention.
+2. **Pattern expansion** -- add prompt leaking, jailbreak, delimiter manipulation patterns. Increase from 11 to ~20-25 patterns.
+3. **Base64 detection** -- detect encoded payloads, decode, re-scan.
+4. **Multi-language patterns** -- top 5 languages (French, German, Spanish, Chinese, Japanese).
+5. **Configurable severity weights** -- TOML config for operator tuning.
 
-- [ ] **OpenAPI spec generation** -- API documentation. High value, moderate effort.
-- [ ] **Lifecycle hook system** -- Operator extensibility. Enables custom automation without code changes.
-- [ ] **OpenTelemetry tracing** -- Observability upgrade. Optional, disabled by default.
-- [ ] **Litestream replication setup** -- Config templates and CLI helpers. Low effort, high value for disaster recovery.
-- [ ] **iMessage adapter** -- BlueBubbles REST API. Extends channel coverage.
-- [ ] **Email adapter** -- IMAP/SMTP. Async agent interaction.
-- [ ] **SMS adapter** -- Twilio API. Universal reach.
+Defer:
+- **Canary token detection**: Novel but not urgent. Requires system prompt modification and careful design.
+- **End-to-end pipeline benchmark**: Requires ONNX model in CI. Complex fixture setup. Better as a follow-up.
+- **jemalloc per-subsystem tracking**: Overkill for v1.6. Prometheus memory gauges suffice.
+- **Quantized vectors (int8/bit)**: Brute-force at 10K entries is fast enough. Quantization is optimization for scale Blufio has not reached.
 
-### Defer if Time-Constrained (v1.6+)
+## Existing Code Impact Analysis
 
-- [ ] **Hot reload (config, TLS, plugins)** -- High complexity, requires config access refactoring across all crates. High value but risky for a gap-closure milestone. Better as a focused phase.
-- [ ] **Background memory validation + file watcher re-indexing** -- Nice to have but not blocking any other feature.
-- [ ] **Context engine token budget enforcement verification** -- Testing/validation task, not a feature.
+### blufio-memory crate (MAJOR changes)
 
----
+| File | Change Type | Scope |
+|------|-------------|-------|
+| `Cargo.toml` | Add `sqlite-vec` dependency | New dep |
+| `store.rs` | Add vec0 table initialization, vec0 insert/delete methods | ~100-150 LOC new |
+| `retriever.rs` | Replace `vector_search()` with vec0 KNN query | ~50 LOC changed |
+| `eviction.rs` | Update `batch_evict()` for dual-table delete | ~20 LOC changed |
+| `types.rs` | Possibly add vec0-specific serialization (zerocopy) | ~10 LOC |
+| `lib.rs` | No change (public API unchanged) | None |
 
-## Feature Prioritization Matrix
+### blufio-injection crate (MODERATE changes)
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Multi-level compaction | HIGH | HIGH | P1 -- Core value: long-term agent reliability |
-| Prompt injection defense | HIGH | HIGH | P1 -- Security table stakes |
-| Data classification | HIGH | LOW | P1 -- Foundation for compliance features |
-| PII detection | HIGH | LOW | P1 -- Compliance foundation |
-| Audit trail (hash-chained) | HIGH | MEDIUM | P1 -- Differentiator, compliance enabler |
-| Cron/scheduler | HIGH | MEDIUM | P1 -- Unblocks retention and automation |
-| Retention policies | HIGH | MEDIUM | P1 -- Operational necessity |
-| Memory decay + MMR | MEDIUM | MEDIUM | P1 -- User-facing quality improvement |
-| GDPR erasure + export | HIGH | MEDIUM | P1 -- Compliance differentiator |
-| Data export | MEDIUM | LOW | P1 -- GDPR requirement, simple to build |
-| Clippy unwrap enforcement | MEDIUM | LOW | P1 -- Code quality, prevents panics |
-| OpenAPI spec | MEDIUM | MEDIUM | P2 -- API documentation |
-| Hook system | MEDIUM | MEDIUM | P2 -- Operator extensibility |
-| OpenTelemetry | MEDIUM | MEDIUM | P2 -- Observability upgrade |
-| Litestream setup | MEDIUM | LOW | P2 -- Disaster recovery |
-| iMessage adapter | LOW | MEDIUM | P2 -- Channel expansion |
-| Email adapter | LOW | MEDIUM | P2 -- Channel expansion |
-| SMS adapter | LOW | MEDIUM | P2 -- Channel expansion |
-| Hot reload | HIGH | HIGH | P3 -- Defer to focused phase |
-| Memory validation/file watcher | LOW | MEDIUM | P3 -- Nice to have |
+| File | Change Type | Scope |
+|------|-------------|-------|
+| `Cargo.toml` | Add `unicode-normalization` dependency | New dep (~50KB) |
+| `patterns.rs` | Expand PATTERNS array from 11 to ~20-25 | ~100 LOC new |
+| `classifier.rs` | Add sanitization pre-pass before pattern matching | ~50-80 LOC new |
+| `config.rs` | Add configurable severity weights | ~30 LOC new |
+| `output_screen.rs` | Expand indirect injection patterns | ~30 LOC new |
 
-**Priority key:**
-- P1: Must have for v1.5 milestone
-- P2: Should have, add within v1.5 if schedule allows
-- P3: Nice to have, defer to v1.6 if time-constrained
+### blufio (binary crate) benchmarks (NEW files)
 
----
+| File | Change Type | Scope |
+|------|-------------|-------|
+| `benches/bench_vec0.rs` | New criterion benchmark for vec0 vs in-memory | ~150 LOC |
+| `benches/bench_injection.rs` | New criterion benchmark for classifier throughput | ~100 LOC |
+| `benches/bench_binary_size.rs` | Measurement script (may be CI-only, not criterion) | ~50 LOC |
 
-## Competitor Feature Analysis
+### blufio-storage crate (MINOR changes)
 
-| Feature | OpenClaw | LangChain / LangGraph | Blufio v1.5 Approach |
-|---------|----------|----------------------|----------------------|
-| Context compaction | Single-pass recursive summary, loses facts after ~50 turns | Memory/summary buffer, no multi-level | L0-L3 tiered compaction with quality gates. Probe-based validation ensures key facts survive compression. Archive system for cold storage retrieval. |
-| Prompt injection defense | None -- trusts all input | Experimental guardrails via LangChain-Guard, no structural defense | 5-layer defense: regex classifier, HMAC boundary tokens, output validator, human-in-loop. Structural separation of system/user content. |
-| Scheduled tasks | None built-in, relies on external cron | Scheduled graphs via LangGraph Cloud | Built-in cron with TOML config, systemd timer generation, SQLite last-run tracking. Single-binary includes scheduler. |
-| Memory temporal decay | 0.995/hour decay factor, 30-day half-life | Optional in vectorstores with metadata filtering | Configurable 0.95^days decay, importance boost, MMR diversity (lambda=0.7). Applied post-RRF-fusion in existing hybrid retriever. |
-| Audit trail | None | None | SHA-256 hash-chained tamper-evident log in SQLite. EventBus integration for automatic capture. CLI verification. |
-| Data classification | None | None | 4-level framework (Public/Internal/Confidential/Restricted) with per-level controls matrix. |
-| Retention policies | None -- unbounded data growth | None built-in | Configurable per-type TTLs in TOML. Automated enforcement via cron scheduler. Audit trail exempt. |
-| PII detection | None | Optional via Presidio integration | Built-in regex patterns for email, phone, SSN, CC. Extends existing secret redaction. Applied in logs, exports, optionally in LLM context. |
-| GDPR tooling | None | None | CLI commands for erasure, export, transparency report. First open-source agent platform with built-in GDPR support. |
-| Hook system | Lifecycle hooks for some events | Graph callbacks | 11 lifecycle events with BTreeMap priority, shell-based, sandboxed, configurable per-event. |
-| Hot reload | Must restart for config changes | N/A (cloud service) | ArcSwap + notify for config/TLS/plugins. Zero-downtime updates. |
-| Channel coverage | 15+ channels (Node.js) | Not a channel system | 8 existing + 3 new (iMessage via BlueBubbles, Email via IMAP/SMTP, SMS via Twilio) = 11 channels |
-| OpenTelemetry | None | Built-in via LangSmith/LangFuse | Optional OTLP export via tracing-opentelemetry. Disabled by default. Zero overhead when off. |
-| OpenAPI spec | None (no HTTP API) | LangServe has OpenAPI | utoipa + utoipa-axum for compile-time OpenAPI 3.1 from existing axum handlers. |
-| Replication | None (JSONL files on disk) | Cloud-managed | Litestream sidecar for WAL-based continuous replication to S3/GCS. Config templates + CLI helpers. |
+| File | Change Type | Scope |
+|------|-------------|-------|
+| `migrations/` | New migration V-next for vec0 table creation | ~30 LOC SQL |
 
----
+### blufio-config crate (MINOR changes)
 
-## Implementation Details: Key Features
+| File | Change Type | Scope |
+|------|-------------|-------|
+| model config | Add optional injection severity weight overrides | ~20 LOC |
 
-### Multi-Level Compaction Design
+## Confidence Assessment
 
-The existing compaction in `blufio-context/compaction.rs` does a single LLM call to summarize the older half of conversation history. The v1.5 upgrade introduces four levels:
-
-| Level | Content | Trigger | Retention |
-|-------|---------|---------|-----------|
-| L0 | Raw messages | Always (current behavior) | Until compacted to L1 |
-| L1 | Turn-pair summaries (2-4 messages -> 1 summary) | Dynamic zone hits 50% of context budget | 24 hours after L2 creation |
-| L2 | Session summary (all L1 summaries -> coherent narrative) | Dynamic zone hits 70% of context budget (current threshold) | Until session closes |
-| L3 | Cross-session archive (L2 summaries from closed sessions) | Session close | Governed by retention policy |
-
-**Quality scoring** uses probe-based validation:
-1. Before compaction, extract 3-5 key facts from the source material (names, decisions, commitments)
-2. After compaction, query the summary for each fact
-3. If recall drops below 80%, reject compaction and retry with more generous token budget
-4. Quality score stored in compaction metadata for monitoring
-
-**Soft/hard triggers:**
-- Soft trigger (50%): Begin L0->L1 compaction in background
-- Hard trigger (85%): Force L1->L2 compaction synchronously before next LLM call
-- Archive trigger (session close): L2->L3 archival
-
-### Prompt Injection Defense Architecture
-
-```
-User Input
-    |
-    v
-[L1: Pattern Classifier]  -- Regex scan for known attack signatures
-    |                         (ignore/system/jailbreak patterns)
-    | pass
-    v
-[L3: HMAC Boundary Tokens]  -- System instructions wrapped in HMAC-signed
-    |                          delimiters. LLM trained to trust only
-    |                          authenticated boundaries.
-    | pass
-    v
-[LLM Processing]
-    |
-    v
-[L4: Output Validator]  -- Scan LLM output before tool execution:
-    |                      - No tool calls targeting system files
-    |                      - No unexpected capability escalation
-    |                      - Parameter value validation
-    | pass
-    v
-[L5: Human-in-the-Loop]  -- For high-risk operations (configurable):
-    |                       - File system writes
-    |                       - External API calls
-    |                       - Memory modifications
-    | approved
-    v
-[Tool Execution / Response]
-```
-
-### Cron/Scheduler TOML Configuration
-
-```toml
-[scheduler]
-enabled = true
-
-[[scheduler.jobs]]
-name = "retention-cleanup"
-schedule = "0 3 * * *"      # Daily at 3 AM
-command = "builtin:retention"
-enabled = true
-
-[[scheduler.jobs]]
-name = "memory-validation"
-schedule = "0 */6 * * *"    # Every 6 hours
-command = "builtin:memory-validate"
-enabled = true
-
-[[scheduler.jobs]]
-name = "custom-backup"
-schedule = "0 0 * * 0"      # Weekly on Sunday
-command = "/usr/local/bin/backup.sh"
-timeout_secs = 300
-sandbox = true
-```
-
-### Hash-Chained Audit Entry Schema
-
-```sql
-CREATE TABLE audit_trail (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp   TEXT NOT NULL,       -- ISO 8601
-    actor       TEXT NOT NULL,       -- "system", "user:<id>", "operator"
-    action      TEXT NOT NULL,       -- "tool.execute", "memory.create", "config.change"
-    target      TEXT,                -- affected resource ID
-    detail      TEXT,                -- JSON detail blob
-    prev_hash   TEXT NOT NULL,       -- SHA-256 of previous entry (genesis = "0"*64)
-    hash        TEXT NOT NULL UNIQUE -- SHA-256(prev_hash || timestamp || actor || action || target || detail)
-);
-CREATE INDEX idx_audit_timestamp ON audit_trail(timestamp);
-CREATE INDEX idx_audit_action ON audit_trail(action);
-```
-
----
+| Area | Confidence | Notes |
+|------|------------|-------|
+| sqlite-vec API and features | MEDIUM | Official docs + blog posts confirm vec0 MATCH syntax, metadata columns, cosine distance. Version is v0.1.7-alpha (not stable). |
+| sqlite-vec + rusqlite integration | HIGH | Official Rust example uses `sqlite3_auto_extension`. Crate compiles C source via `cc`. |
+| sqlite-vec + SQLCipher | LOW | No documentation found on compatibility. SQLCipher is a fork of SQLite with modified headers. Extension compilation against SQLCipher headers is untested. **Must validate before committing to approach.** |
+| vec0 brute-force at 10K scale | HIGH | At 384 dims, brute-force under 50ms for 10K vectors confirmed by benchmarks. SIMD accelerated. |
+| Injection patterns (OWASP) | HIGH | OWASP LLM Top 10 2025 + Cisco + Palo Alto research confirm Unicode evasion, homoglyphs, encoding bypass as active attack vectors. |
+| Unicode normalization approach | HIGH | NFKC normalization + zero-width stripping is well-established defense. unicode-normalization crate is mature. |
+| Criterion benchmarking | HIGH | Already using criterion 0.5 with existing benchmarks. Pattern is established in codebase. |
+| Binary size/memory measurement | HIGH | cargo-bloat and jemalloc stats are standard Rust tooling. Already have jemalloc dep. |
 
 ## Sources
 
-### Context Compaction
-- [The Fundamentals of Context Management and Compaction in LLMs](https://kargarisaac.medium.com/the-fundamentals-of-context-management-and-compaction-in-llms-171ea31741a2) -- Multi-level summarization strategies (MEDIUM confidence)
-- [Evaluating Context Compression for AI Agents](https://factory.ai/news/evaluating-compression) -- Probe-based quality evaluation methodology (HIGH confidence)
-- [ACON: Optimizing Context Compression](https://openreview.net/pdf?id=7JbSwX6bNL) -- 26-54% token reduction with 95%+ accuracy preservation (HIGH confidence, peer-reviewed)
-- [Context Rot: How Increasing Input Tokens Impacts LLM Performance](https://research.trychroma.com/context-rot) -- Why compaction quality matters (MEDIUM confidence)
-
-### Prompt Injection Defense
-- [Prompt Injection Attacks: Comprehensive Review](https://www.mdpi.com/2078-2489/17/1/54) -- Attack taxonomy and defense mechanisms (HIGH confidence, peer-reviewed)
-- [AI Security in 2026: Prompt Injection](https://airia.com/ai-security-in-2026-prompt-injection-the-lethal-trifecta-and-how-to-defend/) -- Production defense strategies (MEDIUM confidence)
-- [Indirect Prompt Injection: The Hidden Threat](https://www.lakera.ai/blog/indirect-prompt-injection) -- Lakera's defense-in-depth approach (MEDIUM confidence)
-- [Prompt Injection: Types, CVEs, Enterprise Defenses](https://www.vectra.ai/topics/prompt-injection) -- Enterprise defense patterns (MEDIUM confidence)
-
-### Cron/Scheduler
-- [tokio-cron-scheduler](https://crates.io/crates/tokio-cron-scheduler) -- v0.15, tokio-native, active maintenance (HIGH confidence, verified via crates.io)
-- [Building a Cron Job System in Rust with Tokio](https://dev.to/hexshift/building-a-cron-job-system-in-rust-with-tokio-and-cronexpr-18j1) -- Implementation patterns (MEDIUM confidence)
-
-### Memory Temporal Decay and MMR
-- [How OpenClaw Orchestrates Long-Term Memory](https://dev.to/chwu1946/how-openclaw-orchestrates-long-term-memory-10en) -- Competitor reference implementation (HIGH confidence, primary source)
-- [OpenClaw MMR Feature Request #19760](https://github.com/openclaw/openclaw/issues/19760) -- MMR implementation details (HIGH confidence)
-- [Memory in the Age of AI Agents](https://arxiv.org/abs/2512.13564) -- Survey of agent memory architectures (HIGH confidence, peer-reviewed)
-- [Human-Like Remembering and Forgetting in LLM Agents](https://dl.acm.org/doi/10.1145/3765766.3765803) -- ACT-R-inspired decay models (HIGH confidence, peer-reviewed)
-
-### Audit Trail
-- [Building a Tamper-Evident Audit Log with SHA-256 Hash Chains](https://dev.to/veritaschain/building-a-tamper-evident-audit-log-with-sha-256-hash-chains-zero-dependencies-h0b) -- Implementation guide (MEDIUM confidence)
-- [AuditableLLM: Hash-Chain-Backed Auditable Framework for LLMs](https://www.mdpi.com/2079-9292/15/1/56) -- 3.4ms/step overhead, 5.7% slowdown benchmarks (HIGH confidence, peer-reviewed)
-- [Trillian: Append-Only Ledger](https://transparency.dev/) -- Production-grade transparency log used by Certificate Transparency (HIGH confidence)
-
-### Data Classification
-- [Data Classification Levels](https://www.sisainfosec.com/blogs/data-classification-levels/) -- Standard 4-level framework (HIGH confidence)
-- [ISO 27001 Annex A 5.12: Classification of Information](https://hightable.io/iso-27001-annex-a-5-12-classification-of-information/) -- International standard reference (HIGH confidence)
-- [AWS Data Classification Models](https://docs.aws.amazon.com/whitepapers/latest/data-classification/data-classification-models-and-schemes.html) -- Cloud provider implementation (HIGH confidence)
-
-### Retention Policies
-- [Data Retention and Deletion: Regulatory Expectations](https://kpmg.com/us/en/articles/2022/data-retention-and-deletion-increasing-regulatory-expectations.html) -- Regulatory context (HIGH confidence)
-- [CPRA Auto-Deletion Workflows](https://secureprivacy.ai/blog/cpra-auto-deletion-workflows) -- Automated deletion implementation (MEDIUM confidence)
-
-### GDPR
-- [EDPB Right to Erasure: 2025 Coordinated Enforcement Report](https://www.edpb.europa.eu/news/news/2026/edpb-identifies-challenges-hindering-full-implementation-right-erasure_en) -- Official regulatory findings (HIGH confidence, primary source)
-- [GDPR Article 17: Right to Erasure](https://www.exabeam.com/explainers/gdpr-compliance/what-is-gdpr-article-17-right-to-erasure-and-4-ways-to-achieve-compliance/) -- Implementation guidance (MEDIUM confidence)
-
-### Hot Reload
-- [tls-hot-reload crate](https://crates.io/crates/tls-hot-reload) -- Wait-free TLS cert reloading for rustls (HIGH confidence, verified via crates.io)
-- [rust-hot-reloader](https://github.com/junkurihara/rust-hot-reloader) -- ArcSwap + notify boilerplate with debouncing (MEDIUM confidence)
-- [ArcSwap Patterns Documentation](https://docs.rs/arc-swap/latest/arc_swap/docs/patterns/index.html) -- Official usage patterns (HIGH confidence)
-
-### Channel Adapters
-- [BlueBubbles API Documentation](https://documenter.getpostman.com/view/765844/UV5RnfwM) -- REST API for iMessage (HIGH confidence, primary source)
-- [BlueBubbles - OpenClaw](https://docs.openclaw.ai/channels/bluebubbles) -- Reference integration (MEDIUM confidence)
-- [lettre: Rust Email Client](https://lettre.rs/) -- SMTP library (HIGH confidence, verified via crates.io)
-- [async-imap](https://github.com/chatmail/async-imap) -- Async IMAP for Rust (MEDIUM confidence)
-- [Twilio SMS with Rust](https://www.twilio.com/en-us/blog/developers/tutorials/send-sms-rust-30-seconds) -- Official Twilio guide (HIGH confidence)
-
-### PII Detection
-- [Regular Expressions used in PII Scanning](https://www.piicrawler.com/blog/regular-expressions-used-in-pii-scanning/) -- Production regex patterns (MEDIUM confidence)
-- [PII Detection with NLP and Pattern Matching](https://www.elastic.co/observability-labs/blog/pii-ner-regex-assess-redact-part-2) -- Elastic's combined approach (HIGH confidence)
-
-### OpenTelemetry
-- [OpenTelemetry Rust](https://opentelemetry.io/docs/languages/rust/) -- Official documentation (HIGH confidence, primary source)
-- [tracing-opentelemetry](https://crates.io/crates/tracing-opentelemetry) -- Bridge crate, v0.27 (HIGH confidence)
-- [Rust Observability with OpenTelemetry and Tokio](https://dasroot.net/posts/2026/01/rust-observability-opentelemetry-tokio/) -- Production integration guide (MEDIUM confidence)
-
-### OpenAPI
-- [utoipa: OpenAPI Documentation for Rust](https://github.com/juhaku/utoipa) -- Code-first OpenAPI generation (HIGH confidence, verified via crates.io)
-- [utoipa-axum](https://docs.rs/utoipa-axum) -- Axum integration (HIGH confidence)
-
-### Litestream
-- [Litestream: How It Works](https://litestream.io/how-it-works/) -- WAL frame streaming architecture (HIGH confidence, primary source)
-- [Going Production-Ready with SQLite: Litestream](https://medium.com/@cosmicray001/going-production-ready-with-sqlite-how-litestream-makes-it-possible-74f894fc96f0) -- Production deployment guide (MEDIUM confidence)
-- [The SQLite Renaissance: Production in 2026](https://dev.to/pockit_tools/the-sqlite-renaissance-why-the-worlds-most-deployed-database-is-taking-over-production-in-2026-3jcc) -- Industry trend context (MEDIUM confidence)
-
----
-*Feature research for: Blufio v1.5 PRD Gap Closure*
-*Researched: 2026-03-10*
+- [sqlite-vec GitHub repository](https://github.com/asg017/sqlite-vec)
+- [sqlite-vec Rust integration guide](https://alexgarcia.xyz/sqlite-vec/rust.html)
+- [sqlite-vec v0.1.0 stable release announcement](https://alexgarcia.xyz/blog/2024/sqlite-vec-stable-release/index.html)
+- [sqlite-vec metadata columns release](https://alexgarcia.xyz/blog/2024/sqlite-vec-metadata-release/index.html)
+- [OWASP LLM01:2025 Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
+- [OWASP Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+- [Cisco: Understanding and Mitigating Unicode Tag Prompt Injection](https://blogs.cisco.com/ai/understanding-and-mitigating-unicode-tag-prompt-injection)
+- [Palo Alto Unit42: Indirect Prompt Injection in the Wild](https://unit42.paloaltonetworks.com/ai-agent-prompt-injection/)
+- [Criterion.rs guide](https://bencher.dev/learn/benchmarking/rust/criterion/)
+- [cargo-bloat-action for CI](https://github.com/orf/cargo-bloat-action)

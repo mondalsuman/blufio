@@ -200,6 +200,11 @@ impl Database {
     /// 3. Runs embedded migrations.
     pub async fn open(path: &str) -> Result<Self, BlufioError> {
         info!(path = %path, "opening database");
+
+        // Register the sqlite-vec extension globally before opening any connection.
+        // This ensures the `vec0` virtual table module is available when migrations run.
+        crate::register_sqlite_vec();
+
         let conn = open_connection(path).await?;
 
         // Apply PRAGMAs on the background thread.

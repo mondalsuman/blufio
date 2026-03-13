@@ -1,343 +1,199 @@
-# Stack Research: v1.5 PRD Gap Closure
+# Stack Research: v1.6 Performance & Scalability Validation
 
-**Domain:** Rust AI agent platform -- infrastructure hardening, compliance, and channel expansion
-**Researched:** 2026-03-10
-**Confidence:** HIGH (versions verified against crates.io API, compatibility cross-checked)
+**Domain:** sqlite-vec vector search migration, performance benchmarking suite, injection defense hardening
+**Researched:** 2026-03-13
+**Confidence:** MEDIUM-HIGH (sqlite-vec Rust crate verified via official docs + crates.io; SQLCipher compatibility is the one gap requiring integration testing)
 
 ## Existing Stack (DO NOT ADD -- Already in Workspace)
 
-These are already in the workspace and cover their respective domains. Listed to prevent accidental duplication and to show which new features they serve.
+These are already in the workspace and cover their respective domains. Listed to prevent accidental duplication and to show which v1.6 features they serve.
 
-| Already Have | Version | v1.5 Feature It Serves |
+| Already Have | Version | v1.6 Feature It Serves |
 |---|---|---|
-| `regex` | 1 | PII pattern expansion, prompt injection L1 classifier |
-| `sha2` | 0.10 | Hash-chained audit trail |
-| `hmac` | 0.12 | Prompt injection L3 HMAC boundary tokens |
-| `chrono` | 0.4 | Temporal decay, retention policies, audit timestamps |
-| `serde` + `serde_json` | 1 | JSON data export, data classification serialization |
-| `tokio` | 1 | Cron scheduler timer loop, file watchers, hook subprocess execution |
-| `tracing` | 0.1 | OpenTelemetry bridge layer (existing spans become OTel traces) |
-| `tracing-subscriber` | 0.3 | OpenTelemetry layer registration |
-| `rusqlite` | 0.37 | Audit trail tables, retention enforcement, compaction storage |
-| `tokio-rusqlite` | 0.7 | Async SQLite for all new persistence |
-| `dashmap` | 6 | Concurrent maps (memory index, hook registry) |
-| `metrics` | 0.24 | Prometheus metrics for new subsystems |
-| `uuid` | 1 | Audit entry IDs, export record IDs |
-| `reqwest` | 0.13 | BlueBubbles REST API, Twilio SMS API, email API fallback |
-| `axum` | 0.8 | OpenAPI route annotations |
-| `ring` | 0.17 | HMAC boundary token computation |
-| `ndarray` | 0.17 | MMR diversity reranking (cosine similarity) |
-| `strum` | 0.26 | Data classification enum derives |
-| `jsonschema` | 0.28 | Prompt injection L4 output validation |
-| `proptest` | 1 | Property-based test expansion |
+| `rusqlite` | 0.37 | SQLCipher connection factory, sqlite-vec registration via FFI |
+| `tokio-rusqlite` | 0.7 | Async wrapper for vec0 virtual table queries |
+| `criterion` | 0.5 | Performance benchmarking suite (4 benches already exist) |
+| `regex` | 1 | Injection defense L1 classifier pattern expansion |
+| `sysinfo` | 0.33 | Memory usage measurement in benchmarks |
+| `metrics` | 0.24 | Prometheus counters for vector search latency |
+| `insta` | 1 | Snapshot testing for injection pattern outputs |
+| `proptest` | 1 | Property-based testing for pattern expansion |
+| `tracing` | 0.1 | OTel spans for vector search operations |
+| `ndarray` | 0.17 | Embedding tensor operations (existing ONNX pipeline) |
+| `ring` | 0.17 | HMAC boundary tokens (existing L3 defense) |
+| `hmac` | 0.12 | HMAC boundary tokens (existing L3 defense) |
+| `sha2` | 0.10 | Hashing for benchmark result integrity |
 
 ---
 
 ## New Dependencies Required
 
-### 1. Hot Reload & File Watching
+### 1. sqlite-vec Integration (Vector Search Migration)
 
 | Technology | Version | Purpose | Why Recommended |
 |---|---|---|---|
-| `arc-swap` | 1.8 | Lock-free atomic pointer swap for config/TLS/plugin hot reload | Read-mostly write-seldom pattern matches config hot reload exactly. `ArcSwap<Config>` lets all request handlers load current config via `arc_swap::Guard` with zero contention -- no RwLock needed. 143M+ downloads, battle-tested in tikv. MSRV 1.31 (no conflict with workspace 1.85). Zero transitive dependencies. |
-| `notify` | 8.0 | Cross-platform filesystem event watcher for config/cert/plugin changes | Mature (62M+ downloads), used by rust-analyzer, zed, deno. kqueue on macOS, inotify on Linux. Triggers reload on TOML config change, TLS cert rotation, plugin directory modification. MSRV 1.85 matches workspace. Pin to 8.x stable -- 9.0 is still RC. |
+| `sqlite-vec` | 0.1.6 | FFI bindings for sqlite-vec SQLite extension -- enables `vec0` virtual tables with native KNN search inside SQLite | Replaces the current in-memory brute-force `get_active_embeddings()` + Rust-side cosine similarity loop that loads ALL embeddings into memory (O(n) scan). sqlite-vec pushes vector search into the SQLite engine via `vec0` virtual tables, enabling: (1) disk-backed vector storage (no more ~15MB RAM ceiling for 10K x 384-dim embeddings), (2) KNN queries with `MATCH` + `k` clause, (3) cosine distance metric built-in (`distance_metric=cosine`), (4) metadata column support for filtering by status/classification without post-load filtering. Pure C, zero dependencies, compiles via `cc` crate at build time and statically links into the binary. |
 
-**Integration pattern:** `notify::RecommendedWatcher` watches config files and cert paths. On file change event, debounce ~500ms, parse new config, validate, then `arc_swap::ArcSwap::store()` atomically swaps the new `Arc<Config>`. All consumers call `config.load()` on each request -- zero restart needed. Emit `BusEvent::ConfigReloaded` through existing `EventBus` for audit logging.
+**Critical Integration Detail -- SQLCipher Compatibility:**
 
-**Where these live:** `blufio-config` gets `arc-swap` for the swappable config holder. A new hot-reload module (in `blufio-config` or `blufio-agent`) uses `notify` for file watching. TLS cert reload lives in `blufio-gateway`.
+The sqlite-vec crate compiles the sqlite-vec C source code via the `cc` build crate and exposes a single function `sqlite3_vec_init`. This function is registered into the already-linked SQLite engine via `rusqlite::ffi::sqlite3_auto_extension()`. Because blufio uses `bundled-sqlcipher-vendored-openssl`, the SQLite engine is SQLCipher. The `sqlite3_auto_extension` call registers the vec0 extension into whichever SQLite is linked -- it does NOT bring its own SQLite. This means sqlite-vec operates inside the SQLCipher engine, and all vec0 virtual table data is encrypted at rest along with everything else.
 
-### 2. Cron Scheduling
+**Confidence: MEDIUM** -- This architecture is sound in principle (extension registration is engine-agnostic), but no explicit documentation confirms sqlite-vec + SQLCipher compatibility. An integration test must verify this during the first phase. If it fails, the fallback is calling `conn.load_extension()` or using sqlite-vec's scalar functions (`vec_distance_cosine()`) on BLOB columns without the `vec0` virtual table.
 
-| Technology | Version | Purpose | Why Recommended |
-|---|---|---|---|
-| `cron` | 0.15 | Cron expression parser (6-field standard + schedule iteration) | Lightweight parser-only crate -- no runtime, no job store, no signal handling. Parses standard cron expressions into a `Schedule` that yields `DateTime<Utc>` iterators. 20M+ downloads, uses `chrono` (already in workspace). Blufio already has `tokio::time` for timer loops and `EventBus` for notifications -- only the parser is missing. |
-
-**Why NOT `tokio-cron-scheduler` 0.15:** Pulls PostgreSQL/Nats metadata stores, its own `Job` abstraction, and signal handling. Blufio already has `tokio::time::sleep_until` for the timer loop, `EventBus` for notifications, and SQLite for persistence. Using `cron` parser + custom `tokio::spawn` loop is simpler, lighter, and integrates cleanly with the existing architecture.
-
-**systemd timer generation:** Convert cron expressions to systemd OnCalendar syntax via a small conversion function (~50 lines). No external crate needed -- it's string template generation.
-
-### 3. OpenTelemetry Distributed Tracing
-
-| Technology | Version | Purpose | Why Recommended |
-|---|---|---|---|
-| `opentelemetry` | 0.31 | Core OpenTelemetry API (trace context, span creation) | Official OTel Rust SDK. Traces are Beta status (sufficient for optional/disabled-by-default). MSRV 1.75 (compatible with workspace 1.85). |
-| `opentelemetry_sdk` | 0.31 | SDK implementation (BatchSpanProcessor, exporters) | Must match `opentelemetry` version exactly. Provides async span processing. |
-| `opentelemetry-otlp` | 0.31 | OTLP exporter to Jaeger/Tempo/Grafana/etc. | Default features changed since 0.28: now HTTP + reqwest (no gRPC default). Use features `["http-proto", "reqwest-client"]` to reuse existing `reqwest` dep -- avoids pulling in `tonic`. |
-| `tracing-opentelemetry` | 0.32 | Bridge existing `tracing` spans to OpenTelemetry | Version 0.32.1 (2026-01-12) requires `opentelemetry` 0.31. This is the key integration point -- Blufio already uses `tracing` everywhere, so adding an `OpenTelemetryLayer` to `tracing-subscriber` exports ALL existing instrumented spans as OTel traces with zero code changes to the 35 crates. |
-
-**Version alignment (critical):**
-
-| Crate | Version | Compatibility |
-|---|---|---|
-| `opentelemetry` | 0.31 | Base API |
-| `opentelemetry_sdk` | 0.31 | Must match opentelemetry |
-| `opentelemetry-otlp` | 0.31 | Must match opentelemetry |
-| `tracing-opentelemetry` | 0.32 | Requires opentelemetry ^0.31 (offset-by-one versioning) |
-
-**Integration:** New `blufio-telemetry` crate (optional, feature-gated). When `[telemetry.opentelemetry]` enabled in TOML config, register `tracing_opentelemetry::OpenTelemetryLayer` with subscriber. Endpoint via `OTEL_EXPORTER_OTLP_ENDPOINT` env var (OTel convention). Disabled by default -- adds ~15 transitive deps and runtime overhead.
-
-### 4. OpenAPI Spec Generation
-
-| Technology | Version | Purpose | Why Recommended |
-|---|---|---|---|
-| `utoipa` | 5.4 | Compile-time OpenAPI 3.1 spec generation from code annotations | Code-first: `#[utoipa::path]` on handlers, `#[derive(ToSchema)]` on types. Generates spec at compile time -- zero runtime overhead. Works with existing `serde` derives. 5M+ downloads, actively maintained. |
-| `utoipa-axum` | 0.2 | Axum router integration | Requires axum ^0.8 (matches workspace exactly). `OpenApiRouter` registers handlers and generates spec simultaneously -- routes and docs stay in sync. |
-| `utoipa-swagger-ui` | 9.0 | Optional Swagger UI serving (dev/enterprise only) | Serves interactive API docs at `/swagger-ui`. Behind feature flag -- bundles ~4MB of Swagger UI JS/CSS assets. |
-
-**Integration:** Add `#[utoipa::path]` annotations to existing gateway handlers in `blufio-gateway`. Derive `ToSchema` on request/response types (most already have `serde::Serialize`). Serve spec at `GET /openapi.json`. Swagger UI optionally at `/swagger-ui` behind `swagger-ui` feature flag.
-
-### 5. Email Channel Adapter
-
-| Technology | Version | Purpose | Why Recommended |
-|---|---|---|---|
-| `lettre` | 0.11 | SMTP email sending (outbound) | The standard Rust email crate. 8M+ downloads. Supports SMTP with STARTTLS/TLS, async via `tokio1` feature. Use features `["tokio1-rustls-tls", "builder", "hostname"]` to align with workspace's rustls preference (no OpenSSL dependency). |
-| `mail-parser` | 0.11 | Parse inbound emails (MIME, headers, body extraction) | Parses RFC 5322 messages, MIME multipart, attachments. 2M+ downloads, actively maintained (0.11.2 released 2026-02-14). Needed for processing incoming emails from IMAP polling or webhook inbound parse. |
-
-**Integration:** New `blufio-email` crate implementing `ChannelAdapter`. Outbound: `lettre` SMTP transport to configured mail server. Inbound: IMAP polling loop (using raw IMAP commands over `tokio::net::TcpStream` + rustls) or webhook from email provider (SendGrid/Mailgun inbound parse -- same webhook pattern as WhatsApp). `mail-parser` extracts text from MIME messages. Config: `[channels.email]` TOML section.
-
-### 6. Data Export
-
-| Technology | Version | Purpose | Why Recommended |
-|---|---|---|---|
-| `csv` | 1.4 | CSV serialization for data export | BurntSushi's csv crate. 46M+ downloads. Zero-copy serde integration -- `#[derive(Serialize)]` on export structs, then `csv::Writer::serialize()`. Already have `serde` workspace-wide. |
-
-**Integration:** Export module in `blufio-storage` or new `blufio-export` crate. Queries SQLite for messages/sessions/memories by date/session/type, serializes to CSV or JSON (JSON covered by existing `serde_json`). CLI: `blufio export --format csv --from 2026-01-01 --session abc`.
-
----
-
-## Features That Need NO New Crates (Build with Existing Stack)
-
-These are implementable entirely with crates already in the workspace. Each entry explains what existing crate(s) serve the purpose.
-
-### Multi-Level Compaction (L0-L3) with Quality Scoring
-
-**Build with:** `rusqlite` + `tokio-rusqlite` + `chrono` + existing `blufio-context/src/compaction.rs`
-
-Current single-level compaction (`generate_compaction_summary`) becomes L1. Add:
-- L0: Raw messages (already stored in SQLite)
-- L2: Session-level summary merge (summarize summaries)
-- L3: Cross-session archive (long-term knowledge extraction)
-
-Quality scoring: token count ratio (`summary_tokens / original_tokens`), information density heuristic (named entities + facts preserved / total), ROUGE-like overlap check. Pure Rust math -- no external crate.
-
-Soft/hard trigger thresholds: configurable in TOML (`[compaction] soft_threshold = 50, hard_threshold = 100` messages). Cold storage: move L3 archives to separate SQLite table with retrieval via SQL query.
-
-### Prompt Injection Defense (L1-L5)
-
-**Build with:** `regex` + `hmac` + `sha2` + `jsonschema` + `ring` (all already in workspace)
-
-| Layer | Implementation | Existing Crate |
-|---|---|---|
-| L1: Pattern classifier | `RegexSet` of ~30 known injection patterns | `regex` 1 |
-| L3: HMAC boundary tokens | Per-turn HMAC wrapping system instructions | `hmac` 0.12 + `sha2` 0.10 |
-| L4: Output validator | Check LLM output for prompt leakage/tool injection | `regex` + `jsonschema` 0.28 |
-| L5: Human-in-the-loop | Escalation via `EventBus` + channel notification | `blufio-bus` (existing) |
-
-L1 patterns include: "ignore previous instructions", "you are now", "system prompt:", "reveal your instructions", "ADMIN OVERRIDE", etc. Store in a compiled `RegexSet` for O(n) multi-pattern matching. The `regex` crate's internal `aho-corasick` handles efficient multi-pattern search.
-
-No ML classifier needed for L1 -- regex covers the practical attack surface. ML-based detection (L2) can be added later via the existing ONNX runtime if a suitable model becomes available.
-
-### Memory Temporal Decay
-
-**Build with:** `chrono` (already in workspace)
-
-One line of math: `score * 0.95_f64.powf(days_since_access)`. Store `last_accessed: DateTime<Utc>` in SQLite memory table. Apply decay multiplier during recall scoring in `blufio-memory`. Importance boost: multiply by user-assigned importance weight (1.0-5.0).
-
-### MMR (Maximal Marginal Relevance) Diversity
-
-**Build with:** `ndarray` (already in workspace for ONNX embeddings)
-
-MMR formula: `score = lambda * sim(query, doc) - (1 - lambda) * max_selected(sim(doc, selected_doc))`
-
-Cosine similarity via `ndarray` dot products on existing 384-dim embedding vectors. ~20 lines of Rust. Applied as a reranking pass after initial retrieval in `blufio-memory`.
-
-### LRU Eviction for Memory Index
-
-**Build with:** `rusqlite` + `chrono` (already in workspace)
-
-Bounded memory index (default 10K entries). Track `last_accessed` timestamp in SQLite. Background task runs periodically (via the new cron scheduler), queries `SELECT id FROM memories ORDER BY last_accessed ASC LIMIT (count - 10000)`, deletes excess entries. The eviction is SQL-based, not in-memory -- no `lru` crate needed.
-
-### Hash-Chained Audit Trail
-
-**Build with:** `sha2` + `rusqlite` + `chrono` + `serde_json` + `uuid` (all already in workspace)
-
-Schema: `audit_trail(id TEXT PK, timestamp TEXT, actor TEXT, action TEXT, resource TEXT, details_json TEXT, prev_hash TEXT, hash TEXT)`
-
-Each entry: `hash = SHA-256(prev_hash || timestamp || actor || action || resource || details_json)`. Tamper detection: walk chain, verify each hash. New `blufio-audit` crate with ~300 lines.
-
-### Data Classification Framework
-
-**Build with:** `serde` + `strum` (both already in workspace)
+**Registration Pattern:**
 
 ```rust
-#[derive(Serialize, Deserialize, EnumString, Display, PartialOrd, Ord)]
-pub enum DataClassification { Public, Internal, Confidential, Restricted }
+use rusqlite::ffi::sqlite3_auto_extension;
+use sqlite_vec::sqlite3_vec_init;
+
+// Must be called BEFORE any connection is opened.
+// Safe: sqlite3_auto_extension is thread-safe and idempotent.
+unsafe {
+    sqlite3_auto_extension(Some(
+        std::mem::transmute(sqlite3_vec_init as *const ())
+    ));
+}
 ```
 
-Tag data in SQLite metadata columns. Policy enforcement: simple `>=` comparison. Classification rules configurable in TOML.
+**vec0 Virtual Table Schema (replaces in-memory vector index):**
 
-### Retention Policy Enforcement
-
-**Build with:** `chrono` + `rusqlite` + new `cron` crate (for schedule)
-
-Background task on cron schedule. Per-type retention config:
-```toml
-[retention.messages]
-max_age_days = 90
-[retention.sessions]
-max_age_days = 365
-[retention.audit]
-max_age_days = 2555  # 7 years
+```sql
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_vec USING vec0(
+    memory_id TEXT PRIMARY KEY,
+    embedding float[384] distance_metric=cosine
+);
 ```
 
-Enforcement: `DELETE FROM messages WHERE created_at < datetime('now', '-90 days')`. Run in a transaction with audit logging.
+**KNN Query (replaces Rust-side cosine similarity loop):**
 
-### Lifecycle Hook System
+```sql
+SELECT memory_id, distance
+FROM memories_vec
+WHERE embedding MATCH ?1 AND k = ?2;
+```
 
-**Build with:** `tokio::process::Command` + `serde` + `chrono` (all already in workspace)
+Where `?1` is the query embedding as a binary BLOB (384 x 4 = 1536 bytes, little-endian f32) and `?2` is the max results count.
 
-11 lifecycle events: `pre_startup`, `post_startup`, `pre_shutdown`, `post_shutdown`, `pre_request`, `post_request`, `pre_response`, `post_response`, `on_error`, `on_session_create`, `on_session_destroy`.
+**Where this lives:** `blufio-memory` crate. The `MemoryStore` gains vec0 table management. The `HybridRetriever::vector_search()` method changes from loading all embeddings + Rust cosine scan to a single SQL KNN query.
 
-Hooks in `BTreeMap<i32, Vec<HookConfig>>` ordered by priority. Shell hooks via `tokio::process::Command` with timeout (30s default) + environment variable injection. Subscribe to `EventBus` events.
+**Migration strategy:** A new V15 migration creates the `memories_vec` virtual table and backfills from existing `memories.embedding` BLOBs. The existing `memories` table and `memories_fts` FTS5 table remain unchanged -- BM25 keyword search + RRF fusion pipeline is preserved.
 
-### PII Regex Expansion
+### 2. Zero-Copy Vector Passing
 
-**Build with:** `regex` (already in workspace)
+| Technology | Version | Purpose | Why Recommended |
+|---|---|---|---|
+| `zerocopy` | 0.8 | Zero-copy conversion from `Vec<f32>` to byte slices for sqlite-vec queries | sqlite-vec expects vectors as compact binary BLOBs. The existing `vec_to_blob()` / `blob_to_vec()` functions in `blufio-memory/src/types.rs` copy every embedding through `flat_map(to_le_bytes)`. zerocopy's `IntoBytes` trait (formerly `AsBytes` in 0.7) enables passing `&[f32]` directly as `&[u8]` without any allocation or copy. For a 384-dim vector, this eliminates a 1536-byte allocation per query and per insert. At scale (10K+ memories), this matters. |
 
-Extend existing `blufio-security/src/redact.rs` `REDACTION_PATTERNS` with:
+**Note:** zerocopy 0.8 renamed `AsBytes` to `IntoBytes` and `FromBytes` to `FromBytes` (unchanged). The derive macros now require `#[derive(IntoBytes)]` instead of `#[derive(AsBytes)]`. Since `f32` already implements `IntoBytes` in zerocopy 0.8, the usage is straightforward:
 
-| PII Type | Regex Pattern |
-|---|---|
-| Email | `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}` |
-| US Phone | `\+?1?\s*\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}` |
-| SSN | `\b\d{3}[-]?\d{2}[-]?\d{4}\b` |
-| Credit Card | `\b(?:\d{4}[-\s]?){3}\d{4}\b` |
-| IP Address | `\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b` |
+```rust
+use zerocopy::IntoBytes;
 
-Same `LazyLock<Vec<Regex>>` architecture as existing secret redaction. Add Luhn checksum validation for credit card false-positive reduction.
+// Pass Vec<f32> to sqlite-vec without copying
+let embedding: &[f32] = &query_embedding;
+let blob: &[u8] = embedding.as_bytes();
+// blob is now a 1536-byte slice pointing to the same memory
+```
 
-### GDPR Erasure Tooling
+**Where this lives:** `blufio-memory` crate, replacing `vec_to_blob()` calls in `store.rs` and `retriever.rs`.
 
-**Build with:** `rusqlite` + `chrono` + `serde_json` (all already in workspace)
-
-CLI: `blufio gdpr erase --user <id>`. Cascading delete across: messages, memories, sessions, audit entries, cost records. Generate JSON erasure receipt: `{ user_id, tables_affected, rows_deleted, timestamp, operator }`. Retention policy integration: auto-erase after per-type retention periods.
-
-### Clippy Unwrap Enforcement
-
-**Build with:** Clippy (Rust toolchain, already available)
-
-Add `#![deny(clippy::unwrap_used)]` to each library crate's `lib.rs`. Replace `.unwrap()` with `.expect("descriptive reason")` or proper `?` error propagation. CI enforcement: `cargo clippy --workspace -- -D clippy::unwrap_used`. No crate addition.
-
-### Litestream WAL Replication
-
-**Build with:** Config file generation (no Rust crate needed)
-
-Litestream is a standalone Go binary (v0.5.8, released 2026-02-12). It runs as a separate process/systemd service watching Blufio's SQLite WAL file. Integration:
-
-1. `blufio litestream init` CLI command generates `litestream.yml` from Blufio's TOML config
-2. Prints systemd unit file for Litestream sidecar
-3. Documents S3/GCS/Azure/SFTP replica configuration
-
-No Rust crate exists for Litestream, and none is needed -- it's a sidecar model.
-
-### iMessage (BlueBubbles) Adapter
-
-**Build with:** `reqwest` + `serde` + `serde_json` (all already in workspace)
-
-BlueBubbles exposes a REST API authenticated via `?guid=password` query param:
-- Send message: `POST /api/v1/message/text`
-- Get messages: `GET /api/v1/message`
-- Get chats: `GET /api/v1/chat`
-- Webhooks: POST to configured URL on new message, typing, read receipt (10 event types)
-
-Same HTTP client pattern as WhatsApp Cloud API adapter. New `blufio-imessage` crate implementing `ChannelAdapter`. Requires BlueBubbles server running on macOS (same constraint as OpenClaw's BlueBubbles integration).
-
-### SMS Adapter
-
-**Build with:** `reqwest` + `serde` + `serde_json` (all already in workspace)
-
-Twilio REST API: `POST https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json` with HTTP Basic Auth (`account_sid:auth_token`). Inbound SMS via webhook (Twilio POSTs to configured URL). Same webhook pattern as other adapters.
-
-No Twilio-specific crate needed -- community crates (`twilio`, `twilio-async`) are thin wrappers around `reqwest` with stale deps. Direct `reqwest` calls are cleaner and avoid dependency on unmaintained wrappers.
-
-New `blufio-sms` crate implementing `ChannelAdapter`.
+**Confidence: HIGH** -- zerocopy is from the Fuchsia team (Google), 200M+ downloads, battle-tested. `f32` is guaranteed little-endian on all Blufio target platforms (x86_64, aarch64). sqlite-vec expects little-endian f32 arrays.
 
 ---
 
-## Workspace Cargo.toml Additions
+## Benchmarking Suite Additions
+
+No new crate dependencies needed. The existing stack already covers benchmarking needs:
+
+| Existing | Version | How It Serves v1.6 Benchmarks |
+|---|---|---|
+| `criterion` | 0.5 | Core benchmark framework. 4 benches already exist: `bench_context`, `bench_memory`, `bench_pii`, `bench_compaction`. Extend with sqlite-vec KNN benchmarks, binary size tracking, and injection classifier benchmarks. |
+| `sysinfo` | 0.33 | RSS measurement for memory usage benchmarks (already a dependency in the binary crate). |
+| `insta` | 1 | Snapshot assertions for benchmark regression detection in CI. |
+
+### Binary Size Tracking (Development Tool, Not a Dependency)
+
+| Tool | Purpose | Notes |
+|---|---|---|
+| `cargo bloat --release --crates` | Analyze per-crate binary size contribution | Install as cargo subcommand: `cargo install cargo-bloat`. Run in CI to track sqlite-vec's impact on binary size (~25MB constraint). Not a Cargo.toml dependency -- a development/CI tool. |
+
+### New Benchmarks to Add (Using Existing criterion)
+
+1. **`bench_vec_search`** -- KNN query via sqlite-vec vec0 virtual table at [100, 1K, 5K, 10K] memory entries
+2. **`bench_injection_classify`** -- L1 classifier throughput on clean, suspicious, and adversarial inputs
+3. **`bench_hybrid_retrieval`** -- Full pipeline: embed query + vec0 KNN + BM25 + RRF + MMR (end-to-end latency)
+4. **`bench_binary_size`** -- Track binary size in bench_results table (not a criterion bench, but a CI check)
+5. **`bench_rss_idle`** -- Measure steady-state RSS after startup with [0, 1K, 10K] memory entries loaded
+
+**Where these live:** `crates/blufio/benches/` (extend existing bench suite). Results persisted to `bench_results` table (V11 migration already exists).
+
+---
+
+## Injection Defense Pattern Expansion
+
+No new crate dependencies needed. The existing `regex` crate with `RegexSet` handles all pattern matching. The expansion is purely additive patterns.
+
+### Pattern Categories to Add
+
+Based on OWASP LLM Top 10 2025 (LLM01: Prompt Injection) and the OWASP Cheat Sheet for LLM Prompt Injection Prevention:
+
+| Category | Current Count | Patterns to Add | Source |
+|---|---|---|---|
+| `RoleHijacking` | 4 patterns | +3: developer mode, DAN/jailbreak, hypothetical scenario | OWASP Cheat Sheet |
+| `InstructionOverride` | 4 patterns | +4: `<\|endoftext\|>`, `### Instruction:`, `<<SYS>>`, `[/INST]` format tokens | OWASP Cheat Sheet + model format token research |
+| `DataExfiltration` | 3 patterns | +3: URL-based exfil, markdown image injection, base64 encoding attempts | OWASP LLM01:2025 |
+| `EncodingEvasion` (NEW) | 0 patterns | +3: base64 payload detection, hex-encoded instructions, Unicode homoglyph detection | OWASP Cheat Sheet "Encoding and Obfuscation" |
+| `SystemPromptExtraction` (NEW) | 0 patterns | +3: "reveal your prompt", "print system message", "what are your instructions" | OWASP Cheat Sheet |
+
+**Total expansion:** 11 patterns -> 27 patterns (+16 patterns, +2 new categories)
+
+**Where this lives:** `blufio-injection/src/patterns.rs` (add to `PATTERNS` array). `InjectionCategory` enum gains `EncodingEvasion` and `SystemPromptExtraction` variants. No new crates needed -- `regex::RegexSet` already handles arbitrary pattern counts efficiently (single-pass DFA).
+
+### Classifier Tuning
+
+The scoring formula in `classifier.rs::calculate_score()` currently uses:
+- Base severity per pattern (0.1 - 0.5)
+- Positional bonus (up to 0.1 for early-message patterns)
+- Multi-match bonus (+0.1 per additional match)
+
+Tuning for v1.6:
+- Add **category diversity bonus**: matches across 2+ distinct categories score higher than same-category matches (multi-vector attacks are more suspicious than false positives from a single category)
+- Add **encoding evasion severity escalation**: any `EncodingEvasion` match boosts total score by 0.15 (encoding is always intentional)
+- Verify existing thresholds (0.95 user, 0.98 MCP) remain appropriate with expanded pattern set
+
+**No new dependencies for any of this.** The existing `regex` + `RegexSet` architecture handles the expanded pattern set identically to the current 11 patterns.
+
+---
+
+## What NOT to Add
+
+| Avoid | Why | What to Do Instead |
+|---|---|---|
+| `sqlite-vss` (FAISS-based) | Deprecated by the sqlite-vec author. sqlite-vss requires FAISS C++ library (~200MB), incompatible with single-binary constraint. sqlite-vec replaced it. | Use `sqlite-vec` 0.1.6 |
+| `qdrant-client` / `pinecone` / any external vector DB | Violates single-binary SQLite-only architecture. Adds network dependency, operational complexity. | sqlite-vec inside existing SQLite engine |
+| `hnsw_rs` / `instant-distance` / any Rust ANN library | sqlite-vec's brute-force approach is fast enough for Blufio's scale (10K-50K memories, 384-dim). ANN libraries add complexity and memory overhead for marginal gain at this scale. Brute-force 384-dim KNN at 10K entries takes <10ms on commodity hardware. | sqlite-vec brute-force via `vec0` virtual table |
+| `dhat-rs` (heap profiler) | Good for debugging but not for production benchmarks. Adds a custom global allocator that conflicts with `tikv-jemallocator`. | Use `sysinfo` for RSS tracking + `cargo bloat` for binary analysis |
+| `pprof` / `flamegraph` in Cargo.toml | Development profiling tools should be installed as cargo subcommands, not workspace dependencies. | `cargo install flamegraph` as a dev tool |
+| `aho-corasick` for injection patterns | The existing `regex::RegexSet` already uses Aho-Corasick internally for multi-pattern matching. Adding it explicitly would be redundant. | `regex::RegexSet` (already used in `patterns.rs`) |
+| `vectorlite` / `sqlite-vector` | Alternative vector extensions that duplicate sqlite-vec's role. sqlite-vec is the most portable (pure C, no deps) and has first-class Rust bindings. | Use `sqlite-vec` 0.1.6 |
+
+---
+
+## Installation
 
 ```toml
-# Add to [workspace.dependencies]:
+# In workspace Cargo.toml [workspace.dependencies]
+sqlite-vec = "0.1.6"
+zerocopy = { version = "0.8", features = ["derive"] }
 
-# Hot reload
-arc-swap = "1.8"
-notify = { version = "8", default-features = false, features = ["macos_kqueue"] }
-
-# Scheduling
-cron = "0.15"
-
-# OpenTelemetry (all behind feature flag -- not in default build)
-opentelemetry = { version = "0.31", default-features = false, features = ["trace"] }
-opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.31", default-features = false, features = ["http-proto", "reqwest-client"] }
-tracing-opentelemetry = { version = "0.32", default-features = false }
-
-# OpenAPI
-utoipa = { version = "5.4", features = ["axum_extras"] }
-utoipa-axum = "0.2"
-utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
-
-# Email channel
-lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "builder", "hostname"] }
-mail-parser = "0.11"
-
-# Data export
-csv = "1.4"
+# In crates/blufio-memory/Cargo.toml [dependencies]
+sqlite-vec.workspace = true
+zerocopy.workspace = true
 ```
 
-## New Crates to Add to Workspace
-
-| New Crate | Purpose | Key External Dependencies |
-|---|---|---|
-| `blufio-scheduler` | Cron parsing, tokio timer loop, systemd timer generation | `cron`, `tokio`, `blufio-config`, `blufio-bus` |
-| `blufio-hooks` | Lifecycle hook registry, shell executor with timeout | `tokio` (process::Command), `blufio-bus`, `blufio-config` |
-| `blufio-audit` | Hash-chained tamper-evident audit trail | `sha2`, `rusqlite`, `chrono`, `blufio-storage`, `blufio-bus` |
-| `blufio-compliance` | Data classification, retention policies, GDPR erasure | `blufio-storage`, `blufio-security`, `chrono`, `cron` |
-| `blufio-export` | JSON/CSV data export with date/session/type filtering | `csv`, `serde_json`, `blufio-storage` |
-| `blufio-telemetry` | OpenTelemetry integration (optional, feature-gated) | `opentelemetry*`, `tracing-opentelemetry` |
-| `blufio-imessage` | iMessage adapter via BlueBubbles REST API | `reqwest`, `serde`, `blufio-core` |
-| `blufio-email` | Email adapter (SMTP out, IMAP/webhook in) | `lettre`, `mail-parser`, `blufio-core` |
-| `blufio-sms` | SMS adapter via Twilio REST API | `reqwest`, `serde`, `blufio-core` |
-
-**Existing crates extended (no new crate):**
-
-| Existing Crate | New v1.5 Functionality |
-|---|---|
-| `blufio-context` | Multi-level compaction (L0-L3), quality scoring, quality gates |
-| `blufio-memory` | Temporal decay, MMR reranking, LRU eviction, file watcher re-indexing |
-| `blufio-security` | Prompt injection classifier (L1-L5), expanded PII regex patterns |
-| `blufio-config` | Hot reload via `arc-swap`, `notify` file watchers |
-| `blufio-gateway` | OpenAPI annotations (`utoipa`), `/openapi.json` + `/swagger-ui` endpoints |
-| `blufio-storage` | Retention enforcement queries, GDPR cascading deletes, audit trail schema |
-| `blufio` (binary) | New feature flags, CLI commands (export, gdpr, litestream) |
-
-## Feature Flags (binary crate)
-
-```toml
-# Add to blufio/Cargo.toml [features]:
-imessage = ["dep:blufio-imessage"]
-email = ["dep:blufio-email"]
-sms = ["dep:blufio-sms"]
-opentelemetry = ["dep:blufio-telemetry"]
-swagger-ui = ["dep:utoipa-swagger-ui"]
-
-# Update default features to include new channels:
-default = [
-    # ... existing features ...
-    "imessage", "email", "sms",
-    # NOT opentelemetry (opt-in only)
-    # NOT swagger-ui (opt-in only)
-]
+```bash
+# Development tools (not Cargo.toml deps)
+cargo install cargo-bloat
 ```
 
 ---
@@ -346,113 +202,69 @@ default = [
 
 | Recommended | Alternative | Why Not |
 |---|---|---|
-| `cron` 0.15 (parser only) | `tokio-cron-scheduler` 0.15 | Pulls Postgres/Nats stores, own job abstraction, signal handling. Blufio has tokio timers + SQLite + EventBus already. |
-| `cron` 0.15 | `croner` 3.0 | More features (L for last day, # for nth weekday) but heavier. Standard cron syntax sufficient for Blufio's needs. |
-| `arc-swap` 1.8 | `RwLock<Arc<T>>` | RwLock blocks readers during write. ArcSwap is wait-free for readers -- critical for hot-path config access. |
-| `notify` 8.x | `notify` 9.0-rc | RC not stable. 8.2 is production-ready. Upgrade when 9.0 hits stable release. |
-| `opentelemetry-otlp` HTTP mode | `opentelemetry-otlp` gRPC (tonic) | Would pull in `tonic` + `prost` + protobuf codegen. HTTP/proto is lighter, sufficient, and reuses existing `reqwest`. |
-| `lettre` (SMTP) | SendGrid/Mailgun API via `reqwest` | SMTP is protocol-level, works with any mail server. API approach creates vendor lock-in. Keep provider API as alternative config option. |
-| `utoipa` 5.4 | `aide` | `aide` is newer, less mature (~500K downloads vs 5M). `utoipa` has proven axum 0.8 support and compile-time generation. |
-| `csv` 1.4 | Manual string formatting | `csv` handles quoting, escaping, headers, serde integration. Reimplementing correctly is error-prone (RFC 4180 edge cases). |
-| `mail-parser` 0.11 | `mailparse` | `mailparse` last release 2023 (unmaintained). `mail-parser` actively maintained (0.11.2 released 2026-02-14). |
-| Direct Twilio `reqwest` calls | `twilio` crate | Community crate is thin wrapper with stale deps. Direct `reqwest` is cleaner, one fewer dependency, same amount of code. |
-| Direct BlueBubbles `reqwest` calls | No Rust crate exists | BlueBubbles is a simple REST API with query-param auth. No SDK needed. |
-| SQL-based LRU eviction | `lru` crate | Eviction is `DELETE FROM ... ORDER BY last_accessed` -- SQL query, not in-memory data structure. `lru` crate solves the wrong problem. |
-| Regex prompt injection (L1) | ML classifier crate | No production-quality Rust prompt injection ML crate exists. Regex is the pragmatic L1; ML can be added later as L2 via existing ONNX runtime. |
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|---|---|---|
-| `tokio-cron-scheduler` | Over-engineered for embedded use; unnecessary Postgres/Nats deps | `cron` parser + `tokio::time` loop |
-| `tonic` (gRPC for OTel) | Heavy dep chain; unnecessary when HTTP OTLP works | `opentelemetry-otlp` with `http-proto` + `reqwest-client` |
-| `twilio` crate | Thin wrapper with stale dependencies | Direct `reqwest` calls to Twilio REST API |
-| `lru` crate | Memory eviction is SQL-based, not in-memory | `DELETE FROM ... ORDER BY last_accessed LIMIT n` |
-| `notify` 9.0-rc | Release candidate, not stable | `notify` 8.x stable |
-| `mailparse` | Unmaintained since 2023 | `mail-parser` 0.11 |
-| `utoipa-swagger-ui` in default build | Bundles ~4MB of Swagger UI assets in binary | Feature-gated, dev/enterprise only |
-| Any PII detection ML crate | No mature Rust option; regex covers 95%+ of cases | Extend existing regex patterns in `blufio-security` |
-| `imap` crate for email inbound | Adds complexity; webhook-based inbound is simpler | IMAP polling with raw TcpStream or email provider webhook |
-| `opentelemetry` in default features | +15 transitive deps, runtime overhead | Feature-gated `opentelemetry` flag, disabled by default |
+| `sqlite-vec` 0.1.6 | `sqlite-vss` (FAISS) | Deprecated by same author, requires FAISS C++ (~200MB), impossible for single binary |
+| `sqlite-vec` 0.1.6 | In-memory Rust cosine similarity (current) | Current approach loads ALL embeddings into memory. At 10K entries x 384 dims x 4 bytes = ~15MB just for vectors. At 100K entries = ~150MB, exceeding the 100-200MB budget. sqlite-vec is disk-backed with O(n) query but no O(n) memory |
+| `sqlite-vec` 0.1.6 | `hnsw_rs` (Rust ANN) | ANN is overkill for <50K entries. Adds ~2MB binary size, complex index maintenance, and the quality/recall tradeoff is unnecessary when brute-force takes <10ms |
+| `sqlite-vec` vec0 virtual table | `sqlite-vec` scalar functions only | vec0 virtual tables handle insert/delete/update automatically with metadata columns. Scalar functions (`vec_distance_cosine()`) require manual management and don't support `MATCH`+`k` KNN syntax. vec0 is the recommended approach per official docs |
+| `zerocopy` 0.8 | Manual `unsafe { std::slice::from_raw_parts() }` | zerocopy provides safety guarantees, is well-audited, and the `IntoBytes` derive validates alignment at compile time. Manual unsafe is error-prone and unnecessary |
+| `zerocopy` 0.8 | Keep existing `vec_to_blob()` / `blob_to_vec()` | Existing functions allocate a new Vec for every conversion. At 10K memories, each retrieval allocates ~15MB just for the vector scan. zerocopy eliminates this entirely. For the vec0 migration specifically, we still need efficient blob conversion for INSERT operations |
+| Expanded regex patterns | ML-based classifier (e.g., ONNX injection model) | The existing ONNX embedding model is 15MB and takes ~50ms per inference. Adding a second model for injection classification doubles model load time and memory. Regex patterns are <1ms, deterministic, and auditable. ML classifier is a v2.0 consideration per OWASP guidance |
+| `criterion` (existing) | `iai` (instruction-count benchmarks) | `iai` uses Valgrind (Linux-only, unavailable on macOS dev). criterion already works on both platforms and provides statistical analysis. Keep criterion for consistency with existing 4 benchmarks |
 
 ---
 
-## Version Compatibility Matrix
+## Version Compatibility
 
-| Package A | Compatible With | Notes |
+| Package | Compatible With | Notes |
 |---|---|---|
-| `opentelemetry` 0.31 | `opentelemetry_sdk` 0.31, `opentelemetry-otlp` 0.31 | Must use same minor version across all OTel crates |
-| `tracing-opentelemetry` 0.32 | `opentelemetry` 0.31 | Offset-by-one versioning (documented behavior) |
-| `utoipa` 5.4 | `utoipa-axum` 0.2, `utoipa-swagger-ui` 9.0 | utoipa-axum requires utoipa ^5.0 |
-| `utoipa-axum` 0.2 | `axum` 0.8 | Matches workspace axum version exactly |
-| `notify` 8.2 | Rust 1.85+ | MSRV matches workspace rust-version |
-| `arc-swap` 1.8 | Rust 1.31+ | No version conflict possible |
-| `lettre` 0.11 | `rustls` via `tokio1-rustls-tls` | Aligns with workspace rustls preference |
-| `cron` 0.15 | `chrono` 0.4 | Uses workspace chrono for schedule iteration |
-| `csv` 1.4 | `serde` 1 | Uses workspace serde for record serialization |
-| `mail-parser` 0.11 | No shared deps | Standalone parsing library |
-| All OTel crates | MSRV 1.75 | Compatible with workspace 1.85 |
+| `sqlite-vec` 0.1.6 | `rusqlite` 0.31+ | sqlite-vec lists rusqlite 0.31 as dev-dependency. Blufio uses 0.37 which is newer and compatible. The `sqlite3_auto_extension` FFI is stable across rusqlite versions. |
+| `sqlite-vec` 0.1.6 | `bundled-sqlcipher-vendored-openssl` | **NEEDS INTEGRATION TEST.** The extension registers via `sqlite3_auto_extension()` into the linked SQLite engine (SQLCipher in our case). Architecture is sound but no explicit documentation confirms this combination. Test in phase 1. |
+| `zerocopy` 0.8 | Rust 1.85+ | zerocopy 0.8 MSRV is 1.56. Workspace MSRV is 1.85. No conflict. |
+| `sqlite-vec` 0.1.6 | SQLite 3.51.1 (via libsqlite3-sys 0.36) | sqlite-vec is pure C extension compiled against standard SQLite API. Compatible with any SQLite 3.x. |
+| `sqlite-vec` 0.1.6 | FTS5 (existing `memories_fts`) | vec0 and FTS5 are independent virtual table types. Both can coexist in the same database. The hybrid retrieval pipeline queries both and fuses via RRF. |
 
 ---
 
-## Dependency Budget Impact
+## Stack Patterns by Variant
 
-**Current:** ~75 direct crates (workspace Cargo.toml lists 52 workspace deps + per-crate local deps).
-**Constraint:** <80 direct crates for tractable audit surface.
+**If sqlite-vec + SQLCipher integration test passes (expected):**
+- Register via `sqlite3_auto_extension` before any connection opens
+- Create `memories_vec` virtual table in V15 migration
+- Replace `get_active_embeddings()` + Rust cosine scan with `MATCH` KNN query
+- Keep `memories_fts` for BM25, fuse results with existing RRF pipeline
+- Use zerocopy for zero-copy blob passing in queries
 
-| Addition | Direct Deps Added | Transitive Impact | Notes |
-|---|---|---|---|
-| `arc-swap` | +1 | 0 | Zero transitive deps |
-| `notify` | +1 | +2 (filetime, walkdir) | Lightweight |
-| `cron` | +1 | +1 (nom for parsing) | Lightweight |
-| `utoipa` + `utoipa-axum` | +2 | +1 (indexmap transitively present) | Compile-time only overhead |
-| `csv` | +1 | +1 (csv-core) | Lightweight |
-| `lettre` + `mail-parser` | +2 | +3 (email-encoding, idna, hostname) | Behind feature flag |
-| `utoipa-swagger-ui` | +1 | +3 (behind feature flag) | Dev/enterprise only |
-| OTel stack (4 crates) | +4 | +8-12 | Behind feature flag |
-| **Total (default build)** | **+8** | **+8** | Within 80-crate budget |
-| **Total (all features)** | **+13** | **+20-25** | Acceptable with feature flags |
+**If sqlite-vec + SQLCipher integration test FAILS (fallback):**
+- Skip `vec0` virtual table approach
+- Use sqlite-vec's scalar functions: `vec_distance_cosine(embedding, ?1)` in ORDER BY
+- Store embeddings in existing `memories.embedding` BLOB column (no change)
+- Still eliminates loading ALL embeddings into memory (query pushes distance computation to SQL)
+- Loses `MATCH` + `k` syntax but gains the same core benefit (disk-backed vector search)
 
-The default build (without OTel and Swagger UI) adds 8 direct + 8 transitive deps, staying within the <80 crate constraint. OTel and Swagger UI are feature-gated and only compiled when explicitly enabled.
+**If 10K entries proves too slow for brute-force (<100ms target not met):**
+- sqlite-vec supports binary quantization (`bit[384]` instead of `float[384]`)
+- Reduces storage 32x and query time ~10x at the cost of some recall quality
+- Add quantized shadow table: `memories_vec_quantized` with `bit[384]`
+- Use quantized table for initial top-100 candidates, rescore with full float vectors
+- This is a future optimization -- benchmarks will determine if it's needed
 
 ---
 
 ## Sources
 
-### Versions Verified via crates.io API (HIGH confidence)
-- [arc-swap](https://crates.io/crates/arc-swap) -- v1.8.2, released 2026-02-14
-- [notify](https://crates.io/crates/notify) -- v8.2.0 stable, v9.0.0-rc.2 RC (pinning to 8.x)
-- [cron](https://crates.io/crates/cron) -- v0.15.0, released 2025-01-14
-- [opentelemetry](https://crates.io/crates/opentelemetry) -- v0.31.0, released 2025-09-25
-- [opentelemetry_sdk](https://crates.io/crates/opentelemetry_sdk) -- v0.31.0
-- [opentelemetry-otlp](https://crates.io/crates/opentelemetry-otlp) -- v0.31.0, HTTP default since 0.28
-- [tracing-opentelemetry](https://crates.io/crates/tracing-opentelemetry) -- v0.32.1, released 2026-01-12, requires opentelemetry ^0.31
-- [utoipa](https://crates.io/crates/utoipa) -- v5.4.0, released 2025-06-16
-- [utoipa-axum](https://crates.io/crates/utoipa-axum) -- v0.2.0, requires axum ^0.8, utoipa ^5.0
-- [utoipa-swagger-ui](https://crates.io/crates/utoipa-swagger-ui) -- v9.0.2
-- [lettre](https://crates.io/crates/lettre) -- v0.11.19, released 2025-10-08
-- [mail-parser](https://crates.io/crates/mail-parser) -- v0.11.2, released 2026-02-14
-- [csv](https://crates.io/crates/csv) -- v1.4.0, released 2025-10-17
-
-### Official Documentation (HIGH confidence)
-- [OpenTelemetry Rust docs](https://opentelemetry.io/docs/languages/rust/) -- traces Beta, MSRV 1.75
-- [tracing-opentelemetry GitHub](https://github.com/tokio-rs/tracing-opentelemetry) -- offset-by-one versioning, compatibility notes
-- [BlueBubbles REST API](https://docs.bluebubbles.app/server/developer-guides/rest-api-and-webhooks) -- webhook + REST docs, 10 event types, guid auth
-- [Litestream](https://litestream.io/) -- v0.5.8 (2026-02-12), Go binary, WAL replication sidecar
-- [utoipa GitHub](https://github.com/juhaku/utoipa) -- axum 0.8 support, compile-time generation
-
-### Community / WebSearch (MEDIUM confidence)
-- [Twilio Rust SMS tutorial](https://www.twilio.com/en-us/blog/developers/tutorials/integrations/send-sms-with-twilio-rust-openapi) -- direct reqwest pattern
-- [arc-swap patterns](https://docs.rs/arc-swap/latest/arc_swap/docs/patterns/index.html) -- config hot reload pattern
-
-### Local Codebase Verification
-- `Cargo.toml` -- confirmed all existing workspace deps and versions
-- `blufio-security/src/redact.rs` -- confirmed existing regex-based redaction (4 patterns, extensible)
-- `blufio-context/src/compaction.rs` -- confirmed single-level compaction (L1 base for multi-level)
-- `blufio-bus/src/events.rs` -- confirmed EventBus event types (extensible for new subsystems)
-- `blufio-memory/src/store.rs` -- confirmed BM25 search (base for temporal decay/MMR extension)
-- `blufio-gateway/Cargo.toml` -- confirmed axum 0.8 (compatible with utoipa-axum 0.2)
+- [sqlite-vec official Rust documentation](https://alexgarcia.xyz/sqlite-vec/rust.html) -- Integration method, `sqlite3_vec_init`, Cargo setup (MEDIUM confidence)
+- [sqlite-vec GitHub repository](https://github.com/asg017/sqlite-vec) -- v0.1.6 features, vec0 virtual table syntax, distance metrics (HIGH confidence)
+- [sqlite-vec KNN documentation](https://alexgarcia.xyz/sqlite-vec/features/knn.html) -- MATCH clause, distance_metric=cosine, k parameter (HIGH confidence)
+- [sqlite-vec crates.io](https://crates.io/crates/sqlite-vec) -- Version 0.1.6 stable, 0.1.7-alpha.10 latest alpha (HIGH confidence)
+- [sqlite-vec docs.rs](https://docs.rs/crate/sqlite-vec/latest) -- API: single `sqlite3_vec_init` function, cc build dep (HIGH confidence)
+- [sqlite-vec compiling documentation](https://alexgarcia.xyz/sqlite-vec/compiling.html) -- SQLITE_VEC_ENABLE_AVX, SQLITE_VEC_ENABLE_NEON compile flags (MEDIUM confidence)
+- [sqlite-vec stable release blog post](https://alexgarcia.xyz/blog/2024/sqlite-vec-stable-release/index.html) -- Performance benchmarks: <75ms for 100K x 384-dim queries (MEDIUM confidence)
+- [rusqlite crates.io](https://crates.io/crates/rusqlite) -- v0.37 with bundled-sqlcipher-vendored-openssl, libsqlite3-sys 0.36.0, SQLite 3.51.1 (HIGH confidence)
+- [OWASP LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html) -- 13 attack types, regex patterns, fuzzy matching, encoding detection (HIGH confidence)
+- [OWASP LLM01:2025 Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) -- Attack taxonomy, mitigation strategies (HIGH confidence)
+- [zerocopy docs.rs](https://docs.rs/zerocopy) -- v0.8 API, IntoBytes trait (formerly AsBytes), f32 support (HIGH confidence)
+- [cargo-bloat GitHub](https://github.com/RazrFalcon/cargo-bloat) -- Binary size analysis, per-crate breakdown (HIGH confidence)
 
 ---
-*Stack research for: Blufio v1.5 PRD Gap Closure*
-*Researched: 2026-03-10*
+*Stack research for: v1.6 Performance & Scalability Validation*
+*Researched: 2026-03-13*
