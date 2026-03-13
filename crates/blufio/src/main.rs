@@ -665,6 +665,9 @@ enum MemoryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Drop and rebuild the vec0 virtual table from the memories table.
+    #[command(name = "rebuild-vec0")]
+    RebuildVec0,
 }
 
 /// Injection defense subcommands.

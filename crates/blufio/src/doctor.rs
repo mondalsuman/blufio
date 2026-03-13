@@ -80,6 +80,9 @@ pub async fn run_doctor(config: &BlufioConfig, deep: bool, plain: bool) -> Resul
     // Litestream WAL replication check
     results.push(check_litestream(config));
 
+    // vec0 vector search health check
+    results.push(check_vec0(config).await);
+
     // Deep checks (only with --deep)
     if deep {
         results.push(check_db_integrity(&config.storage.database_path).await);
@@ -1380,6 +1383,128 @@ fn check_litestream(config: &BlufioConfig) -> CheckResult {
         status: CheckStatus::Pass,
         message: "binary found, replication configured".to_string(),
         duration: start.elapsed(),
+    }
+}
+
+/// Check vec0 vector search health: extension loaded, row count, sync drift.
+async fn check_vec0(config: &BlufioConfig) -> CheckResult {
+    let start = Instant::now();
+
+    if !config.memory.vec0_enabled {
+        return CheckResult {
+            name: "vec0 Search".to_string(),
+            status: CheckStatus::Pass,
+            message: "disabled (memory.vec0_enabled = false)".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    let db_path = &config.storage.database_path;
+    let path = std::path::Path::new(db_path);
+
+    if !path.exists() {
+        return CheckResult {
+            name: "vec0 Search".to_string(),
+            status: CheckStatus::Pass,
+            message: "enabled (no database yet)".to_string(),
+            duration: start.elapsed(),
+        };
+    }
+
+    // Open a connection and check vec0 health.
+    match blufio_storage::open_connection(db_path).await {
+        Ok(conn) => {
+            let result: Result<(Option<String>, Option<usize>, usize), tokio_rusqlite::Error<rusqlite::Error>> = conn
+                .call(|conn| {
+                    // Check 1: Extension loaded
+                    let version = blufio_memory::vec0::check_vec0_available(conn);
+
+                    // Check 2: vec0 row count (table may not exist yet)
+                    let vec0_count: Option<usize> = blufio_memory::vec0::vec0_count(conn).ok();
+
+                    // Check 3: Active memories count for drift detection
+                    let active_count: i64 = conn
+                        .query_row(
+                            "SELECT COUNT(*) FROM memories WHERE status = 'active' \
+                             AND classification != 'restricted' AND deleted_at IS NULL",
+                            [],
+                            |row| row.get(0),
+                        )
+                        .unwrap_or(0);
+
+                    Ok((version, vec0_count, active_count as usize))
+                })
+                .await;
+
+            match result {
+                Ok((version, vec0_count, active_count)) => {
+                    let ver_label = version
+                        .as_deref()
+                        .unwrap_or("NOT LOADED");
+
+                    if version.is_none() {
+                        return CheckResult {
+                            name: "vec0 Search".to_string(),
+                            status: CheckStatus::Fail,
+                            message: format!(
+                                "extension NOT LOADED (call ensure_sqlite_vec_registered at startup)"
+                            ),
+                            duration: start.elapsed(),
+                        };
+                    }
+
+                    match vec0_count {
+                        Some(v0_count) => {
+                            let drift = if active_count > v0_count {
+                                active_count - v0_count
+                            } else {
+                                v0_count - active_count
+                            };
+
+                            if drift > 0 {
+                                CheckResult {
+                                    name: "vec0 Search".to_string(),
+                                    status: CheckStatus::Warn,
+                                    message: format!(
+                                        "{ver_label}, {v0_count} vec0 rows, {active_count} active memories, drift: {drift}"
+                                    ),
+                                    duration: start.elapsed(),
+                                }
+                            } else {
+                                CheckResult {
+                                    name: "vec0 Search".to_string(),
+                                    status: CheckStatus::Pass,
+                                    message: format!(
+                                        "{ver_label}, {v0_count} vec0 rows, in sync"
+                                    ),
+                                    duration: start.elapsed(),
+                                }
+                            }
+                        }
+                        None => CheckResult {
+                            name: "vec0 Search".to_string(),
+                            status: CheckStatus::Warn,
+                            message: format!(
+                                "{ver_label}, vec0 table not found (run: blufio memory rebuild-vec0)"
+                            ),
+                            duration: start.elapsed(),
+                        },
+                    }
+                }
+                Err(e) => CheckResult {
+                    name: "vec0 Search".to_string(),
+                    status: CheckStatus::Fail,
+                    message: format!("check failed: {e}"),
+                    duration: start.elapsed(),
+                },
+            }
+        }
+        Err(e) => CheckResult {
+            name: "vec0 Search".to_string(),
+            status: CheckStatus::Fail,
+            message: format!("open failed: {e}"),
+            duration: start.elapsed(),
+        },
     }
 }
 
