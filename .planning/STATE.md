@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
-status: planning
-stopped_at: Phase 65 context gathered
-last_updated: "2026-03-13T19:20:02.349Z"
-last_activity: 2026-03-13 -- v1.6 roadmap created (5 phases, 23 requirements)
+status: executing
+stopped_at: "Completed 65-01-PLAN.md"
+last_updated: "2026-03-13T20:00:37Z"
+last_activity: 2026-03-13 -- 65-01 sqlite-vec foundation (deps, config, events, vec0.rs) completed
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 10
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 ## Current Position
 
 Phase: 65 -- first of 5 in v1.6 (sqlite-vec Foundation)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-03-13 -- v1.6 roadmap created (5 phases, 23 requirements)
+Plan: 1 of 2 in current phase
+Status: Executing -- Plan 01 complete, Plan 02 next
+Last activity: 2026-03-13 -- 65-01 sqlite-vec foundation (deps, config, events, vec0.rs) completed
 
-Progress: [░░░░░░░░░░] 0% (v1.6)
+Progress: [█░░░░░░░░░] 10% (v1.6)
 
 ## Performance Metrics
 
@@ -65,6 +65,8 @@ Recent decisions affecting v1.6 work:
 - [v1.5 Phase 57]: 5-layer injection defense with L1 pattern classifier -- INJ patterns expand from 11 to ~25
 - [v1.5 Phase 55]: Hybrid retrieval with temporal decay, importance boost, MMR diversity -- must be preserved during vec0 migration
 - [v1.5 Phase 63]: Criterion benchmarks in crates/blufio/benches/ -- extend with vec0 and injection benchmarks
+- [v1.6 Phase 65-01]: sqlite-vec 0.1.6 compiles with SQLCipher (SQLITE_CORE), vec0 auxiliary columns require "float" not "real"
+- [v1.6 Phase 65-01]: vec0 UPDATE on metadata columns works -- no DELETE+INSERT fallback needed for soft-delete sync
 
 ### Pending Todos
 
@@ -72,13 +74,13 @@ None.
 
 ### Blockers/Concerns
 
-- SQLCipher + sqlite-vec compatibility is unconfirmed -- must validate FIRST in Phase 65 before committing to vec0 approach
+- SQLCipher + sqlite-vec compatibility CONFIRMED -- sqlite-vec 0.1.6 compiles and runs with bundled-sqlcipher-vendored-openssl (validated in 65-01)
 - Injection pattern false positive risk -- expanded patterns require benign corpus validation (INJ-08)
 - vec0 returns cosine distance (0-2), not similarity (0-1) -- conversion required at integration boundary
 - Carry-forward: Claude tokenizer accuracy (~80-95%), Litestream + SQLCipher incompatibility documented
 
 ## Session Continuity
 
-Last session: 2026-03-13T19:20:02.346Z
-Stopped at: Phase 65 context gathered
-Resume file: .planning/phases/65-sqlite-vec-foundation/65-CONTEXT.md
+Last session: 2026-03-13T20:00:37Z
+Stopped at: Completed 65-01-PLAN.md
+Resume file: .planning/phases/65-sqlite-vec-foundation/65-02-PLAN.md
