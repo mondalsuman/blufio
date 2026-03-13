@@ -147,9 +147,9 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 - [ ] **QUAL-01**: #![deny(clippy::unwrap_used)] enforced across all library crates
 - [ ] **QUAL-02**: All 1,444+ unwrap() calls in library crates replaced with proper error handling
-- [ ] **QUAL-03**: /api/status endpoint returns actual uptime instead of hardcoded 0
-- [ ] **QUAL-04**: Mock provider replaces unimplemented!() with proper stubs
-- [ ] **QUAL-05**: serve.rs and other oversized functions decomposed into smaller init functions
+- [x] **QUAL-03**: /api/status endpoint returns actual uptime instead of hardcoded 0
+- [x] **QUAL-04**: Mock provider replaces unimplemented!() with proper stubs
+- [x] **QUAL-05**: serve.rs and other oversized functions decomposed into smaller init functions
 - [x] **QUAL-06**: Integration tests added for channel adapters
 - [x] **QUAL-07**: Property-based testing for core algorithms (compaction quality, PII detection, hash chain verification)
 - [x] **QUAL-08**: Benchmark regression detection in CI
@@ -275,9 +275,9 @@ Deferred to v1.6+.
 | LITE-04 | Phase 62 | Complete |
 | QUAL-01 | Phase 63 | Pending |
 | QUAL-02 | Phase 63 | Pending |
-| QUAL-03 | Phase 63 | Pending |
-| QUAL-04 | Phase 63 | Pending |
-| QUAL-05 | Phase 63 | Pending |
+| QUAL-03 | Phase 63 | Complete |
+| QUAL-04 | Phase 63 | Complete |
+| QUAL-05 | Phase 63 | Complete |
 | QUAL-06 | Phase 63 | Complete |
 | QUAL-07 | Phase 63 | Complete |
 | QUAL-08 | Phase 63 | Complete |
