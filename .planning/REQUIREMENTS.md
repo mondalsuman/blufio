@@ -131,10 +131,10 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### OpenAPI
 
-- [ ] **OAPI-01**: OpenAPI 3.1 spec auto-generated from axum route definitions via utoipa annotations
-- [ ] **OAPI-02**: Spec served at /openapi.json endpoint
-- [ ] **OAPI-03**: Optional Swagger UI served at /docs when enabled in config
-- [ ] **OAPI-04**: All existing gateway endpoints annotated with request/response schemas
+- [x] **OAPI-01**: OpenAPI 3.1 spec auto-generated from axum route definitions via utoipa annotations
+- [x] **OAPI-02**: Spec served at /openapi.json endpoint
+- [x] **OAPI-03**: Optional Swagger UI served at /docs when enabled in config
+- [x] **OAPI-04**: All existing gateway endpoints annotated with request/response schemas
 
 ### Litestream
 
@@ -265,10 +265,10 @@ Deferred to v1.6+.
 | OTEL-04 | Phase 62 | Pending |
 | OTEL-05 | Phase 62 | Complete |
 | OTEL-06 | Phase 62 | Complete |
-| OAPI-01 | Phase 62 | Pending |
-| OAPI-02 | Phase 62 | Pending |
-| OAPI-03 | Phase 62 | Pending |
-| OAPI-04 | Phase 62 | Pending |
+| OAPI-01 | Phase 62 | Complete |
+| OAPI-02 | Phase 62 | Complete |
+| OAPI-03 | Phase 62 | Complete |
+| OAPI-04 | Phase 62 | Complete |
 | LITE-01 | Phase 62 | Complete |
 | LITE-02 | Phase 62 | Complete |
 | LITE-03 | Phase 62 | Complete |

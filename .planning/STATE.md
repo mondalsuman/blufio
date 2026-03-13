@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 62-02-PLAN.md
-last_updated: "2026-03-13T11:19:29.636Z"
+stopped_at: Completed 62-04-PLAN.md
+last_updated: "2026-03-13T11:23:11.566Z"
 last_activity: 2026-03-13 -- Phase 62 Plan 05 complete (Litestream CLI init/status, WAL autocheckpoint pragma, doctor check)
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 35
-  completed_plans: 41
+  completed_plans: 42
   percent: 100
 ---
 
@@ -85,6 +85,7 @@ Progress: [██████████] 100%
 | Phase 62 P01 | 6min | 2 tasks | 4 files |
 | Phase 62 P05 | 8min | 2 tasks | 4 files |
 | Phase 62 P02 | 11min | 2 tasks | 2 files |
+| Phase 62 P04 | 14min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,10 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 62]: TracingState struct with cfg-gated otel_provider field for clean feature-conditional API
 - [Phase 62]: ParentBased(TraceIdRatioBased) sampler for proper distributed trace propagation
 - [Phase 62]: OTel init/shutdown uses eprintln (subscriber may not be ready/available)
+- [Phase 62]: Module named openapi.rs (not openapi_doc.rs) -- no utoipa::openapi namespace conflict at crate level
+- [Phase 62]: ModelsListResponse.data uses schema(value_type = Vec<Object>) since ModelInfo is from blufio-core without ToSchema
+- [Phase 62]: swagger_ui_enabled added to ServerConfig (config-driven toggle, not just feature gate)
+- [Phase 62]: /openapi.json is public (no auth) to support CI tooling, Postman imports, and code generators
 
 ### Pending Todos
 
@@ -238,6 +243,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T11:19:22.927Z
-Stopped at: Completed 62-02-PLAN.md
+Last session: 2026-03-13T11:23:11.563Z
+Stopped at: Completed 62-04-PLAN.md
 Resume file: None
