@@ -116,7 +116,7 @@
 
 **Milestone Goal:** Migrate vector search to sqlite-vec for production-scale memory, validate performance claims with benchmarks, and harden injection pattern detection.
 
-- [ ] **Phase 65: sqlite-vec Foundation** — Register sqlite-vec with SQLCipher, create vec0 virtual table with metadata columns, wire KNN search into retriever
+- [x] **Phase 65: sqlite-vec Foundation** — Register sqlite-vec with SQLCipher, create vec0 virtual table with metadata columns, wire KNN search into retriever (completed 2026-03-13)
 - [ ] **Phase 66: Injection Defense Hardening** — Unicode normalization pre-pass, expanded pattern set, multi-language detection, configurable severity, canary tokens, false positive validation
 - [ ] **Phase 67: Vector Search Migration & Hybrid Pipeline** — Migrate BLOB embeddings to vec0, preserve hybrid retrieval, sync eviction/soft-delete, partition keys, auxiliary columns
 - [ ] **Phase 68: Performance Benchmarking Suite** — Binary size tracking, memory RSS profiling, vec0 vs in-memory comparison, injection throughput, end-to-end hybrid pipeline, OpenClaw comparison, CI regression baselines
@@ -133,7 +133,7 @@
   2. KNN search via vec0 returns semantically relevant results ranked by cosine similarity (distance converted to 1.0 - distance)
   3. vec0 metadata columns filter status='active' and classification!='restricted' during KNN search, not post-query — result count matches filter expectations
   4. Existing memory search continues to work (no regression) while new vec0 path is available
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 65-01-PLAN.md — Foundation: sqlite-vec dependency, config, events, migration, vec0.rs CRUD operations
 - [ ] 65-02-PLAN.md — Wiring: dual-write store, vec0 search in retriever, fallback, population, metrics
@@ -197,7 +197,7 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 29-45 | v1.3 | 47/47 | Complete | 2026-03-08 |
 | 46-52 | v1.4 | 16/16 | Complete | 2026-03-09 |
 | 53-64 | v1.5 | 49/49 | Complete | 2026-03-13 |
-| 65. sqlite-vec Foundation | 2/3 | In Progress|  | - |
+| 65. sqlite-vec Foundation | 3/3 | Complete   | 2026-03-13 | - |
 | 66. Injection Defense Hardening | v1.6 | 0/? | Not started | - |
 | 67. Vector Search Migration & Hybrid Pipeline | v1.6 | 0/? | Not started | - |
 | 68. Performance Benchmarking Suite | v1.6 | 0/? | Not started | - |
