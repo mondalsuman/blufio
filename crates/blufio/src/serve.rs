@@ -120,9 +120,10 @@ fn initialize_plugin_registry(config: &BlufioConfig) -> PluginRegistry {
 /// ChannelMultiplexer for multi-channel support, and enters the main
 /// agent loop. Supports graceful shutdown via signal handlers.
 pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
-    // Initialize tracing subscriber with secret redaction (SEC-08).
-    // Returns a handle to populate vault secrets later (after vault unlock).
-    let vault_values = init_tracing(&config.agent.log_level);
+    // Initialize tracing subscriber with secret redaction (SEC-08) and optional OTel layer.
+    // Returns TracingState with vault values handle and (when otel feature compiled) OTel provider.
+    let tracing_state = init_tracing(&config.agent.log_level, &config);
+    let vault_values = tracing_state.vault_values.clone();
 
     info!("starting blufio serve");
 
@@ -2005,6 +2006,15 @@ pub async fn run_serve(config: BlufioConfig) -> Result<(), BlufioError> {
 
     agent_loop.run(cancel).await?;
 
+    // Flush and shut down OTel TracerProvider before other cleanup (OTEL-01).
+    // Must happen while tracing subscriber is still active so final spans export.
+    #[cfg(feature = "otel")]
+    {
+        if let Some(provider) = tracing_state.otel_provider {
+            crate::otel::shutdown_otel(provider);
+        }
+    }
+
     // Fire pre_shutdown hooks before cleanup begins.
     if let Some(ref hm) = hook_manager {
         hm.execute_lifecycle_hooks("pre_shutdown", &event_bus).await;
@@ -2222,11 +2232,27 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for RedactingMakeWriter {
     }
 }
 
-/// Initializes the tracing subscriber with secret redaction.
+/// Tracing initialization state returned by [`init_tracing`].
 ///
-/// Returns a shared handle to the vault values list. The caller
-/// populates this after vault unlock so that dynamically-loaded
-/// secrets are redacted in subsequent log output.
+/// Holds the vault values handle for dynamic secret redaction and,
+/// when the `otel` feature is compiled, the OTel TracerProvider for
+/// graceful shutdown.
+struct TracingState {
+    vault_values: std::sync::Arc<std::sync::RwLock<Vec<String>>>,
+    #[cfg(feature = "otel")]
+    otel_provider: Option<opentelemetry_sdk::trace::SdkTracerProvider>,
+}
+
+/// Initializes the tracing subscriber with secret redaction and optional
+/// OpenTelemetry layer.
+///
+/// Uses a registry-based layered subscriber so that the fmt layer and the
+/// optional OTel layer can be composed. When the `otel` feature is compiled
+/// and enabled in config, spans are exported via OTLP HTTP in addition to
+/// the standard fmt output.
+///
+/// Returns a [`TracingState`] holding the vault values handle and (when
+/// otel-enabled) the TracerProvider for shutdown.
 ///
 /// Regex patterns catch `sk-ant-*`, generic `sk-*`, Bearer tokens, and
 /// Telegram bot tokens automatically. The vault values handle catches
@@ -2234,7 +2260,8 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for RedactingMakeWriter {
 ///
 /// # Panics
 /// Panics if a tracing subscriber is already installed.
-fn init_tracing(log_level: &str) -> std::sync::Arc<std::sync::RwLock<Vec<String>>> {
+fn init_tracing(log_level: &str, config: &BlufioConfig) -> TracingState {
+    use tracing_subscriber::prelude::*;
     use tracing_subscriber::EnvFilter;
 
     let vault_values = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
@@ -2246,12 +2273,50 @@ fn init_tracing(log_level: &str) -> std::sync::Arc<std::sync::RwLock<Vec<String>
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(format!("blufio={log_level},warn")));
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
+    let fmt_layer = tracing_subscriber::fmt::layer()
         .with_target(true)
         .with_thread_names(false)
-        .with_writer(redacting_writer)
-        .init();
+        .with_writer(redacting_writer);
 
-    vault_values
+    #[cfg(feature = "otel")]
+    {
+        let otel_result = crate::otel::try_init_otel_layer(&config.observability.opentelemetry);
+        if let Some((otel_layer, provider)) = otel_result {
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(fmt_layer)
+                .with(otel_layer)
+                .init();
+            return TracingState {
+                vault_values,
+                otel_provider: Some(provider),
+            };
+        }
+        // OTel disabled or failed -- fall through to no-OTel path.
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(fmt_layer)
+            .init();
+        return TracingState {
+            vault_values,
+            otel_provider: None,
+        };
+    }
+
+    #[cfg(not(feature = "otel"))]
+    {
+        // Warn if config has OTel enabled but feature not compiled.
+        if config.observability.opentelemetry.enabled {
+            eprintln!(
+                "WARNING: OpenTelemetry enabled in config but 'otel' feature not compiled. \
+                 Rebuild with --features otel"
+            );
+        }
+
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(fmt_layer)
+            .init();
+        TracingState { vault_values }
+    }
 }

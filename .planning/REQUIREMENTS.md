@@ -138,10 +138,10 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 
 ### Litestream
 
-- [ ] **LITE-01**: Litestream config template generation via `blufio litestream init`
-- [ ] **LITE-02**: `blufio litestream status` checks replication lag
-- [ ] **LITE-03**: Documentation of SQLCipher incompatibility with mitigation (application-level backup alternative)
-- [ ] **LITE-04**: WAL autocheckpoint disabled when Litestream mode active (PRAGMA wal_autocheckpoint=0)
+- [x] **LITE-01**: Litestream config template generation via `blufio litestream init`
+- [x] **LITE-02**: `blufio litestream status` checks replication lag
+- [x] **LITE-03**: Documentation of SQLCipher incompatibility with mitigation (application-level backup alternative)
+- [x] **LITE-04**: WAL autocheckpoint disabled when Litestream mode active (PRAGMA wal_autocheckpoint=0)
 
 ### Code Quality
 
@@ -269,10 +269,10 @@ Deferred to v1.6+.
 | OAPI-02 | Phase 62 | Pending |
 | OAPI-03 | Phase 62 | Pending |
 | OAPI-04 | Phase 62 | Pending |
-| LITE-01 | Phase 62 | Pending |
-| LITE-02 | Phase 62 | Pending |
-| LITE-03 | Phase 62 | Pending |
-| LITE-04 | Phase 62 | Pending |
+| LITE-01 | Phase 62 | Complete |
+| LITE-02 | Phase 62 | Complete |
+| LITE-03 | Phase 62 | Complete |
+| LITE-04 | Phase 62 | Complete |
 | QUAL-01 | Phase 63 | Pending |
 | QUAL-02 | Phase 63 | Pending |
 | QUAL-03 | Phase 63 | Pending |
