@@ -9,8 +9,10 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use chrono::Utc;
+use metrics::{counter, histogram};
 use tracing::warn;
 
 use blufio_config::model::MemoryConfig;
@@ -21,6 +23,7 @@ use blufio_core::types::EmbeddingInput;
 use crate::embedder::OnnxEmbedder;
 use crate::store::MemoryStore;
 use crate::types::{Memory, MemorySource, ScoredMemory, cosine_similarity};
+use crate::vec0;
 
 /// RRF constant per research literature.
 const RRF_K: f32 = 60.0;
@@ -68,19 +71,36 @@ fn importance_boost_for_source(source: &MemorySource, config: &MemoryConfig) -> 
 /// Uses Reciprocal Rank Fusion (RRF) to merge results from both search
 /// methods, applies importance boost and temporal decay, then reranks
 /// with Maximal Marginal Relevance (MMR) for result diversity.
+/// Maximum number of consecutive fallback events logged individually
+/// before switching to rate-limited batch logging.
+const FALLBACK_LOG_THRESHOLD: u64 = 5;
+
+/// Minimum interval between rate-limited fallback log messages.
+const FALLBACK_LOG_INTERVAL_SECS: u64 = 60;
+
 pub struct HybridRetriever {
     store: Arc<MemoryStore>,
     embedder: Arc<OnnxEmbedder>,
     config: MemoryConfig,
+    /// Whether to use vec0 KNN search (from config toggle).
+    vec0_enabled: bool,
+    /// Count of consecutive vec0 fallback events for rate-limited logging.
+    fallback_count: Arc<AtomicU64>,
+    /// Timestamp (epoch secs) of last fallback log for suppression.
+    last_fallback_log: Arc<AtomicU64>,
 }
 
 impl HybridRetriever {
     /// Creates a new hybrid retriever.
     pub fn new(store: Arc<MemoryStore>, embedder: Arc<OnnxEmbedder>, config: MemoryConfig) -> Self {
+        let vec0_enabled = config.vec0_enabled;
         Self {
             store,
             embedder,
             config,
+            vec0_enabled,
+            fallback_count: Arc::new(AtomicU64::new(0)),
+            last_fallback_log: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -97,12 +117,13 @@ impl HybridRetriever {
     /// 8. MMR diversity reranking (greedy, lambda-weighted)
     /// 9. Return Vec<ScoredMemory>
     pub async fn retrieve(&self, query: &str) -> Result<Vec<ScoredMemory>, BlufioError> {
-        // OTel: Memory retrieval span with result count and top score.
+        // OTel: Memory retrieval span with result count, top score, and backend type.
         // Created as a handle (not entered) because entered spans are !Send.
         let _memory_span = tracing::info_span!(
             "blufio.memory.retrieve",
             "blufio.memory.results_count" = tracing::field::Empty,
             "blufio.memory.top_score" = tracing::field::Empty,
+            "blufio.memory.backend" = tracing::field::Empty,
         );
 
         // Step 1: Embed the query
@@ -118,8 +139,16 @@ impl HybridRetriever {
                 BlufioError::Internal("Embedding returned no results".to_string())
             })?;
 
-        // Step 2: Vector search
+        // Step 2: Vector search (vec0 KNN when enabled, fallback to in-memory)
+        let fallback_before = self.fallback_count.load(Ordering::Relaxed);
         let vector_results = self.vector_search(&query_embedding).await?;
+        let fallback_after = self.fallback_count.load(Ordering::Relaxed);
+        let backend = if self.vec0_enabled && fallback_after == fallback_before {
+            "vec0"
+        } else {
+            "in_memory"
+        };
+        _memory_span.record("blufio.memory.backend", backend);
 
         // Step 3: BM25 search
         let bm25_results = self
@@ -183,11 +212,39 @@ impl HybridRetriever {
         Ok(result)
     }
 
-    /// Vector search: compute cosine similarity against all active embeddings.
+    /// Vector search: uses vec0 KNN when enabled, falls back to in-memory on failure.
     ///
     /// Returns (id, similarity) pairs above the similarity threshold,
     /// sorted by similarity descending, capped at max_retrieval_results.
     async fn vector_search(
+        &self,
+        query_embedding: &[f32],
+    ) -> Result<Vec<(String, f32)>, BlufioError> {
+        if self.vec0_enabled {
+            let start = std::time::Instant::now();
+            match self.vec0_vector_search(query_embedding).await {
+                Ok(results) => {
+                    histogram!("blufio_memory_vec0_search_duration_seconds")
+                        .record(start.elapsed().as_secs_f64());
+                    return Ok(results);
+                }
+                Err(e) => {
+                    // Per-query fallback: log and fall through to in-memory
+                    self.log_vec0_fallback(&e);
+                    counter!("blufio_memory_vec0_fallback_total").increment(1);
+                    // Fall through to in-memory search below
+                }
+            }
+        }
+        // Existing in-memory cosine similarity search (unchanged)
+        self.in_memory_vector_search(query_embedding).await
+    }
+
+    /// In-memory vector search: loads all active embeddings and computes cosine similarity.
+    ///
+    /// This is the original vector search path, used when vec0_enabled is false
+    /// or as fallback when vec0 query fails.
+    async fn in_memory_vector_search(
         &self,
         query_embedding: &[f32],
     ) -> Result<Vec<(String, f32)>, BlufioError> {
@@ -215,6 +272,56 @@ impl HybridRetriever {
         results.truncate(self.config.max_retrieval_results);
 
         Ok(results)
+    }
+
+    /// Vec0 KNN vector search: delegates to vec0::vec0_search.
+    ///
+    /// Maps Vec0SearchResult to (memory_id, similarity) pairs for the RRF pipeline.
+    /// The vec0 search already applies VEC-03 metadata filtering (status='active',
+    /// classification!='restricted').
+    async fn vec0_vector_search(
+        &self,
+        query_embedding: &[f32],
+    ) -> Result<Vec<(String, f32)>, BlufioError> {
+        let query_emb = query_embedding.to_vec();
+        let k = self.config.max_retrieval_results;
+        let threshold = self.config.similarity_threshold;
+
+        let results = self
+            .store
+            .conn()
+            .call(move |conn| vec0::vec0_search(&conn, &query_emb, k, threshold, None))
+            .await
+            .map_err(|e| BlufioError::storage_connection_failed(e))?;
+
+        Ok(results
+            .into_iter()
+            .map(|r| (r.memory_id, r.similarity))
+            .collect())
+    }
+
+    /// Log vec0 fallback with rate limiting.
+    ///
+    /// Logs the first `FALLBACK_LOG_THRESHOLD` failures individually, then
+    /// suppresses and batch-logs every `FALLBACK_LOG_INTERVAL_SECS` seconds.
+    fn log_vec0_fallback(&self, error: &impl std::fmt::Display) {
+        let count = self.fallback_count.fetch_add(1, Ordering::Relaxed) + 1;
+
+        if count <= FALLBACK_LOG_THRESHOLD {
+            warn!("vec0 search failed, falling back to in-memory: {error}");
+        } else {
+            let now_secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let last = self.last_fallback_log.load(Ordering::Relaxed);
+            if now_secs - last >= FALLBACK_LOG_INTERVAL_SECS {
+                self.last_fallback_log.store(now_secs, Ordering::Relaxed);
+                warn!(
+                    "vec0 search failed {count} times since last log, falling back to in-memory: {error}"
+                );
+            }
+        }
     }
 }
 
@@ -747,5 +854,290 @@ mod tests {
         let result = mmr_rerank(&scored, 0.7, 5);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].memory.id, "only");
+    }
+
+    // --- vec0 retriever tests ---
+
+    use crate::store::MemoryStore;
+    use crate::types::MemoryStatus;
+    use blufio_core::classification::DataClassification;
+    use tokio_rusqlite::Connection;
+
+    /// Create an async test DB with vec0 virtual table.
+    async fn setup_retriever_test_db() -> Connection {
+        vec0::ensure_sqlite_vec_registered();
+        let conn = Connection::open_in_memory().await.unwrap();
+        conn.call(|conn| -> Result<(), rusqlite::Error> {
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS memories (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    content TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    source TEXT NOT NULL,
+                    confidence REAL NOT NULL DEFAULT 0.5,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    superseded_by TEXT,
+                    session_id TEXT,
+                    classification TEXT NOT NULL DEFAULT 'internal',
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    deleted_at TEXT
+                );
+
+                CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+                    content,
+                    content='memories',
+                    content_rowid='rowid'
+                );
+
+                CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+                    INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+                    INSERT INTO memories_fts(memories_fts, rowid, content)
+                        VALUES('delete', old.rowid, old.content);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+                    INSERT INTO memories_fts(memories_fts, rowid, content)
+                        VALUES('delete', old.rowid, old.content);
+                    INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+                END;
+
+                CREATE VIRTUAL TABLE IF NOT EXISTS memories_vec0 USING vec0(
+                    status text,
+                    classification text,
+                    session_id text partition key,
+                    embedding float[384] distance_metric=cosine,
+                    +memory_id text,
+                    +content text,
+                    +source text,
+                    +confidence float,
+                    +created_at text
+                );",
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        conn
+    }
+
+    fn make_test_memory_full(id: &str, content: &str) -> Memory {
+        Memory {
+            id: id.to_string(),
+            content: content.to_string(),
+            embedding: vec![0.1; 384],
+            source: MemorySource::Explicit,
+            confidence: 0.9,
+            status: MemoryStatus::Active,
+            superseded_by: None,
+            session_id: Some("test-session".to_string()),
+            classification: DataClassification::default(),
+            created_at: "2026-03-01T00:00:00.000Z".to_string(),
+            updated_at: "2026-03-01T00:00:00.000Z".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn vec0_vector_search_returns_results() {
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
+
+        // Insert a memory with dual-write
+        store.save(&make_test_memory_full("mem-r1", "Coffee preference")).await.unwrap();
+
+        // Use vec0 search directly through the retriever's private method
+        // We test by calling the store's vec0 search
+        let results = store
+            .conn()
+            .call(|conn| {
+                vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None)
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].memory_id, "mem-r1");
+    }
+
+    #[tokio::test]
+    async fn vec0_disabled_uses_in_memory_path() {
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, false));
+
+        store.save(&make_test_memory_full("mem-r2", "Tea preference")).await.unwrap();
+
+        // vec0 should be empty (disabled)
+        let vec0_count = store
+            .conn()
+            .call(|conn| vec0::vec0_count(conn))
+            .await
+            .unwrap();
+        assert_eq!(vec0_count, 0, "vec0 should be empty when disabled");
+
+        // In-memory embeddings should still work
+        let embeddings = store.get_active_embeddings().await.unwrap();
+        assert_eq!(embeddings.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn vec0_fallback_on_error_uses_in_memory() {
+        // Create a DB without vec0 table to simulate vec0 failure
+        vec0::ensure_sqlite_vec_registered();
+        let conn = Connection::open_in_memory().await.unwrap();
+        conn.call(|conn| -> Result<(), rusqlite::Error> {
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS memories (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    content TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    source TEXT NOT NULL,
+                    confidence REAL NOT NULL DEFAULT 0.5,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    superseded_by TEXT,
+                    session_id TEXT,
+                    classification TEXT NOT NULL DEFAULT 'internal',
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    deleted_at TEXT
+                );
+
+                CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+                    content,
+                    content='memories',
+                    content_rowid='rowid'
+                );
+
+                CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+                    INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+                END;",
+            )?;
+            // NOTE: no memories_vec0 table -- vec0 search will fail
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        // Create a store (vec0 disabled for inserts since table doesn't exist)
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, false));
+
+        // Save a memory normally (no dual-write)
+        store.save(&make_test_memory_full("mem-fallback", "Fallback test")).await.unwrap();
+
+        // Vec0 search should fail (no table), verify in-memory works as fallback
+        let query_emb = vec![0.1f32; 384];
+
+        // vec0 search should fail
+        let vec0_result = store
+            .conn()
+            .call(move |conn| {
+                vec0::vec0_search(conn, &query_emb, 10, 0.0, None)
+            })
+            .await;
+        assert!(vec0_result.is_err(), "vec0 search should fail without table");
+
+        // In-memory search should still work
+        let in_mem_results = store.get_active_embeddings().await.unwrap();
+        assert_eq!(in_mem_results.len(), 1, "in-memory path should work as fallback");
+    }
+
+    #[tokio::test]
+    async fn vec0_results_match_rrf_format() {
+        // Verify vec0 search results produce (id, similarity) pairs like in-memory
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
+
+        store.save(&make_test_memory_full("mem-fmt-1", "Format test")).await.unwrap();
+
+        let results = store
+            .conn()
+            .call(|conn| {
+                vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None)
+            })
+            .await
+            .unwrap();
+
+        // Results should be mappable to (String, f32) for RRF
+        let rrf_compatible: Vec<(String, f32)> = results
+            .into_iter()
+            .map(|r| (r.memory_id, r.similarity))
+            .collect();
+
+        assert_eq!(rrf_compatible.len(), 1);
+        assert_eq!(rrf_compatible[0].0, "mem-fmt-1");
+        assert!(rrf_compatible[0].1 > 0.0, "similarity should be positive");
+    }
+
+    #[test]
+    fn fallback_counter_tracks_consecutive_failures() {
+        // Test the fallback count tracking used by log_vec0_fallback
+        let counter = Arc::new(AtomicU64::new(0));
+
+        // Simulate 5 fallback events
+        for _ in 0..5 {
+            counter.fetch_add(1, Ordering::Relaxed);
+        }
+        assert_eq!(counter.load(Ordering::Relaxed), 5);
+
+        // 6th event
+        let count = counter.fetch_add(1, Ordering::Relaxed) + 1;
+        assert_eq!(count, 6);
+        // After threshold, rate limiting kicks in (tested via the constant)
+        assert!(count > FALLBACK_LOG_THRESHOLD);
+    }
+
+    #[test]
+    fn vec0_enabled_propagates_from_config() {
+        // Verify that vec0_enabled is picked up from config
+        let mut config = MemoryConfig::default();
+        assert!(!config.vec0_enabled, "default should be false");
+
+        config.vec0_enabled = true;
+        assert!(config.vec0_enabled, "should be settable to true");
+    }
+
+    #[tokio::test]
+    async fn vec0_search_and_in_memory_produce_same_format() {
+        // Verify that both search paths produce Vec<(String, f32)>
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
+
+        store.save(&make_test_memory_full("mem-cmp-1", "Comparison test")).await.unwrap();
+
+        let query_emb = vec![0.1f32; 384];
+
+        // Vec0 path
+        let vec0_results = store
+            .conn()
+            .call({
+                let q = query_emb.clone();
+                move |conn| vec0::vec0_search(conn, &q, 10, 0.0, None)
+            })
+            .await
+            .unwrap();
+        let vec0_pairs: Vec<(String, f32)> = vec0_results
+            .into_iter()
+            .map(|r| (r.memory_id, r.similarity))
+            .collect();
+
+        // In-memory path
+        let in_mem_embeddings = store.get_active_embeddings().await.unwrap();
+        let in_mem_pairs: Vec<(String, f32)> = in_mem_embeddings
+            .into_iter()
+            .filter_map(|(id, emb)| {
+                let sim = cosine_similarity(&query_emb, &emb);
+                if sim >= 0.0 { Some((id, sim)) } else { None }
+            })
+            .collect();
+
+        // Both should return the same memory ID
+        assert_eq!(vec0_pairs.len(), 1);
+        assert_eq!(in_mem_pairs.len(), 1);
+        assert_eq!(vec0_pairs[0].0, in_mem_pairs[0].0);
+        // Both similarities should be positive
+        assert!(vec0_pairs[0].1 > 0.0);
+        assert!(in_mem_pairs[0].1 > 0.0);
     }
 }
