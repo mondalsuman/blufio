@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Completed 66-02-PLAN.md
-last_updated: "2026-03-13T21:57:29Z"
-last_activity: 2026-03-13 -- 66-02 canary tokens, SecurityEvent::CanaryDetection, screen_llm_response
+stopped_at: Completed 66-03-PLAN.md
+last_updated: "2026-03-13T22:17:11.523Z"
+last_activity: 2026-03-13 -- 66-03 dual scan, severity weights, test-canary CLI, doctor canary check
 progress:
   total_phases: 5
   completed_phases: 1
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 ## Current Position
 
 Phase: 66 -- second of 5 in v1.6 (Injection Defense Hardening) -- IN PROGRESS
-Plan: 2 of 4 in current phase (2 complete)
-Status: Plan 66-02 complete -- canary token system with output screening integration
-Last activity: 2026-03-13 -- 66-02 canary tokens, SecurityEvent::CanaryDetection, screen_llm_response
+Plan: 3 of 4 in current phase (3 complete)
+Status: Plan 66-03 complete -- normalization pre-pass, severity weights, CLI/doctor canary integration
+Last activity: 2026-03-13 -- 66-03 dual scan, severity weights, test-canary CLI, doctor canary check
 
 Progress: [████░░░░░░] 42% (v1.6)
 
@@ -63,6 +63,7 @@ Progress: [████░░░░░░] 42% (v1.6)
 | Phase 65 P03 | 12min | 3 | 6 |
 | Phase 66 P01 | 9min | 2 tasks | 11 files |
 | Phase 66 P02 | 10min | 2 tasks | 7 files |
+| Phase 66 P03 | 14min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,7 @@ Recent decisions affecting v1.6 work:
 - [Phase 66]: EncodingEvasion has no static patterns -- triggered dynamically when decoded content matches another category
 - [Phase 66-02]: Canary detection via screen_llm_response() separate from screen_content() tool path
 - [Phase 66-02]: record_input_detection now takes category label -- external callers need Plan 03 update
+- [Phase 66]: Deduplication by (pattern_index, matched_text) for dual-scan merge; evasion bonus additive and independent of weights
 
 ### Pending Todos
 
@@ -100,6 +102,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T21:57:29Z
-Stopped at: Completed 66-02-PLAN.md
+Last session: 2026-03-13T22:17:11.521Z
+Stopped at: Completed 66-03-PLAN.md
 Resume file: None
