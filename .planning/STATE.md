@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Completed 61-01-PLAN.md
-last_updated: "2026-03-12T23:59:27.449Z"
-last_activity: "2026-03-12 -- Phase 61 Plan 01 complete (channel adapter foundation: crate scaffolds, config structs, ChannelEvent extension)"
+stopped_at: Completed 61-03-PLAN.md
+last_updated: "2026-03-13T00:10:56.436Z"
+last_activity: 2026-03-13 -- Phase 61 Plan 03 complete (iMessage/SMS channel adapters with webhook handlers, HMAC-SHA1, E.164 validation)
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 30
-  completed_plans: 35
+  completed_plans: 37
   percent: 100
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 61 of 63 (Channel Adapters) -- ninth of 11 phases in v1.5
-Plan: 01 of 3 complete
+Plan: 03 of 3 complete
 Status: In Progress
-Last activity: 2026-03-12 -- Phase 61 Plan 01 complete (channel adapter foundation: crate scaffolds, config structs, ChannelEvent extension)
+Last activity: 2026-03-13 -- Phase 61 Plan 03 complete (iMessage/SMS channel adapters with webhook handlers, HMAC-SHA1, E.164 validation)
 
 Progress: [██████████] 100%
 
@@ -79,6 +79,8 @@ Progress: [██████████] 100%
 | Phase 60 P02 | 8min | 2 tasks | 6 files |
 | Phase 60 P03 | 8min | 2 tasks | 7 files |
 | Phase 61 P01 | 5min | 2 tasks | 17 files |
+| Phase 61 P02 | 8min | 2 tasks | 6 files |
+| Phase 61 P03 | 7min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -201,6 +203,12 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 60]: Audit entry count uses LIKE matching on actor/session_id/details_json with pii_marker=0 filter
 - [Phase 61]: EmailConfig uses default_email_poll_interval (30s) with serde default helper
 - [Phase 61]: New channel config fields placed between matrix and bridge in BlufioConfig
+- [Phase 61]: BlueBubblesClient uses query-param auth (?password=) per BlueBubbles API convention
+- [Phase 61]: TwilioClient builds form-urlencoded body manually (serde_urlencoded) since workspace reqwest lacks form feature
+- [Phase 61]: HMAC-SHA1 with Base64 encoding for Twilio (distinct from WhatsApp HMAC-SHA256 hex)
+- [Phase 61]: async-imap switched to runtime-tokio feature (default async-std incompatible with project)
+- [Phase 61]: mail-parser DateTime manual ISO 8601 conversion (no built-in method)
+- [Phase 61]: IMAP connect-per-cycle pattern for simplicity over persistent connections
 
 ### Pending Todos
 
@@ -216,6 +224,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12T23:59:27.446Z
-Stopped at: Completed 61-01-PLAN.md
+Last session: 2026-03-13T00:10:56.433Z
+Stopped at: Completed 61-03-PLAN.md
 Resume file: None
