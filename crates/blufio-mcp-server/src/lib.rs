@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Blufio Contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
+#![deny(clippy::unwrap_used)]
 
 //! MCP server implementation for Blufio.
 //!

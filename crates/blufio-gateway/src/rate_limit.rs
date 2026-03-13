@@ -104,21 +104,24 @@ pub async fn rate_limit_middleware(
                         })
                         .to_string(),
                     ))
-                    .unwrap();
+                    .expect("valid response builder");
 
                 let headers = response.headers_mut();
                 headers.insert(
                     "Retry-After",
-                    HeaderValue::from_str(&retry_after.to_string()).unwrap(),
+                    HeaderValue::from_str(&retry_after.to_string())
+                        .expect("valid header: numeric retry_after"),
                 );
                 headers.insert(
                     "X-RateLimit-Limit",
-                    HeaderValue::from_str(&rate_limit.to_string()).unwrap(),
+                    HeaderValue::from_str(&rate_limit.to_string())
+                        .expect("valid header: numeric rate_limit"),
                 );
                 headers.insert("X-RateLimit-Remaining", HeaderValue::from_static("0"));
                 headers.insert(
                     "X-RateLimit-Reset",
-                    HeaderValue::from_str(&retry_after.to_string()).unwrap(),
+                    HeaderValue::from_str(&retry_after.to_string())
+                        .expect("valid header: numeric retry_after"),
                 );
                 headers.insert("Content-Type", HeaderValue::from_static("application/json"));
 
@@ -136,15 +139,18 @@ pub async fn rate_limit_middleware(
             let headers = response.headers_mut();
             headers.insert(
                 "X-RateLimit-Limit",
-                HeaderValue::from_str(&rate_limit.to_string()).unwrap(),
+                HeaderValue::from_str(&rate_limit.to_string())
+                    .expect("valid header: numeric rate_limit"),
             );
             headers.insert(
                 "X-RateLimit-Remaining",
-                HeaderValue::from_str(&remaining.to_string()).unwrap(),
+                HeaderValue::from_str(&remaining.to_string())
+                    .expect("valid header: numeric remaining"),
             );
             headers.insert(
                 "X-RateLimit-Reset",
-                HeaderValue::from_str(&retry_after.to_string()).unwrap(),
+                HeaderValue::from_str(&retry_after.to_string())
+                    .expect("valid header: numeric retry_after"),
             );
 
             Ok(response)
