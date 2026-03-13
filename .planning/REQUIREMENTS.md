@@ -152,7 +152,7 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 - [ ] **QUAL-05**: serve.rs and other oversized functions decomposed into smaller init functions
 - [ ] **QUAL-06**: Integration tests added for channel adapters
 - [ ] **QUAL-07**: Property-based testing for core algorithms (compaction quality, PII detection, hash chain verification)
-- [ ] **QUAL-08**: Benchmark regression detection in CI
+- [x] **QUAL-08**: Benchmark regression detection in CI
 
 ## Future Requirements
 
@@ -280,7 +280,7 @@ Deferred to v1.6+.
 | QUAL-05 | Phase 63 | Pending |
 | QUAL-06 | Phase 63 | Pending |
 | QUAL-07 | Phase 63 | Pending |
-| QUAL-08 | Phase 63 | Pending |
+| QUAL-08 | Phase 63 | Complete |
 
 **Coverage:**
 - v1.5 requirements: 93 total
