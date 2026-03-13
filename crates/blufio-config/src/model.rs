@@ -117,6 +117,14 @@ pub struct BlufioConfig {
     #[serde(default)]
     pub prometheus: PrometheusConfig,
 
+    /// Observability settings (tracing, metrics).
+    #[serde(default)]
+    pub observability: ObservabilityConfig,
+
+    /// Litestream WAL replication settings.
+    #[serde(default)]
+    pub litestream: LitestreamConfig,
+
     /// Daemon and memory management settings.
     #[serde(default)]
     pub daemon: DaemonConfig,
@@ -1400,6 +1408,9 @@ pub struct GatewayConfig {
     /// Maximum number of items allowed in a single batch request.
     #[serde(default = "default_max_batch_size")]
     pub max_batch_size: usize,
+    /// OpenAPI documentation settings.
+    #[serde(default)]
+    pub openapi: OpenApiConfig,
 }
 
 impl Default for GatewayConfig {
@@ -1412,6 +1423,7 @@ impl Default for GatewayConfig {
             api_tools_allowlist: Vec::new(),
             default_rate_limit: default_rate_limit(),
             max_batch_size: default_max_batch_size(),
+            openapi: OpenApiConfig::default(),
         }
     }
 }
@@ -1457,6 +1469,95 @@ impl Default for PrometheusConfig {
 
 fn default_prometheus_enabled() -> bool {
     false
+}
+
+/// Observability settings wrapper (tracing, metrics).
+///
+/// Groups tracing subsystems under a single config section.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct ObservabilityConfig {
+    /// OpenTelemetry distributed tracing settings.
+    pub opentelemetry: OpenTelemetryConfig,
+}
+
+/// OpenTelemetry tracing configuration.
+///
+/// Controls the OTel tracing pipeline: OTLP HTTP export, sampling, batching,
+/// and resource attributes. Requires the `otel` feature to be compiled in.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct OpenTelemetryConfig {
+    /// Enable OpenTelemetry tracing (requires `otel` feature compiled in).
+    pub enabled: bool,
+    /// OTLP HTTP endpoint URL.
+    pub endpoint: String,
+    /// Trace sampling ratio (0.0 = none, 1.0 = all).
+    pub sample_ratio: f64,
+    /// Service name reported in traces.
+    pub service_name: String,
+    /// Deployment environment label.
+    pub environment: String,
+    /// Batch export timeout in milliseconds.
+    pub batch_timeout_ms: u64,
+    /// Maximum spans per export batch.
+    pub max_export_batch_size: usize,
+    /// Maximum span queue size (bounded buffer).
+    pub max_queue_size: usize,
+    /// Custom resource attributes added to all spans.
+    pub resource_attributes: HashMap<String, String>,
+}
+
+impl Default for OpenTelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "http://localhost:4318".to_string(),
+            sample_ratio: 1.0,
+            service_name: "blufio".to_string(),
+            environment: "production".to_string(),
+            batch_timeout_ms: 5000,
+            max_export_batch_size: 512,
+            max_queue_size: 2048,
+            resource_attributes: HashMap::new(),
+        }
+    }
+}
+
+/// Litestream WAL replication configuration.
+///
+/// When enabled, sets `PRAGMA wal_autocheckpoint=0` on database open so
+/// Litestream can manage WAL checkpointing for continuous replication.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct LitestreamConfig {
+    /// Enable Litestream integration (sets PRAGMA wal_autocheckpoint=0).
+    pub enabled: bool,
+}
+
+impl Default for LitestreamConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
+/// OpenAPI documentation configuration.
+///
+/// Controls Swagger UI availability at the `/docs` endpoint.
+/// The `/openapi.json` spec endpoint is always served regardless of this setting.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct OpenApiConfig {
+    /// Enable Swagger UI at `/docs` (requires `swagger-ui` feature compiled in).
+    pub swagger_ui_enabled: bool,
+}
+
+impl Default for OpenApiConfig {
+    fn default() -> Self {
+        Self {
+            swagger_ui_enabled: false,
+        }
+    }
 }
 
 /// Daemon and memory management configuration.
