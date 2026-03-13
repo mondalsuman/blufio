@@ -197,7 +197,7 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 29-45 | v1.3 | 47/47 | Complete | 2026-03-08 |
 | 46-52 | v1.4 | 16/16 | Complete | 2026-03-09 |
 | 53-64 | v1.5 | 49/49 | Complete | 2026-03-13 |
-| 65. sqlite-vec Foundation | 3/3 | Complete   | 2026-03-13 | - |
+| 65. sqlite-vec Foundation | 3/3 | Complete    | 2026-03-13 | - |
 | 66. Injection Defense Hardening | v1.6 | 0/? | Not started | - |
 | 67. Vector Search Migration & Hybrid Pipeline | v1.6 | 0/? | Not started | - |
 | 68. Performance Benchmarking Suite | v1.6 | 0/? | Not started | - |
