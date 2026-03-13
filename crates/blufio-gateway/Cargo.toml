@@ -37,10 +37,14 @@ reqwest.workspace = true
 tokio-rusqlite.workspace = true
 rusqlite.workspace = true
 blufio-whatsapp = { path = "../blufio-whatsapp", optional = true }
+utoipa.workspace = true
+utoipa-swagger-ui = { workspace = true, optional = true }
 
 [features]
 default = []
 whatsapp = ["dep:blufio-whatsapp"]
+swagger-ui = ["dep:utoipa-swagger-ui"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+insta.workspace = true
