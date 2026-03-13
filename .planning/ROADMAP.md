@@ -291,7 +291,13 @@ Plans:
   3. Integration tests exist for channel adapters (Email, iMessage, SMS plus existing adapters)
   4. Property-based tests validate core algorithms (compaction quality scoring, PII detection patterns, hash chain verification)
   5. Benchmark regression detection runs in CI
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 63-01-PLAN.md -- Decompose serve.rs into serve/ directory and main.rs into cli/ directory, fix uptime and mock provider stubs
+- [ ] 63-02-PLAN.md -- Unwrap sweep batch 1: 6 heaviest-offender crates (blufio-skill, blufio-storage, blufio-memory, blufio-audit, blufio-config, blufio-vault)
+- [ ] 63-03-PLAN.md -- Unwrap sweep batch 2: remaining ~29 library crates with deny(clippy::unwrap_used) enforcement
+- [ ] 63-04-PLAN.md -- Integration tests (wiremock) for Email/iMessage/SMS adapters + property-based tests (proptest) for core algorithms
+- [ ] 63-05-PLAN.md -- Criterion benchmarks for 4 hot paths + CI regression detection workflow
 
 ## Progress
 
@@ -362,8 +368,8 @@ Phases execute in numeric order: 53 -> 54 -> 55 -> 56 -> 57 -> 58 -> 59 -> 60 ->
 | 60. GDPR Tooling & Data Export | 3/3 | Complete    | 2026-03-12 | - |
 | 61. Channel Adapters | 4/4 | Complete    | 2026-03-13 | - |
 | 62. Observability & API Surface | 5/5 | Complete    | 2026-03-13 | - |
-| 63. Code Quality Hardening | v1.5 | 0/0 | Not started | - |
+| 63. Code Quality Hardening | v1.5 | 0/5 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-13 after Phase 62 planning*
+*Last updated: 2026-03-13 after Phase 63 planning*
