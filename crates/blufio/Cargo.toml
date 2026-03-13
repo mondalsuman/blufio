@@ -38,7 +38,7 @@ gateway = ["dep:blufio-gateway"]
 mcp-server = ["dep:blufio-mcp-server"]
 mcp-client = ["dep:blufio-mcp-client"]
 node = ["dep:blufio-node"]
-otel = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry", "dep:opentelemetry-http"]
+otel = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry", "dep:opentelemetry-http", "blufio-mcp-client?/otel", "blufio-gateway?/otel"]
 swagger-ui = ["dep:utoipa-swagger-ui", "blufio-gateway/swagger-ui"]
 full = ["otel", "swagger-ui"]
 

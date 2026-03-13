@@ -28,8 +28,6 @@ use opentelemetry_sdk::Resource;
 #[cfg(feature = "otel")]
 use std::time::Duration;
 #[cfg(feature = "otel")]
-use tracing_opentelemetry::OpenTelemetryLayer;
-#[cfg(feature = "otel")]
 use tracing_subscriber::Registry;
 
 /// Attempts to initialize the OpenTelemetry tracing layer.

@@ -221,6 +221,12 @@ pub async fn start_server(
         tracing::info!("Swagger UI enabled at /docs");
     }
 
+    // OTEL-04: X-Trace-Id response header middleware.
+    // When otel feature is active, extracts the current OTel trace ID from the
+    // tracing span context and injects it as an X-Trace-Id response header.
+    // When otel is not compiled, this is a no-op passthrough.
+    let app = app.layer(axum_middleware::from_fn(trace_id_header_middleware));
+
     // Permissive CORS for non-MCP routes.
     // NOTE: The MCP router already has its own restricted CORS layer applied internally.
     let app = app.layer(CorsLayer::permissive());
@@ -254,6 +260,41 @@ async fn get_openapi_json() -> axum::response::Response {
         spec,
     )
         .into_response()
+}
+
+/// OTEL-04: Middleware that injects `X-Trace-Id` response header.
+///
+/// When the `otel` feature is enabled and an active OTel trace context is
+/// present, this middleware extracts the trace ID from the current span and
+/// adds it as an `X-Trace-Id` response header. This allows API consumers to
+/// correlate HTTP responses with distributed traces in their observability
+/// backend.
+///
+/// When `otel` is not compiled, this is a zero-cost passthrough.
+async fn trace_id_header_middleware(
+    request: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    #[allow(unused_mut)] // `mut` needed when `otel` feature is active.
+    let mut response = next.run(request).await;
+
+    #[cfg(feature = "otel")]
+    {
+        use opentelemetry::trace::TraceContextExt;
+        use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+        let context = tracing::Span::current().context();
+        let span_ref = context.span();
+        let span_context = span_ref.span_context();
+        if span_context.is_valid() {
+            let trace_id = span_context.trace_id().to_string();
+            if let Ok(val) = axum::http::HeaderValue::from_str(&trace_id) {
+                response.headers_mut().insert("x-trace-id", val);
+            }
+        }
+    }
+
+    response
 }
 
 #[cfg(test)]

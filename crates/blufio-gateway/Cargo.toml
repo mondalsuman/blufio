@@ -39,11 +39,14 @@ rusqlite.workspace = true
 blufio-whatsapp = { path = "../blufio-whatsapp", optional = true }
 utoipa.workspace = true
 utoipa-swagger-ui = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
+opentelemetry = { workspace = true, optional = true }
 
 [features]
 default = []
 whatsapp = ["dep:blufio-whatsapp"]
 swagger-ui = ["dep:utoipa-swagger-ui"]
+otel = ["dep:tracing-opentelemetry", "dep:opentelemetry"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
