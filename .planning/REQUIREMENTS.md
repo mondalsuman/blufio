@@ -126,8 +126,8 @@ Requirements for PRD gap closure milestone. Each maps to roadmap phases.
 - [ ] **OTEL-02**: OTLP export (HTTP mode) to configurable endpoint
 - [ ] **OTEL-03**: Key spans: agent loop iteration, LLM provider call, tool execution, memory retrieval, context assembly
 - [ ] **OTEL-04**: Trace context propagation through MCP calls
-- [ ] **OTEL-05**: Zero overhead when disabled (feature-gate at compile time)
-- [ ] **OTEL-06**: Coexists with existing Prometheus metrics (OTel for traces only, Prometheus for metrics)
+- [x] **OTEL-05**: Zero overhead when disabled (feature-gate at compile time)
+- [x] **OTEL-06**: Coexists with existing Prometheus metrics (OTel for traces only, Prometheus for metrics)
 
 ### OpenAPI
 
@@ -263,8 +263,8 @@ Deferred to v1.6+.
 | OTEL-02 | Phase 62 | Pending |
 | OTEL-03 | Phase 62 | Pending |
 | OTEL-04 | Phase 62 | Pending |
-| OTEL-05 | Phase 62 | Pending |
-| OTEL-06 | Phase 62 | Pending |
+| OTEL-05 | Phase 62 | Complete |
+| OTEL-06 | Phase 62 | Complete |
 | OAPI-01 | Phase 62 | Pending |
 | OAPI-02 | Phase 62 | Pending |
 | OAPI-03 | Phase 62 | Pending |

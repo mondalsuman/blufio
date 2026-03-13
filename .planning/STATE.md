@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: PRD Gap Closure
 status: executing
-stopped_at: Phase 62 context gathered
-last_updated: "2026-03-13T10:18:21.164Z"
-last_activity: 2026-03-13 -- Phase 61 Plan 04 complete (all three channel adapters wired in serve.rs with webhook route composition)
+stopped_at: Completed 62-01-PLAN.md
+last_updated: "2026-03-13T11:04:09.413Z"
+last_activity: 2026-03-13 -- Phase 62 Plan 01 complete (workspace deps, feature flags, config types for OTel/OpenAPI/Litestream)
 progress:
   total_phases: 11
   completed_phases: 7
-  total_plans: 30
-  completed_plans: 38
+  total_plans: 35
+  completed_plans: 39
   percent: 100
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 
 ## Current Position
 
-Phase: 61 of 63 (Channel Adapters) -- ninth of 11 phases in v1.5
-Plan: 04 of 4 complete
+Phase: 62 of 63 (Observability & API Surface) -- tenth of 11 phases in v1.5
+Plan: 01 of ? complete
 Status: In Progress
-Last activity: 2026-03-13 -- Phase 61 Plan 04 complete (all three channel adapters wired in serve.rs with webhook route composition)
+Last activity: 2026-03-13 -- Phase 62 Plan 01 complete (workspace deps, feature flags, config types for OTel/OpenAPI/Litestream)
 
 Progress: [██████████] 100%
 
@@ -82,6 +82,7 @@ Progress: [██████████] 100%
 | Phase 61 P02 | 8min | 2 tasks | 6 files |
 | Phase 61 P03 | 7min | 2 tasks | 10 files |
 | Phase 61 P04 | 3min | 2 tasks | 2 files |
+| Phase 62 P01 | 6min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -211,6 +212,9 @@ Recent: v1.5 roadmap derives 11 phases from 93 requirements across 17 categories
 - [Phase 61]: mail-parser DateTime manual ISO 8601 conversion (no built-in method)
 - [Phase 61]: IMAP connect-per-cycle pattern for simplicity over persistent connections
 - [Phase 61]: axum added as runtime dependency to blufio crate for Router::merge() in webhook composition
+- [Phase 62]: opentelemetry_sdk uses underscore crate name (not opentelemetry-sdk)
+- [Phase 62]: utoipa non-optional (always compiled) in both blufio and blufio-gateway; OTel deps optional behind otel feature
+- [Phase 62]: ObservabilityConfig wraps OpenTelemetryConfig; OpenApiConfig nested inside GatewayConfig
 
 ### Pending Todos
 
@@ -226,6 +230,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13T10:18:21.160Z
-Stopped at: Phase 62 context gathered
-Resume file: .planning/phases/62-observability-api-surface/62-CONTEXT.md
+Last session: 2026-03-13T11:04:09.410Z
+Stopped at: Completed 62-01-PLAN.md
+Resume file: None
