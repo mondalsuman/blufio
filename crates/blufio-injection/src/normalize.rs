@@ -372,7 +372,7 @@ mod tests {
     #[test]
     fn strip_zero_width_removes_all_zero_width_chars() {
         // Test each zero-width character
-        let input = format!("a\u{200B}b\u{200C}c\u{200D}d\u{FEFF}e\u{2060}f\u{180E}g\u{00AD}h");
+        let input = "a\u{200B}b\u{200C}c\u{200D}d\u{FEFF}e\u{2060}f\u{180E}g\u{00AD}h".to_string();
         let (result, count) = strip_zero_width(&input);
         assert_eq!(result, "abcdefgh");
         assert_eq!(count, 7);
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn strip_zero_width_removes_unicode_tag_characters() {
-        let input = format!("he\u{E0001}\u{E007F}llo");
+        let input = "he\u{E0001}\u{E007F}llo".to_string();
         let (result, count) = strip_zero_width(&input);
         assert_eq!(result, "hello");
         assert_eq!(count, 2);
