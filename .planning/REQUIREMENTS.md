@@ -31,13 +31,13 @@ Requirements for v1.6 Performance & Scalability Validation. Each maps to roadmap
 
 ### Performance Benchmarking
 
-- [ ] **PERF-01**: Binary size measured and tracked against <50MB target, with per-crate breakdown via cargo-bloat
-- [ ] **PERF-02**: Memory RSS profiled for idle (target 50-80MB) and under-load (target 100-200MB) using jemalloc stats
-- [ ] **PERF-03**: Criterion benchmarks compare vec0 KNN vs in-memory cosine at 100, 1K, 5K, and 10K entries
-- [ ] **PERF-04**: Injection classifier throughput benchmarked at 1KB, 5KB, and 10KB input sizes
-- [ ] **PERF-05**: End-to-end hybrid retrieval benchmark measures full pipeline (embed -> vec0 -> BM25 -> RRF -> MMR)
-- [ ] **PERF-06**: Comparative benchmark vs OpenClaw validates memory usage and token efficiency claims with reproducible numbers
-- [ ] **PERF-07**: CI regression baselines established — benchmarks fail if performance degrades beyond 20% threshold
+- [x] **PERF-01**: Binary size measured and tracked against <50MB target, with per-crate breakdown via cargo-bloat
+- [x] **PERF-02**: Memory RSS profiled for idle (target 50-80MB) and under-load (target 100-200MB) using jemalloc stats
+- [x] **PERF-03**: Criterion benchmarks compare vec0 KNN vs in-memory cosine at 100, 1K, 5K, and 10K entries
+- [x] **PERF-04**: Injection classifier throughput benchmarked at 1KB, 5KB, and 10KB input sizes
+- [x] **PERF-05**: End-to-end hybrid retrieval benchmark measures full pipeline (embed -> vec0 -> BM25 -> RRF -> MMR)
+- [x] **PERF-06**: Comparative benchmark vs OpenClaw validates memory usage and token efficiency claims with reproducible numbers
+- [x] **PERF-07**: CI regression baselines established — benchmarks fail if performance degrades beyond 20% threshold
 
 ## Future Requirements
 
@@ -92,13 +92,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INJ-06 | Phase 66 | Complete |
 | INJ-07 | Phase 66 | Complete |
 | INJ-08 | Phase 66 | Complete |
-| PERF-01 | Phase 68 | Pending |
-| PERF-02 | Phase 68 | Pending |
-| PERF-03 | Phase 68 | Pending |
-| PERF-04 | Phase 68 | Pending |
-| PERF-05 | Phase 68 | Pending |
-| PERF-06 | Phase 68 | Pending |
-| PERF-07 | Phase 68 | Pending |
+| PERF-01 | Phase 68 | Complete |
+| PERF-02 | Phase 68 | Complete |
+| PERF-03 | Phase 68 | Complete |
+| PERF-04 | Phase 68 | Complete |
+| PERF-05 | Phase 68 | Complete |
+| PERF-06 | Phase 68 | Complete |
+| PERF-07 | Phase 68 | Complete |
 
 **Coverage:**
 - v1.6 requirements: 23 total

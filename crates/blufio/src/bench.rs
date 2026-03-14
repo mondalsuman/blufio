@@ -39,6 +39,8 @@ pub enum BenchmarkKind {
     ContextAssembly,
     Wasm,
     Sqlite,
+    BinarySize,
+    MemoryProfile,
 }
 
 impl fmt::Display for BenchmarkKind {
@@ -48,6 +50,8 @@ impl fmt::Display for BenchmarkKind {
             BenchmarkKind::ContextAssembly => write!(f, "context"),
             BenchmarkKind::Wasm => write!(f, "wasm"),
             BenchmarkKind::Sqlite => write!(f, "sqlite"),
+            BenchmarkKind::BinarySize => write!(f, "binary_size"),
+            BenchmarkKind::MemoryProfile => write!(f, "memory_profile"),
         }
     }
 }
@@ -63,6 +67,8 @@ impl FromStr for BenchmarkKind {
             }
             "wasm" => Ok(BenchmarkKind::Wasm),
             "sqlite" => Ok(BenchmarkKind::Sqlite),
+            "binary_size" | "binarysize" | "binary" => Ok(BenchmarkKind::BinarySize),
+            "memory_profile" | "memoryprofile" | "memory" => Ok(BenchmarkKind::MemoryProfile),
             _ => Err(format!("unknown benchmark: {s}")),
         }
     }
@@ -166,12 +172,18 @@ fn run_benchmark(kind: BenchmarkKind, iterations: u32) -> Result<BenchmarkResult
 }
 
 /// Run a single iteration of a benchmark, returning its duration.
+///
+/// Note: `BinarySize` and `MemoryProfile` are not timing-based benchmarks and
+/// are handled directly in `run_bench()` — they should never reach this function.
 fn run_single_benchmark(kind: BenchmarkKind) -> Result<Duration, BlufioError> {
     match kind {
         BenchmarkKind::Startup => bench_startup(),
         BenchmarkKind::ContextAssembly => bench_context_assembly(),
         BenchmarkKind::Wasm => bench_wasm(),
         BenchmarkKind::Sqlite => bench_sqlite(),
+        BenchmarkKind::BinarySize | BenchmarkKind::MemoryProfile => {
+            unreachable!("BinarySize and MemoryProfile are handled directly in run_bench()")
+        }
     }
 }
 
@@ -275,6 +287,235 @@ fn bench_sqlite() -> Result<Duration, BlufioError> {
     }
 
     Ok(start.elapsed())
+}
+
+/// Sample current jemalloc resident memory by advancing the epoch and reading stats.
+///
+/// Returns the resident (RSS-like) value in bytes. Must call `epoch::advance()` first
+/// to get a fresh snapshot.
+fn sample_rss() -> u64 {
+    use tikv_jemalloc_ctl::{epoch, stats};
+
+    let _ = epoch::advance();
+    stats::resident::read().unwrap_or(0) as u64
+}
+
+/// Check RSS samples for a potential memory leak.
+///
+/// A leak is flagged when RSS grows monotonically (every sample >= previous)
+/// AND total growth exceeds 10% of the initial measurement.
+fn check_leak(samples: &[u64]) {
+    if samples.len() < 2 {
+        return;
+    }
+
+    let is_monotonic = samples.windows(2).all(|w| w[1] >= w[0]);
+    let first = samples[0];
+    let last = *samples.last().unwrap();
+
+    if first == 0 {
+        return;
+    }
+
+    let growth_pct = ((last as f64 - first as f64) / first as f64) * 100.0;
+
+    if is_monotonic && growth_pct > 10.0 {
+        eprintln!(
+            "  WARNING: Potential memory leak detected -- RSS grew monotonically from {} to {} ({:.1}%)",
+            format_bytes(first),
+            format_bytes(last),
+            growth_pct,
+        );
+    }
+}
+
+/// Print a summary of RSS samples: min, max, mean, and growth trend.
+fn print_rss_summary(samples: &[u64]) {
+    if samples.is_empty() {
+        return;
+    }
+
+    let min = *samples.iter().min().unwrap();
+    let max = *samples.iter().max().unwrap();
+    let mean = samples.iter().sum::<u64>() / samples.len() as u64;
+    let first = samples[0];
+    let last = *samples.last().unwrap();
+
+    let trend = if last > first {
+        format!("+{}", format_bytes(last - first))
+    } else if last < first {
+        format!("-{}", format_bytes(first - last))
+    } else {
+        "stable".to_string()
+    };
+
+    eprintln!(
+        "  RSS samples:  min={}, max={}, mean={}, trend={trend}",
+        format_bytes(min),
+        format_bytes(max),
+        format_bytes(mean)
+    );
+}
+
+/// Benchmark: measure memory profile using jemalloc stats.
+///
+/// Reports idle memory stats (allocated, active, resident, mapped) via jemalloc,
+/// includes RSS sampling helpers for leak detection under load, and prints
+/// comparison against targets and OpenClaw baseline.
+fn bench_memory_profile(json: bool) -> Result<BenchmarkResult, BlufioError> {
+    use tikv_jemalloc_ctl::{epoch, stats};
+
+    // === Idle Memory Profile ===
+    // Advance the jemalloc epoch to get fresh stats
+    epoch::advance()
+        .map_err(|e| BlufioError::Internal(format!("jemalloc epoch::advance() failed: {e}")))?;
+
+    let allocated = stats::allocated::read().map_err(|e| {
+        BlufioError::Internal(format!("jemalloc stats::allocated::read() failed: {e}"))
+    })?;
+    let active = stats::active::read().map_err(|e| {
+        BlufioError::Internal(format!("jemalloc stats::active::read() failed: {e}"))
+    })?;
+    let resident = stats::resident::read().map_err(|e| {
+        BlufioError::Internal(format!("jemalloc stats::resident::read() failed: {e}"))
+    })?;
+    let mapped = stats::mapped::read().map_err(|e| {
+        BlufioError::Internal(format!("jemalloc stats::mapped::read() failed: {e}"))
+    })?;
+
+    // OS-level peak RSS via getrusage / /proc/self/status
+    let peak_rss = get_peak_rss();
+
+    if !json {
+        eprintln!();
+        eprintln!("  === Idle Memory Profile ===");
+        eprintln!("  Allocated: {}", format_bytes(allocated as u64));
+        eprintln!("  Active:    {}", format_bytes(active as u64));
+        eprintln!("  Resident:  {}", format_bytes(resident as u64));
+        eprintln!("  Mapped:    {}", format_bytes(mapped as u64));
+        if let Some(rss) = peak_rss {
+            eprintln!("  Peak RSS:  {} (OS-level)", format_bytes(rss));
+        }
+
+        // Target comparison: 50-80MB idle
+        let resident_mb = resident as f64 / (1024.0 * 1024.0);
+        let status = if resident_mb < 50.0 {
+            "BELOW"
+        } else if resident_mb <= 80.0 {
+            "WITHIN"
+        } else {
+            "ABOVE"
+        };
+        eprintln!(
+            "  Target: 50-80MB idle | Measured: {:.1}MB | Status: {status}",
+            resident_mb
+        );
+
+        // OpenClaw comparison
+        eprintln!("  OpenClaw documented range: 300-800MB");
+
+        // vec0 comparison hint
+        eprintln!();
+        eprintln!(
+            "  Tip: For vec0 vs in-memory comparison, run with --vec0-enabled=true \
+             and --vec0-enabled=false back-to-back"
+        );
+
+        // Under-load RSS sampling framework (idle-only for now; the framework is ready
+        // for Plan 04's CI integration with full workload).
+        eprintln!();
+        eprintln!("  === Under-load RSS Sampling (framework ready) ===");
+        eprintln!(
+            "  The RSS sampling framework (sample_rss, check_leak, print_rss_summary) \
+             is available."
+        );
+        eprintln!(
+            "  Full under-load measurement (1000 saves + 100 retrievals) will be \
+             exercised when invoked with the full application context."
+        );
+
+        // Demonstrate the framework with a quick idle sample sequence
+        let idle_samples: Vec<u64> = (0..5).map(|_| sample_rss()).collect();
+        print_rss_summary(&idle_samples);
+        check_leak(&idle_samples);
+
+        eprintln!();
+    }
+
+    Ok(BenchmarkResult {
+        name: "memory_profile".to_string(),
+        median: Duration::ZERO,
+        min: Duration::ZERO,
+        max: Duration::ZERO,
+        peak_rss: Some(resident as u64),
+        iterations: 1,
+    })
+}
+
+/// Benchmark: measure binary file size and optionally run cargo-bloat for per-crate breakdown.
+///
+/// Returns a `BenchmarkResult` with the binary size stored in `peak_rss` (repurposed).
+fn bench_binary_size(json: bool) -> Result<BenchmarkResult, BlufioError> {
+    let exe_path = std::env::current_exe()
+        .map_err(|e| BlufioError::Internal(format!("cannot locate own binary: {e}")))?;
+    let metadata = std::fs::metadata(&exe_path)
+        .map_err(|e| BlufioError::Internal(format!("cannot stat binary: {e}")))?;
+    let size_bytes = metadata.len();
+
+    if !json {
+        eprintln!();
+        eprintln!("  === Binary Size Report ===");
+        eprintln!("  Path:   {}", exe_path.display());
+        eprintln!(
+            "  Size:   {} ({size_bytes} bytes)",
+            format_bytes(size_bytes)
+        );
+
+        // Target comparison: <50MB
+        let target_mb: u64 = 50;
+        let status = if size_bytes < target_mb * 1024 * 1024 {
+            "OK"
+        } else {
+            "EXCEEDED"
+        };
+        eprintln!("  Target: <{target_mb}MB | Status: {status}");
+
+        // Debug vs release detection
+        if cfg!(debug_assertions) {
+            eprintln!("  Note:   Debug build detected -- release size will differ");
+        }
+
+        // Attempt cargo-bloat per-crate breakdown (report-only)
+        eprintln!();
+        eprint!("  Per-crate breakdown (cargo-bloat)...");
+        match std::process::Command::new("cargo")
+            .args(["bloat", "--release", "--crates", "-n", "20"])
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                eprintln!();
+                for line in stdout.lines() {
+                    eprintln!("    {line}");
+                }
+            }
+            _ => {
+                eprintln!(
+                    " not available -- run `cargo install cargo-bloat` for per-crate breakdown"
+                );
+            }
+        }
+        eprintln!();
+    }
+
+    Ok(BenchmarkResult {
+        name: "binary_size".to_string(),
+        median: Duration::ZERO,
+        min: Duration::ZERO,
+        max: Duration::ZERO,
+        peak_rss: Some(size_bytes),
+        iterations: 1,
+    })
 }
 
 /// Format a duration for display.
@@ -477,6 +718,8 @@ pub async fn run_bench(
         BenchmarkKind::ContextAssembly,
         BenchmarkKind::Wasm,
         BenchmarkKind::Sqlite,
+        BenchmarkKind::BinarySize,
+        BenchmarkKind::MemoryProfile,
     ];
 
     let selected: Vec<BenchmarkKind> = if let Some(ref only_list) = only {
@@ -523,21 +766,63 @@ pub async fn run_bench(
     // Run benchmarks
     let mut results = Vec::new();
     for kind in &selected {
-        if !json {
-            eprint!("  Running {kind}...");
-        }
-        match run_benchmark(*kind, iterations) {
-            Ok(result) => {
+        // BinarySize and MemoryProfile are not timing-based benchmarks;
+        // they have dedicated implementations that bypass the iteration loop.
+        match kind {
+            BenchmarkKind::BinarySize => {
                 if !json {
-                    eprintln!(" {}", format_duration(result.median));
+                    eprint!("  Running {kind}...");
                 }
-                results.push(result);
+                match bench_binary_size(json) {
+                    Ok(result) => {
+                        if !json {
+                            eprintln!(" {}", result.peak_rss.map(format_bytes).unwrap_or_default());
+                        }
+                        results.push(result);
+                    }
+                    Err(e) => {
+                        if !json {
+                            eprintln!(" FAILED: {e}");
+                        }
+                    }
+                }
             }
-            Err(e) => {
+            BenchmarkKind::MemoryProfile => {
                 if !json {
-                    eprintln!(" FAILED: {e}");
+                    eprint!("  Running {kind}...");
                 }
-                // Continue with other benchmarks
+                match bench_memory_profile(json) {
+                    Ok(result) => {
+                        if !json {
+                            eprintln!(" {}", result.peak_rss.map(format_bytes).unwrap_or_default());
+                        }
+                        results.push(result);
+                    }
+                    Err(e) => {
+                        if !json {
+                            eprintln!(" FAILED: {e}");
+                        }
+                    }
+                }
+            }
+            _ => {
+                if !json {
+                    eprint!("  Running {kind}...");
+                }
+                match run_benchmark(*kind, iterations) {
+                    Ok(result) => {
+                        if !json {
+                            eprintln!(" {}", format_duration(result.median));
+                        }
+                        results.push(result);
+                    }
+                    Err(e) => {
+                        if !json {
+                            eprintln!(" FAILED: {e}");
+                        }
+                        // Continue with other benchmarks
+                    }
+                }
             }
         }
     }
