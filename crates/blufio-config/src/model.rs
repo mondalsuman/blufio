@@ -1084,7 +1084,7 @@ impl Default for MemoryConfig {
             eviction_sweep_interval_secs: default_eviction_sweep_interval_secs(),
             stale_threshold_days: default_stale_threshold_days(),
             file_watcher: FileWatcherConfig::default(),
-            vec0_enabled: false,
+            vec0_enabled: true,
         }
     }
 }
@@ -3755,13 +3755,13 @@ max_file_size = 51200
         assert_eq!(config.memory.eviction_sweep_interval_secs, 300);
         assert_eq!(config.memory.stale_threshold_days, 180);
         assert!(config.memory.file_watcher.paths.is_empty());
-        assert!(!config.memory.vec0_enabled);
+        assert!(config.memory.vec0_enabled);
     }
 
     #[test]
-    fn memory_config_default_vec0_enabled_is_false() {
+    fn memory_config_default_vec0_enabled_is_true() {
         let config = MemoryConfig::default();
-        assert!(!config.vec0_enabled);
+        assert!(config.vec0_enabled);
     }
 
     #[test]

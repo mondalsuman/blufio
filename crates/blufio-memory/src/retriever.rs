@@ -1104,11 +1104,13 @@ mod tests {
     #[test]
     fn vec0_enabled_propagates_from_config() {
         // Verify that vec0_enabled is picked up from config
-        let mut config = MemoryConfig::default();
-        assert!(!config.vec0_enabled, "default should be false");
+        let config = MemoryConfig::default();
+        assert!(config.vec0_enabled, "default should be true for new installs");
 
-        config.vec0_enabled = true;
-        assert!(config.vec0_enabled, "should be settable to true");
+        // Verify it can be toggled off via explicit config
+        let mut config2 = MemoryConfig::default();
+        config2.vec0_enabled = false;
+        assert!(!config2.vec0_enabled, "should be settable to false");
     }
 
     #[tokio::test]
