@@ -37,7 +37,7 @@ Requirements for v1.6 Performance & Scalability Validation. Each maps to roadmap
 - [x] **PERF-04**: Injection classifier throughput benchmarked at 1KB, 5KB, and 10KB input sizes
 - [x] **PERF-05**: End-to-end hybrid retrieval benchmark measures full pipeline (embed -> vec0 -> BM25 -> RRF -> MMR)
 - [x] **PERF-06**: Comparative benchmark vs OpenClaw validates memory usage and token efficiency claims with reproducible numbers
-- [ ] **PERF-07**: CI regression baselines established — benchmarks fail if performance degrades beyond 20% threshold
+- [x] **PERF-07**: CI regression baselines established — benchmarks fail if performance degrades beyond 20% threshold
 
 ## Future Requirements
 
@@ -98,7 +98,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERF-04 | Phase 68 | Complete |
 | PERF-05 | Phase 68 | Complete |
 | PERF-06 | Phase 68 | Complete |
-| PERF-07 | Phase 68 | Pending |
+| PERF-07 | Phase 68 | Complete |
 
 **Coverage:**
 - v1.6 requirements: 23 total

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Completed 68-02-PLAN.md
-last_updated: "2026-03-14T12:24:01.328Z"
-last_activity: 2026-03-14 -- 68-02 criterion benchmarks (vec0 5K/10K, injection, hybrid pipeline)
+stopped_at: Completed 68-04-PLAN.md
+last_updated: "2026-03-14T12:29:23.430Z"
+last_activity: 2026-03-14 -- 68-04 CI benchmark workflow (PR comments, binary size, ONNX caching)
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
   percent: 80
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 ## Current Position
 
-Phase: 68 -- fourth of 5 in v1.6 (Performance Benchmarking Suite)
-Plan: 3 of 4 in current phase (3 complete)
-Status: 68-02 complete -- criterion benchmarks (vec0 5K/10K, injection, hybrid pipeline)
-Last activity: 2026-03-14 -- 68-02 criterion benchmarks (vec0 5K/10K, injection, hybrid pipeline)
+Phase: 68 -- fourth of 5 in v1.6 (Performance Benchmarking Suite) -- COMPLETE
+Plan: 4 of 4 in current phase (4 complete)
+Status: 68-04 complete -- CI benchmark workflow (PR comments, binary size, ONNX caching)
+Last activity: 2026-03-14 -- 68-04 CI benchmark workflow (PR comments, binary size, ONNX caching)
 
 Progress: [████████░░] 80% (v1.6)
 
@@ -71,6 +71,7 @@ Progress: [████████░░] 80% (v1.6)
 | Phase 68 P03 | 3min | 1 tasks | 1 files |
 | Phase 68 P01 | 4min | 2 tasks | 1 files |
 | Phase 68 P02 | 12min | 2 tasks | 4 files |
+| Phase 68 P04 | 3min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,9 @@ Recent decisions affecting v1.6 work:
 - [Phase 68]: BinarySize and MemoryProfile bypass iteration-based run_benchmark() loop -- dispatched directly in run_bench()
 - [Phase 68]: 5K/10K vec0 benchmarks use sample_size(10) + 30s measurement time to avoid CI timeouts
 - [Phase 68]: Hybrid bench uses synchronous pipeline (vec0+BM25+RRF) without ONNX embedding -- full async pipeline deferred to CI model caching setup
+- [Phase 68-04]: Belt-and-suspenders regression detection: github-action-benchmark at 120% AND grep-based >20% check on main push
+- [Phase 68-04]: sqlite-vec feature-flag comparison deferred: sqlite-vec is a hard dependency of blufio-memory, not feature-gated
+- [Phase 68-04]: PR benchmarks informational only: fail-on-alert only for push events, PRs get comment without blocking
 
 ### Pending Todos
 
@@ -120,6 +124,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T12:24:01.326Z
-Stopped at: Completed 68-02-PLAN.md
+Last session: 2026-03-14T12:28:18Z
+Stopped at: Completed 68-04-PLAN.md
 Resume file: None

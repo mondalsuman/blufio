@@ -119,7 +119,7 @@
 - [x] **Phase 65: sqlite-vec Foundation** — Register sqlite-vec with SQLCipher, create vec0 virtual table with metadata columns, wire KNN search into retriever (completed 2026-03-13)
 - [x] **Phase 66: Injection Defense Hardening** — Unicode normalization pre-pass, expanded pattern set, multi-language detection, configurable severity, canary tokens, false positive validation (completed 2026-03-13)
 - [x] **Phase 67: Vector Search Migration & Hybrid Pipeline** — Migrate BLOB embeddings to vec0, preserve hybrid retrieval, sync eviction/soft-delete, partition keys, auxiliary columns (completed 2026-03-14)
-- [ ] **Phase 68: Performance Benchmarking Suite** — Binary size tracking, memory RSS profiling, vec0 vs in-memory comparison, injection throughput, end-to-end hybrid pipeline, OpenClaw comparison, CI regression baselines
+- [x] **Phase 68: Performance Benchmarking Suite** — Binary size tracking, memory RSS profiling, vec0 vs in-memory comparison, injection throughput, end-to-end hybrid pipeline, OpenClaw comparison, CI regression baselines (completed 2026-03-14)
 - [ ] **Phase 69: Cross-Phase Integration Validation** — Verify vec0 + injection + benchmarks work together end-to-end, close any wiring gaps
 
 ## Phase Details
@@ -181,7 +181,7 @@ Plans:
   3. Criterion benchmarks compare vec0 KNN vs in-memory cosine at 100, 1K, 5K, and 10K entries — vec0 wins at scale
   4. Injection classifier throughput benchmarked at 1KB, 5KB, 10KB inputs — expanded pattern set quantified
   5. CI regression baselines established — benchmarks fail if performance degrades beyond 20% threshold
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [ ] 68-01-PLAN.md — Binary size + memory RSS profiling CLI (BenchmarkKind::BinarySize, BenchmarkKind::MemoryProfile)
 - [ ] 68-02-PLAN.md — Criterion benchmarks: vec0 5K/10K, injection throughput, hybrid pipeline
@@ -214,7 +214,7 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 65. sqlite-vec Foundation | 3/3 | Complete    | 2026-03-13 | - |
 | 66. Injection Defense Hardening | 4/4 | Complete    | 2026-03-13 | - |
 | 67. Vector Search Migration & Hybrid Pipeline | 3/3 | Complete    | 2026-03-14 | - |
-| 68. Performance Benchmarking Suite | 3/4 | In Progress|  | - |
+| 68. Performance Benchmarking Suite | 4/4 | Complete   | 2026-03-14 | - |
 | 69. Cross-Phase Integration Validation | v1.6 | 0/? | Not started | - |
 
 **Totals:** 69 phases, 200+ plans, 7 milestones (6 shipped, 1 in progress)
