@@ -349,8 +349,12 @@ fn print_rss_summary(samples: &[u64]) {
         "stable".to_string()
     };
 
-    eprintln!("  RSS samples:  min={}, max={}, mean={}, trend={trend}",
-        format_bytes(min), format_bytes(max), format_bytes(mean));
+    eprintln!(
+        "  RSS samples:  min={}, max={}, mean={}, trend={trend}",
+        format_bytes(min),
+        format_bytes(max),
+        format_bytes(mean)
+    );
 }
 
 /// Benchmark: measure memory profile using jemalloc stats.
@@ -363,9 +367,8 @@ fn bench_memory_profile(json: bool) -> Result<BenchmarkResult, BlufioError> {
 
     // === Idle Memory Profile ===
     // Advance the jemalloc epoch to get fresh stats
-    epoch::advance().map_err(|e| {
-        BlufioError::Internal(format!("jemalloc epoch::advance() failed: {e}"))
-    })?;
+    epoch::advance()
+        .map_err(|e| BlufioError::Internal(format!("jemalloc epoch::advance() failed: {e}")))?;
 
     let allocated = stats::allocated::read().map_err(|e| {
         BlufioError::Internal(format!("jemalloc stats::allocated::read() failed: {e}"))
@@ -463,7 +466,10 @@ fn bench_binary_size(json: bool) -> Result<BenchmarkResult, BlufioError> {
         eprintln!();
         eprintln!("  === Binary Size Report ===");
         eprintln!("  Path:   {}", exe_path.display());
-        eprintln!("  Size:   {} ({size_bytes} bytes)", format_bytes(size_bytes));
+        eprintln!(
+            "  Size:   {} ({size_bytes} bytes)",
+            format_bytes(size_bytes)
+        );
 
         // Target comparison: <50MB
         let target_mb: u64 = 50;
@@ -472,15 +478,11 @@ fn bench_binary_size(json: bool) -> Result<BenchmarkResult, BlufioError> {
         } else {
             "EXCEEDED"
         };
-        eprintln!(
-            "  Target: <{target_mb}MB | Status: {status}"
-        );
+        eprintln!("  Target: <{target_mb}MB | Status: {status}");
 
         // Debug vs release detection
         if cfg!(debug_assertions) {
-            eprintln!(
-                "  Note:   Debug build detected -- release size will differ"
-            );
+            eprintln!("  Note:   Debug build detected -- release size will differ");
         }
 
         // Attempt cargo-bloat per-crate breakdown (report-only)
@@ -774,10 +776,7 @@ pub async fn run_bench(
                 match bench_binary_size(json) {
                     Ok(result) => {
                         if !json {
-                            eprintln!(
-                                " {}",
-                                result.peak_rss.map(format_bytes).unwrap_or_default()
-                            );
+                            eprintln!(" {}", result.peak_rss.map(format_bytes).unwrap_or_default());
                         }
                         results.push(result);
                     }
@@ -795,10 +794,7 @@ pub async fn run_bench(
                 match bench_memory_profile(json) {
                     Ok(result) => {
                         if !json {
-                            eprintln!(
-                                " {}",
-                                result.peak_rss.map(format_bytes).unwrap_or_default()
-                            );
+                            eprintln!(" {}", result.peak_rss.map(format_bytes).unwrap_or_default());
                         }
                         results.push(result);
                     }

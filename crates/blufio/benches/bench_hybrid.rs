@@ -18,7 +18,7 @@
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 use blufio_memory::retriever::reciprocal_rank_fusion;
-use blufio_memory::types::{cosine_similarity, vec_to_blob};
+use blufio_memory::types::vec_to_blob;
 use blufio_memory::vec0;
 
 // ---------------------------------------------------------------------------
@@ -193,11 +193,7 @@ fn setup_hybrid_bench_db(count: usize) -> (rusqlite::Connection, Vec<f32>, Strin
 // ---------------------------------------------------------------------------
 
 /// Run BM25 search on FTS5 table synchronously.
-fn bm25_search(
-    conn: &rusqlite::Connection,
-    query: &str,
-    limit: usize,
-) -> Vec<(String, f64)> {
+fn bm25_search(conn: &rusqlite::Connection, query: &str, limit: usize) -> Vec<(String, f64)> {
     let mut stmt = conn
         .prepare(
             "SELECT m.id, bm25(memories_fts) as score \
@@ -239,14 +235,9 @@ fn bench_hybrid_pipeline(c: &mut Criterion) {
             &(&conn, &query_emb),
             |b, &(conn, query_emb)| {
                 b.iter(|| {
-                    let results = vec0::vec0_search(
-                        black_box(conn),
-                        black_box(query_emb),
-                        10,
-                        0.3,
-                        None,
-                    )
-                    .unwrap();
+                    let results =
+                        vec0::vec0_search(black_box(conn), black_box(query_emb), 10, 0.3, None)
+                            .unwrap();
                     black_box(results)
                 });
             },
@@ -278,8 +269,7 @@ fn bench_hybrid_pipeline(c: &mut Criterion) {
             &(&vec0_results, &bm25_results),
             |b, &(vec0_res, bm25_res)| {
                 b.iter(|| {
-                    let fused =
-                        reciprocal_rank_fusion(black_box(vec0_res), black_box(bm25_res));
+                    let fused = reciprocal_rank_fusion(black_box(vec0_res), black_box(bm25_res));
                     black_box(fused)
                 });
             },
