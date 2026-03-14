@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 Phase: 68 -- fourth of 5 in v1.6 (Performance Benchmarking Suite)
 Plan: 3 of 4 in current phase (3 complete)
-Status: 68-03 complete -- OpenClaw comparative benchmark document
-Last activity: 2026-03-14 -- 68-03 OpenClaw comparative benchmark document (docs/benchmarks.md)
+Status: 68-01 complete -- binary size & memory profile benchmarks
+Last activity: 2026-03-14 -- 68-01 binary size & memory profile benchmarks
 
 Progress: [████████░░] 80% (v1.6)
 

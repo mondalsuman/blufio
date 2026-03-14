@@ -31,8 +31,8 @@ Requirements for v1.6 Performance & Scalability Validation. Each maps to roadmap
 
 ### Performance Benchmarking
 
-- [ ] **PERF-01**: Binary size measured and tracked against <50MB target, with per-crate breakdown via cargo-bloat
-- [ ] **PERF-02**: Memory RSS profiled for idle (target 50-80MB) and under-load (target 100-200MB) using jemalloc stats
+- [x] **PERF-01**: Binary size measured and tracked against <50MB target, with per-crate breakdown via cargo-bloat
+- [x] **PERF-02**: Memory RSS profiled for idle (target 50-80MB) and under-load (target 100-200MB) using jemalloc stats
 - [ ] **PERF-03**: Criterion benchmarks compare vec0 KNN vs in-memory cosine at 100, 1K, 5K, and 10K entries
 - [ ] **PERF-04**: Injection classifier throughput benchmarked at 1KB, 5KB, and 10KB input sizes
 - [ ] **PERF-05**: End-to-end hybrid retrieval benchmark measures full pipeline (embed -> vec0 -> BM25 -> RRF -> MMR)
@@ -92,8 +92,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INJ-06 | Phase 66 | Complete |
 | INJ-07 | Phase 66 | Complete |
 | INJ-08 | Phase 66 | Complete |
-| PERF-01 | Phase 68 | Pending |
-| PERF-02 | Phase 68 | Pending |
+| PERF-01 | Phase 68 | Complete |
+| PERF-02 | Phase 68 | Complete |
 | PERF-03 | Phase 68 | Pending |
 | PERF-04 | Phase 68 | Pending |
 | PERF-05 | Phase 68 | Pending |
