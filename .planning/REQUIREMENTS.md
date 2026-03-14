@@ -36,7 +36,7 @@ Requirements for v1.6 Performance & Scalability Validation. Each maps to roadmap
 - [ ] **PERF-03**: Criterion benchmarks compare vec0 KNN vs in-memory cosine at 100, 1K, 5K, and 10K entries
 - [ ] **PERF-04**: Injection classifier throughput benchmarked at 1KB, 5KB, and 10KB input sizes
 - [ ] **PERF-05**: End-to-end hybrid retrieval benchmark measures full pipeline (embed -> vec0 -> BM25 -> RRF -> MMR)
-- [ ] **PERF-06**: Comparative benchmark vs OpenClaw validates memory usage and token efficiency claims with reproducible numbers
+- [x] **PERF-06**: Comparative benchmark vs OpenClaw validates memory usage and token efficiency claims with reproducible numbers
 - [ ] **PERF-07**: CI regression baselines established — benchmarks fail if performance degrades beyond 20% threshold
 
 ## Future Requirements
@@ -97,7 +97,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERF-03 | Phase 68 | Pending |
 | PERF-04 | Phase 68 | Pending |
 | PERF-05 | Phase 68 | Pending |
-| PERF-06 | Phase 68 | Pending |
+| PERF-06 | Phase 68 | Complete |
 | PERF-07 | Phase 68 | Pending |
 
 **Coverage:**
