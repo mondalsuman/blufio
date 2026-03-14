@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Phase 67 context gathered
-last_updated: "2026-03-14T09:43:38.821Z"
-last_activity: 2026-03-13 -- 66-04 benign/attack corpus fixtures, corpus validation integration tests
+stopped_at: Completed 67-01-PLAN.md
+last_updated: "2026-03-14T10:20:54.462Z"
+last_activity: 2026-03-14 -- 67-01 startup vec0 wiring, get_embeddings_by_ids, config default flip
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 8
   percent: 50
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-13)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 65 -- sqlite-vec Foundation
+**Current focus:** Phase 67 -- Vector Search Migration & Hybrid Pipeline
 
 ## Current Position
 
-Phase: 66 -- second of 5 in v1.6 (Injection Defense Hardening) -- IN PROGRESS
-Plan: 4 of 4 in current phase (4 complete)
-Status: Phase 66 complete -- all 4 plans delivered, corpus validation CI gates passing
-Last activity: 2026-03-13 -- 66-04 benign/attack corpus fixtures, corpus validation integration tests
+Phase: 67 -- third of 5 in v1.6 (Vector Search Migration & Hybrid Pipeline) -- IN PROGRESS
+Plan: 1 of 3 in current phase (1 complete)
+Status: 67-01 complete -- startup vec0 wiring, get_embeddings_by_ids, config default flip
+Last activity: 2026-03-14 -- 67-01 startup vec0 wiring, get_embeddings_by_ids, config default flip
 
 Progress: [█████░░░░░] 50% (v1.6)
 
@@ -65,6 +65,7 @@ Progress: [█████░░░░░] 50% (v1.6)
 | Phase 66 P02 | 10min | 2 tasks | 7 files |
 | Phase 66 P03 | 14min | 2 tasks | 9 files |
 | Phase 66 P04 | 9min | 2 tasks | 3 files |
+| Phase 67 P01 | 4min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Recent decisions affecting v1.6 work:
 - [Phase 66-02]: record_input_detection now takes category label -- external callers need Plan 03 update
 - [Phase 66]: Deduplication by (pattern_index, matched_text) for dual-scan merge; evasion bonus additive and independent of weights
 - [Phase 66-04]: Corpus validation as hard CI gate: 125 benign messages (0% FP), 67 attack messages (100% detection), 3 attack messages adjusted to match existing patterns
+- [Phase 67-01]: populate_vec0 failure logs warning but does not crash startup -- retriever falls back to in-memory search
+- [Phase 67-01]: vec0_enabled defaults to true for new installs; existing installs with explicit vec0_enabled=false retain their setting via serde
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T09:43:38.819Z
-Stopped at: Phase 67 context gathered
-Resume file: .planning/phases/67-vector-search-migration-hybrid-pipeline/67-CONTEXT.md
+Last session: 2026-03-14T10:20:54.460Z
+Stopped at: Completed 67-01-PLAN.md
+Resume file: None
