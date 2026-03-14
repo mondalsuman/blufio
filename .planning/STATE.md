@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Phase 69 context gathered
-last_updated: "2026-03-14T14:45:05.165Z"
-last_activity: 2026-03-14 -- 68-04 CI benchmark workflow (PR comments, binary size, ONNX caching)
+stopped_at: Completed 69-02-PLAN.md
+last_updated: "2026-03-14T15:10:50.519Z"
+last_activity: 2026-03-14 -- 69-02 ONNX E2E and combined vec0+injection benchmarks
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 14
-  completed_plans: 14
-  percent: 80
+  total_plans: 17
+  completed_plans: 15
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-13)
 
 **Core value:** An always-on personal AI agent that is secure enough to trust, efficient enough to afford, and simple enough to deploy by copying one file.
-**Current focus:** Phase 68 -- Performance Benchmarking Suite
+**Current focus:** Phase 69 -- Cross-Phase Integration Validation
 
 ## Current Position
 
-Phase: 68 -- fourth of 5 in v1.6 (Performance Benchmarking Suite) -- COMPLETE
-Plan: 4 of 4 in current phase (4 complete)
-Status: 68-04 complete -- CI benchmark workflow (PR comments, binary size, ONNX caching)
-Last activity: 2026-03-14 -- 68-04 CI benchmark workflow (PR comments, binary size, ONNX caching)
+Phase: 69 -- fifth of 5 in v1.6 (Cross-Phase Integration Validation) -- IN PROGRESS
+Plan: 2 of 3 in current phase (1 complete)
+Status: 69-02 complete -- ONNX E2E and combined vec0+injection benchmarks
+Last activity: 2026-03-14 -- 69-02 ONNX E2E and combined vec0+injection benchmarks
 
-Progress: [████████░░] 80% (v1.6)
+Progress: [██████████] 100% (v1.6)
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [████████░░] 80% (v1.6)
 | Phase 68 P01 | 4min | 2 tasks | 1 files |
 | Phase 68 P02 | 12min | 2 tasks | 4 files |
 | Phase 68 P04 | 3min | 2 tasks | 1 files |
+| Phase 69 P02 | 4min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,7 @@ Recent decisions affecting v1.6 work:
 - [Phase 68-04]: Belt-and-suspenders regression detection: github-action-benchmark at 120% AND grep-based >20% check on main push
 - [Phase 68-04]: sqlite-vec feature-flag comparison deferred: sqlite-vec is a hard dependency of blufio-memory, not feature-gated
 - [Phase 68-04]: PR benchmarks informational only: fail-on-alert only for push events, PRs get comment without blocking
+- [Phase 69]: Used OnnxEmbedder::embed_text() synchronous method in Criterion benchmarks to avoid runtime-in-runtime panic
 
 ### Pending Todos
 
@@ -124,6 +126,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T14:45:05.162Z
-Stopped at: Phase 69 context gathered
-Resume file: .planning/phases/69-cross-phase-integration-validation/69-CONTEXT.md
+Last session: 2026-03-14T15:10:50.517Z
+Stopped at: Completed 69-02-PLAN.md
+Resume file: None
