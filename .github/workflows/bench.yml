@@ -3,6 +3,7 @@ name: Benchmarks
 on:
   push:
     branches: [main]
+  pull_request:
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,6 +13,7 @@ jobs:
   benchmark:
     name: Criterion Benchmarks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -36,15 +38,48 @@ jobs:
             bench-baseline-${{ hashFiles('Cargo.lock') }}-
             bench-baseline-
 
+      # Cache ONNX model for hybrid pipeline benchmarks.
+      - name: Cache ONNX model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/blufio/models
+          key: onnx-model-all-MiniLM-L6-v2
+
+      - name: Download ONNX model
+        run: |
+          MODEL_DIR="$HOME/.cache/blufio/models"
+          mkdir -p "$MODEL_DIR"
+          if [ ! -f "$MODEL_DIR/model.onnx" ]; then
+            curl -L -o "$MODEL_DIR/model.onnx" \
+              "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx"
+          fi
+
       # Run benchmarks and save results.
       - name: Run benchmarks
         run: cargo bench -p blufio 2>&1 | tee bench-output.txt
+        env:
+          BLUFIO_MODEL_PATH: ~/.cache/blufio/models/model.onnx
 
-      # Check for >20% regressions in criterion output.
+      # Post benchmark results as PR comment via github-action-benchmark.
+      - name: Store benchmark result
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Blufio Benchmarks
+          tool: 'cargo'
+          output-file-path: bench-output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-on-alert: true
+          alert-threshold: '120%'
+          fail-on-alert: ${{ github.event_name == 'push' }}
+          auto-push: false
+
+      # Check for >20% regressions in criterion output (main push only).
       # Criterion prints "regressed" for benchmarks that got slower.
       # We parse the output for regression percentages and fail if any exceed 20%.
-      # Note: This workflow only triggers on push to main (no untrusted input).
+      # Belt-and-suspenders: github-action-benchmark also alerts at 120%.
       - name: Check for regressions
+        if: github.event_name == 'push'
         run: |
           echo "=== Checking for performance regressions ==="
 
