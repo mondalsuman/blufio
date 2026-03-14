@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Completed 67-02-PLAN.md
-last_updated: "2026-03-14T10:32:39.367Z"
-last_activity: 2026-03-14 -- 67-02 vec0 auxiliary scoring pipeline, partial JOIN elimination
+stopped_at: Completed 67-03-PLAN.md
+last_updated: "2026-03-14T10:39:56Z"
+last_activity: 2026-03-14 -- 67-03 parity validation tests at 10/100/1K scales
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 10
-  completed_plans: 9
-  percent: 50
+  completed_plans: 10
+  percent: 60
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 ## Current Position
 
-Phase: 67 -- third of 5 in v1.6 (Vector Search Migration & Hybrid Pipeline) -- IN PROGRESS
-Plan: 2 of 3 in current phase (2 complete)
-Status: 67-02 complete -- vec0 auxiliary scoring pipeline, partial JOIN elimination
-Last activity: 2026-03-14 -- 67-02 vec0 auxiliary scoring pipeline, partial JOIN elimination
+Phase: 67 -- third of 5 in v1.6 (Vector Search Migration & Hybrid Pipeline) -- COMPLETE
+Plan: 3 of 3 in current phase (3 complete)
+Status: 67-03 complete -- parity validation tests at 10/100/1K scales
+Last activity: 2026-03-14 -- 67-03 parity validation tests at 10/100/1K scales
 
-Progress: [█████░░░░░] 50% (v1.6)
+Progress: [██████░░░░] 60% (v1.6)
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [█████░░░░░] 50% (v1.6)
 | Phase 66 P04 | 9min | 2 tasks | 3 files |
 | Phase 67 P01 | 4min | 2 tasks | 5 files |
 | Phase 67 P02 | 8min | 1 task | 1 file |
+| Phase 67 P03 | 6min | 1 task | 1 file |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Recent decisions affecting v1.6 work:
 - [Phase 67-01]: vec0_enabled defaults to true for new installs; existing installs with explicit vec0_enabled=false retain their setting via serde
 - [Phase 67-02]: Scoring functions extracted as standalone async fns (score_from_vec0_data, score_from_memory_structs) rather than HybridRetriever methods -- enables testing without ONNX embedder
 - [Phase 67-02]: Removed vector_search() dispatch wrapper -- retrieve() handles vec0/in-memory dispatch inline with Vec0ScoringData capture
+- [Phase 67-03]: Parity comparison uses ID set equality (sorted) not positional order -- tied f32 scores may reorder between vec0 and in-memory
+- [Phase 67-03]: 0.02 tolerance at 1K scale (vs 0.01 at smaller scales) for f32 accumulation drift in 384-dim dot products
 
 ### Pending Todos
 
@@ -110,6 +113,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T10:30:23Z
-Stopped at: Completed 67-02-PLAN.md
+Last session: 2026-03-14T10:39:56Z
+Stopped at: Completed 67-03-PLAN.md
 Resume file: None

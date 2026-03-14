@@ -118,7 +118,7 @@
 
 - [x] **Phase 65: sqlite-vec Foundation** — Register sqlite-vec with SQLCipher, create vec0 virtual table with metadata columns, wire KNN search into retriever (completed 2026-03-13)
 - [x] **Phase 66: Injection Defense Hardening** — Unicode normalization pre-pass, expanded pattern set, multi-language detection, configurable severity, canary tokens, false positive validation (completed 2026-03-13)
-- [ ] **Phase 67: Vector Search Migration & Hybrid Pipeline** — Migrate BLOB embeddings to vec0, preserve hybrid retrieval, sync eviction/soft-delete, partition keys, auxiliary columns
+- [x] **Phase 67: Vector Search Migration & Hybrid Pipeline** — Migrate BLOB embeddings to vec0, preserve hybrid retrieval, sync eviction/soft-delete, partition keys, auxiliary columns (completed 2026-03-14)
 - [ ] **Phase 68: Performance Benchmarking Suite** — Binary size tracking, memory RSS profiling, vec0 vs in-memory comparison, injection throughput, end-to-end hybrid pipeline, OpenClaw comparison, CI regression baselines
 - [ ] **Phase 69: Cross-Phase Integration Validation** — Verify vec0 + injection + benchmarks work together end-to-end, close any wiring gaps
 
@@ -165,7 +165,7 @@ Plans:
   2. Hybrid retrieval results (top-K ordering) are functionally identical to pre-migration output for the same queries
   3. Eviction (batch_evict) and soft-delete operations sync across both memories and vec0 tables atomically in a single transaction
   4. vec0 partition key by session_id and auxiliary columns eliminate JOIN to memories table — search returns complete results in a single query
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 67-01-PLAN.md — Startup wiring (vec0 in initialize_memory), get_embeddings_by_ids store method, config default flip
 - [ ] 67-02-PLAN.md — Retriever partial JOIN elimination (vec0 auxiliary data through scoring pipeline)
@@ -208,7 +208,7 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 53-64 | v1.5 | 49/49 | Complete | 2026-03-13 |
 | 65. sqlite-vec Foundation | 3/3 | Complete    | 2026-03-13 | - |
 | 66. Injection Defense Hardening | 4/4 | Complete    | 2026-03-13 | - |
-| 67. Vector Search Migration & Hybrid Pipeline | 2/3 | In Progress|  | - |
+| 67. Vector Search Migration & Hybrid Pipeline | 3/3 | Complete   | 2026-03-14 | - |
 | 68. Performance Benchmarking Suite | v1.6 | 0/? | Not started | - |
 | 69. Cross-Phase Integration Validation | v1.6 | 0/? | Not started | - |
 
