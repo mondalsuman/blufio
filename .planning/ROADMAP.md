@@ -165,7 +165,11 @@ Plans:
   2. Hybrid retrieval results (top-K ordering) are functionally identical to pre-migration output for the same queries
   3. Eviction (batch_evict) and soft-delete operations sync across both memories and vec0 tables atomically in a single transaction
   4. vec0 partition key by session_id and auxiliary columns eliminate JOIN to memories table — search returns complete results in a single query
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 67-01-PLAN.md — Startup wiring (vec0 in initialize_memory), get_embeddings_by_ids store method, config default flip
+- [ ] 67-02-PLAN.md — Retriever partial JOIN elimination (vec0 auxiliary data through scoring pipeline)
+- [ ] 67-03-PLAN.md — Parity validation tests at 10/100/1K scales, auxiliary column + eviction + session partition tests
 
 ### Phase 68: Performance Benchmarking Suite
 **Goal**: Quantified performance baselines validate binary size, memory usage, retrieval latency, and injection throughput claims with CI regression detection
@@ -204,7 +208,7 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 53-64 | v1.5 | 49/49 | Complete | 2026-03-13 |
 | 65. sqlite-vec Foundation | 3/3 | Complete    | 2026-03-13 | - |
 | 66. Injection Defense Hardening | 4/4 | Complete    | 2026-03-13 | - |
-| 67. Vector Search Migration & Hybrid Pipeline | v1.6 | 0/? | Not started | - |
+| 67. Vector Search Migration & Hybrid Pipeline | v1.6 | 0/3 | Not started | - |
 | 68. Performance Benchmarking Suite | v1.6 | 0/? | Not started | - |
 | 69. Cross-Phase Integration Validation | v1.6 | 0/? | Not started | - |
 
@@ -212,4 +216,4 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-13 after Phase 66 planning (4 plans created)*
+*Last updated: 2026-03-14 after Phase 67 planning (3 plans created)*
