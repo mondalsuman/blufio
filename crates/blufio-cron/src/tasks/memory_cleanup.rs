@@ -60,6 +60,23 @@ impl CronTask for MemoryCleanupTask {
                     return Ok((count, 0));
                 }
 
+                // Sync vec0 status BEFORE soft-deleting memories (rowids must still
+                // be resolvable). Gracefully ignore "no such table" errors for
+                // databases without vec0 enabled.
+                let _ = conn.execute(
+                    "UPDATE memories_vec0 SET status = 'evicted' \
+                     WHERE rowid IN (\
+                       SELECT rowid FROM memories \
+                       WHERE id IN (\
+                         SELECT id FROM memories \
+                         WHERE deleted_at IS NULL AND status = 'active' \
+                         ORDER BY confidence ASC, created_at ASC \
+                         LIMIT ?1\
+                       )\
+                     )",
+                    rusqlite::params![to_evict],
+                );
+
                 // Delete lowest-confidence memories (soft-delete)
                 let evicted = conn.execute(
                     "UPDATE memories SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \

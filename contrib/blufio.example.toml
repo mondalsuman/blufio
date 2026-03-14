@@ -28,6 +28,28 @@
 # indirect_injection = 1.0
 # encoding_evasion = 1.0
 
+# [memory]
+# Long-term memory subsystem settings.
+# vec0_enabled = true           # Enable sqlite-vec vec0 disk-backed KNN vector search (default: true).
+#                                # When false, falls back to in-memory brute-force cosine similarity.
+#                                # Requires restart to take effect (not hot-reloadable).
+# similarity_threshold = 0.35   # Minimum cosine similarity for retrieval (0.0-1.0). Default: 0.35.
+# max_retrieval_results = 20    # Maximum candidate results per search method (pre-RRF). Default: 20.
+# max_entries = 10000           # Maximum active memories before eviction triggers. Default: 10000.
+# decay_factor = 0.95           # Exponential temporal decay per day. Default: 0.95.
+# decay_floor = 0.1             # Minimum decay multiplier (prevents zero scores). Default: 0.1.
+# mmr_lambda = 0.7              # MMR diversity vs relevance balance (0.0=diverse, 1.0=relevant). Default: 0.7.
+# importance_boost_explicit = 1.5  # Score multiplier for user-created memories. Default: 1.5.
+# importance_boost_extracted = 1.0 # Score multiplier for LLM-extracted memories. Default: 1.0.
+# importance_boost_file = 1.2      # Score multiplier for file-watcher memories. Default: 1.2.
+# eviction_sweep_interval_secs = 3600  # Seconds between eviction sweeps. Default: 3600.
+# stale_threshold_days = 90     # Days after which a memory at decay floor is considered stale. Default: 90.
+#
+# [memory.file_watcher]
+# paths = []                    # Directories to watch for auto-indexing. Empty disables watcher.
+# extensions = ["md", "txt"]    # File extensions to include. Empty means all files.
+# max_file_size = 1048576       # Maximum file size in bytes (1 MB default).
+
 # GDPR Data Subject Rights (Art. 15, 17, 20)
 # Configures the `blufio gdpr` CLI tooling for erasure, export, and reporting.
 # All fields are optional -- defaults apply if this section is omitted.
