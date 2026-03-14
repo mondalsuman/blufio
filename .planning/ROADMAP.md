@@ -8,7 +8,7 @@
 - ✅ **v1.3 Ecosystem Expansion** — Phases 29-45 (shipped 2026-03-08)
 - ✅ **v1.4 Quality & Resilience** — Phases 46-52 (shipped 2026-03-09)
 - ✅ **v1.5 PRD Gap Closure** — Phases 53-64 (shipped 2026-03-13)
-- **v1.6 Performance & Scalability Validation** — Phases 65-69 (in progress)
+- ✅ **v1.6 Performance & Scalability Validation** — Phases 65-69 (shipped 2026-03-14)
 
 ## Phases
 
@@ -112,81 +112,18 @@
 
 </details>
 
-### v1.6 Performance & Scalability Validation (In Progress)
+<details>
+<summary>v1.6 Performance & Scalability Validation (Phases 65-69) — SHIPPED 2026-03-14</summary>
 
-**Milestone Goal:** Migrate vector search to sqlite-vec for production-scale memory, validate performance claims with benchmarks, and harden injection pattern detection.
+- [x] Phase 65: sqlite-vec Foundation (3/3 plans) — completed 2026-03-13
+- [x] Phase 66: Injection Defense Hardening (4/4 plans) — completed 2026-03-13
+- [x] Phase 67: Vector Search Migration & Hybrid Pipeline (3/3 plans) — completed 2026-03-14
+- [x] Phase 68: Performance Benchmarking Suite (4/4 plans) — completed 2026-03-14
+- [x] Phase 69: Cross-Phase Integration Validation (3/3 plans) — completed 2026-03-14
 
-- [x] **Phase 65: sqlite-vec Foundation** — Register sqlite-vec with SQLCipher, create vec0 virtual table with metadata columns, wire KNN search into retriever (completed 2026-03-13)
-- [x] **Phase 66: Injection Defense Hardening** — Unicode normalization pre-pass, expanded pattern set, multi-language detection, configurable severity, canary tokens, false positive validation (completed 2026-03-13)
-- [x] **Phase 67: Vector Search Migration & Hybrid Pipeline** — Migrate BLOB embeddings to vec0, preserve hybrid retrieval, sync eviction/soft-delete, partition keys, auxiliary columns (completed 2026-03-14)
-- [x] **Phase 68: Performance Benchmarking Suite** — Binary size tracking, memory RSS profiling, vec0 vs in-memory comparison, injection throughput, end-to-end hybrid pipeline, OpenClaw comparison, CI regression baselines (completed 2026-03-14)
-- [ ] **Phase 69: Cross-Phase Integration Validation** — Verify vec0 + injection + benchmarks work together end-to-end, close any wiring gaps
+</details>
 
 ## Phase Details
-
-### Phase 65: sqlite-vec Foundation
-**Goal**: Memory store uses sqlite-vec vec0 virtual tables for disk-backed KNN vector search, correctly integrated with SQLCipher encryption
-**Depends on**: Nothing (first v1.6 phase)
-**Requirements**: VEC-01, VEC-02, VEC-03
-**Success Criteria** (what must be TRUE):
-  1. sqlite-vec registers per-connection after PRAGMA key and vec0 queries succeed on an encrypted database
-  2. KNN search via vec0 returns semantically relevant results ranked by cosine similarity (distance converted to 1.0 - distance)
-  3. vec0 metadata columns filter status='active' and classification!='restricted' during KNN search, not post-query — result count matches filter expectations
-  4. Existing memory search continues to work (no regression) while new vec0 path is available
-**Plans:** 3/3 plans complete
-Plans:
-- [ ] 65-01-PLAN.md — Foundation: sqlite-vec dependency, config, events, migration, vec0.rs CRUD operations
-- [ ] 65-02-PLAN.md — Wiring: dual-write store, vec0 search in retriever, fallback, population, metrics
-- [ ] 65-03-PLAN.md — Validation: CLI rebuild-vec0, doctor health check, integration tests, benchmarks
-
-### Phase 66: Injection Defense Hardening
-**Goal**: Injection classifier detects Unicode evasion, encoding obfuscation, prompt leaking, and multi-language attacks with validated false positive rates
-**Depends on**: Nothing (parallel with Phase 65)
-**Requirements**: INJ-01, INJ-02, INJ-03, INJ-04, INJ-05, INJ-06, INJ-07, INJ-08
-**Success Criteria** (what must be TRUE):
-  1. Messages with zero-width characters, Unicode tags, and homoglyphs are normalized before pattern matching — previously-evading payloads now detected
-  2. Base64-encoded injection payloads are decoded and re-scanned — encoded "ignore previous instructions" triggers detection
-  3. Pattern set covers prompt leaking, jailbreak keywords, delimiter manipulation, indirect injection via tool outputs, and multi-language attacks (French, German, Spanish, Chinese, Japanese)
-  4. Operators can tune per-category severity weights via TOML config and canary token is planted in system prompt with output echo detection
-  5. All patterns validated against benign corpus (100+ messages) with acceptable false positive rate — no legitimate messages blocked
-**Plans:** 4/4 plans complete
-Plans:
-- [ ] 66-01-PLAN.md — Normalization pipeline (normalize.rs) + pattern expansion (8 categories, multi-language) + severity weights config
-- [ ] 66-02-PLAN.md — Canary token system (canary.rs) + output screening integration + SecurityEvent + metrics
-- [ ] 66-03-PLAN.md — Classifier integration (normalization pre-pass, dual scan, weights) + pipeline timeout + CLI + doctor
-- [ ] 66-04-PLAN.md — Corpus validation (benign/attack JSON fixtures + integration tests as CI gate)
-
-### Phase 67: Vector Search Migration & Hybrid Pipeline
-**Goal**: Existing BLOB embeddings migrate to vec0 and the full hybrid retrieval pipeline (BM25 + vec0 KNN + RRF + temporal decay + importance + MMR) produces identical results to pre-migration
-**Depends on**: Phase 65
-**Requirements**: VEC-04, VEC-05, VEC-06, VEC-07, VEC-08
-**Success Criteria** (what must be TRUE):
-  1. Batched migration (500-row chunks) moves all existing BLOB embeddings to vec0 virtual table with rollback strategy — migration completes without blocking other DB operations
-  2. Hybrid retrieval results (top-K ordering) are functionally identical to pre-migration output for the same queries
-  3. Eviction (batch_evict) and soft-delete operations sync across both memories and vec0 tables atomically in a single transaction
-  4. vec0 partition key by session_id and auxiliary columns eliminate JOIN to memories table — search returns complete results in a single query
-**Plans:** 3/3 plans complete
-Plans:
-- [ ] 67-01-PLAN.md — Startup wiring (vec0 in initialize_memory), get_embeddings_by_ids store method, config default flip
-- [ ] 67-02-PLAN.md — Retriever partial JOIN elimination (vec0 auxiliary data through scoring pipeline)
-- [ ] 67-03-PLAN.md — Parity validation tests at 10/100/1K scales, auxiliary column + eviction + session partition tests
-
-### Phase 68: Performance Benchmarking Suite
-**Goal**: Quantified performance baselines validate binary size, memory usage, retrieval latency, and injection throughput claims with CI regression detection
-**Depends on**: Phase 65, Phase 66, Phase 67
-**Requirements**: PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07
-**Success Criteria** (what must be TRUE):
-  1. Binary size measured with per-crate breakdown and tracked against <50MB target — sqlite-vec impact quantified
-  2. Memory RSS profiled at idle (target 50-80MB) and under load (target 100-200MB) using jemalloc stats
-  3. Criterion benchmarks compare vec0 KNN vs in-memory cosine at 100, 1K, 5K, and 10K entries — vec0 wins at scale
-  4. Injection classifier throughput benchmarked at 1KB, 5KB, 10KB inputs — expanded pattern set quantified
-  5. CI regression baselines established — benchmarks fail if performance degrades beyond 20% threshold
-**Plans:** 4/4 plans complete
-Plans:
-- [ ] 68-01-PLAN.md — Binary size + memory RSS profiling CLI (BenchmarkKind::BinarySize, BenchmarkKind::MemoryProfile)
-- [ ] 68-02-PLAN.md — Criterion benchmarks: vec0 5K/10K, injection throughput, hybrid pipeline
-- [ ] 68-03-PLAN.md — OpenClaw comparative benchmark document (docs/benchmarks.md)
-- [ ] 68-04-PLAN.md — CI regression baselines: bench.yml enhancements, PR comments, binary size gates
 
 ### Phase 69: Cross-Phase Integration Validation
 **Goal**: All v1.6 subsystems (vec0, injection, benchmarks) verified working together in production configuration
@@ -196,11 +133,11 @@ Plans:
   1. End-to-end hybrid retrieval benchmark (embed -> vec0 -> BM25 -> RRF -> MMR) runs successfully with production-like data and produces correct rankings
   2. Comparative benchmark vs OpenClaw validates memory usage and token efficiency claims with reproducible numbers
   3. All 23 v1.6 requirements verified with traceability — zero orphans, zero regressions against v1.5 functionality
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
-- [ ] 69-01-PLAN.md — Wiring gap fixes + cross-subsystem integration tests
-- [ ] 69-02-PLAN.md — ONNX E2E + combined vec0+injection benchmarks
-- [ ] 69-03-PLAN.md — Milestone verification report + project updates
+- [x] 69-01-PLAN.md -- Wiring gap fixes + cross-subsystem integration tests
+- [x] 69-02-PLAN.md -- ONNX E2E + combined vec0+injection benchmarks
+- [x] 69-03-PLAN.md -- Milestone verification report + project updates
 
 ## Progress
 
@@ -215,14 +152,10 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 29-45 | v1.3 | 47/47 | Complete | 2026-03-08 |
 | 46-52 | v1.4 | 16/16 | Complete | 2026-03-09 |
 | 53-64 | v1.5 | 49/49 | Complete | 2026-03-13 |
-| 65. sqlite-vec Foundation | 3/3 | Complete    | 2026-03-13 | - |
-| 66. Injection Defense Hardening | 4/4 | Complete    | 2026-03-13 | - |
-| 67. Vector Search Migration & Hybrid Pipeline | 3/3 | Complete    | 2026-03-14 | - |
-| 68. Performance Benchmarking Suite | 4/4 | Complete    | 2026-03-14 | - |
-| 69. Cross-Phase Integration Validation | 2/3 | In Progress|  | - |
+| 65-69 | v1.6 | 17/17 | Complete | 2026-03-14 |
 
-**Totals:** 69 phases, 200+ plans, 7 milestones (6 shipped, 1 in progress)
+**Totals:** 69 phases, 217 plans, 7 milestones (7 shipped)
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-14 after Phase 69 planning (3 plans created)*
+*Last updated: 2026-03-14 after v1.6 milestone validated*
