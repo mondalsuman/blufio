@@ -187,3 +187,7 @@ harness = false
 [[bench]]
 name = "bench_injection"
 harness = false
+
+[[bench]]
+name = "bench_hybrid"
+harness = false
