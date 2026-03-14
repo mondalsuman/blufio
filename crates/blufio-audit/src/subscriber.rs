@@ -878,6 +878,25 @@ fn convert_to_pending_entry(event: &BusEvent) -> PendingEntry {
             })
             .to_string(),
         },
+        BusEvent::Security(SecurityEvent::CanaryDetection {
+            timestamp,
+            correlation_id,
+            token_type,
+            action,
+            ..
+        }) => PendingEntry {
+            timestamp: timestamp.clone(),
+            event_type,
+            action: action.clone(),
+            resource_type: "security".to_string(),
+            resource_id: correlation_id.clone(),
+            actor: "system".to_string(),
+            session_id: correlation_id.clone(),
+            details_json: serde_json::json!({
+                "token_type": token_type,
+            })
+            .to_string(),
+        },
 
         // --- Cron events ---
         BusEvent::Cron(CronEvent::Completed {

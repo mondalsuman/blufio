@@ -2503,6 +2503,12 @@ pub struct InputDetectionConfig {
     /// Invalid patterns are logged and skipped at startup.
     #[serde(default)]
     pub custom_patterns: Vec<String>,
+
+    /// Per-category severity weight multipliers (1.0 = neutral, 0.0 = disabled, max 3.0).
+    /// Keys are category names in snake_case (e.g., `"role_hijacking"`, `"jailbreak"`).
+    /// Empty HashMap means all categories use the default weight of 1.0.
+    #[serde(default)]
+    pub severity_weights: HashMap<String, f64>,
 }
 
 impl Default for InputDetectionConfig {
@@ -2512,6 +2518,7 @@ impl Default for InputDetectionConfig {
             blocking_threshold: default_blocking_threshold(),
             mcp_blocking_threshold: default_mcp_blocking_threshold(),
             custom_patterns: Vec::new(),
+            severity_weights: HashMap::new(),
         }
     }
 }

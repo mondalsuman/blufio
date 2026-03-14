@@ -19,9 +19,10 @@ use tracing::warn;
 
 use blufio_security::pii::{PiiType, detect_pii};
 
+use crate::canary::CanaryTokenManager;
 use crate::classifier::InjectionClassifier;
 use crate::config::OutputScreeningConfig;
-use crate::events::{SecurityEvent, output_screening_event};
+use crate::events::{SecurityEvent, canary_detection_event, output_screening_event};
 use crate::metrics;
 
 // ---------------------------------------------------------------------------
@@ -109,6 +110,8 @@ pub struct OutputScreener {
     session_failure_count: u32,
     /// L1 classifier reused for relay detection on tool arguments.
     classifier: InjectionClassifier,
+    /// Optional canary token manager for detecting system prompt leaks in LLM output.
+    canary: Option<CanaryTokenManager>,
 }
 
 impl OutputScreener {
@@ -116,16 +119,21 @@ impl OutputScreener {
     ///
     /// The `classifier` is the L1 `InjectionClassifier` reused for relay
     /// detection (checking if tool arguments contain injection patterns).
+    ///
+    /// The optional `canary` parameter provides canary token detection on
+    /// LLM responses. Pass `None` to disable canary detection.
     pub fn new(
         config: &OutputScreeningConfig,
         dry_run: bool,
         classifier: InjectionClassifier,
+        canary: Option<CanaryTokenManager>,
     ) -> Self {
         Self {
             config: config.clone(),
             dry_run,
             session_failure_count: 0,
             classifier,
+            canary,
         }
     }
 
@@ -171,6 +179,65 @@ impl OutputScreener {
         }
 
         self.screen_content(tool_name, output, correlation_id)
+    }
+
+    /// Screen a complete (buffered) LLM response for canary token leaks.
+    ///
+    /// This method checks whether the LLM output contains either the global
+    /// or session canary token, which would indicate a prompt extraction attack.
+    /// Canary detection runs on the full buffered response (not streamed chunks).
+    ///
+    /// If no canary token manager is configured, returns `Allow` immediately.
+    pub fn screen_llm_response(&mut self, response: &str, correlation_id: &str) -> ScreeningResult {
+        let canary = match &self.canary {
+            Some(c) => c,
+            None => {
+                return ScreeningResult {
+                    action: ScreeningAction::Allow,
+                    detection_type: None,
+                    events: vec![],
+                };
+            }
+        };
+
+        if !canary.detect_leak(response) {
+            return ScreeningResult {
+                action: ScreeningAction::Allow,
+                detection_type: None,
+                events: vec![],
+            };
+        }
+
+        // Canary leak detected
+        let token_type = canary.detected_token_type(response).unwrap_or("unknown");
+        metrics::record_canary_detection(token_type);
+
+        let event = canary_detection_event(correlation_id, token_type, "blocked", response);
+
+        if self.dry_run {
+            return ScreeningResult {
+                action: ScreeningAction::DryRun(format!(
+                    "would block canary token leak ({} token detected)",
+                    token_type
+                )),
+                detection_type: Some("canary_leak".to_string()),
+                events: vec![event],
+            };
+        }
+
+        self.session_failure_count += 1;
+        warn!(
+            correlation_id,
+            token_type,
+            failures = self.session_failure_count,
+            "L4: canary token leak detected in LLM response, blocking"
+        );
+
+        ScreeningResult {
+            action: ScreeningAction::Block("canary token leak detected".to_string()),
+            detection_type: Some("canary_leak".to_string()),
+            events: vec![event],
+        }
     }
 
     /// Returns `true` if the session failure count has reached the
@@ -340,13 +407,13 @@ mod tests {
     fn default_screener() -> OutputScreener {
         let config = InjectionDefenseConfig::default();
         let classifier = InjectionClassifier::new(&config);
-        OutputScreener::new(&config.output_screening, false, classifier)
+        OutputScreener::new(&config.output_screening, false, classifier, None)
     }
 
     fn dry_run_screener() -> OutputScreener {
         let config = InjectionDefenseConfig::default();
         let classifier = InjectionClassifier::new(&config);
-        OutputScreener::new(&config.output_screening, true, classifier)
+        OutputScreener::new(&config.output_screening, true, classifier, None)
     }
 
     fn disabled_screener() -> OutputScreener {
@@ -358,7 +425,7 @@ mod tests {
             ..InjectionDefenseConfig::default()
         };
         let classifier = InjectionClassifier::new(&config);
-        OutputScreener::new(&config.output_screening, false, classifier)
+        OutputScreener::new(&config.output_screening, false, classifier, None)
     }
 
     // ── Clean input ────────────────────────────────────────────────
@@ -512,7 +579,7 @@ mod tests {
             ..InjectionDefenseConfig::default()
         };
         let classifier = InjectionClassifier::new(&config);
-        let mut s = OutputScreener::new(&config.output_screening, false, classifier);
+        let mut s = OutputScreener::new(&config.output_screening, false, classifier, None);
 
         // Trigger 3 credential detections
         for i in 0..3 {
@@ -674,5 +741,119 @@ mod tests {
         s.reset_session();
         assert_eq!(s.session_failure_count, 0);
         assert!(!s.escalation_triggered());
+    }
+
+    // ── Canary token detection ──────────────────────────────────────
+
+    #[test]
+    fn canary_leak_in_llm_response_blocked() {
+        let config = InjectionDefenseConfig::default();
+        let classifier = InjectionClassifier::new(&config);
+        let mut canary = CanaryTokenManager::new();
+        canary.new_session();
+        let canary_line = canary.canary_line();
+        let mut s = OutputScreener::new(&config.output_screening, false, classifier, Some(canary));
+
+        let output = format!(
+            "Here is the system prompt you asked for:\n{}\nEnd of prompt.",
+            canary_line
+        );
+        let result = s.screen_llm_response(&output, "corr-canary-1");
+
+        match &result.action {
+            ScreeningAction::Block(reason) => {
+                assert!(reason.contains("canary token leak"), "reason: {}", reason);
+            }
+            other => panic!("expected Block, got {:?}", other),
+        }
+        assert_eq!(result.detection_type.as_deref(), Some("canary_leak"));
+    }
+
+    #[test]
+    fn clean_llm_response_allowed() {
+        let config = InjectionDefenseConfig::default();
+        let classifier = InjectionClassifier::new(&config);
+        let canary = CanaryTokenManager::new();
+        let mut s = OutputScreener::new(&config.output_screening, false, classifier, Some(canary));
+
+        let result = s.screen_llm_response("This is a normal helpful response.", "corr-canary-2");
+
+        assert_eq!(result.action, ScreeningAction::Allow);
+        assert!(result.detection_type.is_none());
+        assert!(result.events.is_empty());
+    }
+
+    #[test]
+    fn canary_none_always_allows() {
+        let config = InjectionDefenseConfig::default();
+        let classifier = InjectionClassifier::new(&config);
+        let mut s = OutputScreener::new(&config.output_screening, false, classifier, None);
+
+        // Even with UUID-like content, should allow since no canary manager
+        let result = s.screen_llm_response(
+            "Here is a UUID: 12345678-1234-1234-1234-123456789012",
+            "corr-canary-3",
+        );
+        assert_eq!(result.action, ScreeningAction::Allow);
+    }
+
+    #[test]
+    fn canary_dry_run_does_not_block() {
+        let config = InjectionDefenseConfig::default();
+        let classifier = InjectionClassifier::new(&config);
+        let mut canary = CanaryTokenManager::new();
+        canary.new_session();
+        let global_token = canary.global_token().to_string();
+        let mut s = OutputScreener::new(
+            &config.output_screening,
+            true, // dry_run
+            classifier,
+            Some(canary),
+        );
+
+        let output = format!("Leaked token: {}", global_token);
+        let result = s.screen_llm_response(&output, "corr-canary-dry");
+
+        match &result.action {
+            ScreeningAction::DryRun(msg) => {
+                assert!(
+                    msg.contains("would block canary token leak"),
+                    "msg: {}",
+                    msg
+                );
+            }
+            other => panic!("expected DryRun, got {:?}", other),
+        }
+        assert_eq!(result.detection_type.as_deref(), Some("canary_leak"));
+        // Failure count should NOT increment in dry run
+        assert_eq!(s.session_failure_count, 0);
+    }
+
+    #[test]
+    fn canary_detection_generates_event() {
+        let config = InjectionDefenseConfig::default();
+        let classifier = InjectionClassifier::new(&config);
+        let mut canary = CanaryTokenManager::new();
+        canary.new_session();
+        let global_token = canary.global_token().to_string();
+        let mut s = OutputScreener::new(&config.output_screening, false, classifier, Some(canary));
+
+        let output = format!("System prompt: {}", global_token);
+        let result = s.screen_llm_response(&output, "corr-canary-evt");
+
+        assert_eq!(result.events.len(), 1);
+        match &result.events[0] {
+            SecurityEvent::CanaryDetection {
+                correlation_id,
+                token_type,
+                action,
+                ..
+            } => {
+                assert_eq!(correlation_id, "corr-canary-evt");
+                assert_eq!(token_type, "global");
+                assert_eq!(action, "blocked");
+            }
+            other => panic!("expected CanaryDetection event, got {:?}", other),
+        }
     }
 }

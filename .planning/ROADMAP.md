@@ -117,7 +117,7 @@
 **Milestone Goal:** Migrate vector search to sqlite-vec for production-scale memory, validate performance claims with benchmarks, and harden injection pattern detection.
 
 - [x] **Phase 65: sqlite-vec Foundation** — Register sqlite-vec with SQLCipher, create vec0 virtual table with metadata columns, wire KNN search into retriever (completed 2026-03-13)
-- [ ] **Phase 66: Injection Defense Hardening** — Unicode normalization pre-pass, expanded pattern set, multi-language detection, configurable severity, canary tokens, false positive validation
+- [x] **Phase 66: Injection Defense Hardening** — Unicode normalization pre-pass, expanded pattern set, multi-language detection, configurable severity, canary tokens, false positive validation (completed 2026-03-13)
 - [ ] **Phase 67: Vector Search Migration & Hybrid Pipeline** — Migrate BLOB embeddings to vec0, preserve hybrid retrieval, sync eviction/soft-delete, partition keys, auxiliary columns
 - [ ] **Phase 68: Performance Benchmarking Suite** — Binary size tracking, memory RSS profiling, vec0 vs in-memory comparison, injection throughput, end-to-end hybrid pipeline, OpenClaw comparison, CI regression baselines
 - [ ] **Phase 69: Cross-Phase Integration Validation** — Verify vec0 + injection + benchmarks work together end-to-end, close any wiring gaps
@@ -149,7 +149,12 @@ Plans:
   3. Pattern set covers prompt leaking, jailbreak keywords, delimiter manipulation, indirect injection via tool outputs, and multi-language attacks (French, German, Spanish, Chinese, Japanese)
   4. Operators can tune per-category severity weights via TOML config and canary token is planted in system prompt with output echo detection
   5. All patterns validated against benign corpus (100+ messages) with acceptable false positive rate — no legitimate messages blocked
-**Plans**: TBD
+**Plans:** 4/4 plans complete
+Plans:
+- [ ] 66-01-PLAN.md — Normalization pipeline (normalize.rs) + pattern expansion (8 categories, multi-language) + severity weights config
+- [ ] 66-02-PLAN.md — Canary token system (canary.rs) + output screening integration + SecurityEvent + metrics
+- [ ] 66-03-PLAN.md — Classifier integration (normalization pre-pass, dual scan, weights) + pipeline timeout + CLI + doctor
+- [ ] 66-04-PLAN.md — Corpus validation (benign/attack JSON fixtures + integration tests as CI gate)
 
 ### Phase 67: Vector Search Migration & Hybrid Pipeline
 **Goal**: Existing BLOB embeddings migrate to vec0 and the full hybrid retrieval pipeline (BM25 + vec0 KNN + RRF + temporal decay + importance + MMR) produces identical results to pre-migration
@@ -198,7 +203,7 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 46-52 | v1.4 | 16/16 | Complete | 2026-03-09 |
 | 53-64 | v1.5 | 49/49 | Complete | 2026-03-13 |
 | 65. sqlite-vec Foundation | 3/3 | Complete    | 2026-03-13 | - |
-| 66. Injection Defense Hardening | v1.6 | 0/? | Not started | - |
+| 66. Injection Defense Hardening | 4/4 | Complete    | 2026-03-13 | - |
 | 67. Vector Search Migration & Hybrid Pipeline | v1.6 | 0/? | Not started | - |
 | 68. Performance Benchmarking Suite | v1.6 | 0/? | Not started | - |
 | 69. Cross-Phase Integration Validation | v1.6 | 0/? | Not started | - |
@@ -207,4 +212,4 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-13 after Phase 65 planning (3 plans created)*
+*Last updated: 2026-03-13 after Phase 66 planning (4 plans created)*

@@ -16,6 +16,18 @@
 # # Selective auditing example:
 # # events = ["session.*", "memory.*", "config.*", "audit.*"]
 
+# [injection_defense.input_detection.severity_weights]
+# Per-category severity weight multipliers.
+# Default: 1.0 (neutral). Set to 0.0 to disable a category. Maximum: 3.0.
+# role_hijacking = 1.0
+# instruction_override = 1.0
+# data_exfiltration = 1.0
+# prompt_leaking = 1.0
+# jailbreak = 1.0
+# delimiter_manipulation = 1.0
+# indirect_injection = 1.0
+# encoding_evasion = 1.0
+
 # GDPR Data Subject Rights (Art. 15, 17, 20)
 # Configures the `blufio gdpr` CLI tooling for erasure, export, and reporting.
 # All fields are optional -- defaults apply if this section is omitted.

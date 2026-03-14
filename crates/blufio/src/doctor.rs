@@ -687,10 +687,13 @@ fn check_injection_defense(config: &BlufioConfig) -> CheckResult {
     // that the classifier works at all.
     let custom_errors: usize = 0;
 
+    // Canary self-test.
+    let canary_ok = blufio_injection::canary::CanaryTokenManager::self_test();
+
     let custom_count = custom_count_configured;
     let _ = classifier_ok; // suppress unused warning if not needed elsewhere
     let details = format!(
-        "{} layers ({}), {}custom patterns, HMAC {}",
+        "{} layers ({}), {}custom patterns, HMAC {}, canary {}",
         active_layers.len(),
         active_layers.join("/"),
         if custom_count > 0 {
@@ -706,10 +709,15 @@ fn check_injection_defense(config: &BlufioConfig) -> CheckResult {
             }
         } else {
             "disabled"
+        },
+        if canary_ok {
+            "self-test OK"
+        } else {
+            "self-test FAILED"
         }
     );
 
-    if !hmac_ok {
+    if !hmac_ok || !canary_ok {
         return CheckResult {
             name: "Injection Defense".to_string(),
             status: CheckStatus::Fail,

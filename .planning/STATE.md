@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Completed 65-03-PLAN.md (Phase 65 complete)
-last_updated: "2026-03-13T20:35:48.116Z"
-last_activity: 2026-03-13 -- 65-03 CLI, doctor, integration tests, benchmarks completed
+stopped_at: Completed 66-04-PLAN.md
+last_updated: "2026-03-13T22:37:20.273Z"
+last_activity: 2026-03-13 -- 66-04 benign/attack corpus fixtures, corpus validation integration tests
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 20
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 7
+  percent: 50
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 ## Current Position
 
-Phase: 65 -- first of 5 in v1.6 (sqlite-vec Foundation) -- COMPLETE
-Plan: 3 of 3 in current phase (all complete)
-Status: Phase 65 complete -- ready for Phase 66
-Last activity: 2026-03-13 -- 65-03 CLI, doctor, integration tests, benchmarks completed
+Phase: 66 -- second of 5 in v1.6 (Injection Defense Hardening) -- IN PROGRESS
+Plan: 4 of 4 in current phase (4 complete)
+Status: Phase 66 complete -- all 4 plans delivered, corpus validation CI gates passing
+Last activity: 2026-03-13 -- 66-04 benign/attack corpus fixtures, corpus validation integration tests
 
-Progress: [██░░░░░░░░] 20% (v1.6)
+Progress: [█████░░░░░] 50% (v1.6)
 
 ## Performance Metrics
 
@@ -61,6 +61,10 @@ Progress: [██░░░░░░░░] 20% (v1.6)
 | Phase 65 P01 | 14min | 2 | 10 |
 | Phase 65 P02 | 8min | 2 | 2 |
 | Phase 65 P03 | 12min | 3 | 6 |
+| Phase 66 P01 | 9min | 2 tasks | 11 files |
+| Phase 66 P02 | 10min | 2 tasks | 7 files |
+| Phase 66 P03 | 14min | 2 tasks | 9 files |
+| Phase 66 P04 | 9min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -79,6 +83,13 @@ Recent decisions affecting v1.6 work:
 - [v1.6 Phase 65-02]: AtomicU64 fallback counters for lock-free rate-limited logging in hot search path
 - [v1.6 Phase 65-03]: Integration tests use in-memory DB with manual schema -- avoids file-based DBs while exercising all vec0 ops
 - [v1.6 Phase 65-03]: Full hybrid pipeline benchmark deferred to Phase 68 -- ONNX model init adds complexity without value at this stage
+- [Phase 66]: Confusable mapping table: ~60 entries covering Cyrillic/Greek uppercase+lowercase plus fullwidth Latin ranges
+- [Phase 66]: PATTERNS expanded to 38 entries (from 11) with multi-language phrase-level patterns across 8 categories
+- [Phase 66]: EncodingEvasion has no static patterns -- triggered dynamically when decoded content matches another category
+- [Phase 66-02]: Canary detection via screen_llm_response() separate from screen_content() tool path
+- [Phase 66-02]: record_input_detection now takes category label -- external callers need Plan 03 update
+- [Phase 66]: Deduplication by (pattern_index, matched_text) for dual-scan merge; evasion bonus additive and independent of weights
+- [Phase 66-04]: Corpus validation as hard CI gate: 125 benign messages (0% FP), 67 attack messages (100% detection), 3 attack messages adjusted to match existing patterns
 
 ### Pending Todos
 
@@ -87,12 +98,12 @@ None.
 ### Blockers/Concerns
 
 - SQLCipher + sqlite-vec compatibility CONFIRMED -- sqlite-vec 0.1.6 compiles and runs with bundled-sqlcipher-vendored-openssl (validated in 65-01)
-- Injection pattern false positive risk -- expanded patterns require benign corpus validation (INJ-08)
+- Injection pattern false positive risk RESOLVED -- corpus validation (INJ-08) confirms 0% FP on 125 benign messages
 - vec0 returns cosine distance (0-2), not similarity (0-1) -- conversion required at integration boundary
 - Carry-forward: Claude tokenizer accuracy (~80-95%), Litestream + SQLCipher incompatibility documented
 
 ## Session Continuity
 
-Last session: 2026-03-13T20:28:21Z
-Stopped at: Completed 65-03-PLAN.md (Phase 65 complete)
-Resume file: Next phase (66)
+Last session: 2026-03-13T22:28:03Z
+Stopped at: Completed 66-04-PLAN.md
+Resume file: None
