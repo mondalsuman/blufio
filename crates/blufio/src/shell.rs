@@ -601,9 +601,32 @@ async fn initialize_memory(
     // Create ONNX embedder.
     let embedder = Arc::new(OnnxEmbedder::new(&model_path)?);
 
+    // Register sqlite-vec extension before opening the connection (must be
+    // called before any connections so sqlite3_auto_extension takes effect).
+    if config.memory.vec0_enabled {
+        blufio_memory::vec0::ensure_sqlite_vec_registered();
+    }
+
     // Create memory store (opens its own connection to the same DB).
     let memory_conn = blufio_storage::open_connection(&config.storage.database_path).await?;
-    let memory_store = Arc::new(MemoryStore::new(memory_conn));
+    let memory_store = Arc::new(MemoryStore::with_vec0(
+        memory_conn,
+        None, // event_bus wired separately
+        config.memory.vec0_enabled,
+    ));
+
+    // Populate vec0 virtual table from existing BLOB embeddings (migration).
+    if config.memory.vec0_enabled {
+        info!("starting vec0 population/migration...");
+        match memory_store.populate_vec0().await {
+            Ok((populated, total)) => {
+                info!(populated, total, "vec0 population complete");
+            }
+            Err(e) => {
+                warn!(error = %e, "vec0 population failed, retriever will fall back to in-memory search");
+            }
+        }
+    }
 
     // Create hybrid retriever.
     let retriever = Arc::new(HybridRetriever::new(

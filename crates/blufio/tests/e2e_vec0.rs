@@ -12,7 +12,7 @@
 //! - Eviction sync: batch_evict removes from vec0
 
 use blufio_core::classification::DataClassification;
-use blufio_memory::types::{Memory, MemorySource, MemoryStatus};
+use blufio_memory::types::{Memory, MemorySource, MemoryStatus, cosine_similarity};
 use blufio_memory::vec0;
 use tokio_rusqlite::Connection;
 
@@ -656,5 +656,444 @@ async fn test_vec0_eviction_sync() {
         results.len() <= 3,
         "vec0 search should return at most 3 results, got {}",
         results.len()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Parity validation tests (67-03: VEC-05, VEC-06, VEC-07)
+// ---------------------------------------------------------------------------
+
+/// Helper: insert N memories with varied sources and timestamps, return the store.
+async fn insert_parity_memories(count: usize) -> blufio_memory::MemoryStore {
+    let conn = setup_test_db().await;
+    let store = blufio_memory::MemoryStore::with_vec0(conn, None, true);
+    let sources = [
+        MemorySource::Explicit,
+        MemorySource::Extracted,
+        MemorySource::FileWatcher,
+    ];
+
+    for i in 0..count {
+        let days_ago = (i * 3) as i64; // 0, 3, 6, ..., days ago
+        let created = (chrono::Utc::now() - chrono::Duration::days(days_ago)).to_rfc3339();
+        let mut mem = make_test_memory(
+            &format!("parity-{i}"),
+            &format!("Memory content for parity test {i}"),
+            i as u64 + 1000, // seed offset to avoid collisions with other tests
+        );
+        mem.source = sources[i % 3];
+        mem.confidence = 0.5 + (i as f64 % 5.0) * 0.1; // vary confidence
+        mem.session_id = Some("test-session".to_string());
+        mem.created_at = created.clone();
+        mem.updated_at = created;
+        store.save(&mem).await.unwrap();
+    }
+    store
+}
+
+/// Compare vec0 search results against in-memory cosine search.
+///
+/// Both paths must return the same ID sets and scores within `tolerance`.
+fn assert_parity(
+    vec0_results: &[vec0::Vec0SearchResult],
+    in_mem_results: &[(String, f32)],
+    k: usize,
+    tolerance: f32,
+) {
+    let vec0_top: Vec<&str> = vec0_results
+        .iter()
+        .take(k)
+        .map(|r| r.memory_id.as_str())
+        .collect();
+    let in_mem_top: Vec<&str> = in_mem_results
+        .iter()
+        .take(k)
+        .map(|(id, _)| id.as_str())
+        .collect();
+
+    // Same number of results (both capped at k or less if fewer entries)
+    assert_eq!(
+        vec0_top.len(),
+        in_mem_top.len(),
+        "result count mismatch: vec0={}, in_mem={}",
+        vec0_top.len(),
+        in_mem_top.len()
+    );
+
+    // Same ID sets (order may vary for tied scores)
+    let mut vec0_sorted = vec0_top.clone();
+    vec0_sorted.sort();
+    let mut in_mem_sorted = in_mem_top.clone();
+    in_mem_sorted.sort();
+    assert_eq!(
+        vec0_sorted, in_mem_sorted,
+        "result ID sets differ:\n  vec0:   {:?}\n  in_mem: {:?}",
+        vec0_sorted, in_mem_sorted
+    );
+
+    // Scores within tolerance (compare by matching IDs, not by position)
+    for v in vec0_results.iter().take(k) {
+        if let Some((_, in_mem_sim)) = in_mem_results.iter().find(|(id, _)| id == &v.memory_id) {
+            assert!(
+                (v.similarity - in_mem_sim).abs() < tolerance,
+                "score mismatch for {}: vec0={:.6}, in_mem={:.6}, diff={:.6}, tolerance={:.6}",
+                v.memory_id,
+                v.similarity,
+                in_mem_sim,
+                (v.similarity - in_mem_sim).abs(),
+                tolerance
+            );
+        }
+    }
+}
+
+/// Perform in-memory cosine search using get_active_embeddings, sorted descending.
+async fn in_memory_cosine_search(
+    store: &blufio_memory::MemoryStore,
+    query_emb: &[f32],
+) -> Vec<(String, f32)> {
+    let all_embeddings = store.get_active_embeddings().await.unwrap();
+    let mut results: Vec<(String, f32)> = all_embeddings
+        .into_iter()
+        .filter_map(|(id, emb)| {
+            let sim = cosine_similarity(query_emb, &emb);
+            if sim >= 0.0 { Some((id, sim)) } else { None }
+        })
+        .collect();
+    results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    results
+}
+
+// Test 1: Parity at 10-entry scale (VEC-05)
+
+#[tokio::test]
+async fn test_vec0_parity_10_memories() {
+    vec0::ensure_sqlite_vec_registered();
+    let store = insert_parity_memories(10).await;
+
+    // Ensure vec0 is populated (dual-write should have handled it, but verify)
+    let (_, total) = store.populate_vec0().await.unwrap();
+    assert_eq!(total, 10, "should have 10 active memories");
+
+    // Query with a specific embedding (close to parity-5)
+    let query_emb = synthetic_embedding(1005);
+
+    // Vec0 path
+    let vec0_results = store
+        .conn()
+        .call({
+            let q = query_emb.clone();
+            move |conn| vec0::vec0_search(conn, &q, 10, 0.0, None)
+        })
+        .await
+        .unwrap();
+
+    // In-memory path
+    let in_mem_results = in_memory_cosine_search(&store, &query_emb).await;
+
+    // Assert parity: same IDs, scores within 0.01
+    assert_parity(&vec0_results, &in_mem_results, 10, 0.01);
+}
+
+// Test 2: Parity at 100-entry scale (VEC-05)
+
+#[tokio::test]
+async fn test_vec0_parity_100_memories() {
+    vec0::ensure_sqlite_vec_registered();
+    let store = insert_parity_memories(100).await;
+
+    let (_, total) = store.populate_vec0().await.unwrap();
+    assert_eq!(total, 100);
+
+    // Query from the middle of the range
+    let query_emb = synthetic_embedding(1050);
+
+    // Vec0 path (top-20)
+    let vec0_results = store
+        .conn()
+        .call({
+            let q = query_emb.clone();
+            move |conn| vec0::vec0_search(conn, &q, 20, 0.0, None)
+        })
+        .await
+        .unwrap();
+
+    // In-memory path
+    let in_mem_results = in_memory_cosine_search(&store, &query_emb).await;
+
+    // Assert parity on top-20
+    assert_parity(&vec0_results, &in_mem_results, 20, 0.01);
+}
+
+// Test 3: Parity at 1K-entry scale (VEC-05)
+
+#[tokio::test]
+async fn test_vec0_parity_1000_memories() {
+    vec0::ensure_sqlite_vec_registered();
+    let store = insert_parity_memories(1000).await;
+
+    let (_, total) = store.populate_vec0().await.unwrap();
+    assert_eq!(total, 1000);
+
+    // Query embedding
+    let query_emb = synthetic_embedding(1500);
+
+    // Vec0 path (top-20)
+    let vec0_results = store
+        .conn()
+        .call({
+            let q = query_emb.clone();
+            move |conn| vec0::vec0_search(conn, &q, 20, 0.0, None)
+        })
+        .await
+        .unwrap();
+
+    // In-memory path
+    let in_mem_results = in_memory_cosine_search(&store, &query_emb).await;
+
+    // Use 0.02 tolerance at 1K scale (f32 accumulation differences grow)
+    assert_parity(&vec0_results, &in_mem_results, 20, 0.02);
+}
+
+// Test 4: Auxiliary columns carry correct data (VEC-08)
+
+#[tokio::test]
+async fn test_vec0_auxiliary_columns_populated() {
+    vec0::ensure_sqlite_vec_registered();
+    let conn = setup_test_db().await;
+    let store = blufio_memory::MemoryStore::with_vec0(conn, None, true);
+
+    // Insert a memory with known field values
+    let mut mem = make_test_memory("aux-col-1", "Auxiliary column test content", 9999);
+    mem.source = MemorySource::FileWatcher;
+    mem.confidence = 0.75;
+    mem.session_id = Some("aux-session".to_string());
+    mem.created_at = "2026-02-15T12:30:00.000Z".to_string();
+    mem.updated_at = "2026-02-15T12:30:00.000Z".to_string();
+    store.save(&mem).await.unwrap();
+
+    // Search with the exact same embedding -> should get this memory as top result
+    let query_emb = synthetic_embedding(9999);
+    let results = store
+        .conn()
+        .call({
+            let q = query_emb;
+            move |conn| vec0::vec0_search(conn, &q, 1, 0.0, Some("aux-session"))
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(results.len(), 1, "should find exactly one result");
+    let r = &results[0];
+
+    // Validate all auxiliary columns match the original Memory fields
+    assert_eq!(r.memory_id, "aux-col-1", "memory_id mismatch");
+    assert_eq!(
+        r.content, "Auxiliary column test content",
+        "content mismatch"
+    );
+    assert_eq!(r.source, "file_watcher", "source mismatch");
+    assert!(
+        (r.confidence - 0.75).abs() < 0.001,
+        "confidence mismatch: expected 0.75, got {}",
+        r.confidence
+    );
+    assert_eq!(
+        r.created_at, "2026-02-15T12:30:00.000Z",
+        "created_at mismatch"
+    );
+    assert!(
+        r.similarity > 0.99,
+        "exact embedding match should have similarity ~1.0, got {}",
+        r.similarity
+    );
+}
+
+// Test 5: Eviction sync parity (VEC-06)
+
+#[tokio::test]
+async fn test_vec0_eviction_sync_parity() {
+    vec0::ensure_sqlite_vec_registered();
+    let conn = setup_test_db().await;
+    let store = blufio_memory::MemoryStore::with_vec0(conn, None, true);
+
+    // Insert 5 memories with varied ages (so eviction scoring produces distinct results)
+    for i in 0..5u64 {
+        let days_ago = (i * 10) as i64; // 0, 10, 20, 30, 40 days ago
+        let created = (chrono::Utc::now() - chrono::Duration::days(days_ago)).to_rfc3339();
+        let mut mem = make_test_memory(
+            &format!("evict-parity-{i}"),
+            &format!("Eviction parity memory {i}"),
+            i + 5000,
+        );
+        mem.created_at = created.clone();
+        mem.updated_at = created;
+        store.save(&mem).await.unwrap();
+    }
+
+    // Verify initial counts
+    let initial_vec0 = vec0_count_async(store.conn()).await;
+    let initial_active = store.count_active().await.unwrap();
+    assert_eq!(initial_vec0, 5, "vec0 should start with 5 rows");
+    assert_eq!(initial_active, 5, "memories should start with 5 active");
+
+    // Evict 2 memories (lowest eviction scores = oldest)
+    let (evicted, _low, _high) = store
+        .batch_evict(2, 0.95, 0.1, (1.5, 1.0, 1.2))
+        .await
+        .unwrap();
+    assert_eq!(evicted, 2, "should have evicted 2 memories");
+
+    // Verify both tables are in sync after eviction
+    let final_vec0 = vec0_count_async(store.conn()).await;
+    let final_active = store.count_active().await.unwrap();
+    assert_eq!(final_vec0, 3, "vec0 should have 3 rows after eviction");
+    assert_eq!(
+        final_active, 3,
+        "memories should have 3 active after eviction"
+    );
+    assert_eq!(
+        final_vec0, final_active,
+        "vec0 count should match active memory count"
+    );
+
+    // Verify search results exclude evicted memories in both paths
+    let query_emb = synthetic_embedding(5002);
+
+    // Vec0 path
+    let vec0_results = store
+        .conn()
+        .call({
+            let q = query_emb.clone();
+            move |conn| vec0::vec0_search(conn, &q, 10, 0.0, None)
+        })
+        .await
+        .unwrap();
+
+    // In-memory path
+    let in_mem_results = in_memory_cosine_search(&store, &query_emb).await;
+
+    // Both should return at most 3 results
+    assert!(
+        vec0_results.len() <= 3,
+        "vec0 should return at most 3 results after eviction, got {}",
+        vec0_results.len()
+    );
+    assert!(
+        in_mem_results.len() <= 3,
+        "in-memory should return at most 3 results after eviction, got {}",
+        in_mem_results.len()
+    );
+
+    // Same IDs returned by both paths
+    let mut vec0_ids: Vec<&str> = vec0_results.iter().map(|r| r.memory_id.as_str()).collect();
+    vec0_ids.sort();
+    let mut in_mem_ids: Vec<&str> = in_mem_results.iter().map(|(id, _)| id.as_str()).collect();
+    in_mem_ids.sort();
+    assert_eq!(
+        vec0_ids, in_mem_ids,
+        "vec0 and in-memory should return same IDs after eviction"
+    );
+}
+
+// Test 6: Session partition key filtering (VEC-07)
+
+#[tokio::test]
+async fn test_vec0_session_partition_search() {
+    vec0::ensure_sqlite_vec_registered();
+    let conn = setup_test_db().await;
+    let store = blufio_memory::MemoryStore::with_vec0(conn, None, true);
+
+    // Insert 5 memories in session-A
+    for i in 0..5u64 {
+        let mut mem = make_test_memory(
+            &format!("sess-a-{i}"),
+            &format!("Session A memory {i}"),
+            i + 6000,
+        );
+        mem.session_id = Some("session-A".to_string());
+        store.save(&mem).await.unwrap();
+    }
+
+    // Insert 5 memories in session-B
+    for i in 0..5u64 {
+        let mut mem = make_test_memory(
+            &format!("sess-b-{i}"),
+            &format!("Session B memory {i}"),
+            i + 7000,
+        );
+        mem.session_id = Some("session-B".to_string());
+        store.save(&mem).await.unwrap();
+    }
+
+    // Verify total vec0 count
+    let total = vec0_count_async(store.conn()).await;
+    assert_eq!(total, 10, "should have 10 total vec0 rows");
+
+    let query_emb = synthetic_embedding(6002); // close to session-A memories
+
+    // Search with session_id="session-A" -> only session-A memories
+    let results_a = store
+        .conn()
+        .call({
+            let q = query_emb.clone();
+            move |conn| vec0::vec0_search(conn, &q, 10, 0.0, Some("session-A"))
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        results_a.len(),
+        5,
+        "session-A search should return 5 results, got {}",
+        results_a.len()
+    );
+    for r in &results_a {
+        assert!(
+            r.memory_id.starts_with("sess-a-"),
+            "session-A search returned non-session-A memory: {}",
+            r.memory_id
+        );
+    }
+
+    // Search with session_id="session-B" -> only session-B memories
+    let results_b = store
+        .conn()
+        .call({
+            let q = query_emb.clone();
+            move |conn| vec0::vec0_search(conn, &q, 10, 0.0, Some("session-B"))
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        results_b.len(),
+        5,
+        "session-B search should return 5 results, got {}",
+        results_b.len()
+    );
+    for r in &results_b {
+        assert!(
+            r.memory_id.starts_with("sess-b-"),
+            "session-B search returned non-session-B memory: {}",
+            r.memory_id
+        );
+    }
+
+    // Search without session filter -> all 10 memories
+    let results_all = store
+        .conn()
+        .call({
+            let q = query_emb;
+            move |conn| vec0::vec0_search(conn, &q, 10, 0.0, None)
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        results_all.len(),
+        10,
+        "unfiltered search should return all 10 results, got {}",
+        results_all.len()
     );
 }

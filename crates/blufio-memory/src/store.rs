@@ -501,6 +501,46 @@ impl MemoryStore {
             .map_err(storage_err)
     }
 
+    /// Fetch only the id and embedding vector for a batch of memory IDs.
+    ///
+    /// Used by the retriever when vec0 provides all other fields (content,
+    /// source, confidence, created_at) and only raw embeddings are needed
+    /// for MMR pairwise cosine similarity. Much lighter than `get_memories_by_ids()`.
+    pub async fn get_embeddings_by_ids(
+        &self,
+        ids: &[String],
+    ) -> Result<Vec<(String, Vec<f32>)>, BlufioError> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let ids = ids.to_vec();
+        self.conn
+            .call(move |conn| {
+                let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
+                let sql = format!(
+                    "SELECT id, embedding FROM memories WHERE id IN ({}) \
+                     AND status = 'active' AND classification != 'restricted' \
+                     AND deleted_at IS NULL",
+                    placeholders.join(", ")
+                );
+                let mut stmt = conn.prepare(&sql)?;
+                let params: Vec<&dyn rusqlite::types::ToSql> = ids
+                    .iter()
+                    .map(|id| id as &dyn rusqlite::types::ToSql)
+                    .collect();
+                let results = stmt
+                    .query_map(params.as_slice(), |row| {
+                        let id: String = row.get(0)?;
+                        let blob: Vec<u8> = row.get(1)?;
+                        Ok((id, blob_to_vec(&blob)))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(results)
+            })
+            .await
+            .map_err(storage_err)
+    }
+
     /// Populate the vec0 virtual table from existing memories.
     ///
     /// Copies all active, non-restricted embeddings to `memories_vec0` in
@@ -1351,5 +1391,54 @@ mod tests {
             "rebuild should repopulate all active memories"
         );
         assert_eq!(vec0_count_async(&store).await, 2);
+    }
+
+    #[tokio::test]
+    async fn get_embeddings_by_ids_returns_embedding_only() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        store
+            .save(&make_test_memory("emb-fetch-1", "Test content"))
+            .await
+            .unwrap();
+        store
+            .save(&make_test_memory("emb-fetch-2", "Other content"))
+            .await
+            .unwrap();
+
+        // Fetch embedding for one ID
+        let results = store
+            .get_embeddings_by_ids(&["emb-fetch-1".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "emb-fetch-1");
+        assert_eq!(results[0].1.len(), 384);
+    }
+
+    #[tokio::test]
+    async fn get_embeddings_by_ids_empty_returns_empty() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        let results = store.get_embeddings_by_ids(&[]).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_embeddings_by_ids_excludes_restricted() {
+        let conn = setup_test_db().await;
+        let store = MemoryStore::new(conn);
+
+        let mut restricted = make_test_memory("emb-restr", "Secret content");
+        restricted.classification = DataClassification::Restricted;
+        store.save(&restricted).await.unwrap();
+
+        let results = store
+            .get_embeddings_by_ids(&["emb-restr".to_string()])
+            .await
+            .unwrap();
+        assert!(results.is_empty(), "restricted memories should be excluded");
     }
 }

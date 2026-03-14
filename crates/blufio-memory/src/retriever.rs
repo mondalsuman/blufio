@@ -6,6 +6,10 @@
 //! The retriever embeds the query, runs both vector search and FTS5 BM25,
 //! fuses results using Reciprocal Rank Fusion (k=60), applies source-based
 //! importance boost and temporal decay, then reranks with MMR for diversity.
+//!
+//! When vec0 is enabled, the scoring pipeline uses auxiliary column data
+//! (content, source, confidence, created_at) from vec0 search results,
+//! only fetching raw embeddings from the memories table for MMR reranking.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -66,6 +70,208 @@ fn importance_boost_for_source(source: &MemorySource, config: &MemoryConfig) -> 
     }
 }
 
+/// Scoring data carried from vec0 search results through the pipeline.
+/// Avoids re-fetching content, source, confidence, created_at from the memories table.
+struct Vec0ScoringData {
+    memory_id: String,
+    similarity: f32,
+    content: String,
+    source: String,
+    confidence: f64,
+    created_at: String,
+}
+
+/// Parse a MemorySource from its string representation.
+///
+/// Handles both the canonical forms (`explicit`, `extracted`, `file_watcher`)
+/// and the variant form (`filewatcher`) from vec0 auxiliary columns.
+fn parse_memory_source(s: &str) -> MemorySource {
+    MemorySource::from_str_value(s)
+}
+
+/// Compute temporal decay from a created_at string and source.
+///
+/// Same logic as [`temporal_decay()`] but works with raw string data from vec0
+/// auxiliary columns, avoiding the need to construct a full [`Memory`] struct.
+fn temporal_decay_from_str(
+    created_at: &str,
+    source: &MemorySource,
+    now: chrono::DateTime<Utc>,
+    config: &MemoryConfig,
+) -> f32 {
+    if *source == MemorySource::FileWatcher {
+        return 1.0;
+    }
+    let created = match chrono::DateTime::parse_from_rfc3339(created_at) {
+        Ok(dt) => dt.with_timezone(&Utc),
+        Err(_) => return 1.0,
+    };
+    let days = (now - created).num_days().max(0) as f32;
+    (config.decay_factor as f32)
+        .powf(days)
+        .max(config.decay_floor as f32)
+}
+
+/// Score memories using vec0 auxiliary data (optimized path).
+///
+/// Builds `ScoredMemory` from vec0 search results without fetching full `Memory`
+/// structs from the database for scoring. Only fetches embeddings from the
+/// `memories` table for MMR pairwise cosine similarity.
+///
+/// BM25-only results (IDs in `fused` but not in `vec0_data`) fall back to
+/// `get_memories_by_ids` for those specific IDs.
+async fn score_from_vec0_data(
+    store: &MemoryStore,
+    config: &MemoryConfig,
+    vec0_data: &[Vec0ScoringData],
+    fused: &[(String, f32)],
+) -> Result<Vec<ScoredMemory>, BlufioError> {
+    use crate::types::MemoryStatus;
+    use blufio_core::classification::DataClassification;
+
+    // Build lookup for vec0 data by memory_id
+    let vec0_map: HashMap<&str, &Vec0ScoringData> = vec0_data
+        .iter()
+        .map(|d| (d.memory_id.as_str(), d))
+        .collect();
+
+    // Build lookup for RRF scores
+    let score_map: HashMap<&str, f32> = fused
+        .iter()
+        .map(|(id, score)| (id.as_str(), *score))
+        .collect();
+
+    // For IDs that don't have vec0 data (BM25-only results), fall back to memories
+    let missing_ids: Vec<String> = fused
+        .iter()
+        .map(|(id, _)| id.clone())
+        .filter(|id| !vec0_map.contains_key(id.as_str()))
+        .collect();
+    let fallback_memories = if !missing_ids.is_empty() {
+        store.get_memories_by_ids(&missing_ids).await?
+    } else {
+        vec![]
+    };
+    let fallback_map: HashMap<&str, &Memory> = fallback_memories
+        .iter()
+        .map(|m| (m.id.as_str(), m))
+        .collect();
+
+    // Build scored memories
+    let now = Utc::now();
+    let mut scored: Vec<ScoredMemory> = Vec::new();
+
+    for (id, _) in fused {
+        let rrf_score = score_map.get(id.as_str()).copied().unwrap_or(0.0);
+
+        if let Some(v) = vec0_map.get(id.as_str()) {
+            // Vec0 path: parse source from string, use vec0 auxiliary data
+            let source = parse_memory_source(&v.source);
+            let importance = importance_boost_for_source(&source, config);
+            let decay = temporal_decay_from_str(&v.created_at, &source, now, config);
+            let final_score = rrf_score * importance * decay;
+
+            scored.push(ScoredMemory {
+                memory: Memory {
+                    id: id.clone(),
+                    content: v.content.clone(),
+                    embedding: vec![], // filled later for MMR
+                    source,
+                    confidence: v.confidence,
+                    status: MemoryStatus::Active,
+                    superseded_by: None,
+                    session_id: None,
+                    classification: DataClassification::default(),
+                    created_at: v.created_at.clone(),
+                    updated_at: v.created_at.clone(),
+                },
+                score: final_score,
+            });
+        } else if let Some(m) = fallback_map.get(id.as_str()) {
+            // BM25-only results: use full Memory from fallback
+            let importance = importance_boost_for_source(&m.source, config);
+            let decay = temporal_decay(m, now, config);
+            let final_score = rrf_score * importance * decay;
+            scored.push(ScoredMemory {
+                memory: (*m).clone(),
+                score: final_score,
+            });
+        }
+    }
+
+    // Sort by combined score descending
+    scored.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Fetch embeddings for MMR
+    let mmr_ids: Vec<String> = scored.iter().map(|s| s.memory.id.clone()).collect();
+    let embeddings = store.get_embeddings_by_ids(&mmr_ids).await?;
+    let emb_map: HashMap<&str, &Vec<f32>> = embeddings
+        .iter()
+        .map(|(id, emb)| (id.as_str(), emb))
+        .collect();
+    for s in &mut scored {
+        if let Some(emb) = emb_map.get(s.memory.id.as_str()) {
+            s.memory.embedding = (*emb).clone();
+        }
+    }
+
+    // MMR diversity reranking
+    Ok(mmr_rerank(
+        &scored,
+        config.mmr_lambda,
+        config.max_retrieval_results,
+    ))
+}
+
+/// Score memories using full Memory structs from the database (original path).
+///
+/// Fetches complete Memory records including embeddings, applies importance
+/// boost and temporal decay, sorts, and applies MMR reranking.
+async fn score_from_memory_structs(
+    store: &MemoryStore,
+    config: &MemoryConfig,
+    fused: &[(String, f32)],
+) -> Result<Vec<ScoredMemory>, BlufioError> {
+    let top_ids: Vec<String> = fused.iter().map(|(id, _)| id.clone()).collect();
+    let memories = store.get_memories_by_ids(&top_ids).await?;
+
+    let score_map: HashMap<&str, f32> = fused
+        .iter()
+        .map(|(id, score)| (id.as_str(), *score))
+        .collect();
+
+    let now = Utc::now();
+    let mut scored: Vec<ScoredMemory> = memories
+        .into_iter()
+        .map(|memory| {
+            let rrf_score = score_map.get(memory.id.as_str()).copied().unwrap_or(0.0);
+            let importance = importance_boost_for_source(&memory.source, config);
+            let decay = temporal_decay(&memory, now, config);
+            let final_score = rrf_score * importance * decay;
+            ScoredMemory {
+                memory,
+                score: final_score,
+            }
+        })
+        .collect();
+
+    scored.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    Ok(mmr_rerank(
+        &scored,
+        config.mmr_lambda,
+        config.max_retrieval_results,
+    ))
+}
+
 /// Hybrid retriever combining vector similarity search and BM25 keyword search.
 ///
 /// Uses Reciprocal Rank Fusion (RRF) to merge results from both search
@@ -108,14 +314,11 @@ impl HybridRetriever {
     ///
     /// Pipeline:
     /// 1. Embed the query text
-    /// 2. Run vector similarity search (cosine similarity with threshold filter)
+    /// 2. Run vector similarity search (vec0 KNN with auxiliary data when enabled)
     /// 3. Run BM25 keyword search via FTS5
     /// 4. Fuse results with RRF (k=60)
-    /// 5. Fetch full Memory structs for top results
-    /// 6. Apply importance boost and temporal decay: `rrf_score * importance * decay`
-    /// 7. Sort by combined score descending
-    /// 8. MMR diversity reranking (greedy, lambda-weighted)
-    /// 9. Return Vec<ScoredMemory>
+    /// 5. Score, sort, and MMR rerank (vec0 uses auxiliary data; fallback fetches full Memory structs)
+    /// 6. Return `Vec<ScoredMemory>`
     pub async fn retrieve(&self, query: &str) -> Result<Vec<ScoredMemory>, BlufioError> {
         // OTel: Memory retrieval span with result count, top score, and backend type.
         // Created as a handle (not entered) because entered spans are !Send.
@@ -139,9 +342,33 @@ impl HybridRetriever {
                 BlufioError::Internal("Embedding returned no results".to_string())
             })?;
 
-        // Step 2: Vector search (vec0 KNN when enabled, fallback to in-memory)
+        // Step 2: Vector search
+        // When vec0 is enabled, also capture rich auxiliary data for scoring optimization.
         let fallback_before = self.fallback_count.load(Ordering::Relaxed);
-        let vector_results = self.vector_search(&query_embedding).await?;
+        let (vector_results, vec0_data) = if self.vec0_enabled {
+            let start = std::time::Instant::now();
+            match self.vec0_vector_search_rich(&query_embedding).await {
+                Ok(rich_results) => {
+                    histogram!("blufio_memory_vec0_search_duration_seconds")
+                        .record(start.elapsed().as_secs_f64());
+                    let pairs: Vec<(String, f32)> = rich_results
+                        .iter()
+                        .map(|r| (r.memory_id.clone(), r.similarity))
+                        .collect();
+                    (pairs, Some(rich_results))
+                }
+                Err(e) => {
+                    self.log_vec0_fallback(&e);
+                    counter!("blufio_memory_vec0_fallback_total").increment(1);
+                    let results = self.in_memory_vector_search(&query_embedding).await?;
+                    (results, None)
+                }
+            }
+        } else {
+            let results = self.in_memory_vector_search(&query_embedding).await?;
+            (results, None)
+        };
+
         let fallback_after = self.fallback_count.load(Ordering::Relaxed);
         let backend = if self.vec0_enabled && fallback_after == fallback_before {
             "vec0"
@@ -163,45 +390,15 @@ impl HybridRetriever {
             return Ok(vec![]);
         }
 
-        // Step 5: Fetch full Memory structs
-        let top_ids: Vec<String> = fused.iter().map(|(id, _)| id.clone()).collect();
-        let memories = self.store.get_memories_by_ids(&top_ids).await?;
-
-        // Build lookup for RRF scores
-        let score_map: HashMap<&str, f32> = fused
-            .iter()
-            .map(|(id, score)| (id.as_str(), *score))
-            .collect();
-
-        // Step 6: Apply importance boost + temporal decay
-        let now = Utc::now();
-        let mut scored: Vec<ScoredMemory> = memories
-            .into_iter()
-            .map(|memory| {
-                let rrf_score = score_map.get(memory.id.as_str()).copied().unwrap_or(0.0);
-                let importance = importance_boost_for_source(&memory.source, &self.config);
-                let decay = temporal_decay(&memory, now, &self.config);
-                let final_score = rrf_score * importance * decay;
-                ScoredMemory {
-                    memory,
-                    score: final_score,
-                }
-            })
-            .collect();
-
-        // Step 7: Sort by combined score descending
-        scored.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Step 8: MMR diversity reranking
-        let result = mmr_rerank(
-            &scored,
-            self.config.mmr_lambda,
-            self.config.max_retrieval_results,
-        );
+        // Steps 5-8: Score, sort, and MMR rerank
+        let result = if let Some(ref vec0_data) = vec0_data {
+            // Vec0 optimized path: build ScoredMemory from auxiliary data,
+            // only fetch embeddings for MMR
+            score_from_vec0_data(&self.store, &self.config, vec0_data, &fused).await?
+        } else {
+            // In-memory path: fetch full Memory structs (unchanged)
+            score_from_memory_structs(&self.store, &self.config, &fused).await?
+        };
 
         // OTel: Record retrieval result attributes on span.
         _memory_span.record("blufio.memory.results_count", result.len() as u64);
@@ -210,34 +407,6 @@ impl HybridRetriever {
         }
 
         Ok(result)
-    }
-
-    /// Vector search: uses vec0 KNN when enabled, falls back to in-memory on failure.
-    ///
-    /// Returns (id, similarity) pairs above the similarity threshold,
-    /// sorted by similarity descending, capped at max_retrieval_results.
-    async fn vector_search(
-        &self,
-        query_embedding: &[f32],
-    ) -> Result<Vec<(String, f32)>, BlufioError> {
-        if self.vec0_enabled {
-            let start = std::time::Instant::now();
-            match self.vec0_vector_search(query_embedding).await {
-                Ok(results) => {
-                    histogram!("blufio_memory_vec0_search_duration_seconds")
-                        .record(start.elapsed().as_secs_f64());
-                    return Ok(results);
-                }
-                Err(e) => {
-                    // Per-query fallback: log and fall through to in-memory
-                    self.log_vec0_fallback(&e);
-                    counter!("blufio_memory_vec0_fallback_total").increment(1);
-                    // Fall through to in-memory search below
-                }
-            }
-        }
-        // Existing in-memory cosine similarity search (unchanged)
-        self.in_memory_vector_search(query_embedding).await
     }
 
     /// In-memory vector search: loads all active embeddings and computes cosine similarity.
@@ -274,15 +443,18 @@ impl HybridRetriever {
         Ok(results)
     }
 
-    /// Vec0 KNN vector search: delegates to vec0::vec0_search.
+    /// Vec0 KNN vector search with rich auxiliary data.
     ///
-    /// Maps Vec0SearchResult to (memory_id, similarity) pairs for the RRF pipeline.
-    /// The vec0 search already applies VEC-03 metadata filtering (status='active',
-    /// classification!='restricted').
-    async fn vec0_vector_search(
+    /// Returns `Vec0ScoringData` with content, source, confidence, and created_at
+    /// carried from vec0 auxiliary columns. This avoids re-fetching these fields
+    /// from the memories table for scoring (importance boost + temporal decay).
+    ///
+    /// The caller uses the rich data for scoring and only fetches embeddings
+    /// from the memories table for MMR pairwise cosine similarity.
+    async fn vec0_vector_search_rich(
         &self,
         query_embedding: &[f32],
-    ) -> Result<Vec<(String, f32)>, BlufioError> {
+    ) -> Result<Vec<Vec0ScoringData>, BlufioError> {
         let query_emb = query_embedding.to_vec();
         let k = self.config.max_retrieval_results;
         let threshold = self.config.similarity_threshold;
@@ -296,7 +468,14 @@ impl HybridRetriever {
 
         Ok(results
             .into_iter()
-            .map(|r| (r.memory_id, r.similarity))
+            .map(|r| Vec0ScoringData {
+                memory_id: r.memory_id,
+                similarity: r.similarity,
+                content: r.content,
+                source: r.source,
+                confidence: r.confidence,
+                created_at: r.created_at,
+            })
             .collect())
     }
 
@@ -1104,11 +1283,271 @@ mod tests {
     #[test]
     fn vec0_enabled_propagates_from_config() {
         // Verify that vec0_enabled is picked up from config
-        let mut config = MemoryConfig::default();
-        assert!(!config.vec0_enabled, "default should be false");
+        let config = MemoryConfig::default();
+        assert!(
+            config.vec0_enabled,
+            "default should be true for new installs"
+        );
 
-        config.vec0_enabled = true;
-        assert!(config.vec0_enabled, "should be settable to true");
+        // Verify it can be toggled off via explicit config
+        let config2 = MemoryConfig {
+            vec0_enabled: false,
+            ..Default::default()
+        };
+        assert!(!config2.vec0_enabled, "should be settable to false");
+    }
+
+    // --- Vec0ScoringData and auxiliary scoring tests ---
+
+    #[test]
+    fn parse_memory_source_explicit() {
+        assert_eq!(parse_memory_source("explicit"), MemorySource::Explicit);
+    }
+
+    #[test]
+    fn parse_memory_source_extracted() {
+        assert_eq!(parse_memory_source("extracted"), MemorySource::Extracted);
+    }
+
+    #[test]
+    fn parse_memory_source_file_watcher() {
+        assert_eq!(
+            parse_memory_source("file_watcher"),
+            MemorySource::FileWatcher
+        );
+    }
+
+    #[test]
+    fn parse_memory_source_unknown_defaults_to_extracted() {
+        assert_eq!(
+            parse_memory_source("something_else"),
+            MemorySource::Extracted
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_today_returns_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let decay =
+            temporal_decay_from_str(&now.to_rfc3339(), &MemorySource::Explicit, now, &config);
+        assert!(
+            (decay - 1.0).abs() < 0.001,
+            "Decay for today should be ~1.0, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_seven_days() {
+        let config = default_config();
+        let now = Utc::now();
+        let seven_days_ago = now - chrono::Duration::days(7);
+        let decay = temporal_decay_from_str(
+            &seven_days_ago.to_rfc3339(),
+            &MemorySource::Explicit,
+            now,
+            &config,
+        );
+        let expected = 0.95_f32.powf(7.0);
+        assert!(
+            (decay - expected).abs() < 0.001,
+            "7-day decay should be ~{expected}, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_file_watcher_always_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let old = now - chrono::Duration::days(365);
+        let decay =
+            temporal_decay_from_str(&old.to_rfc3339(), &MemorySource::FileWatcher, now, &config);
+        assert!(
+            (decay - 1.0).abs() < f32::EPSILON,
+            "FileWatcher should always have decay 1.0, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_unparseable_returns_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let decay = temporal_decay_from_str("not-a-date", &MemorySource::Extracted, now, &config);
+        assert!(
+            (decay - 1.0).abs() < f32::EPSILON,
+            "Unparseable timestamp should return 1.0, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_matches_temporal_decay() {
+        // Verify temporal_decay_from_str produces the same result as temporal_decay
+        let config = default_config();
+        let now = Utc::now();
+        let created_at = (now - chrono::Duration::days(14)).to_rfc3339();
+        let mem = make_memory("parity", MemorySource::Explicit, &created_at);
+
+        let from_memory = temporal_decay(&mem, now, &config);
+        let from_str = temporal_decay_from_str(&created_at, &MemorySource::Explicit, now, &config);
+
+        assert!(
+            (from_memory - from_str).abs() < 0.001,
+            "temporal_decay ({from_memory}) and temporal_decay_from_str ({from_str}) should match"
+        );
+    }
+
+    #[test]
+    fn vec0_scoring_data_struct_exists() {
+        // Verify Vec0ScoringData can be constructed and fields are accessible
+        let data = Vec0ScoringData {
+            memory_id: "test-id".to_string(),
+            similarity: 0.95,
+            content: "test content".to_string(),
+            source: "explicit".to_string(),
+            confidence: 0.9,
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+        };
+        assert_eq!(data.memory_id, "test-id");
+        assert!((data.similarity - 0.95).abs() < f32::EPSILON);
+        assert_eq!(data.content, "test content");
+        assert_eq!(data.source, "explicit");
+        assert!((data.confidence - 0.9).abs() < f64::EPSILON);
+        assert_eq!(data.created_at, "2026-03-01T00:00:00Z");
+    }
+
+    #[tokio::test]
+    async fn vec0_search_returns_rich_auxiliary_data() {
+        // Test that vec0 search results contain all auxiliary fields needed for Vec0ScoringData
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
+
+        let mut mem = make_test_memory_full("mem-rich-1", "Coffee preference data");
+        mem.source = MemorySource::Explicit;
+        mem.confidence = 0.85;
+        store.save(&mem).await.unwrap();
+
+        // Vec0SearchResult already has rich fields -- verify they map to Vec0ScoringData correctly
+        let results = store
+            .conn()
+            .call(|conn| vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None))
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        // Map to Vec0ScoringData (the new struct)
+        let scoring_data: Vec<Vec0ScoringData> = results
+            .into_iter()
+            .map(|r| Vec0ScoringData {
+                memory_id: r.memory_id,
+                similarity: r.similarity,
+                content: r.content,
+                source: r.source,
+                confidence: r.confidence,
+                created_at: r.created_at,
+            })
+            .collect();
+
+        assert_eq!(scoring_data[0].memory_id, "mem-rich-1");
+        assert!(
+            scoring_data[0].similarity > 0.0,
+            "similarity should be positive"
+        );
+        assert_eq!(scoring_data[0].content, "Coffee preference data");
+        assert_eq!(scoring_data[0].source, "explicit");
+        assert!((scoring_data[0].confidence - 0.85).abs() < 0.01);
+        assert!(!scoring_data[0].created_at.is_empty());
+    }
+
+    #[test]
+    fn vec0_scoring_data_scoring_matches_memory_scoring() {
+        // Verify that scoring from Vec0ScoringData produces identical results to scoring from Memory
+        let config = default_config();
+        let now = Utc::now();
+        let created_at = (now - chrono::Duration::days(7)).to_rfc3339();
+        let rrf_score = 0.5_f32;
+
+        // Score from Memory (existing path)
+        let mem = make_memory("m1", MemorySource::Explicit, &created_at);
+        let importance_mem = importance_boost_for_source(&mem.source, &config);
+        let decay_mem = temporal_decay(&mem, now, &config);
+        let score_mem = rrf_score * importance_mem * decay_mem;
+
+        // Score from Vec0ScoringData (new path)
+        let source = parse_memory_source("explicit");
+        let importance_vec0 = importance_boost_for_source(&source, &config);
+        let decay_vec0 = temporal_decay_from_str(&created_at, &source, now, &config);
+        let score_vec0 = rrf_score * importance_vec0 * decay_vec0;
+
+        assert!(
+            (score_mem - score_vec0).abs() < 0.001,
+            "Memory-based score ({score_mem}) should match vec0-based score ({score_vec0})"
+        );
+    }
+
+    #[tokio::test]
+    async fn score_from_vec0_builds_scored_memories() {
+        // Test that score_from_vec0 builds ScoredMemory from vec0 data + RRF scores
+        // Uses the standalone scoring function that takes store + config directly
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
+
+        // Save a memory so embeddings can be fetched for MMR
+        let mem = make_test_memory_full("mem-score-1", "Score test");
+        store.save(&mem).await.unwrap();
+
+        let config = default_config();
+        let now_str = Utc::now().to_rfc3339();
+        let vec0_data = vec![Vec0ScoringData {
+            memory_id: "mem-score-1".to_string(),
+            similarity: 0.95,
+            content: "Score test".to_string(),
+            source: "explicit".to_string(),
+            confidence: 0.9,
+            created_at: now_str,
+        }];
+
+        let fused = vec![("mem-score-1".to_string(), 0.5_f32)];
+
+        let scored = score_from_vec0_data(&store, &config, &vec0_data, &fused)
+            .await
+            .unwrap();
+
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].memory.id, "mem-score-1");
+        assert_eq!(scored[0].memory.content, "Score test");
+        assert_eq!(scored[0].memory.source, MemorySource::Explicit);
+        // Score should be rrf * importance * decay (0.5 * 1.0 * ~1.0)
+        assert!(
+            scored[0].score > 0.4 && scored[0].score < 0.6,
+            "Score should be ~0.5, got {}",
+            scored[0].score
+        );
+        // Embedding should have been fetched for MMR
+        assert_eq!(scored[0].memory.embedding.len(), 384);
+    }
+
+    #[tokio::test]
+    async fn score_from_memories_unchanged() {
+        // Test that score_from_memories produces the same output as the original path
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, false));
+
+        let mem = make_test_memory_full("mem-inmem-1", "In-memory test");
+        store.save(&mem).await.unwrap();
+
+        let config = default_config();
+        let fused = vec![("mem-inmem-1".to_string(), 0.5_f32)];
+        let scored = score_from_memory_structs(&store, &config, &fused)
+            .await
+            .unwrap();
+
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].memory.id, "mem-inmem-1");
+        assert_eq!(scored[0].memory.content, "In-memory test");
+        // Score should be rrf * importance * decay
+        assert!(scored[0].score > 0.0);
+        // Embedding should be loaded (for MMR)
+        assert_eq!(scored[0].memory.embedding.len(), 384);
     }
 
     #[tokio::test]
