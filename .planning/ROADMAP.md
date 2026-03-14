@@ -191,7 +191,7 @@ Plans:
 ### Phase 69: Cross-Phase Integration Validation
 **Goal**: All v1.6 subsystems (vec0, injection, benchmarks) verified working together in production configuration
 **Depends on**: Phase 67, Phase 68
-**Requirements**: (integration validation — covers cross-cutting concerns from VEC-05, PERF-05, PERF-06)
+**Requirements**: VEC-05, PERF-05, PERF-06
 **Success Criteria** (what must be TRUE):
   1. End-to-end hybrid retrieval benchmark (embed -> vec0 -> BM25 -> RRF -> MMR) runs successfully with production-like data and produces correct rankings
   2. Comparative benchmark vs OpenClaw validates memory usage and token efficiency claims with reproducible numbers
