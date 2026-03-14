@@ -118,3 +118,73 @@ jobs:
           name: criterion-reports
           path: target/criterion/
           retention-days: 30
+
+  binary-size:
+    name: Binary Size Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: binary-size
+
+      - name: Install cargo-bloat
+        run: cargo install cargo-bloat --locked
+
+      - name: Build release binary
+        run: cargo build --release -p blufio
+
+      - name: Measure binary size
+        id: size
+        run: |
+          SIZE=$(stat -c%s target/release/blufio 2>/dev/null || stat -f%z target/release/blufio)
+          SIZE_MB=$(echo "scale=2; $SIZE / 1048576" | bc)
+          echo "Binary size: ${SIZE_MB}MB ($SIZE bytes)"
+          echo "binary_size=$SIZE" >> $GITHUB_OUTPUT
+          echo "binary_size_mb=$SIZE_MB" >> $GITHUB_OUTPUT
+
+          # Warn at 50MB
+          if [ "$SIZE" -gt 52428800 ]; then
+            echo "::warning::Binary size ${SIZE_MB}MB exceeds 50MB target"
+          fi
+
+          # Fail at 55MB
+          if [ "$SIZE" -gt 57671680 ]; then
+            echo "::error::Binary size ${SIZE_MB}MB exceeds 55MB hard limit"
+            exit 1
+          fi
+
+          echo "Binary size ${SIZE_MB}MB is within limits"
+
+      - name: Per-crate size breakdown
+        run: cargo bloat --release -p blufio --crates -n 20
+
+      - name: Build without sqlite-vec (size comparison)
+        continue-on-error: true
+        run: |
+          # sqlite-vec is a hard dependency of blufio-memory (not feature-gated).
+          # This step will fail until sqlite-vec is feature-gated.
+          # When feature-gated, update this to use the correct --no-default-features + --features flags.
+          echo "sqlite-vec is currently a hard dependency -- feature-flag comparison not yet available"
+          echo "To enable: make sqlite-vec optional in crates/blufio-memory/Cargo.toml"
+
+      - name: Report sqlite-vec size delta
+        if: success()
+        run: |
+          echo "Full binary (with sqlite-vec): ${{ steps.size.outputs.binary_size_mb }}MB"
+          echo "sqlite-vec is a hard dependency -- size delta requires feature-gating"
+
+      - name: Measure debug binary size
+        run: |
+          cargo build -p blufio
+          SIZE=$(stat -c%s target/debug/blufio 2>/dev/null || stat -f%z target/debug/blufio)
+          SIZE_MB=$(echo "scale=2; $SIZE / 1048576" | bc)
+          echo "Debug binary size: ${SIZE_MB}MB"
