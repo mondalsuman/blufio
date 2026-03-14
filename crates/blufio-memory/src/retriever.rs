@@ -126,8 +126,8 @@ async fn score_from_vec0_data(
     vec0_data: &[Vec0ScoringData],
     fused: &[(String, f32)],
 ) -> Result<Vec<ScoredMemory>, BlufioError> {
-    use blufio_core::classification::DataClassification;
     use crate::types::MemoryStatus;
+    use blufio_core::classification::DataClassification;
 
     // Build lookup for vec0 data by memory_id
     let vec0_map: HashMap<&str, &Vec0ScoringData> = vec0_data
@@ -317,12 +317,8 @@ impl HybridRetriever {
     /// 2. Run vector similarity search (vec0 KNN with auxiliary data when enabled)
     /// 3. Run BM25 keyword search via FTS5
     /// 4. Fuse results with RRF (k=60)
-    /// 5-8. Score, sort, and MMR rerank:
-    ///   - **Vec0 path:** Use vec0 auxiliary data (content, source, confidence, created_at)
-    ///     for importance boost and temporal decay. Only fetch embeddings from memories
-    ///     table for MMR pairwise cosine similarity.
-    ///   - **In-memory path:** Fetch full Memory structs via get_memories_by_ids (unchanged).
-    /// 9. Return Vec<ScoredMemory>
+    /// 5. Score, sort, and MMR rerank (vec0 uses auxiliary data; fallback fetches full Memory structs)
+    /// 6. Return `Vec<ScoredMemory>`
     pub async fn retrieve(&self, query: &str) -> Result<Vec<ScoredMemory>, BlufioError> {
         // OTel: Memory retrieval span with result count, top score, and backend type.
         // Created as a handle (not entered) because entered spans are !Send.
@@ -1288,11 +1284,16 @@ mod tests {
     fn vec0_enabled_propagates_from_config() {
         // Verify that vec0_enabled is picked up from config
         let config = MemoryConfig::default();
-        assert!(config.vec0_enabled, "default should be true for new installs");
+        assert!(
+            config.vec0_enabled,
+            "default should be true for new installs"
+        );
 
         // Verify it can be toggled off via explicit config
-        let mut config2 = MemoryConfig::default();
-        config2.vec0_enabled = false;
+        let config2 = MemoryConfig {
+            vec0_enabled: false,
+            ..Default::default()
+        };
         assert!(!config2.vec0_enabled, "should be settable to false");
     }
 
@@ -1310,19 +1311,26 @@ mod tests {
 
     #[test]
     fn parse_memory_source_file_watcher() {
-        assert_eq!(parse_memory_source("file_watcher"), MemorySource::FileWatcher);
+        assert_eq!(
+            parse_memory_source("file_watcher"),
+            MemorySource::FileWatcher
+        );
     }
 
     #[test]
     fn parse_memory_source_unknown_defaults_to_extracted() {
-        assert_eq!(parse_memory_source("something_else"), MemorySource::Extracted);
+        assert_eq!(
+            parse_memory_source("something_else"),
+            MemorySource::Extracted
+        );
     }
 
     #[test]
     fn temporal_decay_from_str_today_returns_one() {
         let config = default_config();
         let now = Utc::now();
-        let decay = temporal_decay_from_str(&now.to_rfc3339(), &MemorySource::Explicit, now, &config);
+        let decay =
+            temporal_decay_from_str(&now.to_rfc3339(), &MemorySource::Explicit, now, &config);
         assert!(
             (decay - 1.0).abs() < 0.001,
             "Decay for today should be ~1.0, got {decay}"
@@ -1352,12 +1360,8 @@ mod tests {
         let config = default_config();
         let now = Utc::now();
         let old = now - chrono::Duration::days(365);
-        let decay = temporal_decay_from_str(
-            &old.to_rfc3339(),
-            &MemorySource::FileWatcher,
-            now,
-            &config,
-        );
+        let decay =
+            temporal_decay_from_str(&old.to_rfc3339(), &MemorySource::FileWatcher, now, &config);
         assert!(
             (decay - 1.0).abs() < f32::EPSILON,
             "FileWatcher should always have decay 1.0, got {decay}"
@@ -1444,7 +1448,10 @@ mod tests {
             .collect();
 
         assert_eq!(scoring_data[0].memory_id, "mem-rich-1");
-        assert!(scoring_data[0].similarity > 0.0, "similarity should be positive");
+        assert!(
+            scoring_data[0].similarity > 0.0,
+            "similarity should be positive"
+        );
         assert_eq!(scoring_data[0].content, "Coffee preference data");
         assert_eq!(scoring_data[0].source, "explicit");
         assert!((scoring_data[0].confidence - 0.85).abs() < 0.01);
@@ -1501,7 +1508,9 @@ mod tests {
 
         let fused = vec![("mem-score-1".to_string(), 0.5_f32)];
 
-        let scored = score_from_vec0_data(&store, &config, &vec0_data, &fused).await.unwrap();
+        let scored = score_from_vec0_data(&store, &config, &vec0_data, &fused)
+            .await
+            .unwrap();
 
         assert_eq!(scored.len(), 1);
         assert_eq!(scored[0].memory.id, "mem-score-1");
@@ -1528,7 +1537,9 @@ mod tests {
 
         let config = default_config();
         let fused = vec![("mem-inmem-1".to_string(), 0.5_f32)];
-        let scored = score_from_memory_structs(&store, &config, &fused).await.unwrap();
+        let scored = score_from_memory_structs(&store, &config, &fused)
+            .await
+            .unwrap();
 
         assert_eq!(scored.len(), 1);
         assert_eq!(scored[0].memory.id, "mem-inmem-1");

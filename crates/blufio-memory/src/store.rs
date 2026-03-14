@@ -516,8 +516,7 @@ impl MemoryStore {
         let ids = ids.to_vec();
         self.conn
             .call(move |conn| {
-                let placeholders: Vec<String> =
-                    (1..=ids.len()).map(|i| format!("?{i}")).collect();
+                let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
                 let sql = format!(
                     "SELECT id, embedding FROM memories WHERE id IN ({}) \
                      AND status = 'active' AND classification != 'restricted' \
@@ -525,8 +524,10 @@ impl MemoryStore {
                     placeholders.join(", ")
                 );
                 let mut stmt = conn.prepare(&sql)?;
-                let params: Vec<&dyn rusqlite::types::ToSql> =
-                    ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+                let params: Vec<&dyn rusqlite::types::ToSql> = ids
+                    .iter()
+                    .map(|id| id as &dyn rusqlite::types::ToSql)
+                    .collect();
                 let results = stmt
                     .query_map(params.as_slice(), |row| {
                         let id: String = row.get(0)?;
@@ -1438,9 +1439,6 @@ mod tests {
             .get_embeddings_by_ids(&["emb-restr".to_string()])
             .await
             .unwrap();
-        assert!(
-            results.is_empty(),
-            "restricted memories should be excluded"
-        );
+        assert!(results.is_empty(), "restricted memories should be excluded");
     }
 }

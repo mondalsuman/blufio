@@ -12,7 +12,7 @@
 //! - Eviction sync: batch_evict removes from vec0
 
 use blufio_core::classification::DataClassification;
-use blufio_memory::types::{cosine_similarity, Memory, MemorySource, MemoryStatus};
+use blufio_memory::types::{Memory, MemorySource, MemoryStatus, cosine_similarity};
 use blufio_memory::vec0;
 use tokio_rusqlite::Connection;
 
@@ -667,12 +667,15 @@ async fn test_vec0_eviction_sync() {
 async fn insert_parity_memories(count: usize) -> blufio_memory::MemoryStore {
     let conn = setup_test_db().await;
     let store = blufio_memory::MemoryStore::with_vec0(conn, None, true);
-    let sources = [MemorySource::Explicit, MemorySource::Extracted, MemorySource::FileWatcher];
+    let sources = [
+        MemorySource::Explicit,
+        MemorySource::Extracted,
+        MemorySource::FileWatcher,
+    ];
 
     for i in 0..count {
         let days_ago = (i * 3) as i64; // 0, 3, 6, ..., days ago
-        let created =
-            (chrono::Utc::now() - chrono::Duration::days(days_ago)).to_rfc3339();
+        let created = (chrono::Utc::now() - chrono::Duration::days(days_ago)).to_rfc3339();
         let mut mem = make_test_memory(
             &format!("parity-{i}"),
             &format!("Memory content for parity test {i}"),
@@ -697,8 +700,16 @@ fn assert_parity(
     k: usize,
     tolerance: f32,
 ) {
-    let vec0_top: Vec<&str> = vec0_results.iter().take(k).map(|r| r.memory_id.as_str()).collect();
-    let in_mem_top: Vec<&str> = in_mem_results.iter().take(k).map(|(id, _)| id.as_str()).collect();
+    let vec0_top: Vec<&str> = vec0_results
+        .iter()
+        .take(k)
+        .map(|r| r.memory_id.as_str())
+        .collect();
+    let in_mem_top: Vec<&str> = in_mem_results
+        .iter()
+        .take(k)
+        .map(|(id, _)| id.as_str())
+        .collect();
 
     // Same number of results (both capped at k or less if fewer entries)
     assert_eq!(
@@ -746,11 +757,7 @@ async fn in_memory_cosine_search(
         .into_iter()
         .filter_map(|(id, emb)| {
             let sim = cosine_similarity(query_emb, &emb);
-            if sim >= 0.0 {
-                Some((id, sim))
-            } else {
-                None
-            }
+            if sim >= 0.0 { Some((id, sim)) } else { None }
         })
         .collect();
     results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -881,14 +888,20 @@ async fn test_vec0_auxiliary_columns_populated() {
 
     // Validate all auxiliary columns match the original Memory fields
     assert_eq!(r.memory_id, "aux-col-1", "memory_id mismatch");
-    assert_eq!(r.content, "Auxiliary column test content", "content mismatch");
+    assert_eq!(
+        r.content, "Auxiliary column test content",
+        "content mismatch"
+    );
     assert_eq!(r.source, "file_watcher", "source mismatch");
     assert!(
         (r.confidence - 0.75).abs() < 0.001,
         "confidence mismatch: expected 0.75, got {}",
         r.confidence
     );
-    assert_eq!(r.created_at, "2026-02-15T12:30:00.000Z", "created_at mismatch");
+    assert_eq!(
+        r.created_at, "2026-02-15T12:30:00.000Z",
+        "created_at mismatch"
+    );
     assert!(
         r.similarity > 0.99,
         "exact embedding match should have similarity ~1.0, got {}",
@@ -907,8 +920,7 @@ async fn test_vec0_eviction_sync_parity() {
     // Insert 5 memories with varied ages (so eviction scoring produces distinct results)
     for i in 0..5u64 {
         let days_ago = (i * 10) as i64; // 0, 10, 20, 30, 40 days ago
-        let created =
-            (chrono::Utc::now() - chrono::Duration::days(days_ago)).to_rfc3339();
+        let created = (chrono::Utc::now() - chrono::Duration::days(days_ago)).to_rfc3339();
         let mut mem = make_test_memory(
             &format!("evict-parity-{i}"),
             &format!("Eviction parity memory {i}"),
