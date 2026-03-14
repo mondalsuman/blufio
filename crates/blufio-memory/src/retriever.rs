@@ -6,6 +6,10 @@
 //! The retriever embeds the query, runs both vector search and FTS5 BM25,
 //! fuses results using Reciprocal Rank Fusion (k=60), applies source-based
 //! importance boost and temporal decay, then reranks with MMR for diversity.
+//!
+//! When vec0 is enabled, the scoring pipeline uses auxiliary column data
+//! (content, source, confidence, created_at) from vec0 search results,
+//! only fetching raw embeddings from the memories table for MMR reranking.
 
 use std::collections::HashMap;
 use std::sync::Arc;
