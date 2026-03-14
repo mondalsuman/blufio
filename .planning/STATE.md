@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Completed 67-01-PLAN.md
-last_updated: "2026-03-14T10:20:54.462Z"
-last_activity: 2026-03-14 -- 67-01 startup vec0 wiring, get_embeddings_by_ids, config default flip
+stopped_at: Completed 67-02-PLAN.md
+last_updated: "2026-03-14T10:32:39.367Z"
+last_activity: 2026-03-14 -- 67-02 vec0 auxiliary scoring pipeline, partial JOIN elimination
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   percent: 50
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 ## Current Position
 
 Phase: 67 -- third of 5 in v1.6 (Vector Search Migration & Hybrid Pipeline) -- IN PROGRESS
-Plan: 1 of 3 in current phase (1 complete)
-Status: 67-01 complete -- startup vec0 wiring, get_embeddings_by_ids, config default flip
-Last activity: 2026-03-14 -- 67-01 startup vec0 wiring, get_embeddings_by_ids, config default flip
+Plan: 2 of 3 in current phase (2 complete)
+Status: 67-02 complete -- vec0 auxiliary scoring pipeline, partial JOIN elimination
+Last activity: 2026-03-14 -- 67-02 vec0 auxiliary scoring pipeline, partial JOIN elimination
 
 Progress: [█████░░░░░] 50% (v1.6)
 
@@ -66,6 +66,7 @@ Progress: [█████░░░░░] 50% (v1.6)
 | Phase 66 P03 | 14min | 2 tasks | 9 files |
 | Phase 66 P04 | 9min | 2 tasks | 3 files |
 | Phase 67 P01 | 4min | 2 tasks | 5 files |
+| Phase 67 P02 | 8min | 1 task | 1 file |
 
 ## Accumulated Context
 
@@ -93,6 +94,8 @@ Recent decisions affecting v1.6 work:
 - [Phase 66-04]: Corpus validation as hard CI gate: 125 benign messages (0% FP), 67 attack messages (100% detection), 3 attack messages adjusted to match existing patterns
 - [Phase 67-01]: populate_vec0 failure logs warning but does not crash startup -- retriever falls back to in-memory search
 - [Phase 67-01]: vec0_enabled defaults to true for new installs; existing installs with explicit vec0_enabled=false retain their setting via serde
+- [Phase 67-02]: Scoring functions extracted as standalone async fns (score_from_vec0_data, score_from_memory_structs) rather than HybridRetriever methods -- enables testing without ONNX embedder
+- [Phase 67-02]: Removed vector_search() dispatch wrapper -- retrieve() handles vec0/in-memory dispatch inline with Vec0ScoringData capture
 
 ### Pending Todos
 
@@ -107,6 +110,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T10:20:54.460Z
-Stopped at: Completed 67-01-PLAN.md
+Last session: 2026-03-14T10:30:23Z
+Stopped at: Completed 67-02-PLAN.md
 Resume file: None
