@@ -1113,6 +1113,267 @@ mod tests {
         assert!(!config2.vec0_enabled, "should be settable to false");
     }
 
+    // --- Vec0ScoringData and auxiliary scoring tests ---
+
+    #[test]
+    fn parse_memory_source_explicit() {
+        assert_eq!(parse_memory_source("explicit"), MemorySource::Explicit);
+    }
+
+    #[test]
+    fn parse_memory_source_extracted() {
+        assert_eq!(parse_memory_source("extracted"), MemorySource::Extracted);
+    }
+
+    #[test]
+    fn parse_memory_source_file_watcher() {
+        assert_eq!(parse_memory_source("file_watcher"), MemorySource::FileWatcher);
+    }
+
+    #[test]
+    fn parse_memory_source_unknown_defaults_to_extracted() {
+        assert_eq!(parse_memory_source("something_else"), MemorySource::Extracted);
+    }
+
+    #[test]
+    fn temporal_decay_from_str_today_returns_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let decay = temporal_decay_from_str(&now.to_rfc3339(), &MemorySource::Explicit, now, &config);
+        assert!(
+            (decay - 1.0).abs() < 0.001,
+            "Decay for today should be ~1.0, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_seven_days() {
+        let config = default_config();
+        let now = Utc::now();
+        let seven_days_ago = now - chrono::Duration::days(7);
+        let decay = temporal_decay_from_str(
+            &seven_days_ago.to_rfc3339(),
+            &MemorySource::Explicit,
+            now,
+            &config,
+        );
+        let expected = 0.95_f32.powf(7.0);
+        assert!(
+            (decay - expected).abs() < 0.001,
+            "7-day decay should be ~{expected}, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_file_watcher_always_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let old = now - chrono::Duration::days(365);
+        let decay = temporal_decay_from_str(
+            &old.to_rfc3339(),
+            &MemorySource::FileWatcher,
+            now,
+            &config,
+        );
+        assert!(
+            (decay - 1.0).abs() < f32::EPSILON,
+            "FileWatcher should always have decay 1.0, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_unparseable_returns_one() {
+        let config = default_config();
+        let now = Utc::now();
+        let decay = temporal_decay_from_str("not-a-date", &MemorySource::Extracted, now, &config);
+        assert!(
+            (decay - 1.0).abs() < f32::EPSILON,
+            "Unparseable timestamp should return 1.0, got {decay}"
+        );
+    }
+
+    #[test]
+    fn temporal_decay_from_str_matches_temporal_decay() {
+        // Verify temporal_decay_from_str produces the same result as temporal_decay
+        let config = default_config();
+        let now = Utc::now();
+        let created_at = (now - chrono::Duration::days(14)).to_rfc3339();
+        let mem = make_memory("parity", MemorySource::Explicit, &created_at);
+
+        let from_memory = temporal_decay(&mem, now, &config);
+        let from_str = temporal_decay_from_str(&created_at, &MemorySource::Explicit, now, &config);
+
+        assert!(
+            (from_memory - from_str).abs() < 0.001,
+            "temporal_decay ({from_memory}) and temporal_decay_from_str ({from_str}) should match"
+        );
+    }
+
+    #[test]
+    fn vec0_scoring_data_struct_exists() {
+        // Verify Vec0ScoringData can be constructed and fields are accessible
+        let data = Vec0ScoringData {
+            memory_id: "test-id".to_string(),
+            similarity: 0.95,
+            content: "test content".to_string(),
+            source: "explicit".to_string(),
+            confidence: 0.9,
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+        };
+        assert_eq!(data.memory_id, "test-id");
+        assert!((data.similarity - 0.95).abs() < f32::EPSILON);
+        assert_eq!(data.content, "test content");
+        assert_eq!(data.source, "explicit");
+        assert!((data.confidence - 0.9).abs() < f64::EPSILON);
+        assert_eq!(data.created_at, "2026-03-01T00:00:00Z");
+    }
+
+    #[tokio::test]
+    async fn vec0_search_returns_rich_auxiliary_data() {
+        // Test that vec0 search results contain all auxiliary fields needed for Vec0ScoringData
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
+
+        let mut mem = make_test_memory_full("mem-rich-1", "Coffee preference data");
+        mem.source = MemorySource::Explicit;
+        mem.confidence = 0.85;
+        store.save(&mem).await.unwrap();
+
+        // Vec0SearchResult already has rich fields -- verify they map to Vec0ScoringData correctly
+        let results = store
+            .conn()
+            .call(|conn| vec0::vec0_search(conn, &vec![0.1f32; 384], 10, 0.0, None))
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        // Map to Vec0ScoringData (the new struct)
+        let scoring_data: Vec<Vec0ScoringData> = results
+            .into_iter()
+            .map(|r| Vec0ScoringData {
+                memory_id: r.memory_id,
+                similarity: r.similarity,
+                content: r.content,
+                source: r.source,
+                confidence: r.confidence,
+                created_at: r.created_at,
+            })
+            .collect();
+
+        assert_eq!(scoring_data[0].memory_id, "mem-rich-1");
+        assert!(scoring_data[0].similarity > 0.0, "similarity should be positive");
+        assert_eq!(scoring_data[0].content, "Coffee preference data");
+        assert_eq!(scoring_data[0].source, "explicit");
+        assert!((scoring_data[0].confidence - 0.85).abs() < 0.01);
+        assert!(!scoring_data[0].created_at.is_empty());
+    }
+
+    #[test]
+    fn vec0_scoring_data_scoring_matches_memory_scoring() {
+        // Verify that scoring from Vec0ScoringData produces identical results to scoring from Memory
+        let config = default_config();
+        let now = Utc::now();
+        let created_at = (now - chrono::Duration::days(7)).to_rfc3339();
+        let rrf_score = 0.5_f32;
+
+        // Score from Memory (existing path)
+        let mem = make_memory("m1", MemorySource::Explicit, &created_at);
+        let importance_mem = importance_boost_for_source(&mem.source, &config);
+        let decay_mem = temporal_decay(&mem, now, &config);
+        let score_mem = rrf_score * importance_mem * decay_mem;
+
+        // Score from Vec0ScoringData (new path)
+        let source = parse_memory_source("explicit");
+        let importance_vec0 = importance_boost_for_source(&source, &config);
+        let decay_vec0 = temporal_decay_from_str(&created_at, &source, now, &config);
+        let score_vec0 = rrf_score * importance_vec0 * decay_vec0;
+
+        assert!(
+            (score_mem - score_vec0).abs() < 0.001,
+            "Memory-based score ({score_mem}) should match vec0-based score ({score_vec0})"
+        );
+    }
+
+    #[tokio::test]
+    async fn score_from_vec0_builds_scored_memories() {
+        // Test that score_from_vec0 builds ScoredMemory from vec0 data + RRF scores
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, true));
+
+        // Save a memory so embeddings can be fetched for MMR
+        let mem = make_test_memory_full("mem-score-1", "Score test");
+        store.save(&mem).await.unwrap();
+
+        let config = default_config();
+        // Create a minimal retriever (embedder not needed for score_from_vec0)
+        let retriever = HybridRetriever {
+            store: store.clone(),
+            embedder: Arc::new(crate::embedder::OnnxEmbedder::dummy()),
+            config,
+            vec0_enabled: true,
+            fallback_count: Arc::new(AtomicU64::new(0)),
+            last_fallback_log: Arc::new(AtomicU64::new(0)),
+        };
+
+        let now_str = Utc::now().to_rfc3339();
+        let vec0_data = vec![Vec0ScoringData {
+            memory_id: "mem-score-1".to_string(),
+            similarity: 0.95,
+            content: "Score test".to_string(),
+            source: "explicit".to_string(),
+            confidence: 0.9,
+            created_at: now_str,
+        }];
+
+        let fused = vec![("mem-score-1".to_string(), 0.5_f32)];
+
+        let scored = retriever.score_from_vec0(&vec0_data, &fused).await.unwrap();
+
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].memory.id, "mem-score-1");
+        assert_eq!(scored[0].memory.content, "Score test");
+        assert_eq!(scored[0].memory.source, MemorySource::Explicit);
+        // Score should be rrf * importance * decay (0.5 * 1.0 * ~1.0)
+        assert!(
+            scored[0].score > 0.4 && scored[0].score < 0.6,
+            "Score should be ~0.5, got {}",
+            scored[0].score
+        );
+        // Embedding should have been fetched for MMR
+        assert_eq!(scored[0].memory.embedding.len(), 384);
+    }
+
+    #[tokio::test]
+    async fn score_from_memories_unchanged() {
+        // Test that score_from_memories produces the same output as the original path
+        let conn = setup_retriever_test_db().await;
+        let store = Arc::new(MemoryStore::with_vec0(conn, None, false));
+
+        let mem = make_test_memory_full("mem-inmem-1", "In-memory test");
+        store.save(&mem).await.unwrap();
+
+        let config = default_config();
+        let retriever = HybridRetriever {
+            store: store.clone(),
+            embedder: Arc::new(crate::embedder::OnnxEmbedder::dummy()),
+            config,
+            vec0_enabled: false,
+            fallback_count: Arc::new(AtomicU64::new(0)),
+            last_fallback_log: Arc::new(AtomicU64::new(0)),
+        };
+
+        let fused = vec![("mem-inmem-1".to_string(), 0.5_f32)];
+        let scored = retriever.score_from_memories(&fused).await.unwrap();
+
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].memory.id, "mem-inmem-1");
+        assert_eq!(scored[0].memory.content, "In-memory test");
+        // Score should be rrf * importance * decay
+        assert!(scored[0].score > 0.0);
+        // Embedding should be loaded (for MMR)
+        assert_eq!(scored[0].memory.embedding.len(), 384);
+    }
+
     #[tokio::test]
     async fn vec0_search_and_in_memory_produce_same_format() {
         // Verify that both search paths produce Vec<(String, f32)>
