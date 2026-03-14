@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Performance & Scalability Validation
 status: completed
-stopped_at: Completed 68-01-PLAN.md
-last_updated: "2026-03-14T12:13:58.746Z"
-last_activity: 2026-03-14 -- 68-03 OpenClaw comparative benchmark document (docs/benchmarks.md)
+stopped_at: Completed 68-02-PLAN.md
+last_updated: "2026-03-14T12:24:01.328Z"
+last_activity: 2026-03-14 -- 68-02 criterion benchmarks (vec0 5K/10K, injection, hybrid pipeline)
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 14
-  completed_plans: 12
+  completed_plans: 13
   percent: 80
 ---
 
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 Phase: 68 -- fourth of 5 in v1.6 (Performance Benchmarking Suite)
 Plan: 3 of 4 in current phase (3 complete)
-Status: 68-01 complete -- binary size & memory profile benchmarks
-Last activity: 2026-03-14 -- 68-01 binary size & memory profile benchmarks
+Status: 68-02 complete -- criterion benchmarks (vec0 5K/10K, injection, hybrid pipeline)
+Last activity: 2026-03-14 -- 68-02 criterion benchmarks (vec0 5K/10K, injection, hybrid pipeline)
 
 Progress: [████████░░] 80% (v1.6)
 
@@ -70,6 +70,7 @@ Progress: [████████░░] 80% (v1.6)
 | Phase 67 P03 | 6min | 1 task | 1 file |
 | Phase 68 P03 | 3min | 1 tasks | 1 files |
 | Phase 68 P01 | 4min | 2 tasks | 1 files |
+| Phase 68 P02 | 12min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,8 @@ Recent decisions affecting v1.6 work:
 - [Phase 67-03]: 0.02 tolerance at 1K scale (vs 0.01 at smaller scales) for f32 accumulation drift in 384-dim dot products
 - [Phase 68]: Hybrid methodology: Blufio measured with reproducibility commands, OpenClaw cited from docs v1.6.x
 - [Phase 68]: BinarySize and MemoryProfile bypass iteration-based run_benchmark() loop -- dispatched directly in run_bench()
+- [Phase 68]: 5K/10K vec0 benchmarks use sample_size(10) + 30s measurement time to avoid CI timeouts
+- [Phase 68]: Hybrid bench uses synchronous pipeline (vec0+BM25+RRF) without ONNX embedding -- full async pipeline deferred to CI model caching setup
 
 ### Pending Todos
 
@@ -117,6 +120,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T12:13:58.744Z
-Stopped at: Completed 68-01-PLAN.md
+Last session: 2026-03-14T12:24:01.326Z
+Stopped at: Completed 68-02-PLAN.md
 Resume file: None
