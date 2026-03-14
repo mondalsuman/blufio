@@ -11,9 +11,7 @@
 //! - Config v1.6 sections (Phase 65 memory.vec0_enabled + Phase 66 injection weights)
 //! - Doctor v1.6 checks (Phase 65 check_vec0 + Phase 66 check_injection_defense)
 
-use blufio_bus::{
-    BusEvent, EventBus, MemoryEvent, SecurityEvent, new_event_id, now_timestamp,
-};
+use blufio_bus::{BusEvent, EventBus, MemoryEvent, SecurityEvent, new_event_id, now_timestamp};
 use blufio_core::classification::DataClassification;
 use blufio_memory::types::{Memory, MemorySource, MemoryStatus};
 use blufio_memory::vec0;
@@ -185,10 +183,7 @@ async fn test_gdpr_erasure_with_vec0_sync() {
 
     // Verify vec0 count drops to 0
     let final_count = vec0_count_async(store.conn()).await;
-    assert_eq!(
-        final_count, 0,
-        "vec0 should have 0 rows after GDPR erasure"
-    );
+    assert_eq!(final_count, 0, "vec0 should have 0 rows after GDPR erasure");
 
     // KNN search should return empty
     let query_emb = synthetic_embedding(102);
@@ -493,10 +488,7 @@ async fn test_eventbus_v16_events() {
             assert_eq!(count, 500);
             assert_eq!(duration_ms, 1200);
         }
-        other => panic!(
-            "expected Memory::Vec0PopulationComplete, got: {:?}",
-            other
-        ),
+        other => panic!("expected Memory::Vec0PopulationComplete, got: {:?}", other),
     }
 
     // Emit SecurityEvent::InputDetection
@@ -525,10 +517,7 @@ async fn test_eventbus_v16_events() {
             assert_eq!(action, "blocked");
             assert_eq!(categories, vec!["role_hijacking"]);
         }
-        other => panic!(
-            "expected Security::InputDetection, got: {:?}",
-            other
-        ),
+        other => panic!("expected Security::InputDetection, got: {:?}", other),
     }
 
     // Emit Vec0FallbackTriggered event
@@ -543,10 +532,7 @@ async fn test_eventbus_v16_events() {
         Ok(Ok(BusEvent::Memory(MemoryEvent::Vec0FallbackTriggered { reason, .. }))) => {
             assert_eq!(reason, "extension not loaded");
         }
-        other => panic!(
-            "expected Memory::Vec0FallbackTriggered, got: {:?}",
-            other
-        ),
+        other => panic!("expected Memory::Vec0FallbackTriggered, got: {:?}", other),
     }
 
     // Emit CanaryDetection event
@@ -562,17 +548,12 @@ async fn test_eventbus_v16_events() {
 
     match tokio::time::timeout(Duration::from_secs(1), rx.recv()).await {
         Ok(Ok(BusEvent::Security(SecurityEvent::CanaryDetection {
-            token_type,
-            action,
-            ..
+            token_type, action, ..
         }))) => {
             assert_eq!(token_type, "global");
             assert_eq!(action, "blocked");
         }
-        other => panic!(
-            "expected Security::CanaryDetection, got: {:?}",
-            other
-        ),
+        other => panic!("expected Security::CanaryDetection, got: {:?}", other),
     }
 }
 
