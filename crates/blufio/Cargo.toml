@@ -183,3 +183,7 @@ harness = false
 [[bench]]
 name = "bench_vec0"
 harness = false
+
+[[bench]]
+name = "bench_injection"
+harness = false

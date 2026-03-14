@@ -3,12 +3,11 @@
 
 //! Criterion benchmarks comparing vec0 KNN vs in-memory cosine similarity.
 //!
-//! Measures search latency at 100 and 1000 entries to establish baseline
-//! performance characteristics for the sqlite-vec integration. Setup time
-//! (DB creation, population) is excluded from measurements.
-//!
-//! The full hybrid pipeline (vec0 -> BM25 -> RRF -> decay -> MMR) is
-//! deferred to Phase 68 since it requires ONNX model initialization.
+//! Measures search latency at 100, 1000, 5000, and 10000 entries to
+//! establish baseline performance characteristics for the sqlite-vec
+//! integration. Setup time (DB creation, population) is excluded from
+//! measurements. Counts >= 5000 use reduced sample sizes to avoid CI
+//! timeouts.
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
@@ -135,7 +134,13 @@ fn setup_bench_embeddings(count: usize) -> Vec<(String, Vec<f32>)> {
 fn bench_vector_search(c: &mut Criterion) {
     let mut group = c.benchmark_group("vector_search");
 
-    for count in [100, 1000] {
+    for count in [100, 1000, 5000, 10000] {
+        // Reduce sample size for large counts to avoid CI timeouts
+        if count >= 5000 {
+            group.sample_size(10);
+            group.measurement_time(std::time::Duration::from_secs(30));
+        }
+
         // vec0 KNN
         let (conn, query_emb) = setup_bench_db(count);
         group.bench_with_input(
