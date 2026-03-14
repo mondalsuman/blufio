@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 11 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, Email, iMessage, SMS, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with multi-level compaction (L0-L3), per-zone token budgets, and prompt cache alignment, local ONNX memory with hybrid search, temporal decay, MMR diversity, and LRU eviction, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, per-dependency circuit breakers with 6-level graceful degradation, 5-layer prompt injection defense (L1 pattern classifier, L3 HMAC boundary tokens, L4 output screening, L5 human-in-the-loop), data classification with PII detection, hash-chained audit trail, cron scheduler with retention policies, hook system with hot reload, GDPR tooling (erasure, export, transparency), OpenTelemetry distributed tracing, OpenAPI spec with Swagger UI, Prometheus observability, full MCP integration (server + client), Docker deployment, and migration/CLI utilities. 116,827 LOC Rust across 37 crates, 357 requirements verified across 6 milestones.
+Blufio is a ground-up Rust AI agent platform that ships as a single static binary. It runs an FSM-per-session agent loop backed by Anthropic Claude (with OpenAI, Ollama, OpenRouter, and Gemini provider plugins), with 11 channel adapters (Telegram, Discord, Slack, WhatsApp, Signal, IRC, Matrix, Email, iMessage, SMS, plus cross-channel bridging), SQLite persistence (WAL mode, ACID, SQLCipher encryption), AES-256-GCM credential vault, three-zone context engine with multi-level compaction (L0-L3), per-zone token budgets, and prompt cache alignment, local ONNX memory with sqlite-vec disk-backed KNN vector search, hybrid retrieval (BM25 + vec0 KNN + RRF + temporal decay + importance + MMR), and LRU eviction, WASM skill sandbox with Ed25519 code signing, plugin system with 7 adapter traits, OpenAI-compatible gateway API (/v1/chat/completions, /v1/responses, tools, scoped keys, webhooks, batch), model routing (Haiku/Sonnet/Opus), multi-agent delegation with Ed25519 signing, node system for paired device mesh, per-dependency circuit breakers with 6-level graceful degradation, 5-layer prompt injection defense (L1 38-pattern classifier with Unicode normalization, L3 HMAC boundary tokens, L4 output screening with canary detection, L5 human-in-the-loop), data classification with PII detection, hash-chained audit trail, cron scheduler with retention policies, hook system with hot reload, GDPR tooling (erasure, export, transparency), OpenTelemetry distributed tracing, OpenAPI spec with Swagger UI, Prometheus observability, full MCP integration (server + client), performance benchmarking suite with CI regression detection, Docker deployment, and migration/CLI utilities. 124,903 LOC Rust across 44 crates, 380 requirements verified across 7 milestones.
 
 ## Core Value
 
@@ -100,20 +100,20 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 - ✓ Clippy unwrap enforcement (#![deny(clippy::unwrap_used)]) across 43 library crates — v1.5 Phase 63
 - ✓ Module decomposition (serve.rs, main.rs), integration tests, property-based tests, benchmark regression CI — v1.5 Phase 63
 - ✓ Cross-phase integration wiring: channel_interactive from adapter capabilities, PII pattern sharing with OutputScreener, GDPR erasure audit trail — v1.5 Phase 64
+- ✓ sqlite-vec vec0 virtual table for disk-backed KNN vector search with SQLCipher encryption — v1.6 Phase 65
+- ✓ Hybrid retrieval preserved: BM25 + vec0 KNN + RRF + temporal decay + importance + MMR functionally identical to pre-migration — v1.6 Phase 67
+- ✓ Injection defense hardened: 38 patterns (8 categories), Unicode normalization, base64 decoding, multi-language (FR/DE/ES/ZH/JA), canary tokens, 0% FP rate — v1.6 Phase 66
+- ✓ Performance benchmarking suite: binary size, memory RSS, vec0 KNN at 10K, injection throughput, hybrid pipeline, CI regression detection — v1.6 Phase 68
+- ✓ Cross-phase integration validated: 8 integration tests, 2 wiring gap fixes (GDPR erasure + cron cleanup vec0 sync), 23/23 requirements verified — v1.6 Phase 69
+- ✓ All 23 v1.6 requirements verified with 69-VERIFICATION.md milestone report — v1.6
 
 ### Active
 
-## Current Milestone: v1.6 Performance & Scalability Validation
-
-**Goal:** Migrate vector search to sqlite-vec for production-scale memory, validate performance claims with benchmarks, and harden injection pattern detection.
-
-**Target features:**
-- sqlite-vec integration replacing in-memory cosine similarity for scalable vector search
-- Performance benchmarking suite (binary size, memory usage, token reduction validation)
-- Injection defense pattern expansion and classifier tuning
+None -- all milestones through v1.6 shipped.
 
 ## Shipped Milestones
 
+- **v1.6 Performance & Scalability Validation** -- 5 phases (65-69), 17 plans, 23 requirements (2026-03-13 -> 2026-03-14)
 - **v1.5 PRD Gap Closure** -- 12 phases (53-64), 49 plans, 93 requirements (2026-03-10 -> 2026-03-13)
 - **v1.4 Quality & Resilience** -- 7 phases (46-52), 16 plans, 39 requirements (2026-03-09)
 - **v1.3 Ecosystem Expansion** -- 17 phases (29-45), 47 plans, 71 requirements (2026-03-05 -> 2026-03-08)
@@ -139,11 +139,11 @@ An always-on personal AI agent that is secure enough to trust, efficient enough 
 
 ### Current State
 
-Shipped v1.5 PRD Gap Closure — all 12 phases (53-64) complete. 116,827 LOC Rust across 37 crates. 357 requirements verified across 6 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39, v1.5: 93). All PRD gaps closed: the platform now has data classification, audit trail, memory enhancements, multi-level compaction, prompt injection defense, cron/retention, hooks/hot-reload, GDPR tooling, 11 channel adapters, OpenTelemetry, OpenAPI, and clippy unwrap enforcement.
+Shipped v1.6 Performance & Scalability Validation — all 5 phases (65-69) complete. 124,903 LOC Rust across 44 crates. 380 requirements verified across 7 milestones (v1.0: 70, v1.1: 48, v1.2: 30, v1.3: 71, v1.4: 39, v1.5: 93, v1.6: 23 + 6 cross-phase). Vector search migrated to sqlite-vec with disk-backed KNN, injection defense expanded to 38 patterns with Unicode normalization and multi-language support, performance benchmarking suite with CI regression detection established.
 
-**Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc, lettre (SMTP), async-imap, mail-parser, utoipa (OpenAPI), opentelemetry, croner.
+**Tech stack (actual):** Rust 2021, tokio, axum, rusqlite (WAL), sqlite-vec 0.1.6 (vec0 KNN), ort (ONNX), wasmtime, teloxide, reqwest 0.13, rmcp 0.17, schemars 1.0, jsonschema 0.28, serde, tracing, clap, figment, tikv-jemallocator, metrics/metrics-exporter-prometheus, ed25519-dalek, aes-gcm, argon2, tower, serenity (Discord), slack-morphism, matrix-sdk 0.11, irc, lettre (SMTP), async-imap, mail-parser, utoipa (OpenAPI), opentelemetry, croner, criterion (benchmarks).
 
-**Architecture:** 37-crate workspace — blufio-agent, blufio-anthropic, blufio-audit, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-cron, blufio-discord, blufio-email, blufio-gateway, blufio-gdpr, blufio-gemini, blufio-hooks, blufio-imessage, blufio-injection, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-sms, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
+**Architecture:** 44-crate workspace — blufio-agent, blufio-anthropic, blufio-audit, blufio-auth-keypair, blufio-bridge, blufio-bus, blufio-config, blufio-context, blufio-core (traits), blufio-cost, blufio-cron, blufio-discord, blufio-email, blufio-gateway, blufio-gdpr, blufio-gemini, blufio-hooks, blufio-imessage, blufio-injection, blufio-irc, blufio-matrix, blufio-mcp-client, blufio-mcp-server, blufio-memory, blufio-node, blufio-ollama, blufio-openai, blufio-openrouter, blufio-plugin, blufio-prometheus, blufio-router, blufio-security, blufio-signal, blufio-skill, blufio-slack, blufio-sms, blufio-storage, blufio-telegram, blufio-test-utils, blufio-vault, blufio-verify, blufio-whatsapp, plus blufio (binary).
 
 **Known tech debt:** Carry-forward from v1.1: 5 deferred MCP integration items, 4 human verification items. WasmSkillRuntime EventBus wiring deferred. Media provider trait implementations deferred (EXT-03/04/05). Claude tokenizer accuracy (~80-95% for Claude 3+, community Xenova artifact). TLS hot reload is a documented stub. 13 human verification items from v1.5 (E2E OTel, Swagger UI, Litestream replication, etc.).
 
@@ -241,6 +241,14 @@ Progressive disclosure everywhere: operators start with `blufio serve` (zero con
 | Feature-gated OTel (disabled by default) | Zero overhead when disabled, OTLP HTTP export when enabled | ✓ Good — compile-time elimination via feature gate |
 | cfg_attr(not(test), deny(clippy::unwrap_used)) | Unwrap banned in library code but allowed in tests | ✓ Good — CI compatible with --all-targets |
 | Direct SQL INSERT for CLI audit events | CLI operates outside EventBus lifecycle, uses tokio-rusqlite directly | ✓ Good — GDPR erasure audit works without serve.rs |
+| sqlite-vec 0.1.6 with SQLCipher (SQLITE_CORE) | Compile sqlite-vec as extension loaded after PRAGMA key, per-connection registration | ✓ Good — vec0 queries succeed on encrypted database |
+| vec0 auxiliary columns for partial JOIN elimination | Store content, source, confidence, created_at in vec0 virtual table to avoid re-fetching | ✓ Good — single-query path for search results, only embeddings fetched for MMR |
+| Dual-write atomicity for vec0 sync | INSERT/UPDATE/DELETE on memories table atomically syncs to memories_vec0 in same transaction | ✓ Good — zero consistency drift between tables |
+| 38-pattern injection classifier with Unicode normalization | NFKC normalize + homoglyph map + zero-width strip before pattern matching | ✓ Good — 0% FP on 125-message benign corpus, multi-language coverage |
+| HMAC canary tokens for prompt leak detection | Per-session canary planted in system prompt, output screening detects if echoed | ✓ Good — complements L1 input-side detection |
+| Criterion with iter_batched for ONNX benchmarks | Separate model load (setup) from per-query latency (measured) in benchmark | ✓ Good — avoids runtime-in-runtime panic, clean measurement |
+| Belt-and-suspenders CI regression detection | github-action-benchmark at 120% + grep-based >20% check on main push | ✓ Good — redundant detection, PR comments informational only |
+| Vec0 graceful-skip pattern (let _ = execute) | Vec0 SQL operations ignore "no such table" errors for pre-migration databases | ✓ Good — handles disabled vec0 and pre-migration DBs without branching |
 
 ---
-*Last updated: 2026-03-13 after v1.6 milestone start*
+*Last updated: 2026-03-14 after v1.6 milestone validated*

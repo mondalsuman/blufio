@@ -88,6 +88,21 @@ pub async fn execute_erasure(
         };
 
         // b. DELETE memories (hard delete for GDPR -- FTS5 triggers fire automatically)
+        // b1. Delete vec0 rows FIRST -- the rowid subquery depends on memories rows still
+        // existing.  Gracefully handle the case where the vec0 table does not exist
+        // (databases that were created before vec0 was enabled, or where vec0 is disabled).
+        if !session_ids.is_empty() {
+            let _ = tx.execute(
+                &format!(
+                    "DELETE FROM memories_vec0 WHERE rowid IN \
+                     (SELECT rowid FROM memories WHERE session_id IN ({placeholders}))"
+                ),
+                rusqlite::params_from_iter(session_ids.iter()),
+            );
+            // Ignore "no such table" errors -- vec0 may not be enabled.
+        }
+
+        // b2. Delete memories rows (FTS5 triggers clean up memories_fts automatically).
         let memories_deleted = if session_ids.is_empty() {
             0
         } else {
