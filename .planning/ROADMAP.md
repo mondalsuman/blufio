@@ -196,7 +196,11 @@ Plans:
   1. End-to-end hybrid retrieval benchmark (embed -> vec0 -> BM25 -> RRF -> MMR) runs successfully with production-like data and produces correct rankings
   2. Comparative benchmark vs OpenClaw validates memory usage and token efficiency claims with reproducible numbers
   3. All 23 v1.6 requirements verified with traceability — zero orphans, zero regressions against v1.5 functionality
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 69-01-PLAN.md — Wiring gap fixes + cross-subsystem integration tests
+- [ ] 69-02-PLAN.md — ONNX E2E + combined vec0+injection benchmarks
+- [ ] 69-03-PLAN.md — Milestone verification report + project updates
 
 ## Progress
 
@@ -215,10 +219,10 @@ Phases execute in numeric order: 65 -> 66 (parallel with 65) -> 67 -> 68 -> 69
 | 66. Injection Defense Hardening | 4/4 | Complete    | 2026-03-13 | - |
 | 67. Vector Search Migration & Hybrid Pipeline | 3/3 | Complete    | 2026-03-14 | - |
 | 68. Performance Benchmarking Suite | 4/4 | Complete    | 2026-03-14 | - |
-| 69. Cross-Phase Integration Validation | v1.6 | 0/? | Not started | - |
+| 69. Cross-Phase Integration Validation | v1.6 | 0/3 | Not started | - |
 
 **Totals:** 69 phases, 200+ plans, 7 milestones (6 shipped, 1 in progress)
 
 ---
 *Roadmap created: 2026-02-28*
-*Last updated: 2026-03-14 after Phase 68 planning (4 plans created)*
+*Last updated: 2026-03-14 after Phase 69 planning (3 plans created)*
